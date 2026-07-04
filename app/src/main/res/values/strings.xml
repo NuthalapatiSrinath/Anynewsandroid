@@ -1,0 +1,79 @@
+<resources>
+    <string name="app_name">AnyNews</string>
+
+
+    <string name="edittext_title_hint"><font size="12">Write your news title here !</font></string>
+    <string name="edittext_enter_phone_number_redeem"><font size="14">Enter Paytm Number</font></string>
+    <string name="edittext_enter_pan_card"><font size="14">Enter Pan Card Number</font></string>
+
+
+    <string name="edittext_discription_hint"><font size="12"> Description over here !</font></string>
+    <string name="edittext_enter_amonut_hint"><font size="14">Enter Amount </font></string>
+
+    <string name="edittext_enter_user_name"><font size="14">   User name </font></string>
+    <string name="edittext_enter_phone_number"><font size="14">  Phone number </font></string>
+
+
+    <!--<string name="facebook_app_id">292261002195382</string>-->
+    <!--235381625264376-->
+
+    <string name="facebook_app_id">235381625264376</string>
+    <string name="fb_login_protocol_scheme">fb235381625264376</string>
+
+
+    <string name="todo">TODO</string>
+
+
+    <!-- link to email must be: mailto:your@email.com -->
+
+
+    <!-- Drawer menu -->
+    <string name="my_text"> <u>Terms &amp; Conditions</u>.</string>
+    <string name="terms_conditions"> <u> I agree to the Terms &amp; Conditions</u>.</string>
+    <!-- FORMS -->
+
+    <!-- INPUT ERRORS -->
+
+    <!-- PREFERENCES -->
+
+
+    <!-- PREF CATS -->
+
+
+    <!-- TEST ADMOB ADS -->
+    <string name="cancel">Cancel</string>
+    <string name="update_now">Update</string>
+    <string name="update_message">New Update is Available in Playstore Update</string>
+    <string name="Home">Home</string>
+    <string name="Category">Category</string>
+    <string name="Profile">Profile</string>
+    <string name="Events">Events</string>
+    <string name="like_image">like image</string>
+    <string name="comment_image">comment image</string>
+    <string name="share_image">share image</string>
+    <string name="post_selection">Post Selection</string>
+    <string name="india">INDIA</string>
+    <string name="my_feed">MY FEED</string>
+    <string name="comment">Comment</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="single_page">Single Page</string>
+    <string name="or">OR</string>
+    <string name="share">Share</string>
+    <string name="total_magazine">Total Magazine</string>
+    <string name="if_you_like_the_app_please_rate_us_nwith_5_star">If you like the app, please rate us \nwith 5 star!</string>
+    <string name="thankyou_for_your_feedback">Thank you for your feedback</string>
+    <string name="anynews">ANYNEWS</string>
+    <string name="share_anynews_with_your_friends">Share AnyNews with your friends</string>
+
+    <string name="stfEmptyMessage">There are no items</string>
+    <string name="your_video_downloaded">Your Video is Downloaded</string>
+
+    <string name="ad_attribution" translatable="false">Ad</string>
+    <string name="more_menu" translatable="false">More</string>
+    <string name="privacy_settings" translatable="false">Privacy Settings</string>
+    <string name="refresh_ad" translatable="false">Refresh Ad</string>
+    <string name="request_template" translatable="false">Request Custom Template Ads</string>
+    <string name="request_unified" translatable="false">Request Unified Native Ads</string>
+    <string name="start_muted" translatable="false">Start video ads muted</string>
+    <string name="video_status" translatable="false">Video status: </string>
+</resources>

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:orientation="vertical"
+    android:layout_height="match_parent"
+    android:background="@color/whitewithblack">
+
+
+    <!-- android:visibility="gone"-->
+    <LinearLayout
+        android:id="@+id/layout_with_data"
+        android:layout_width="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="@color/whitewithblack"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:id="@+id/card_header"
+            android:background="@color/background_color"
+            android:layout_width="match_parent"
+            android:layout_height="52dp">
+
+            <RelativeLayout
+                android:background="@color/whitewithblack"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <ImageView
+                    android:id="@+id/img_back"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_marginLeft="14dp"
+                    android:src="@drawable/ic_back_arrow"
+                    app:tint="@color/black" />
+
+                <TextView
+                    android:id="@+id/title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="16sp"
+                    android:textColor="@color/white"
+                    android:lineSpacingExtra="2sp"
+                    android:text=""
+                    android:layout_centerHorizontal="true"
+                    android:layout_centerVertical="true" />
+
+
+
+            </RelativeLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_marginTop="-55dp"
+            android:layout_width="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_height="match_parent">
+            <LinearLayout
+                android:id="@+id/linear"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    android:id="@+id/select_state"
+                    android:gravity="center"
+                    android:textColor="@color/title_color"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="@dimen/_20sdp"
+                    android:textSize="@dimen/_20sdp"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                </TextView>
+
+            </LinearLayout>
+
+
+            <LinearLayout
+                android:layout_below="@+id/linear"
+                android:layout_width="match_parent"
+                android:gravity="center"
+                android:layout_marginLeft="@dimen/five"
+                android:layout_marginRight="@dimen/five"
+                android:layout_height="wrap_content">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/States_Details"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                </androidx.recyclerview.widget.RecyclerView>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layout_with_out_data"
+        android:layout_width="match_parent"
+        android:gravity="center"
+        android:background="@color/whitewithblack"
+        android:layout_centerInParent="true"
+        android:layout_height="match_parent">
+        <include layout="@layout/layout_loading"/>
+
+    </LinearLayout>
+
+
+</RelativeLayout>

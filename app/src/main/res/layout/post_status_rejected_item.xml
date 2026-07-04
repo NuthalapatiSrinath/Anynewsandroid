@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:background="@color/background_color"
+    android:layout_height="@dimen/_90sdp"
+    android:orientation="vertical"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+
+    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:neomorph_shadow_type="outer"
+        app:neomorph_layer_type="hardware"
+        app:neomorph_background_color="@color/white"
+        app:neomorph_corner_radius="10dp"
+        app:neomorph_elevation="5dp"
+        app:neomorph_view_type="rectangular"
+        app:neomorph_shadow_color="#D0D2D5"
+        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:gravity="center"
+            android:layout_height="match_parent">
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_margin="@dimen/two"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_background_color="@color/payment_history_border"
+                app:neomorph_corner_radius="10dp"
+                app:neomorph_elevation="0dp"
+                app:neomorph_view_type="rectangular"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <LinearLayout
+                    android:orientation="horizontal"
+                    android:layout_width="match_parent"
+                    android:gravity="center"
+                    android:layout_height="match_parent">
+
+                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="0.001dp"
+                        app:neomorph_shadow_type="outer"
+                        app:neomorph_layer_type="hardware"
+                        app:neomorph_background_color="@color/payment_history_background"
+                        app:neomorph_corner_radius="10dp"
+                        app:neomorph_elevation="0dp"
+                        app:neomorph_view_type="rectangular"
+                        app:neomorph_shadow_color="#D0D2D5"
+                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        app:layout_constraintRight_toRightOf="parent"
+                        app:layout_constraintTop_toTopOf="parent">
+
+
+                        <LinearLayout
+                            android:orientation="horizontal"
+                            android:layout_width="match_parent"
+                            android:gravity="center"
+                            android:layout_height="match_parent">
+
+                            <LinearLayout
+                                android:orientation="vertical"
+                                android:layout_width="10dp"
+                                android:gravity="left|center"
+                                android:layout_height="match_parent">
+
+
+
+                                <LinearLayout
+                                    android:orientation="vertical"
+                                    android:id="@+id/reject"
+                                    android:layout_width="10dp"
+
+                                    android:gravity="left|center"
+                                    android:layout_height="match_parent">
+
+                                </LinearLayout>
+
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:orientation="vertical"
+                                android:layout_width="0dp"
+                                android:layout_weight="2"
+                                android:gravity="center"
+                                android:layout_height="match_parent">
+
+                                <ImageView
+                                    android:id="@+id/profile_articales_image"
+                                    android:src="@drawable/ic_launcher"
+                                    android:scaleType="fitXY"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent">
+
+                                </ImageView>
+
+
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:orientation="vertical"
+                                android:layout_width="0dp"
+                                android:layout_weight="5"
+                                android:gravity="center"
+                                android:layout_height="match_parent">
+
+                                <LinearLayout
+                                    android:layout_marginLeft="@dimen/five"
+                                    android:orientation="vertical"
+                                    android:layout_width="match_parent"
+                                    android:gravity="bottom|left"
+                                    android:layout_height="match_parent">
+
+                                    <LinearLayout
+                                        android:orientation="horizontal"
+                                        android:layout_width="match_parent"
+                                        android:gravity="left|bottom"
+                                        android:layout_weight="2"
+                                        android:layout_height="0dp">
+
+                                        <TextView
+                                            android:id="@+id/post_title"
+                                            android:layout_width="match_parent"
+                                            android:textStyle="bold"
+                                            android:gravity="bottom"
+                                            android:textSize="@dimen/_11sdp"
+                                            android:text="War between brothers"
+                                            android:textColor="@color/payment_history_border_title"
+                                            android:layout_height="match_parent">
+
+                                        </TextView>
+
+
+
+                                    </LinearLayout>
+                                    <LinearLayout
+                                        android:orientation="vertical"
+                                        android:layout_width="match_parent"
+                                        android:gravity="center"
+                                        android:layout_weight="3"
+                                        android:layout_height="0dp">
+                                        <TextView
+                                            android:id="@+id/post_discrepton"
+                                            android:layout_marginTop="@dimen/three"
+                                            android:layout_width="match_parent"
+                                            android:textStyle="normal"
+                                            android:gravity="left"
+                                            android:maxLines="1"
+                                            android:textSize="@dimen/_8sdp"
+                                            android:text="Under"
+                                            android:textColor="@color/payment_history_border_discreption"
+                                            android:layout_height="wrap_content">
+                                        </TextView>
+
+                                        <TextView
+                                            android:id="@+id/post_reject"
+                                            android:layout_marginTop="@dimen/three"
+                                            android:layout_width="match_parent"
+                                            android:textStyle="normal"
+                                            android:gravity="left"
+                                            android:textSize="@dimen/_8sdp"
+                                            android:text="Under"
+                                            android:maxLines="1"
+                                            android:textColor="@color/red_one"
+                                            android:layout_height="wrap_content">
+                                        </TextView>
+
+                                        <TextView
+                                            android:id="@+id/post_time"
+                                            android:layout_width="match_parent"
+                                            android:textStyle="normal"
+                                            android:layout_marginRight="@dimen/_10sdp"
+                                            android:gravity="right|center"
+                                            android:textSize="@dimen/_10sdp"
+                                            android:text="Nov-6"
+                                            android:maxLines="1"
+                                            android:textColor="@color/payment_history_border_discreption"
+                                            android:layout_height="match_parent">
+                                        </TextView>
+                                        //57105473
+                                    </LinearLayout>
+
+                                </LinearLayout>
+
+
+
+                            </LinearLayout>
+
+
+
+                        </LinearLayout>
+
+                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                </LinearLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+        </LinearLayout>
+
+
+
+
+    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+</LinearLayout>

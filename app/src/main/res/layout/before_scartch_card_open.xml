@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="250dp"
+    android:layout_height="250dp"
+    android:layout_gravity="center"
+    android:gravity="center">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true"
+        android:gravity="center">
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_centerInParent="true"
+            android:background="@drawable/ic_locked_offer_scratch_card_icon"
+            android:scaleType="fitXY"
+            android:src="@drawable/ic_locked_offer_scratch_card_icon" />
+
+        <LinearLayout
+            android:layout_alignParentBottom="true"
+            android:orientation="vertical"
+            android:layout_marginBottom="@dimen/_35sdp"
+            android:gravity="center"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <TextView
+                android:id="@+id/offer_amount_rupess"
+                android:text=" Will Be Available on "
+                android:gravity="center"
+                android:textColor="#E2323542"
+                android:textStyle="bold"
+                android:textSize="@dimen/_14sdp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+            </TextView>
+
+            <TextView
+                android:id="@+id/before_locked_scartch_card_value"
+                android:textColor="#E2323542"
+                android:text=" "
+                android:textStyle="bold"
+                android:gravity="center"
+                android:textSize="@dimen/_14sdp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+            </TextView>
+        </LinearLayout>
+
+    </RelativeLayout>
+</RelativeLayout>

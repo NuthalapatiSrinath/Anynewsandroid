@@ -1,0 +1,157 @@
+apply plugin: 'com.android.application'
+android {
+    signingConfigs {
+        release {
+            storeFile file('R:\\work\\AndroidStudioProjects\\anynews\\gitLab\\AnyNews\\anyNews.jks')
+            storePassword 'sagiam123'
+            keyAlias 'anyNews'
+            keyPassword '123sagiam'
+        }
+    }
+
+//    compileSdkVersion 31
+//   // buildToolsVersion "30.0.3"
+//    defaultConfig {
+//        applicationId "com.anyNews.anynews"
+//        minSdkVersion 22
+//        targetSdkVersion 29
+//        versionCode 114
+//        versionName "3.40.13"
+//        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+//        renderscriptTargetApi 31
+//        renderscriptSupportModeEnabled true
+    compileSdkVersion 33
+    defaultConfig {
+        applicationId "com.anyNews.anynews"
+        minSdkVersion 24
+        targetSdkVersion 33
+        multiDexEnabled true
+        versionCode 128
+        versionName "3.40.28"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        renderscriptTargetApi 33
+        renderscriptSupportModeEnabled true
+        archivesBaseName = "AnyNews_"+versionName+"_"
+
+    }
+    buildTypes {
+        debug {
+            debuggable true
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        release {
+// 3999 0336 2591    155115
+            debuggable false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+
+    dexOptions {
+        preDexLibraries = false
+        javaMaxHeapSize "4g"
+    }
+    packagingOptions {
+        exclude 'META-INF/LICENSE.txt'
+        exclude("META-INF/*.kotlin_module")
+
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
+        // Or, if you prefer, you can continue to check for errors in release builds,
+        // but continue the build even when errors are found:
+        abortOnError false
+    }
+}
+
+dependencies {
+    implementation 'com.android.installreferrer:installreferrer:2.2'
+    implementation 'com.google.android.gms:play-services-analytics-impl:18.0.4'
+    configurations {
+        all*.exclude module: "support-core-ui"
+    }
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.navigation:navigation-fragment:2.1.0'
+    implementation 'androidx.navigation:navigation-ui:2.1.0'
+    implementation 'androidx.lifecycle:lifecycle-extensions:2.1.0'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'androidx.test:runner:1.2.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+    androidTestImplementation 'com.android.support.test:runner:1.0.2'
+    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+    implementation 'com.google.android.gms:play-services-maps:17.0.0'
+    implementation 'com.afollestad.material-dialogs:core:0.9.6.0'
+    implementation 'androidx.percentlayout:percentlayout:1.0.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.7.2'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.squareup.retrofit2:adapter-rxjava:2.1.0'
+    implementation 'com.android.volley:volley:1.2.1'
+    implementation "androidx.multidex:multidex:2.0.1"
+    implementation 'com.google.firebase:firebase-analytics:17.3.2'
+    implementation 'com.google.firebase:firebase-core:17.3.2'
+    implementation 'com.google.firebase:firebase-messaging:23.1.2'
+    implementation 'com.google.firebase:firebase-invites:17.0.0'
+
+    implementation 'de.hdodenhof:circleimageview:3.1.0'
+    implementation 'com.github.goibibo:ScratchCardView:v0.1.7'
+    implementation 'com.intuit.sdp:sdp-android:1.0.6'
+    implementation "androidx.core:core:1.0.1"
+    implementation 'jp.wasabeef:picasso-transformations:2.4.0'
+    implementation 'com.google.android.flexbox:flexbox:3.0.0'
+    implementation 'com.github.fornewid:neumorphism:0.2.1'
+    implementation files('libs/junit-4.12.jar')
+    implementation 'com.jakewharton:butterknife:10.2.1'
+    annotationProcessor 'com.jakewharton:butterknife-compiler:10.2.1'
+    implementation 'com.google.android.material:material:1.1.0'
+
+    implementation 'com.rollbar:rollbar-java:1.+'
+    implementation 'com.rollbar:rollbar-android:1.+@aar'
+    implementation platform('com.google.firebase:firebase-bom:30.1.0')
+    implementation 'com.google.firebase:firebase-dynamic-links'
+    implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.github.PierfrancescoSoffritti:AndroidYouTubePlayer:7.0.1'
+    implementation 'com.pierfrancescosoffritti.androidyoutubeplayer:core:11.1.0'
+    implementation 'com.github.nostra13:Android-Universal-Image-Loader:458df4da2e'
+    implementation 'com.google.android.gms:play-services-auth:19.2.0'
+    implementation 'com.google.android.gms:play-services-auth-api-phone:17.5.1'
+    implementation 'com.tbuonomo:dotsindicator:4.2' //UI NEED TO CHECK
+    implementation 'com.squareup.picasso:picasso:2.71828'
+    implementation "com.google.android.exoplayer:exoplayer:2.17.1"
+    implementation 'com.google.firebase:firebase-database:20.0.1'
+    implementation 'com.github.GrenderG:Toasty:1.5.0'
+    implementation 'com.github.bumptech.glide:glide:4.12.0'
+    implementation "com.github.skydoves:progressview:1.1.2"
+    implementation 'com.facebook.android:facebook-android-sdk:5.15.3'
+    implementation 'com.google.android.gms:play-services-ads:22.2.0'
+    implementation 'com.google.ads.mediation:facebook:6.15.0.0'
+    implementation 'com.facebook.android:audience-network-sdk:6.15.0'
+    implementation 'com.github.gturedi:StatefulLayout:1.2.2'
+    implementation 'com.google.android.ump:user-messaging-platform:2.2.0'
+//    implementation project(':nativetemplates')
+    implementation 'androidx.core:core-splashscreen:1.0.0-beta02'
+    implementation 'com.facebook.android:facebook-applinks:[4,5)'
+
+    implementation(platform("org.jetbrains.kotlin:kotlin-bom:1.8.0"))
+    implementation 'androidx.browser:browser:1.4.0'
+    implementation 'androidx.media:media:1.6.0'
+    implementation 'com.google.ads.interactivemedia.v3:interactivemedia:3.31.0'
+    implementation 'com.guolindev.permissionx:permissionx:1.7.1'
+    implementation 'pl.droidsonroids.gif:android-gif-drawable:1.2.28'
+  //  implementation group: 'io.github.cleveradvertising', name: 'kotlin_ads_package', version: '1.1'
+
+}
+apply plugin: 'com.google.gms.google-services'
+// git key:: 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

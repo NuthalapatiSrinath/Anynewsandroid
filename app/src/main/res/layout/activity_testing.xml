@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center">
+
+    <EditText
+        android:id="@+id/user_name"
+        android:textColor="@color/red_one"
+        android:background="@color/white"
+        android:gravity="center"
+        android:hint="enter user name"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_30sdp">
+
+    </EditText>
+    <EditText
+        android:layout_marginTop="@dimen/_20sdp"
+        android:id="@+id/type"
+        android:gravity="center"
+        android:hint="enter share id"
+        android:textColor="@color/red_one"
+        android:background="@color/white"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_30sdp">
+
+    </EditText>
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="20dp"
+        android:id="@+id/createlink"
+        android:text="create link" />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="20dp"
+        android:id="@+id/share"
+        android:text="Share Link"/>
+</LinearLayout>

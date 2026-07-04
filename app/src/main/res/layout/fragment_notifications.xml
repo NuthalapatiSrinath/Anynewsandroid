@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/card_header"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        app:cardElevation="3dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:background="@color/red"
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/img_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/white_back_arrow"
+                android:layout_centerVertical="true"
+                android:layout_marginLeft="14dp"/>
+
+            <TextView
+                android:id="@+id/title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textColor="@color/white"
+                android:lineSpacingExtra="2sp"
+                android:text=""
+                android:layout_centerHorizontal="true"
+                android:layout_centerVertical="true"
+
+                />
+
+            <!--            <ImageView-->
+            <!--                android:visibility="invisible"-->
+            <!--                android:id="@+id/img_search_my_bag"-->
+            <!--                android:layout_width="wrap_content"-->
+            <!--                android:layout_height="wrap_content"-->
+            <!--                android:src="@drawable/magnifying_glass_black"-->
+            <!--                android:layout_alignParentRight="true"-->
+            <!--                android:layout_marginRight="20dp"-->
+            <!--                android:layout_centerVertical="true"/>-->
+
+
+
+        </RelativeLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:background="#9EFFFFFF"
+        android:layout_below="@+id/card_header">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:orientation="vertical"
+            android:layout_height="match_parent">
+
+            <include
+
+                layout="@layout/layout_loading">
+
+            </include>
+
+
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/ten"/>
+
+            <LinearLayout
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:layout_height="match_parent">
+                <ImageView
+                    android:src="@drawable/notifications_no_data"
+                    android:layout_width="100dp"
+                    android:layout_height="100dp">
+                </ImageView>
+                <TextView
+                    android:layout_marginTop="@dimen/ten"
+                    android:text="No notification found"
+                    android:layout_width="wrap_content"
+                    android:textColor="#666666"
+                    android:textSize="@dimen/fiveteen"
+                    android:layout_height="wrap_content">
+
+                </TextView>
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </RelativeLayout>
+
+</RelativeLayout>

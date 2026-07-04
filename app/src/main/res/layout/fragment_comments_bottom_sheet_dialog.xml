@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/_320sdp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+
+
+    <RelativeLayout
+        android:id="@+id/layoutReportPage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="@dimen/_10sdp"
+        android:visibility="visible"
+        app:layout_constraintTop_toTopOf="parent"
+        android:paddingBottom="@dimen/_20sdp"
+        android:layout_alignParentBottom="true"
+        android:background="@color/white">
+
+        <TextView
+            android:id="@+id/textViewReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingLeft="@dimen/_10sdp"
+            android:paddingTop="@dimen/_10sdp"
+            android:text="Report Comment"
+            android:textColor="@color/black"
+            android:textSize="@dimen/_14sdp" />
+        <TextView
+            android:id="@+id/textViewBlockUser"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingLeft="@dimen/_10sdp"
+            android:paddingTop="@dimen/_10sdp"
+            android:text="Block User"
+            android:layout_below="@+id/textViewReport"
+            android:textColor="@color/black"
+            android:textSize="@dimen/_14sdp" />
+
+
+    </RelativeLayout>
+
+
+</LinearLayout>

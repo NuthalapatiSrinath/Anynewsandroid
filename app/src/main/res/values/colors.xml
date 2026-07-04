@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimaryDark">#00574B</color>
+    <color name="colorPrimary">#FF4027</color>
+    <color name="colorAccent">#D15353</color>
+
+    <!-- color page -->
+    <color name="colorGray">#FDCCCCCC</color>
+
+    <color name="full_gallery_text_color">#FFFFFF</color>
+    <color name="background_color">#F5F7FB</color>
+    <color name="default_color">#02a6d8</color>
+    <color name="default_color_dark">#52a6b8</color>
+    <color name="color_red">#FF0000</color>
+    <color name="ayp_red">#FF0000</color>
+
+    <color name="white">#ffffff</color>
+    <color name="whitewithblack">#FFFFFF</color>
+    <color name="red">#FF6300</color>
+    <color name="red_one">#FF6300</color>
+    <color name="content_title_color">#525252</color>
+    <color name="content_desc_color">#5d5d5d</color>
+
+    <color name="post_new_title_text_color">#8D8D8E</color>
+    <color name="whitesren">#E4E4E4</color>
+    <color name="black">#000000</color>
+    <color name="profilepagecolor">#424549</color>
+    <color name="pale_grey">#f9fbfc</color>
+    <color name="warm_grey">#707070</color>
+    <color name="warm_grey_two">#a2a2a2</color>
+    <color name="warm_grey_three">#9a9a9a</color>
+    <color name="greyish">#afafaf</color>
+    <color name="warm_grey_16">#299f9f9f</color>
+
+    <color name="color42">#5A5A60</color>
+
+
+    <color name="colorBg">#EEEEEE</color>
+    <color name="colorBlack">#000000</color>
+
+    <color name="colorTextSecondary">#656565</color>
+    <color name="splash_bg_code">#000000</color>
+    <color name="splash_logo_bg">#FFFFFF</color>
+
+
+    <!-- COLOR Card News -->
+
+
+    <!-- COLOR Grid News -->
+
+    <!-- COLOR Top News -->
+
+    <!-- Color Video News -->
+
+
+    <!-- Color Related News -->
+
+    <!-- Color News Detail -->
+
+    <!-- Color Search-->
+
+    <!-- Bookmarks -->
+    <color name="colorBookmarksInfo">#555555</color>
+
+
+    <!-- Color Profile-->
+
+    <!-- Color Profile User Comments -->
+
+    <!-- POST comments  -->
+
+    <!-- Color Pagination -->
+
+    <!-- Color State Layout -->
+
+    <!-- Comments -->
+
+
+    <!-- Color Drawer -->
+
+
+    <!-- Edittext -->
+
+
+    <!-- TAB -->
+
+
+    <!-- Toolbar Style -->
+
+
+    <!--  payment history colour-->
+    <color name="payment_history_border">#0ABDD3E0</color>
+    <color name="payment_history_background">#F5F7FB</color>
+    <color name="payment_history_border_title">#5A5858</color>
+    <color name="payment_history_border_discreption">#8D8D8E</color>    // 009444
+    <color name="payment_history_border_green">#009444</color>   //009444
+
+
+    <!--  post detailes-->
+    <color name="post_yellow">#FCF202</color>
+    <color name="post_profile_red_border">#FF2401</color>
+    <color name="post_profile_red">#FF4027</color>
+
+    <!--    Profile Border Color-->
+    <color name="profile_border">#60BDD3E0</color>   //60BDD3E0
+    <color name="profile_background">#EBF5F7FB</color>
+<!-- bottom navigation color -->
+    <color name="bottom_navigation_view_color">#F5F7FB</color>
+    <color name="selected_feed_color">#808080</color>
+    <color name="transparent_white">#00FFFFFF</color>
+    <color name="transparent">#00000000</color>
+
+
+
+    <color name="neomorph_background_color">#F1F3F6</color>
+    <color name="neomorph_shadow_color">#D9DBDE</color>
+    <color name="neomorph_highlight_color">#FFFFFF</color>
+
+
+    <color name="white_50">#80FFFFFF</color>
+    <color name="white_20">#33FFFFFF</color>
+    <color name="live_red">#FF3144</color>
+    <color name="title_color">#5A5858</color>
+
+    <color name="anynews_test_background_color">#00F4F4F4</color>
+    <color name="anynews_test_background_color_2">#00A3A3A3</color>
+    <color name="anynews_black">#000000</color>
+    <color name="anynews_white">#FFFFFF</color>
+    <color name="anynews_red">#FF0000</color>
+    <color name="anynews_green">#00FF00</color>
+    <color name="anynews_blue">#4285f4</color>
+    <color name="anynews_ad_green">#3A6728</color>
+    <color name="anynews_gray">#808080</color>
+    <color name="anynews_outline">#E0E0E0</color>
+
+</resources>

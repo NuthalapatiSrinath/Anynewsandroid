@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/_65sdp">
+
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:visibility="visible"
+            android:id="@+id/neomorphFrameLayout"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:layout_margin="@dimen/_5sdp"
+            android:background="@drawable/rounded_setting_bg"
+            android:orientation="horizontal">
+
+
+            <TextView
+                android:id="@+id/setings_name"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="8"
+                android:gravity="left|center"
+                android:paddingLeft="@dimen/_20sdp"
+                android:text="one"
+                android:textColor="@color/colorBlack">
+
+            </TextView>
+
+            <Switch
+                android:id="@+id/switchNotification"
+                android:layout_width="wrap_content"
+                android:layout_height="15.1dp"
+                android:layout_alignParentEnd="true"
+                android:layout_gravity="center|right"
+                android:layout_marginRight="14dp"
+                android:theme="@style/SwitchTheme">
+
+            </Switch>
+
+        </LinearLayout>
+
+
+        <LinearLayout
+            android:visibility="gone"
+            android:orientation="vertical"
+            android:background="@drawable/ic_settings_icon"
+            android:layout_width="match_parent"
+            android:layout_height="85dp">
+
+            <TextView
+                android:id="@+id/second_language_name"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_margin="3dp"
+                android:gravity="center"
+                android:text="one"
+                android:textColor="@color/white">
+
+            </TextView>
+        </LinearLayout>
+
+    </RelativeLayout>
+
+
+
+
+
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+
+
+
+
+
+
+
+
+    <!--
+    <?xml version="1.0" encoding="utf-8"?>
+    <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="match_parent"
+        android:layout_marginTop="-15dp"
+
+        android:layout_height="wrap_content"
+        android:background="#F5F7FB">
+
+        <com.github.sshadkany.shapes.RoundRectView
+            android:id="@+id/btn3"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:layout_margin="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.0"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:outlineAmbientShadowColor="@color/colorPrimaryDark"
+            android:outlineSpotShadowColor="@color/colorPrimaryDark"
+            app:shape_roundRect_backgroundColor="#ffffff"
+            app:shape_roundRect_bottomLeftRadius="12dp"
+            app:shape_roundRect_bottomRightRadius="12dp"
+            app:shape_roundRect_shadow_type="drop_shadow"
+            app:shape_roundRect_topLeftRadius="12dp"
+            app:shape_roundRect_topRightRadius="12dp">
+
+            <TextView
+                android:id="@+id/text"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:layout_margin="36dp"
+                android:background="@drawable/bn"
+                android:gravity="center"
+                android:text="@string/app_name"
+                android:textSize="20dp"
+                android:textStyle="bold">
+
+            </TextView>
+
+            &lt;!&ndash;  <com.github.sshadkany.shapes.RoundRectView
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+
+                  app:shape_roundRect_backgroundColor="#ECF0F3"
+                  app:shape_roundRect_bottomLeftRadius="12dp"
+                  app:shape_roundRect_bottomRightRadius="12dp"
+                  app:shape_roundRect_shadow_type="drop_shadow"
+                  app:shape_roundRect_topLeftRadius="12dp"
+                  app:shape_roundRect_topRightRadius="12dp">
+
+
+                &lt;!&ndash;  <com.github.sshadkany.shapes.RoundRectView
+                      android:layout_width="match_parent"
+                      android:layout_height="match_parent"
+                      android:layout_margin="5dp"
+                      app:shape_roundRect_backgroundColor="#ECF0F3"
+                      app:shape_roundRect_bottomLeftRadius="12dp"
+                      app:shape_roundRect_bottomRightRadius="12dp"
+                      app:shape_roundRect_shadow_type="drop_shadow"
+                      app:shape_roundRect_topLeftRadius="12dp"
+                      app:shape_roundRect_topRightRadius="12dp">
+
+                  </com.github.sshadkany.shapes.RoundRectView>&ndash;&gt;
+              </com.github.sshadkany.shapes.RoundRectView>&ndash;&gt;
+        </com.github.sshadkany.shapes.RoundRectView>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>-->

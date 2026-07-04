@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout  xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_height="match_parent"
+    tools:context=".Activities.RedeemSuccessful">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:src="@drawable/ic_success_icons"
+        android:layout_height="@dimen/_150sdp">
+
+    </ImageView>
+    <TextView
+        android:text="Redeem Successful"
+        android:gravity="center"
+        android:textColor="@color/black"
+        android:textSize="@dimen/_16sdp"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_30sdp">
+
+    </TextView>
+    <TextView
+        android:text="Amount will be credited in"
+        android:gravity="center"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_20sdp">
+
+    </TextView>
+    <TextView
+        android:text="2-3 business days"
+        android:gravity="top|center"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_30sdp">
+
+    </TextView>
+    <ImageView
+        android:id="@+id/redeem_suceess_done"
+        android:layout_width="match_parent"
+        android:src="@drawable/ic_done_icon"
+        android:layout_height="@dimen/_60sdp">
+
+    </ImageView>
+
+</LinearLayout>

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="200dp"
+    android:layout_marginBottom="@dimen/_10sdp">
+
+    <LinearLayout
+        android:visibility="gone"
+        android:id="@+id/one"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent">
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_review_scratch_icon">
+
+            </ImageView>
+
+            <TextView
+                android:id="@+id/scartch_card_amount"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginTop="@dimen/_20sdp"
+                android:gravity="center"
+                android:text="100"
+                android:textSize="@dimen/_12sdp"
+                android:textStyle="bold">
+
+            </TextView>
+
+        </RelativeLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:visibility="gone"
+        android:id="@+id/two"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/one">
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_scratch_card_icon">
+
+            </ImageView>
+
+
+        </RelativeLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:visibility="visible"
+        android:id="@+id/three"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/two">
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:src="@drawable/ic_offer_scartch_card_icon">
+
+            </ImageView>
+
+            <TextView
+
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginTop="@dimen/_40sdp"
+                android:gravity="center"
+                android:text=" Will Be Available on "
+                android:textColor="#E2323542"
+                android:textSize="@dimen/_12sdp"
+                android:textStyle="normal">
+
+            </TextView>
+            <TextView
+                android:id="@+id/disble_time_for_scartch"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginTop="@dimen/_65sdp"
+                android:gravity="center"
+                android:textColor="#E2323542"
+                android:text="Available on "
+                android:textSize="@dimen/_10sdp"
+                android:textStyle="normal">
+
+            </TextView>
+        </RelativeLayout>
+
+    </LinearLayout>
+
+</RelativeLayout>

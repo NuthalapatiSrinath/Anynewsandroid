@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context=".Activities.HomePage">
+
+
+    <item
+        android:checked="true"
+        android:id="@+id/navigation_home"
+        android:icon="@drawable/refresh_icon"
+        android:title="@string/Home" />
+
+    <item
+
+        android:id="@+id/navigation_catagiries"
+        android:title="@string/Events" />
+    <!--android:icon="@drawable/ic_events"-->
+    <!--must set the item title to empty-->
+    <item
+
+        android:id="@+id/navigation_stricker"
+        android:title="" />
+
+    <item
+        android:id="@+id/navigation_status"
+        android:icon="@drawable/ic_category"
+        android:title="@string/Category" />
+    <item
+        android:id="@+id/navigation_profile"
+        android:icon="@drawable/ic_profile"
+        android:title="@string/Profile" />
+</menu>

@@ -1,0 +1,1706 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="4"
+        android:background="#FF4027"
+        android:orientation="vertical">
+
+
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="1">
+
+                <ImageView
+                    android:id="@+id/ic_back_ground_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:alpha="0.4"
+                    android:background="@drawable/profile_cover_icon"
+                    android:scaleType="fitXY" />
+
+                <de.hdodenhof.circleimageview.CircleImageView
+                    android:id="@+id/back_ground_profile"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:layout_centerInParent="true"
+                    android:layout_gravity="center"
+                    android:visibility="gone"
+                    app:civ_border_color="#DC7272"
+                    app:civ_border_width="4dp" />
+
+
+
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+
+
+
+
+                    <RelativeLayout
+                        android:layout_width="fill_parent"
+                        android:layout_height="wrap_content">
+
+                        <ImageView
+                            android:id="@+id/img_back"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentLeft="true"
+                            android:layout_marginStart="12dp"
+                            android:layout_marginTop="16dp"
+                            app:srcCompat="@drawable/ic_arrowwhite_back" />
+
+                        <ImageView
+                            android:id="@+id/neo_settings"
+                            android:layout_width="@dimen/_35sdp"
+                            android:layout_height="@dimen/_40sdp"
+                            android:layout_alignParentRight="true"
+                            android:layout_gravity="center"
+                            android:layout_marginTop="@dimen/ten"
+                            android:layout_marginRight="@dimen/_10sdp"
+                            android:padding="@dimen/two"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/profile_setting_icon" />
+
+                        <!-- -->
+
+
+                        <!-- <com.chinodev.androidneomorphframelayout.NeomorphFrameLayoutandroid:layout_marginTop="8dp"android:layout_marginEnd="12dp"android:layout_width="@dimen/_35sdp"android:layout_height="wrap_content"android:layout_alignParentRight="true"app:layout_constraintEnd_toEndOf="parent"app:neomorph_background_color="@color/red"app:neomorph_corner_radius="1dp"app:neomorph_elevation="2dp"app:neomorph_highlight_color="@color/red_one"app:neomorph_layer_type="hardware"app:neomorph_shadow_color="@color/red"app:neomorph_shadow_type="outer"app:neomorph_view_type="circular"><com.chinodev.androidneomorphframelayout.NeomorphFrameLayoutandroid:layout_width="match_parent"android:layout_height="match_parent"android:layout_margin="0dp"app:layout_constraintBottom_toBottomOf="parent"app:layout_constraintLeft_toLeftOf="parent"app:layout_constraintRight_toRightOf="parent"app:layout_constraintTop_toTopOf="parent"app:neomorph_background_color="@color/red"app:neomorph_corner_radius="1dp"app:neomorph_elevation="0dp"app:neomorph_highlight_color="@color/red"app:neomorph_layer_type="hardware"app:neomorph_shadow_color="@color/red"app:neomorph_shadow_type="inner"app:neomorph_view_type="circular"><ImageButtonandroid:id="@+id/neo_settings"android:layout_width="wrap_content"android:layout_height="wrap_content"android:layout_gravity="center"android:padding="@dimen/two"android:background="@color/red"android:scaleType="fitCenter"android:src="@drawable/profile_setting_icon"android:tint="@color/white" /></com.anyNews.anynews.Ui.NeomorphFrameLayout></com.anyNews.anynews.Ui.NeomorphFrameLayout> -->
+
+
+                    </RelativeLayout>
+
+
+
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="top|center"
+                        android:orientation="vertical">
+
+
+
+
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent">
+
+                            <de.hdodenhof.circleimageview.CircleImageView
+                                android:layout_width="120dp"
+                                android:layout_height="120dp"
+                                android:layout_centerHorizontal="true"
+                                android:src="@drawable/ic_user_profile"
+                                app:civ_border_color="#FFFFFF"
+                                app:civ_border_overlay="true"
+                                app:civ_border_width="@dimen/four" />
+
+                            <de.hdodenhof.circleimageview.CircleImageView
+                                android:id="@+id/img_upload_photo"
+                                android:layout_width="120dp"
+                                android:layout_height="120dp"
+                                android:layout_centerHorizontal="true"
+                                app:civ_border_color="#FFFFFF"
+                                app:civ_border_overlay="false"
+                                app:civ_border_width="2dp" />
+
+
+
+
+                            <LinearLayout
+                                android:id="@+id/imageupload_progressbar"
+                                android:layout_width="match_parent"
+                                android:layout_height="120dp"
+                                android:gravity="center">
+
+                                <ProgressBar
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_centerInParent="true"
+                                    android:visibility="visible" />
+
+                            </LinearLayout>
+
+                        </RelativeLayout>
+
+                        <TextView
+                            style="@style/TextStyle28"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/img_upload_photo"
+                            android:layout_centerHorizontal="true"
+                            android:layout_marginTop="12dp"
+                            android:text="Upload Photo"
+                            android:visibility="gone" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/username_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:layout_marginTop="@dimen/three"
+                        android:layout_marginBottom="@dimen/three"
+                        android:text=" "
+                        android:textColor="#FFFFFF"
+                        android:textSize="20dp"
+                        android:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/local_distic_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:layout_marginLeft="-5dp"
+                        android:drawableLeft="@drawable/ic_location_icon"
+                        android:text=" "
+                        android:textColor="@color/white"
+                        android:textSize="14dp"
+                        android:visibility="gone" />
+
+
+
+
+                    <LinearLayout
+                        android:id="@+id/login_button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="@dimen/_25sdp"
+                        android:layout_gravity="center"
+                        android:layout_marginTop="@dimen/ten"
+                        android:orientation="vertical"
+                        android:visibility="visible">
+
+
+
+
+                        <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintLeft_toLeftOf="parent"
+                            app:layout_constraintRight_toRightOf="parent"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:neomorph_background_color="#F5F7FB"
+                            app:neomorph_corner_radius="30dp"
+                            app:neomorph_elevation="0dp"
+                            app:neomorph_highlight_color="@color/red_one"
+                            app:neomorph_layer_type="hardware"
+                            app:neomorph_shadow_color="@color/red_one"
+                            app:neomorph_shadow_type="outer"
+                            app:neomorph_view_type="rectangular">
+
+
+
+
+                            <LinearLayout
+                                android:id="@+id/login"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:orientation="horizontal"
+                                android:visibility="gone">
+
+                                <TextView
+                                    android:id="@+id/logintext"
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="8"
+                                    android:background="@drawable/writer_profile_details"
+                                    android:gravity="center"
+                                    android:text="Login"
+                                    android:textColor="@color/red"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                            </LinearLayout>
+
+                        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </FrameLayout>
+
+        </RelativeLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1.5"
+        android:layout_marginTop="-50dp"
+        android:visibility="visible">
+
+
+
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="visible">
+
+
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/_80sdp"
+                android:orientation="horizontal">
+
+
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1">
+
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:src="@drawable/next_payment"
+                        android:layout_height="match_parent">
+
+                    </ImageView>                   <!-- <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        app:layout_constraintRight_toRightOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_corner_radius="30dp"
+                        app:neomorph_elevation="5dp"
+                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                        app:neomorph_layer_type="hardware"
+                        app:neomorph_shadow_color="#D0D2D5"
+                        app:neomorph_shadow_type="outer"
+                        app:neomorph_view_type="rectangular">
+
+                            <LinearLayout
+                                android:id="@+id/total_earning"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:orientation="horizontal">
+
+
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="2"
+                                    android:gravity="center">
+
+                                    <ImageView
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:layout_marginTop="6dp"
+                                        android:layout_marginBottom="@dimen/six"
+                                        android:gravity="center"
+                                        android:src="@drawable/ic_money_icon" />
+
+                                </LinearLayout>
+
+
+
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="3"
+                                    android:gravity="left|center"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="match_parent"
+                                        android:layout_height="0dp"
+                                        android:layout_toLeftOf="@id/img_upload_news_pics"
+                                        android:layout_weight="3"
+                                        android:enabled="false"
+                                        android:gravity="left|bottom"
+                                        android:paddingLeft="5dp"
+                                        android:text="Total Earning "
+                                        android:textColor="@color/greyish"
+                                        android:textSize="@dimen/_8sdp" />
+
+
+
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="0dp"
+                                        android:layout_weight="5">
+
+                                        <TextView
+
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="match_parent"
+                                            android:enabled="false"
+                                            android:gravity="left"
+                                            android:paddingLeft="5dp"
+                                            android:text="₹ 909"
+                                            android:textColor="@color/black"
+                                            android:textSize="@dimen/_14sdp" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:enabled="false"
+                                            android:gravity="left|bottom"
+                                            android:paddingLeft="1dp"
+                                            android:text=".43 "
+                                            android:textColor="@color/black"
+                                            android:textSize="@dimen/_8sdp" />
+
+                                    </LinearLayout>
+
+                                </LinearLayout>
+
+                            </LinearLayout>
+
+                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>-->
+
+                </LinearLayout>
+
+
+
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1">
+
+
+
+
+                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        app:layout_constraintRight_toRightOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_corner_radius="30dp"
+                        app:neomorph_elevation="5dp"
+                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                        app:neomorph_layer_type="hardware"
+                        app:neomorph_shadow_color="#D0D2D5"
+                        app:neomorph_shadow_type="outer"
+                        app:neomorph_view_type="rectangular">
+
+                        <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            app:neomorph_shadow_type="outer"
+                            app:neomorph_layer_type="hardware"
+                            app:neomorph_background_color="@color/white"
+                            app:neomorph_corner_radius="10dp"
+                            app:neomorph_elevation="0dp"
+                            app:neomorph_view_type="rectangular"
+                            app:neomorph_shadow_color="#D0D2D5"
+                            app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintLeft_toLeftOf="parent"
+                            app:layout_constraintRight_toRightOf="parent"
+                            app:layout_constraintTop_toTopOf="parent">
+
+                            <LinearLayout
+                                android:orientation="horizontal"
+                                android:layout_width="match_parent"
+                                android:gravity="center"
+                                android:layout_height="match_parent">
+
+                                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:layout_margin="@dimen/two"
+                                    app:neomorph_shadow_type="outer"
+                                    app:neomorph_layer_type="hardware"
+                                    app:neomorph_background_color="@color/payment_history_border"
+                                    app:neomorph_corner_radius="10dp"
+                                    app:neomorph_elevation="0.2dp"
+                                    app:neomorph_view_type="rectangular"
+                                    app:neomorph_shadow_color="#D0D2D5"
+                                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintLeft_toLeftOf="parent"
+                                    app:layout_constraintRight_toRightOf="parent"
+                                    app:layout_constraintTop_toTopOf="parent">
+
+                                    <LinearLayout
+                                        android:orientation="horizontal"
+                                        android:layout_width="match_parent"
+                                        android:gravity="center"
+                                        android:layout_height="match_parent">
+
+                                        <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                            android:layout_width="match_parent"
+                                            android:layout_height="match_parent"
+                                            android:layout_margin="0.4dp"
+                                            app:neomorph_shadow_type="outer"
+                                            app:neomorph_layer_type="hardware"
+                                            app:neomorph_background_color="@color/payment_history_background"
+                                            app:neomorph_corner_radius="10dp"
+                                            app:neomorph_elevation="0dp"
+                                            app:neomorph_view_type="rectangular"
+                                            app:neomorph_shadow_color="#D0D2D5"
+                                            app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                                            app:layout_constraintBottom_toBottomOf="parent"
+                                            app:layout_constraintLeft_toLeftOf="parent"
+                                            app:layout_constraintRight_toRightOf="parent"
+                                            app:layout_constraintTop_toTopOf="parent">
+
+
+                                            <LinearLayout
+                                                android:id="@+id/next_payment"
+                                                android:orientation="horizontal"
+                                                android:layout_width="match_parent"
+                                                android:gravity="center"
+                                                android:layout_height="match_parent">
+
+                                                <LinearLayout
+                                                    android:orientation="horizontal"
+                                                    android:layout_width="match_parent"
+                                                    android:gravity="center"
+                                                    android:layout_height="match_parent">
+
+                                                    <LinearLayout
+                                                        android:layout_width="0dp"
+                                                        android:layout_weight="2"
+                                                        android:gravity="center"
+                                                        android:layout_height="match_parent">
+                                                        <ImageView
+
+                                                            android:layout_width="40dp"
+                                                            android:layout_height="40dp"
+                                                            android:layout_marginTop="6dp"
+                                                            android:layout_marginBottom="@dimen/six"
+                                                            android:gravity="center"
+                                                            android:src="@drawable/ic_money_icon" />
+                                                    </LinearLayout>
+
+                                                    <LinearLayout
+                                                        android:layout_width="0dp"
+                                                        android:layout_weight="3"
+                                                        android:orientation="vertical"
+                                                        android:gravity="left|center"
+                                                        android:layout_height="match_parent">
+                                                        <TextView
+                                                            android:layout_width="match_parent"
+                                                            android:layout_weight="3"
+                                                            android:layout_height="0dp"
+                                                            android:gravity="left|bottom"
+                                                            android:textSize="@dimen/_10sdp"
+                                                            android:textColor="@color/black"
+                                                            android:text="Total Amount "
+                                                            android:paddingLeft="5dp"
+                                                            android:enabled="false"/>
+                                                        <LinearLayout
+                                                            android:layout_width="match_parent"
+                                                            android:layout_weight="5"
+                                                            android:layout_height="0dp">
+                                                            <TextView
+                                                                android:id="@+id/total_amount"
+                                                                android:layout_width="wrap_content"
+                                                                android:layout_height="match_parent"
+                                                                android:gravity="left"
+                                                                android:textSize="@dimen/_14sdp"
+                                                                android:textColor="@color/payment_history_border_green"
+                                                                android:text="909"
+                                                                android:paddingLeft="5dp"
+                                                                android:enabled="false"/>
+                                                            <TextView
+
+                                                                android:layout_width="wrap_content"
+                                                                android:layout_height="wrap_content"
+                                                                android:gravity="left|bottom"
+                                                                android:textSize="@dimen/_8sdp"
+                                                                android:textColor="@color/payment_history_border_green"
+                                                                android:text=".43 "
+                                                                android:paddingLeft="1dp"
+                                                                android:enabled="false"/>
+                                                        </LinearLayout>
+
+
+                                                    </LinearLayout>
+
+
+
+
+                                                </LinearLayout>
+
+                                            </LinearLayout>
+
+                                        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                                    </LinearLayout>
+
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            </LinearLayout>
+
+
+
+
+                        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                            <!--<LinearLayout
+                                android:id="@+id/next_payment"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:layout_marginLeft="@dimen/_10sdp"
+                                android:gravity="center"
+                                android:orientation="horizontal">
+
+
+
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_marginLeft="@dimen/seven"
+                                    android:layout_weight="3"
+                                    android:gravity="left|center"
+                                    android:orientation="vertical">
+
+
+
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="0dp"
+                                        android:layout_weight="3">
+
+                                        <TextView
+                                            android:layout_width="match_parent"
+                                            android:layout_height="match_parent"
+                                            android:enabled="false"
+                                            android:gravity="left|bottom"
+                                            android:paddingLeft="5dp"
+                                            android:text="Next Payment "
+                                            android:textColor="@color/greyish"
+                                            android:textSize="@dimen/_8sdp" />
+
+                                    </LinearLayout>
+
+
+
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="0dp"
+                                        android:layout_weight="3">
+
+                                        <TextView
+                                            android:id="@+id/earned_total_amount"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="match_parent"
+                                            android:enabled="false"
+                                            android:gravity="left"
+                                            android:paddingLeft="5dp"
+                                            android:text="₹ 909"
+                                            android:textColor="@color/black"
+                                            android:textSize="@dimen/_14sdp" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:enabled="false"
+                                            android:gravity="bottom"
+                                            android:paddingLeft="1dp"
+                                            android:text=".23 "
+                                            android:textColor="@color/black"
+                                            android:textSize="@dimen/_8sdp" />
+
+                                    </LinearLayout>
+
+
+
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="0dp"
+                                        android:layout_weight="3">
+
+                                        <ImageView
+                                            android:id="@+id/simpleSeekBar"
+                                            android:layout_width="@dimen/_60sdp"
+                                            android:layout_height="18dp"
+                                            android:src="@drawable/seek_bar_icon" />
+
+                                    </LinearLayout>
+
+                                </LinearLayout>
+
+                            </LinearLayout>-->
+
+                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                    <!-- <soup.neumorphism.NeumorphCardViewstyle="@style/Two_Widget.Neumorph.ImageButton"android:layout_width="0dp"android:layout_height="match_parent"android:layout_below="@+id/basin_image_view"android:layout_weight="1"android:scaleType="centerInside"app:layout_constraintEnd_toEndOf="parent"app:neumorph_shadowColorDark="#DFDDDD"app:neumorph_shadowColorLight="@color/white"app:neumorph_shadowElevation="2dp"app:neumorph_shapeAppearance="@style/ShapeAppearance_profile"app:neumorph_shapeType="flat"app:neumorph_strokeColor="@color/design_default_color_on_primary"app:neumorph_strokeWidth="1dp"><soup.neumorphism.NeumorphCardViewstyle="@style/Widget.Neumorph.ImageButton"android:layout_width="match_parent"android:layout_height="match_parent"android:layout_below="@+id/basin_image_view"android:scaleType="centerInside"app:layout_constraintEnd_toEndOf="parent"app:neumorph_shadowColorDark="@color/white"app:neumorph_shadowColorLight="@color/white"app:neumorph_shadowElevation="0dp"app:neumorph_shapeAppearance="@style/ShapeAppearance_profile"app:neumorph_shapeType="flat"app:neumorph_strokeColor="@color/profile_border"app:neumorph_strokeWidth="1dp"><LinearLayoutandroid:id="@+id/next_payment"android:layout_width="match_parent"android:layout_height="match_parent"android:layout_marginLeft="@dimen/_10sdp"android:background="@color/profile_background"android:gravity="center"android:orientation="horizontal"><LinearLayoutandroid:layout_width="0dp"android:layout_height="match_parent"android:layout_marginLeft="@dimen/seven"android:layout_weight="3"android:gravity="left|center"android:orientation="vertical"><LinearLayoutandroid:layout_width="match_parent"android:layout_height="0dp"android:layout_weight="3"><TextViewandroid:layout_width="match_parent"android:layout_height="match_parent"android:enabled="false"android:gravity="left|bottom"android:paddingLeft="5dp"android:text="Next Payment "android:textColor="@color/greyish"android:textSize="@dimen/_8sdp" /></LinearLayout><LinearLayoutandroid:layout_width="match_parent"android:layout_height="0dp"android:layout_weight="3"><TextViewandroid:id="@+id/earned_total_amount"android:layout_width="wrap_content"android:layout_height="match_parent"android:enabled="false"android:gravity="left"android:paddingLeft="5dp"android:text="909"android:textColor="@color/black"android:textSize="@dimen/_14sdp" /><TextViewandroid:layout_width="wrap_content"android:layout_height="wrap_content"android:enabled="false"android:gravity="bottom"android:paddingLeft="1dp"android:text=".23 "android:textColor="@color/black"android:textSize="@dimen/_8sdp" /></LinearLayout><LinearLayoutandroid:layout_width="match_parent"android:layout_height="0dp"android:layout_weight="3"><ImageViewandroid:id="@+id/simpleSeekBar"android:layout_width="@dimen/_60sdp"android:layout_height="18dp"android:src="@drawable/seek_bar_icon" /></LinearLayout></LinearLayout></LinearLayout></soup.neumorphism.NeumorphCardView></soup.neumorphism.NeumorphCardView>-->
+
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="4"
+        android:orientation="vertical"
+        android:visibility="visible">
+
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2"
+            android:orientation="horizontal">
+
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_corner_radius="30dp"
+                app:neomorph_elevation="5dp"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_view_type="rectangular">
+
+
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_corner_radius="30dp"
+                app:neomorph_elevation="0dp"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_view_type="rectangular">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="3"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+
+
+
+                            <LinearLayout
+                                 android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="2"
+                                android:gravity="center">
+
+
+                                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                    android:layout_width="@dimen/_35sdp"
+                                    android:layout_height="match_parent"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent"
+                                    app:neomorph_background_color="@color/white"
+                                    app:neomorph_corner_radius="1dp"
+                                    app:neomorph_elevation="2dp"
+                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_layer_type="hardware"
+                                    app:neomorph_shadow_color="@color/red"
+                                    app:neomorph_shadow_type="outer"
+                                    app:neomorph_view_type="circular">
+
+
+
+                                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:layout_margin="0dp"
+                                        app:layout_constraintBottom_toBottomOf="parent"
+                                        app:layout_constraintLeft_toLeftOf="parent"
+                                        app:layout_constraintRight_toRightOf="parent"
+                                        app:layout_constraintTop_toTopOf="parent"
+                                        app:neomorph_background_color="@color/red"
+                                        app:neomorph_corner_radius="1dp"
+                                        app:neomorph_elevation="0dp"
+                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_layer_type="hardware"
+                                        app:neomorph_shadow_color="@color/red"
+                                        app:neomorph_shadow_type="inner"
+                                        app:neomorph_view_type="circular">
+
+                                        <ImageButton
+                                            android:layout_width="20dp"
+                                            android:layout_height="20dp"
+                                            android:layout_gravity="center"
+                                            android:layout_margin="@dimen/_2sdp"
+                                            android:layout_marginBottom="@dimen/two"
+                                            android:background="@color/red"
+                                            android:scaleType="fitCenter"
+                                            android:src="@drawable/ic_like_icon"
+                                            android:tint="@color/white" />
+
+                                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:enabled="false"
+                                android:gravity="center|top"
+                                android:paddingLeft="5dp"
+                                android:text="Likes"
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                        </LinearLayout>
+
+
+
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1.5"
+                            android:gravity="left|center"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_marginTop="20dp"
+                                android:layout_marginRight="@dimen/_10sdp"
+                                android:layout_weight="3"
+                                android:enabled="false"
+                                android:gravity="end"
+                                android:paddingLeft="5dp"
+                                android:text="999"
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="5"
+                                android:enabled="false"
+                                android:gravity="left"
+                                android:paddingLeft="5dp"
+                                android:text=""
+                                android:textColor="@color/greyish"
+                                android:textSize="@dimen/_18sdp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_corner_radius="30dp"
+                app:neomorph_elevation="5dp"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_view_type="rectangular">
+
+
+
+                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintLeft_toLeftOf="parent"
+                    app:layout_constraintRight_toRightOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_corner_radius="30dp"
+                    app:neomorph_elevation="0dp"
+                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                    app:neomorph_layer_type="hardware"
+                    app:neomorph_shadow_color="#D0D2D5"
+                    app:neomorph_shadow_type="outer"
+                    app:neomorph_view_type="rectangular">
+
+                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        app:layout_constraintRight_toRightOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_corner_radius="30dp"
+                        app:neomorph_elevation="0dp"
+                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                        app:neomorph_layer_type="hardware"
+                        app:neomorph_shadow_color="#D0D2D5"
+                        app:neomorph_shadow_type="outer"
+                        app:neomorph_view_type="rectangular">
+
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+
+
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="2"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="3"
+                                android:gravity="center">
+
+
+
+
+                                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                    android:layout_width="@dimen/_35sdp"
+                                    android:layout_height="match_parent"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent"
+                                    app:neomorph_background_color="@color/white"
+                                    app:neomorph_corner_radius="1dp"
+                                    app:neomorph_elevation="2dp"
+                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_layer_type="hardware"
+                                    app:neomorph_shadow_color="@color/red"
+                                    app:neomorph_shadow_type="outer"
+                                    app:neomorph_view_type="circular">
+
+
+
+
+                                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:layout_margin="0dp"
+                                        app:layout_constraintBottom_toBottomOf="parent"
+                                        app:layout_constraintLeft_toLeftOf="parent"
+                                        app:layout_constraintRight_toRightOf="parent"
+                                        app:layout_constraintTop_toTopOf="parent"
+                                        app:neomorph_background_color="@color/red"
+                                        app:neomorph_corner_radius="1dp"
+                                        app:neomorph_elevation="0dp"
+                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_layer_type="hardware"
+                                        app:neomorph_shadow_color="@color/red"
+                                        app:neomorph_shadow_type="inner"
+                                        app:neomorph_view_type="circular">
+
+                                        <ImageButton
+                                            android:layout_width="20dp"
+                                            android:layout_height="20dp"
+                                            android:layout_gravity="center"
+                                            android:layout_margin="@dimen/_2sdp"
+                                            android:layout_marginBottom="@dimen/two"
+                                            android:background="@color/red"
+                                            android:scaleType="fitCenter"
+                                            android:src="@drawable/ic_follow_icon"
+                                            android:tint="@color/white" />
+
+                                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:enabled="false"
+                                android:gravity="center|top"
+                                android:paddingLeft="5dp"
+                                android:text="Following"
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                        </LinearLayout>
+
+
+
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1.3"
+                            android:gravity="left|center"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_marginTop="20dp"
+                                android:layout_marginRight="@dimen/_10sdp"
+                                android:layout_weight="3"
+                                android:enabled="false"
+                                android:gravity="end"
+                                android:paddingLeft="5dp"
+                                android:text="525"
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="5"
+                                android:enabled="false"
+                                android:gravity="left"
+                                android:paddingLeft="5dp"
+                                android:text=""
+                                android:textColor="@color/greyish"
+                                android:textSize="@dimen/_18sdp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2"
+            android:orientation="horizontal">
+
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_corner_radius="30dp"
+                app:neomorph_elevation="5dp"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_view_type="rectangular">
+
+
+
+                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintLeft_toLeftOf="parent"
+                    app:layout_constraintRight_toRightOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_corner_radius="30dp"
+                    app:neomorph_elevation="0.1dp"
+                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                    app:neomorph_layer_type="hardware"
+                    app:neomorph_shadow_color="#D0D2D5"
+                    app:neomorph_shadow_type="outer"
+                    app:neomorph_view_type="rectangular">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="3"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+
+
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="2"
+                                android:gravity="center">
+
+
+                                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                    android:layout_width="@dimen/_35sdp"
+                                    android:layout_height="match_parent"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent"
+                                    app:neomorph_background_color="@color/white"
+                                    app:neomorph_corner_radius="1dp"
+                                    app:neomorph_elevation="2dp"
+                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_layer_type="hardware"
+                                    app:neomorph_shadow_color="@color/red"
+                                    app:neomorph_shadow_type="outer"
+                                    app:neomorph_view_type="circular">
+
+
+
+                                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:layout_margin="0dp"
+                                        app:layout_constraintBottom_toBottomOf="parent"
+                                        app:layout_constraintLeft_toLeftOf="parent"
+                                        app:layout_constraintRight_toRightOf="parent"
+                                        app:layout_constraintTop_toTopOf="parent"
+                                        app:neomorph_background_color="@color/red"
+                                        app:neomorph_corner_radius="1dp"
+                                        app:neomorph_elevation="0dp"
+                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_layer_type="hardware"
+                                        app:neomorph_shadow_color="@color/red"
+                                        app:neomorph_shadow_type="inner"
+                                        app:neomorph_view_type="circular">
+
+                                        <ImageButton
+                                            android:layout_width="20dp"
+                                            android:layout_height="20dp"
+                                            android:layout_gravity="center"
+                                            android:layout_margin="@dimen/_2sdp"
+                                            android:layout_marginBottom="@dimen/two"
+                                            android:background="@color/red"
+                                            android:scaleType="fitCenter"
+                                            android:src="@drawable/ic_like_icon"
+                                            android:tint="@color/white" />
+
+                                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:enabled="false"
+                                android:gravity="center|top"
+                                android:paddingLeft="5dp"
+                                android:text="Likes"
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                        </LinearLayout>
+
+
+
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1.5"
+                            android:gravity="left|center"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_marginTop="20dp"
+                                android:layout_marginRight="@dimen/_10sdp"
+                                android:layout_weight="3"
+                                android:enabled="false"
+                                android:gravity="end"
+                                android:paddingLeft="5dp"
+                                android:text="999"
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="5"
+                                android:enabled="false"
+                                android:gravity="left"
+                                android:paddingLeft="5dp"
+                                android:text=""
+                                android:textColor="@color/greyish"
+                                android:textSize="@dimen/_18sdp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_corner_radius="30dp"
+                app:neomorph_elevation="5dp"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_view_type="rectangular">
+
+
+
+                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintLeft_toLeftOf="parent"
+                    app:layout_constraintRight_toRightOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_corner_radius="30dp"
+                    app:neomorph_elevation="0dp"
+                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                    app:neomorph_layer_type="hardware"
+                    app:neomorph_shadow_color="#D0D2D5"
+                    app:neomorph_shadow_type="outer"
+                    app:neomorph_view_type="rectangular">
+
+                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        app:layout_constraintRight_toRightOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_corner_radius="30dp"
+                        app:neomorph_elevation="0.1dp"
+                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                        app:neomorph_layer_type="hardware"
+                        app:neomorph_shadow_color="#D0D2D5"
+                        app:neomorph_shadow_type="outer"
+                        app:neomorph_view_type="rectangular">
+
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+
+
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="2"
+                                android:gravity="center"
+                                android:orientation="vertical">
+
+
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="0dp"
+                                    android:layout_weight="3"
+                                    android:gravity="center">
+
+
+
+
+                                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                        android:layout_width="@dimen/_35sdp"
+                                        android:layout_height="match_parent"
+                                        app:layout_constraintBottom_toBottomOf="parent"
+                                        app:layout_constraintEnd_toEndOf="parent"
+                                        app:neomorph_background_color="@color/white"
+                                        app:neomorph_corner_radius="1dp"
+                                        app:neomorph_elevation="2dp"
+                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_layer_type="hardware"
+                                        app:neomorph_shadow_color="@color/red"
+                                        app:neomorph_shadow_type="outer"
+                                        app:neomorph_view_type="circular">
+
+
+
+
+                                        <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                            android:layout_width="match_parent"
+                                            android:layout_height="match_parent"
+                                            android:layout_margin="0dp"
+                                            app:layout_constraintBottom_toBottomOf="parent"
+                                            app:layout_constraintLeft_toLeftOf="parent"
+                                            app:layout_constraintRight_toRightOf="parent"
+                                            app:layout_constraintTop_toTopOf="parent"
+                                            app:neomorph_background_color="@color/red"
+                                            app:neomorph_corner_radius="1dp"
+                                            app:neomorph_elevation="0dp"
+                                            app:neomorph_highlight_color="#FFFFFF"
+                                            app:neomorph_layer_type="hardware"
+                                            app:neomorph_shadow_color="@color/red"
+                                            app:neomorph_shadow_type="inner"
+                                            app:neomorph_view_type="circular">
+
+                                            <ImageButton
+                                                android:layout_width="20dp"
+                                                android:layout_height="20dp"
+                                                android:layout_gravity="center"
+                                                android:layout_margin="@dimen/_2sdp"
+                                                android:layout_marginBottom="@dimen/two"
+                                                android:background="@color/red"
+                                                android:scaleType="fitCenter"
+                                                android:src="@drawable/ic_follow_icon"
+                                                android:tint="@color/white" />
+
+                                        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                                </LinearLayout>
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="0dp"
+                                    android:layout_weight="1"
+                                    android:enabled="false"
+                                    android:gravity="center|top"
+                                    android:paddingLeft="5dp"
+                                    android:text="Following"
+                                    android:textColor="@color/black"
+                                    android:textSize="@dimen/_10sdp" />
+
+                            </LinearLayout>
+
+
+
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1.3"
+                                android:gravity="left|center"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="0dp"
+                                    android:layout_marginTop="20dp"
+                                    android:layout_marginRight="@dimen/_10sdp"
+                                    android:layout_weight="3"
+                                    android:enabled="false"
+                                    android:gravity="end"
+                                    android:paddingLeft="5dp"
+                                    android:text="525"
+                                    android:textColor="@color/black"
+                                    android:textSize="@dimen/_10sdp" />
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="0dp"
+                                    android:layout_weight="5"
+                                    android:enabled="false"
+                                    android:gravity="left"
+                                    android:paddingLeft="5dp"
+                                    android:text=""
+                                    android:textColor="@color/greyish"
+                                    android:textSize="@dimen/_18sdp" />
+
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2"
+            android:visibility="visible">
+
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_corner_radius="30dp"
+                app:neomorph_elevation="5dp"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_view_type="rectangular">
+
+
+
+                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintLeft_toLeftOf="parent"
+                    app:layout_constraintRight_toRightOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_corner_radius="30dp"
+                    app:neomorph_elevation="0dp"
+                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                    app:neomorph_layer_type="hardware"
+                    app:neomorph_shadow_color="#D0D2D5"
+                    app:neomorph_shadow_type="outer"
+                    app:neomorph_view_type="rectangular">
+
+                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintLeft_toLeftOf="parent"
+                        app:layout_constraintRight_toRightOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_corner_radius="30dp"
+                        app:neomorph_elevation="0.1dp"
+                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                        app:neomorph_layer_type="hardware"
+                        app:neomorph_shadow_color="#D0D2D5"
+                        app:neomorph_shadow_type="outer"
+                        app:neomorph_view_type="rectangular">
+
+
+                <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:padding="10dp">
+
+
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="3"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="2"
+                                android:gravity="center">
+
+
+
+                                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                    android:layout_width="@dimen/_35sdp"
+                                    android:layout_height="match_parent"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent"
+                                    app:neomorph_background_color="@color/white"
+                                    app:neomorph_corner_radius="1dp"
+                                    app:neomorph_elevation="2dp"
+                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_layer_type="hardware"
+                                    app:neomorph_shadow_color="@color/red"
+                                    app:neomorph_shadow_type="outer"
+                                    app:neomorph_view_type="circular">
+
+
+
+                                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:layout_margin="0dp"
+                                        app:layout_constraintBottom_toBottomOf="parent"
+                                        app:layout_constraintLeft_toLeftOf="parent"
+                                        app:layout_constraintRight_toRightOf="parent"
+                                        app:layout_constraintTop_toTopOf="parent"
+                                        app:neomorph_background_color="@color/red"
+                                        app:neomorph_corner_radius="1dp"
+                                        app:neomorph_elevation="0dp"
+                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_layer_type="hardware"
+                                        app:neomorph_shadow_color="@color/red"
+                                        app:neomorph_shadow_type="inner"
+                                        app:neomorph_view_type="circular">
+
+                                        <ImageButton
+                                            android:layout_width="20dp"
+                                            android:layout_height="20dp"
+                                            android:layout_gravity="center"
+                                            android:layout_margin="@dimen/_2sdp"
+                                            android:layout_marginBottom="@dimen/two"
+                                            android:background="@color/red"
+                                            android:scaleType="fitCenter"
+                                            android:src="@drawable/ic_share_icon"
+                                            android:tint="@color/white" />
+
+                                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:enabled="false"
+                                android:gravity="center|top"
+                                android:paddingLeft="5dp"
+                                android:text="Share"
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_corner_radius="30dp"
+                app:neomorph_elevation="5dp"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_view_type="rectangular">
+
+
+
+                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintLeft_toLeftOf="parent"
+                    app:layout_constraintRight_toRightOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_corner_radius="30dp"
+                    app:neomorph_elevation="0dp"
+                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                    app:neomorph_layer_type="hardware"
+                    app:neomorph_shadow_color="#D0D2D5"
+                    app:neomorph_shadow_type="outer"
+                    app:neomorph_view_type="rectangular">
+
+
+
+
+                <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:padding="10dp">
+
+
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="3"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+
+
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="2"
+                                android:gravity="center">
+
+
+
+
+                                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                    android:layout_width="@dimen/_35sdp"
+                                    android:layout_height="match_parent"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintEnd_toEndOf="parent"
+                                    app:neomorph_background_color="@color/white"
+                                    app:neomorph_corner_radius="1dp"
+                                    app:neomorph_elevation="2dp"
+                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_layer_type="hardware"
+                                    app:neomorph_shadow_color="@color/red"
+                                    app:neomorph_shadow_type="outer"
+                                    app:neomorph_view_type="circular">
+
+
+
+
+                                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:layout_margin="0dp"
+                                        app:layout_constraintBottom_toBottomOf="parent"
+                                        app:layout_constraintLeft_toLeftOf="parent"
+                                        app:layout_constraintRight_toRightOf="parent"
+                                        app:layout_constraintTop_toTopOf="parent"
+                                        app:neomorph_background_color="@color/red"
+                                        app:neomorph_corner_radius="1dp"
+                                        app:neomorph_elevation="0dp"
+                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_layer_type="hardware"
+                                        app:neomorph_shadow_color="@color/red"
+                                        app:neomorph_shadow_type="inner"
+                                        app:neomorph_view_type="circular">
+
+                                        <ImageButton
+                                            android:layout_width="20dp"
+                                            android:layout_height="20dp"
+                                            android:layout_gravity="center"
+                                            android:layout_margin="@dimen/_2sdp"
+                                            android:layout_marginBottom="@dimen/two"
+                                            android:background="@color/red"
+                                            android:scaleType="fitCenter"
+                                            android:src="@drawable/ic_follow_icon"
+                                            android:tint="@color/white" />
+
+                                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:enabled="false"
+                                android:gravity="center|top"
+                                android:paddingLeft="5dp"
+                                android:text="Follow More"
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+    </View>
+
+</LinearLayout>

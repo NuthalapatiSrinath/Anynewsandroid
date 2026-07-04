@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:background="@color/background_color"
+    android:layout_height="match_parent">
+
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_weight="2"
+            android:layout_height="0dp">
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:gravity="bottom|center"
+            android:layout_weight="5">
+            <ImageView
+                android:layout_width="@dimen/_200sdp"
+                android:src="@drawable/no_internet_scrren"
+                android:layout_height="match_parent">
+
+            </ImageView>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:layout_weight="2">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/forty"
+                android:fontFamily="@font/montserrat"
+                android:gravity="center"
+                android:textColor="@color/black"
+                android:text="No internet!"
+                android:textSize="@dimen/thity"
+                android:textStyle="normal">
+
+            </TextView>
+            <TextView
+                android:layout_marginTop="@dimen/five"
+                android:textStyle="normal"
+                android:textSize="@dimen/_16sdp"
+                android:text="Please check your network"
+                android:fontFamily="@font/montserrat"
+                android:gravity="center"
+                android:textColor="@color/colorBookmarksInfo"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/thity">
+
+            </TextView>
+            <TextView
+                android:layout_marginTop="-5dp"
+                android:textStyle="normal"
+                android:textSize="@dimen/_16sdp"
+                android:text="connection."
+                android:textColor="@color/colorBookmarksInfo"
+                android:fontFamily="@font/montserrat"
+                android:gravity="center"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/thity">
+
+        </TextView>
+        </LinearLayout>
+
+        <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:gravity="center"
+               android:layout_weight="3">
+                <LinearLayout
+                    android:visibility="gone"
+                    android:id="@+id/net_try"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingRight="@dimen/thity"
+                    android:paddingLeft="@dimen/thity"
+                    android:background="@drawable/bg_text_comment"
+                    android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:text="Retry"
+                    android:gravity="center"
+                    android:fontFamily="@font/montserrat"
+                    android:textStyle="bold"
+                    android:textColor="@color/white"
+                     android:layout_height="40dp">
+
+                </TextView>
+                </LinearLayout>
+            </LinearLayout>
+
+
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

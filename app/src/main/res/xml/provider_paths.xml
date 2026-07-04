@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+<!--    <external-path name="OctopusDriver" path="OctopusDriver/"/>-->
+    <external-path name="AnyNews" path="Android/data/com.anyNews.anynews/files/cache/"/>
+    <external-path name="external_files" path="."/>
+    <files-path path="Images/" name="Pictures" />
+    <files-path path="Video/" name="Documents" />
+    <files-path path="Videos/" name="Documents" />
+
+    <files-path name="my_images" path="images/"/>
+    <files-path name="my_docs" path="docs/"/>
+    <cache-path name="internal_cache" path="."/>
+    <external-cache-path name="external_cache" path="."/>
+<!--
+    file URI:content://com.anyNews.anynews.provider/external_files/Android/data/com.anyNews.anynews/cache/sample.png
+-->
+</paths>

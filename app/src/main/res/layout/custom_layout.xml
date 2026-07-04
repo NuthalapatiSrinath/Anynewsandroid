@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center">
+    <soup.neumorphism.NeumorphCardView
+
+        android:id="@+id/search_text"
+        style="@style/Widget.Neumorph.ImageButton"
+        android:layout_below="@+id/basin_image_view"
+        android:layout_width="wrap_content"
+        android:layout_height="60dp"
+        android:gravity="center"
+        android:text="Next"
+        android:textSize="@dimen/_15sdp"
+        app:neumorph_shadowElevation="4dp"
+        app:neumorph_shadowColorLight="#DFFFFFFF"
+        app:neumorph_shadowColorDark="#4BDDDCDC"
+        android:scaleType="centerInside"
+        app:neumorph_strokeWidth="0.3dp"
+        app:neumorph_strokeColor="#BDD3E0"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:neumorph_shapeType="flat" >
+        <TextView
+            android:id="@+id/language_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:background="#F5F7FB"
+            android:paddingLeft="18dp"
+            android:paddingRight="18dp"
+            android:text="Nilesh"
+            android:textColor="@color/title_color"
+            android:textSize="@dimen/_10sdp"
+            android:textStyle="normal" />
+
+
+
+    </soup.neumorphism.NeumorphCardView>
+
+    <soup.neumorphism.NeumorphCardView
+        android:visibility="gone"
+        android:id="@+id/selected_search_text"
+        style="@style/Widget.Neumorph.ImageButton"
+        android:layout_below="@+id/basin_image_view"
+        android:layout_width="wrap_content"
+        android:layout_height="60dp"
+        android:gravity="center"
+        android:text="Next"
+        android:textSize="@dimen/_15sdp"
+        app:neumorph_shadowElevation="4dp"
+        app:neumorph_shadowColorLight="#DFFFFFFF"
+        app:neumorph_shadowColorDark="#4BDDDCDC"
+        android:scaleType="centerInside"
+        app:neumorph_strokeWidth="0.5dp"
+        app:neumorph_strokeColor="#F63F05"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:neumorph_shapeType="flat" >
+        <TextView
+            android:id="@+id/selected_language_name"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:background="@color/red_one"
+            android:paddingLeft="18dp"
+            android:paddingRight="18dp"
+            android:text="Nilesh"
+            android:drawableLeft="@drawable/ic_white_icon"
+            android:textColor="#FFFFFF"
+            android:textSize="@dimen/_10sdp"
+            android:textStyle="normal" />
+
+
+
+    </soup.neumorphism.NeumorphCardView>
+
+</LinearLayout>
+
+    <!--
+    <?xml version="1.0" encoding="utf-8"?>
+    <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        tools:context=".MainActivity">
+
+        <com.anyNews.anynews.Ui.NeomorphFrameLayout
+            android:id="@+id/neomorphFrameLayout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:neomorph_shadow_type="outer"
+            app:neomorph_layer_type="hardware"
+            app:neomorph_background_color="@color/white"
+            app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+            app:neomorph_elevation="@dimen/neomorph_view_elevation"
+            app:neomorph_view_type="rectangular"
+            app:neomorph_shadow_color="#D0D2D5"
+            app:neomorph_highlight_color="@color/neomorph_highlight_color"
+            tools:ignore="MissingConstraints">
+            <TextView
+                android:id="@+id/language_name"
+                android:text="one"
+                android:gravity="center"
+                android:layout_margin="@dimen/_3sdp"
+                android:background="@drawable/background_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+            </TextView>
+        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+        <com.anyNews.anynews.Ui.NeomorphFrameLayout
+            android:id="@+id/second_neomorphFrameLayout"
+            android:layout_width="match_parent"
+            android:layout_height="85dp"
+            android:visibility="gone"
+            app:neomorph_shadow_type="outer"
+            app:neomorph_layer_type="hardware"
+            app:neomorph_background_color="#FF2401"
+            app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+            app:neomorph_elevation="@dimen/neomorph_view_elevation"
+            app:neomorph_view_type="rectangular"
+            app:neomorph_shadow_color="#FF2401"
+            app:neomorph_highlight_color="#ffffff"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+            <TextView
+                android:id="@+id/second_language_name"
+                android:text="one"
+                android:layout_margin="3dp"
+                android:gravity="center"
+                android:textColor="@color/white"
+                android:background="@drawable/red_color"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+            </TextView>
+        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    -->

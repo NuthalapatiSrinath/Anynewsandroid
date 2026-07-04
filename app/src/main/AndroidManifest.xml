@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.anyNews.anynews">
+
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.MANAGE_DOCUMENTS" />
+
+    <uses-permission
+        android:name="android.permission.READ_PHONE_STATE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.RECEIVE_SMS"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_SMS"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.SEND_SMS"
+        tools:node="remove" />
+    <queries>
+        <!-- Explicit apps you know in advance about: -->
+        <package android:name="com.anyNews.anynews"/>
+        <package android:name="com.whatsapp"/>
+    </queries>
+
+    <application
+        android:name=".Application.AppController"
+        android:allowBackup="false"
+        android:configChanges="fontScale"
+        android:exported="false"
+        android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:largeHeap="true"
+        android:requestLegacyExternalStorage="true"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:screenOrientation="portrait"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:vmSafeMode="true"
+        tools:replace="android:allowBackup"
+        tools:targetApi="m">
+        <activity
+            android:name=".Activities.NewHomePage"
+            android:exported="false"
+            android:theme="@style/AppTheme"/>
+        <activity
+            android:name=".Activities.ReportCommentScreenActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"/>
+        <activity
+            android:name=".Activities.PrivacyPolicy"
+            android:exported="false"
+            android:theme="@style/AppTheme"/>
+        <activity
+            android:name=".Activities.AreaSelection"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity android:name=".Activities.JobsPageActivity" android:theme="@style/AppTheme" />
+        <activity android:name=".Activities.QuizPageActivity"  android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.HomeActivityN" android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.Report_Demo_Activity" android:theme="@style/AppTheme"/>
+        <activity android:name=".holder.FullViewPager" android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.Pagination" android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.RedeemSuccessful" android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.Testing" android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.DailogBox" android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.Transparent" android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.RelativeLayoutScratchActivity" android:theme="@style/AppTheme"/>
+        <activity android:name=".CryptoUtil" android:theme="@style/AppTheme"/>
+        <activity android:name=".Activities.UserProfile" android:theme="@style/AppTheme"/>
+        <activity
+            android:name=".Activities.WriterProfileActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/AppTheme"/>
+        <activity
+            android:name=".Activities.FolloweingMenders"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.PostVideo"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:noHistory="false"
+            android:name=".Activities.newProfileDetails"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.TermsAndCondition"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.ViewTermsAndCondition"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.Wifireconnection"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.WifiConnection"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.PaymentHistoryDetailes"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait"
+            tools:ignore="MissingClass" />
+        <activity
+            android:name=".testing.MainActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait"
+            tools:ignore="MissingClass" />
+        <activity
+            android:name=".Activities.StartingActivity"
+            android:exported="true"
+            android:noHistory="false"
+            android:screenOrientation="portrait"
+            android:launchMode="singleTask"
+            android:theme="@style/AppThemeSplash">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="anynews0.page.link"
+                    android:scheme="https" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".Activities.TestingClass"
+            android:theme="@style/AppTheme"
+            android:exported="true">
+
+            <!--
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="anynews0.page.link"
+                    android:scheme="https" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            -->
+        </activity>
+        <activity android:name=".Activities.PostArticleStatus"
+            android:theme="@style/AppTheme"/>
+        <activity
+            android:name=".Activities.FollowersProfileDetailes"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.RedeemPageActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.FullPost"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.PostArticles"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.SearchActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.LoginActivityDetails"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.Settings_Scrren"
+            android:theme="@style/AppTheme"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.RecyclerViewActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:noHistory="false"
+            android:name=".Activities.HomePage"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait"/>
+        <activity
+            android:name=".Activities.Districs"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.States"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.LanguageActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.TouchActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Utils.FlipviewDetails"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".TestCrop"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.Fullscrrenvideo"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.NotificationsActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+
+
+        <uses-library
+            android:name="org.apache.http.legacy"
+            android:required="true"
+            tools:ignore="WrongManifestParent" />
+
+        <service
+            android:name=".Services.MyFirebaseMessagingService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                <action android:name="android.intent.action.SYSTEM_ALERT_WINDOW" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_launcher" />
+        <meta-data
+            android:name="com.facebook.sdk.ApplicationId"
+            android:value="@string/facebook_app_id" />
+
+        <activity
+            android:name="com.facebook.FacebookActivity"
+            android:configChanges="keyboard|keyboardHidden|screenLayout|screenSize|orientation"
+            android:label="@string/app_name" />
+        <activity
+            android:name="com.facebook.CustomTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="@string/fb_login_protocol_scheme" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+        <meta-data
+            android:name="preloaded_fonts"
+            android:resource="@array/preloaded_fonts" />
+        <meta-data
+            android:name="com.rollbar.android.ACCESS_TOKEN"
+            android:value="29f7da84e24c4605a1bd5338bb89a8e8" />
+
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-8562336752221105~9851429858"/>
+
+        <meta-data android:name="com.google.android.gms.ads.flag.NATIVE_AD_DEBUGGER_ENABLED"
+            android:value="false" />
+
+        <meta-data android:name="com.facebook.sdk.AutoLogAppEventsEnabled"
+            android:value="true"/>
+
+        <meta-data android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled"
+            android:value="false"/>
+
+    </application>
+
+</manifest>

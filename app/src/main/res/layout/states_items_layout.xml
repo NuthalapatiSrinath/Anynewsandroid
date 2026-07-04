@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="175dp"
+  >
+
+    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+        android:visibility="gone"
+        android:id="@+id/states_neomorphFrameLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="@dimen/five"
+        app:neomorph_shadow_type="outer"
+        app:neomorph_layer_type="hardware"
+        app:neomorph_background_color="@color/white"
+        app:neomorph_corner_radius="20dp"
+        app:neomorph_elevation="5dp"
+        app:neomorph_view_type="rectangular"
+        app:neomorph_shadow_color="#D0D2D5"
+        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:gravity="center"
+            android:layout_height="match_parent">
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_margin="2dp"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_background_color="@color/payment_history_background"
+                app:neomorph_corner_radius="20dp"
+                app:neomorph_elevation="0dp"
+                app:neomorph_view_type="rectangular"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+
+                <LinearLayout
+                    android:orientation="horizontal"
+                    android:layout_width="match_parent"
+                    android:gravity="center"
+                    android:layout_height="match_parent">
+
+
+
+
+
+                    <LinearLayout
+                        android:orientation="vertical"
+                        android:layout_width="0dp"
+                        android:layout_weight="5"
+                        android:gravity="center"
+                        android:layout_height="match_parent">
+
+                        <LinearLayout
+                            android:orientation="vertical"
+                            android:layout_width="match_parent"
+                            android:gravity="center"
+                            android:layout_height="match_parent">
+
+                            <LinearLayout
+                                android:orientation="horizontal"
+                                android:layout_width="match_parent"
+                                android:gravity="center"
+                                android:layout_weight="2"
+                                android:layout_height="0dp">
+
+                                <TextView
+                                    android:id="@+id/new_states_name"
+                                    android:layout_width="match_parent"
+                                    android:textStyle="normal"
+                                    android:layout_marginLeft="@dimen/ten"
+                                    android:textSize="@dimen/_18sdp"
+                                    android:text="XXXXXXXXXXXXXX"
+                                    android:gravity="center"
+                                    android:textColor="@color/black"
+                                    android:layout_height="match_parent">
+
+                                </TextView>
+
+
+
+                            </LinearLayout>
+
+
+                        </LinearLayout>
+
+
+
+                    </LinearLayout>
+
+
+
+
+                </LinearLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+        </LinearLayout>
+
+    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+        android:id="@+id/second_states_neomorphFrameLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="@dimen/five"
+        app:neomorph_shadow_type="outer"
+        app:neomorph_layer_type="hardware"
+        app:neomorph_background_color="#ff2401"
+        app:neomorph_corner_radius="20dp"
+        app:neomorph_elevation="5dp"
+        app:neomorph_view_type="rectangular"
+        app:neomorph_shadow_color="#D0D2D5"
+        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:gravity="center"
+            android:layout_height="match_parent">
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_margin="2dp"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_background_color="#C4FF4027"
+                app:neomorph_corner_radius="20dp"
+                app:neomorph_elevation="0dp"
+                app:neomorph_view_type="rectangular"
+                app:neomorph_shadow_color="#C4FF4027"
+                app:neomorph_highlight_color="#ffffff"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintLeft_toLeftOf="parent"
+                app:layout_constraintRight_toRightOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+
+                <LinearLayout
+                    android:orientation="horizontal"
+                    android:layout_width="match_parent"
+                    android:gravity="center"
+                    android:layout_height="match_parent">
+
+
+
+
+
+                    <LinearLayout
+                        android:orientation="vertical"
+                        android:layout_width="0dp"
+                        android:layout_weight="5"
+                        android:gravity="center"
+                        android:layout_height="match_parent">
+
+                        <LinearLayout
+                            android:orientation="vertical"
+                            android:layout_width="match_parent"
+                            android:gravity="center"
+                            android:layout_height="match_parent">
+
+                            <LinearLayout
+                                android:orientation="horizontal"
+                                android:layout_width="match_parent"
+                                android:gravity="center"
+                                android:layout_weight="2"
+                                android:layout_height="0dp">
+
+                                <TextView
+                                    android:id="@+id/second_new_states_name"
+                                    android:layout_width="match_parent"
+                                    android:textStyle="normal"
+                                    android:layout_marginLeft="@dimen/ten"
+                                    android:textSize="@dimen/_18sdp"
+                                    android:text="XXXXXXXXXXXXXX"
+                                    android:gravity="center"
+                                    android:textColor="@color/white"
+                                    android:layout_height="match_parent">
+
+                                </TextView>
+
+
+
+                            </LinearLayout>
+
+
+                        </LinearLayout>
+
+
+
+                    </LinearLayout>
+
+
+
+
+                </LinearLayout>
+
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+        </LinearLayout>
+
+    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+   <!-- <com.anyNews.anynews.Ui.NeomorphFrameLayout
+
+        android:id="@+id/second_states_neomorphFrameLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        app:neomorph_shadow_type="outer"
+        app:neomorph_layer_type="hardware"
+        app:neomorph_background_color="#FF2401"
+        app:neomorph_corner_radius="@dimen/neomorph_view_state_corner_radius"
+        app:neomorph_elevation="@dimen/neomorph_view_elevation"
+        app:neomorph_view_type="rectangular"
+        app:neomorph_shadow_color="#FF2401"
+        app:neomorph_highlight_color="#ffffff"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+        <TextView
+            android:id="@+id/second_new_states_name"
+            android:text="one"
+            android:layout_margin="3dp"
+            android:gravity="center"
+            android:textColor="@color/white"
+            android:background="@drawable/state_selection"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+        </TextView>
+    </com.anyNews.anynews.Ui.NeomorphFrameLayout>-->
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+    <!--
+    <?xml version="1.0" encoding="utf-8"?>
+    <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="match_parent"
+        android:layout_marginTop="-15dp"
+
+        android:layout_height="wrap_content"
+        android:background="#F5F7FB">
+
+        <com.github.sshadkany.shapes.RoundRectView
+            android:id="@+id/btn3"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:layout_margin="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.0"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:outlineAmbientShadowColor="@color/colorPrimaryDark"
+            android:outlineSpotShadowColor="@color/colorPrimaryDark"
+            app:shape_roundRect_backgroundColor="#ffffff"
+            app:shape_roundRect_bottomLeftRadius="12dp"
+            app:shape_roundRect_bottomRightRadius="12dp"
+            app:shape_roundRect_shadow_type="drop_shadow"
+            app:shape_roundRect_topLeftRadius="12dp"
+            app:shape_roundRect_topRightRadius="12dp">
+
+            <TextView
+                android:id="@+id/text"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:layout_margin="36dp"
+                android:background="@drawable/bn"
+                android:gravity="center"
+                android:text="@string/app_name"
+                android:textSize="20dp"
+                android:textStyle="bold">
+
+            </TextView>
+
+            &lt;!&ndash;  <com.github.sshadkany.shapes.RoundRectView
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+
+                  app:shape_roundRect_backgroundColor="#ECF0F3"
+                  app:shape_roundRect_bottomLeftRadius="12dp"
+                  app:shape_roundRect_bottomRightRadius="12dp"
+                  app:shape_roundRect_shadow_type="drop_shadow"
+                  app:shape_roundRect_topLeftRadius="12dp"
+                  app:shape_roundRect_topRightRadius="12dp">
+
+
+                &lt;!&ndash;  <com.github.sshadkany.shapes.RoundRectView
+                      android:layout_width="match_parent"
+                      android:layout_height="match_parent"
+                      android:layout_margin="5dp"
+                      app:shape_roundRect_backgroundColor="#ECF0F3"
+                      app:shape_roundRect_bottomLeftRadius="12dp"
+                      app:shape_roundRect_bottomRightRadius="12dp"
+                      app:shape_roundRect_shadow_type="drop_shadow"
+                      app:shape_roundRect_topLeftRadius="12dp"
+                      app:shape_roundRect_topRightRadius="12dp">
+
+                  </com.github.sshadkany.shapes.RoundRectView>&ndash;&gt;
+              </com.github.sshadkany.shapes.RoundRectView>&ndash;&gt;
+        </com.github.sshadkany.shapes.RoundRectView>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>-->

@@ -1,0 +1,731 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:flip="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <RelativeLayout
+            android:id="@+id/yes_internet"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/transparent_white"
+                android:orientation="vertical">
+
+                <!--  Top Menu -->
+                <LinearLayout
+                    android:id="@+id/top_item_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="0.4"
+                    android:visibility="gone"
+                    android:background="@color/background_color"
+                    android:gravity="center|bottom"
+                    android:orientation="horizontal">
+
+
+                    <LinearLayout
+                        android:id="@+id/selected_my_feed"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.5"
+                        android:gravity="center|bottom"
+                        android:orientation="horizontal">
+
+
+                        <TextView
+                            android:id="@+id/my_feed"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="center|bottom"
+                            android:background="@drawable/underline_feed"
+                            android:paddingLeft="@dimen/_3sdp"
+                            android:paddingRight="@dimen/_3sdp"
+                            android:paddingBottom="@dimen/_2sdp"
+                            android:text="@string/my_feed"
+                            android:textColor="@color/selected_feed_color"
+                            android:textStyle="bold"
+                            android:textAllCaps="true"
+                            android:fontFamily="@font/roboto_bold"/>
+
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/un_selected_my_feed"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.5"
+                        android:background="@color/background_color"
+                        android:gravity="center|bottom"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/my_feed_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/_15sdp"
+                            android:text=" "
+                            android:paddingBottom="@dimen/_2sdp"
+                            android:textColor="@color/black"
+                            android:textStyle="bold"
+                            app:layout_constraintBottom_toBottomOf="@+id/button"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toTopOf="@+id/button"
+                            android:textAllCaps="true"
+                            android:fontFamily="@font/roboto_bold"/>
+                    </LinearLayout>
+
+                    <!-- local -->
+                    <LinearLayout
+                        android:id="@+id/un_selected_local"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.5"
+                        android:background="@color/background_color"
+                        android:clickable="false"
+                        android:gravity="center|bottom"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/local_distic_name"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/_15sdp"
+                            android:text="@string/india"
+                            android:textColor="@color/black"
+                            android:textStyle="bold"
+                            android:paddingBottom="@dimen/_2sdp"
+                            android:gravity="center|bottom"
+                            app:layout_constraintBottom_toBottomOf="@+id/button"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toTopOf="@+id/button"
+                            android:textAllCaps="true"
+                            android:fontFamily="@font/roboto_bold"/>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/selected_local"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.5"
+                        android:clickable="false"
+                        android:gravity="center|bottom"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/selelcted_local_distic_name"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center|bottom"
+                            android:gravity="center|bottom"
+                            android:paddingLeft="@dimen/_3sdp"
+                            android:paddingRight="@dimen/_3sdp"
+                            android:paddingBottom="@dimen/_2sdp"
+                            android:text=" "
+                            android:textColor="@color/selected_feed_color"
+                            android:textStyle="bold"
+                            android:textAllCaps="true"
+                            android:fontFamily="@font/roboto_bold"
+                            android:background="@drawable/underline_feed"/>
+
+                        <!--   <soup.neumorphism.NeumorphCardView
+                               android:layout_width="140dp"
+                               android:layout_height="50dp"
+                               android:text="Button"
+                               app:layout_constraintBottom_toBottomOf="@+id/textView6"
+                               app:layout_constraintStart_toEndOf="@+id/textView6"
+                               app:layout_constraintTop_toTopOf="@+id/textView6"
+                               app:neumorph_backgroundColor="@color/red_one">
+
+                               <TextView
+                                   android:layout_width="wrap_content"
+                                   android:layout_height="wrap_content"
+                                   android:layout_gravity="center"
+                                   android:text="MY FEED "
+                                   android:textStyle="bold"
+                                   android:textColor="@color/white" />
+                           </soup.neumorphism.NeumorphCardView>-->
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+
+                <LinearLayout
+                    android:id="@+id/layout_with_data"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="9"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:id="@+id/data_finding_value"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@color/transparent_white"
+                        android:gravity="bottom"
+                        android:orientation="vertical">
+
+                        <com.anyNews.anynews.flipview.FlipView
+                            android:id="@+id/flip_view"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="@color/transparent_white"
+                            android:visibility="gone"/>
+
+                        <androidx.percentlayout.widget.PercentRelativeLayout
+                            android:id="@+id/post_news_scrren"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="9"
+                            android:background="@drawable/transparent"
+                            android:gravity="bottom"
+                            android:visibility="gone">
+
+                            <LinearLayout
+                                android:id="@+id/floating_action_button"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="9"
+                                android:gravity="bottom"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/fab_article"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="center"
+                                    android:paddingLeft="16dp"
+                                    android:paddingRight="16dp"
+                                    android:text="Article"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+
+                                <ImageView
+                                    android:id="@+id/fab4"
+                                    android:layout_width="65dp"
+                                    android:layout_height="75dp"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/article_fab_button"
+                                    android:visibility="visible" />
+
+
+                                <com.google.android.material.floatingactionbutton.FloatingActionButton
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/ic_artical_image"
+                                    android:visibility="gone">
+
+
+                                </com.google.android.material.floatingactionbutton.FloatingActionButton>
+
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="@dimen/_50sdp"
+                                    android:gravity="center"
+                                    android:orientation="horizontal">
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1"
+                                        android:gravity="right">
+
+                                        <TextView
+                                            android:id="@+id/fab_video"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_gravity="center"
+                                            android:paddingTop="16dp"
+                                            android:paddingBottom="16dp"
+                                            android:text="Video Post"
+                                            android:textSize="@dimen/_9sdp"
+                                            android:textStyle="bold" />
+
+                                        <ImageView
+                                            android:id="@+id/fab1"
+                                            android:layout_width="65dp"
+                                            android:layout_height="75dp"
+                                            android:layout_gravity="center"
+                                            android:src="@drawable/video_post_fab"
+                                            android:visibility="visible" />
+
+
+                                        <com.google.android.material.floatingactionbutton.FloatingActionButton
+
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_gravity="center"
+                                            android:src="@drawable/ic_video_icons_value"
+                                            android:visibility="gone">
+
+                                        </com.google.android.material.floatingactionbutton.FloatingActionButton>
+
+                                    </LinearLayout>
+
+                                    <View
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="0.5">
+
+                                    </View>
+
+                                    <LinearLayout
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_weight="1">
+
+
+                                        <ImageView
+                                            android:id="@+id/fab2"
+                                            android:layout_width="65dp"
+                                            android:layout_height="75dp"
+                                            android:layout_gravity="center"
+                                            android:src="@drawable/full_image_fab"
+                                            android:visibility="visible" />
+
+                                        <com.google.android.material.floatingactionbutton.FloatingActionButton
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_gravity="center"
+                                            android:src="@drawable/ic_scoop_icon"
+                                            android:visibility="gone">
+
+                                        </com.google.android.material.floatingactionbutton.FloatingActionButton>
+
+                                        <TextView
+                                            android:id="@+id/fab_fullpost"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_gravity="center"
+                                            android:paddingTop="16dp"
+                                            android:paddingBottom="16dp"
+                                            android:text="Full Post"
+                                            android:textSize="@dimen/_9sdp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+
+
+                                </LinearLayout>
+
+
+                            </LinearLayout>
+
+                        </androidx.percentlayout.widget.PercentRelativeLayout>
+
+                        <LinearLayout
+                            android:id="@+id/txtNoData"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+                            <RelativeLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent">
+
+                                <ImageView
+                                    android:id="@+id/goHomePage"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:src="@drawable/ic_close"
+                                    android:padding="@dimen/_10sdp"
+                                    android:layout_alignParentLeft="true"
+                                    android:layout_marginTop="@dimen/_10sdp"
+                                    android:layout_marginRight="@dimen/_10sdp"/>
+
+                                <ImageView
+                                    android:id="@+id/imageViewNoData"
+                                    android:layout_width="100dp"
+                                    android:layout_height="100dp"
+                                    android:layout_centerInParent="true"
+                                    android:layout_gravity="center"
+                                    android:src="@drawable/nodata">
+
+                                </ImageView>
+
+                                <TextView
+                                    android:id="@+id/nodatascreen"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="@dimen/ten"
+                                    android:text="No data"
+                                    android:layout_centerInParent="true"
+                                    android:gravity="center"
+                                    android:layout_below="@+id/imageViewNoData"
+                                    android:textColor="#666666"
+                                    android:textSize="@dimen/fiveteen">
+
+                                </TextView>
+                            </RelativeLayout>
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_with_out_data"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="9"
+                    android:gravity="center"
+                    android:visibility="gone">
+
+                    <include layout="@layout/layout_loading"></include>
+
+                </LinearLayout>
+
+                <!--  Bottom Menu -->
+                <androidx.coordinatorlayout.widget.CoordinatorLayout
+                    android:id="@+id/home_page_navigation"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:animateLayoutChanges="true">
+
+
+                    <com.google.android.material.bottomnavigation.BottomNavigationView
+                        android:id="@+id/nav_view"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:background="@color/bottom_navigation_view_color"
+                        app:itemIconTint="@color/selector_item_primary_color"
+                        app:itemTextColor="@color/selector_item_primary_color"
+                        app:labelVisibilityMode="labeled"
+                        app:elevation="0dp"
+                        app:menu="@menu/menu_navigation_center_fab"
+                        app:theme="@style/Theme.MaterialComponents"/>
+
+                    <!--For tab remove max dp
+                    app:maxImageSize="@dimen/_40sdp"-->
+                    <ImageView
+                        android:id="@+id/imageVIewShareWhatsapp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:maxHeight="50dp"
+                        android:maxWidth="50dp"
+                        android:visibility="gone"/>
+
+                    <com.google.android.material.floatingactionbutton.FloatingActionButton
+                        android:id="@+id/fab"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:contentDescription="@string/post_selection"
+                        app:backgroundTint="@color/bottom_navigation_view_color"
+                        app:elevation="0dp"
+                        android:visibility="visible"
+                        app:layout_anchor="@+id/nav_view"
+                        app:layout_anchorGravity="center"
+                        app:maxImageSize="50dp" />
+                </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+
+            </LinearLayout>
+
+            <androidx.percentlayout.widget.PercentRelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/transparent">
+
+                <RelativeLayout
+                    android:id="@+id/comment_page"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_alignParentBottom="true"
+                    android:background="@drawable/ic_comment_page"
+                    android:visibility="gone"
+                    app:layout_heightPercent="85%">
+
+                    <RelativeLayout
+                        android:id="@+id/layoutCommentProgressbar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent">
+
+                        <ProgressBar
+                            android:id="@+id/progress_bar"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_centerInParent="true"
+                            android:indeterminate="true" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@+id/progress_bar"
+                            android:layout_centerInParent="true"
+                            android:layout_marginTop="10dp"
+                            android:gravity="center"
+                            android:text="Loading..."
+                            android:textSize="@dimen/_12sdp">
+
+                        </TextView>
+
+
+                    </RelativeLayout>
+
+
+                    <RelativeLayout
+                        android:id="@+id/top_layout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <ImageView
+                            android:id="@+id/commet_close"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:layout_alignParentRight="true"
+                            android:layout_margin="5dp"
+                            android:padding="5dp"
+                            android:src="@drawable/ic_clear_black_24dp"
+                            app:tint="@color/black" />
+
+                        <TextView
+                            android:id="@+id/comment_totoal_count"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_margin="5dp"
+                            android:gravity="left|center"
+                            android:padding="4dp"
+                            android:textColor="@color/black"
+                            android:textSize="15dp" />
+
+                    </RelativeLayout>
+
+
+                    <ScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_above="@+id/textViewCommentsTag"
+                        android:layout_marginTop="@dimen/_30sdp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent">
+
+                            <androidx.recyclerview.widget.RecyclerView
+                                android:id="@+id/comment_recycler_view"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:layout_above="@+id/write_layout"
+                                android:layout_below="@+id/top_layout"
+                                android:layout_marginBottom="@dimen/sixty" />
+                        </LinearLayout>
+
+                    </ScrollView>
+
+
+                    <!--  No Data for  Comment Page -->
+                    <LinearLayout
+                        android:id="@+id/linear_no_comment_page"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center|center_horizontal"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:layout_width="100dp"
+                            android:layout_height="100dp"
+                            android:src="@drawable/nodata">
+
+                        </ImageView>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/ten"
+                            android:text="No data"
+                            android:textColor="#666666"
+                            android:textSize="@dimen/fiveteen">
+
+                        </TextView>
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/textViewCommentsTag"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_above="@+id/write_layout"
+                        android:layout_centerHorizontal="true"
+                        android:layout_margin="@dimen/_10sdp"
+                        android:gravity="left|center"
+                        android:padding="4dp"
+                        android:textColor="#655656"
+                        android:textSize="@dimen/_12sdp" />
+
+
+                    <RelativeLayout
+                        android:id="@+id/write_layout"
+                        android:layout_width="match_parent"
+                        android:layout_height="60dp"
+                        android:layout_alignParentBottom="true"
+                        android:background="@color/background_color"
+                        android:paddingLeft="10dp"
+                        android:paddingRight="10dp">
+
+
+                        <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                            android:id="@+id/neomorphFrameLayout"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_below="@+id/textViewCommentsTag"
+                            android:layout_marginRight="50dp"
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintLeft_toLeftOf="parent"
+                            app:layout_constraintRight_toRightOf="parent"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:neomorph_background_color="@color/white"
+                            app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+                            app:neomorph_elevation="3dp"
+                            app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                            app:neomorph_layer_type="hardware"
+                            app:neomorph_shadow_color="#D0D2D5"
+                            app:neomorph_shadow_type="outer"
+                            app:neomorph_view_type="rectangular">
+
+                            <EditText
+                                android:id="@+id/leave_comment_white"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:layout_toLeftOf="@+id/send_btn_layout"
+                                android:backgroundTint="@color/white"
+                                android:hint="Leave a comment..."
+                                android:textColor="@color/black"
+                                android:textColorHint="@color/black"
+                                android:textSize="14dp" />
+
+                        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                        <RelativeLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@+id/textViewCommentsTag"
+                            android:layout_alignParentRight="true"
+                            android:layout_centerVertical="true">
+
+                            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:padding="@dimen/five"
+                                app:layout_constraintBottom_toBottomOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                app:neomorph_background_color="@color/red"
+                                app:neomorph_corner_radius="1dp"
+                                app:neomorph_elevation="3dp"
+                                app:neomorph_highlight_color="#F5F8F5"
+                                app:neomorph_layer_type="hardware"
+                                app:neomorph_shadow_color="#919395"
+                                app:neomorph_shadow_type="outer"
+                                app:neomorph_view_type="circular">
+
+                                <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                    android:layout_width="50dp"
+                                    android:layout_height="40dp"
+                                    android:layout_margin="0dp"
+                                    app:layout_constraintBottom_toBottomOf="parent"
+                                    app:layout_constraintLeft_toLeftOf="parent"
+                                    app:layout_constraintRight_toRightOf="parent"
+                                    app:layout_constraintTop_toTopOf="parent"
+                                    app:neomorph_background_color="@color/red"
+                                    app:neomorph_corner_radius="1dp"
+                                    app:neomorph_elevation="0dp"
+                                    app:neomorph_highlight_color="#919395"
+                                    app:neomorph_layer_type="hardware"
+                                    app:neomorph_shadow_color="#919395"
+                                    app:neomorph_shadow_type="inner"
+                                    app:neomorph_view_type="circular">
+
+                                    <ImageButton
+                                        android:id="@+id/send_btn_layout"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="center"
+                                        android:layout_margin="@dimen/seven"
+                                        android:background="@color/red"
+                                        android:rotation="-35"
+                                        android:scaleType="fitCenter"
+                                        android:src="@drawable/ic_send"
+                                        android:tint="@color/white" />
+
+                                    <ProgressBar
+                                        android:id="@+id/send_progress"
+                                        android:layout_width="25dp"
+                                        android:layout_height="25dp"
+                                        android:layout_gravity="center"
+                                        android:visibility="gone" />
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+
+                        </RelativeLayout>
+                    </RelativeLayout>
+                </RelativeLayout>
+
+                <LinearLayout
+                    android:id="@+id/linear_no_recyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="250dp"
+                    android:gravity="center|center_horizontal"
+                    android:orientation="vertical"
+
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:layout_width="100dp"
+                        android:layout_height="100dp"
+                        android:src="@drawable/nodata">
+
+                    </ImageView>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/ten"
+                        android:text="No data"
+                        android:textColor="#666666"
+                        android:textSize="@dimen/fiveteen">
+
+                    </TextView>
+                </LinearLayout>
+
+            </androidx.percentlayout.widget.PercentRelativeLayout>
+
+
+        </RelativeLayout>
+
+        <RelativeLayout
+            android:id="@+id/no_internet"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <include layout="@layout/no_internet_scrren"> </include>
+
+        </RelativeLayout>
+    </LinearLayout>
+
+
+</androidx.cardview.widget.CardView>
+

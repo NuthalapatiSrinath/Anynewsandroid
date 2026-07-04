@@ -1,0 +1,4 @@
+include ':android-smart-image-view-1.0.0'
+include ':app'
+rootProject.name='any news'
+include ':youtubeExtractor'

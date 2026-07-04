@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio
+.idea/
+*.iml
+local.properties
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# ProGuard
+mapping.txt
+
+# OS
+.DS_Store
+Thumbs.db

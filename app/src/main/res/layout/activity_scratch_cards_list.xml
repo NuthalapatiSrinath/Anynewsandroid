@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F5F7FB"
+    android:gravity="center"
+    android:id="@+id/nexted_scroll_view"
+    android:orientation="vertical">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/layout_with_data"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_below="@+id/linear"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <LinearLayout
+
+                    android:id="@+id/linear"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/_90sdp"
+                    android:gravity="center|center_horizontal"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:id="@+id/back_button"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginLeft="@dimen/five"
+                        android:layout_marginTop="@dimen/_10sdp"
+                        android:layout_weight="2"
+                        android:gravity="left"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="@dimen/_10sdp"
+                            android:src="@drawable/ic_back_arrow">
+
+                        </ImageView>
+
+                    </LinearLayout>
+
+
+                    <LinearLayout
+                        android:id="@+id/rewords_total_amount"
+                        android:visibility="gone"
+                        android:layout_width="@dimen/_160sdp"
+                        android:layout_height="@dimen/_75sdp"
+                        android:layout_marginTop="@dimen/_10sdp"
+                        android:background="@drawable/payment"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="2"
+                            android:gravity="center">
+
+                            <ImageView
+
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:layout_marginTop="6dp"
+                                android:layout_marginBottom="@dimen/six"
+                                android:gravity="center"
+                                android:src="@drawable/ic_money_icon" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="3"
+                            android:gravity="left|center"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/scarch_totoal_earing"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="3"
+                                android:enabled="false"
+                                android:gravity="left|bottom"
+                                android:paddingLeft="5dp"
+                                android:text="Total Rewards "
+                                android:textColor="@color/black"
+                                android:textSize="@dimen/_10sdp" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="5">
+
+                                <TextView
+                                    android:id="@+id/total_amount"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="match_parent"
+                                    android:enabled="false"
+                                    android:gravity="left"
+                                    android:paddingLeft="5dp"
+                                    android:text=""
+                                    android:textColor="@color/greyish"
+                                    android:textSize="@dimen/_16sdp" />
+
+                                <TextView
+                                    android:visibility="gone"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:enabled="false"
+                                    android:gravity="left|bottom"
+                                    android:paddingLeft="1dp"
+                                    android:text=".43 "
+                                    android:textColor="@color/greyish"
+                                    android:textSize="@dimen/_8sdp" />
+                            </LinearLayout>
+
+
+                        </LinearLayout>
+
+
+                    </LinearLayout>
+
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="2"
+                        android:orientation="horizontal">
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/scratcard_recyclerview"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginTop="@dimen/_20sdp"
+                    android:nestedScrollingEnabled="false"
+                    tools:listitem="@layout/list_row_main"
+                    android:visibility="gone">
+
+                </androidx.recyclerview.widget.RecyclerView>
+                <ProgressBar
+                    android:visibility="gone"
+                    android:id="@+id/progress_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                </ProgressBar>
+                <LinearLayout
+                    android:id="@+id/txtNoData"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/_400sdp"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/norewards"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/ten"
+                        android:layout_marginBottom="@dimen/_6sdp"
+                        android:text="You Have No Rewards Yet"
+                        android:textColor="@color/black"
+                        android:textSize="@dimen/_18sdp"
+                        android:textStyle="bold">
+
+                    </TextView>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/_3sdp"
+                        android:text="You can earn rewards by referring "
+                        android:textColor="@color/greyish"
+                        android:textSize="@dimen/_10sdp">
+
+                    </TextView>
+
+                    <TextView
+
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="@dimen/_3sdp"
+                        android:text="to your contacts"
+                        android:textColor="@color/greyish"
+                        android:textSize="@dimen/_10sdp">
+
+                    </TextView>
+
+                    <ImageView
+                        android:id="@+id/scratch_card_refer_now"
+                        android:layout_width="180dp"
+                        android:layout_height="150dp"
+                        android:scaleType="fitStart"
+                        android:src="@drawable/ic_scartch_card_refer_earn">
+
+                    </ImageView>
+
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layout_with_out_data"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginTop="@dimen/_300sdp"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <include layout="@layout/layout_loading"></include>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+        </LinearLayout>
+
+
+    </RelativeLayout>
+
+
+</androidx.core.widget.NestedScrollView>

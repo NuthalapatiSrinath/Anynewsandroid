@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_height="match_parent"
+    android:background="@color/whitewithblack">
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/_40sdp"
+            android:background="@color/whitewithblack">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+
+                <ImageView
+                    android:layout_marginTop="@dimen/ten"
+                    android:id="@+id/back"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:src="@drawable/ic_back_arrow"
+                    android:layout_marginLeft="@dimen/twenty"
+                    android:scaleType="fitXY" />
+
+                <TextView
+                    android:visibility="invisible"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:text="Payment"
+                    android:layout_marginLeft="@dimen/_10sdp"
+                    android:id="@+id/username"
+                    android:textSize="16dp"
+                    android:gravity="left|center"
+                    android:textStyle="normal"
+                    android:layout_marginRight="@dimen/fiveteen"
+                    android:textColor="@color/warm_grey"/>
+
+
+
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/menbers_list"
+            android:text="MEMBERS"
+            android:layout_width="match_parent"
+            android:textSize="@dimen/_18sdp"
+            android:gravity="center"
+            android:textColor="@color/title_color"
+            android:layout_height="@dimen/_30sdp">
+
+        </TextView>
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:orientation="vertical"
+            android:layout_height="match_parent">
+
+            <LinearLayout
+                android:id="@+id/follow_layout_with_data"
+                android:visibility="gone"
+                android:layout_below="@+id/linear"
+                android:layout_width="match_parent"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:layout_height="match_parent">
+
+
+
+
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/followeing_menbers"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                </androidx.recyclerview.widget.RecyclerView>
+
+                <LinearLayout
+                    android:id="@+id/linear_no_recyclerView"
+                    android:layout_width="match_parent"
+                    android:orientation="vertical"
+                    android:layout_marginTop="250dp"
+                    android:gravity="center|center_horizontal"
+                    android:visibility="gone"
+                    android:layout_height="wrap_content">
+                    <ImageView
+                        android:src="@drawable/nodata"
+                        android:layout_width="100dp"
+                        android:layout_height="100dp">
+                    </ImageView>
+                    <TextView
+                        android:layout_marginTop="@dimen/ten"
+                        android:text="No data"
+                        android:layout_width="wrap_content"
+                        android:textColor="#666666"
+                        android:textSize="@dimen/fiveteen"
+                        android:layout_height="wrap_content">
+
+                    </TextView>
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <LinearLayout
+
+                android:id="@+id/follow_layout_with_out_data"
+                android:layout_width="match_parent"
+                android:gravity="center"
+                android:layout_marginTop="@dimen/_180sdp"
+                android:layout_height="match_parent">
+
+                <include layout="@layout/layout_loading"></include>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:visibility="gone"
+                android:id="@+id/no_data_scrren"
+                android:layout_width="match_parent"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/_200sdp"
+                android:gravity="center|center_horizontal"
+
+                android:layout_height="wrap_content">
+                <ImageView
+                    android:src="@drawable/nodata"
+                    android:layout_width="100dp"
+                    android:layout_height="100dp">
+                </ImageView>
+                <TextView
+                    android:layout_marginTop="@dimen/ten"
+                    android:text="No data"
+                    android:layout_width="wrap_content"
+                    android:textColor="#666666"
+                    android:textSize="@dimen/fiveteen"
+                    android:layout_height="wrap_content">
+
+                </TextView>
+            </LinearLayout>
+
+        </LinearLayout>
+
+        </androidx.core.widget.NestedScrollView>
+
+
+
+    </LinearLayout>
+
+</LinearLayout>

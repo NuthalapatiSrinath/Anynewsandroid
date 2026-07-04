@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--<declare-styleable name="FlipViewController">
+        <attr name="orientation" format="enum">
+            <enum name="vertical" value="0" />
+            <enum name="horizontal" value="1" />
+        </attr>
+
+        <attr name="animationBitmapFormat" format="enum">
+            <enum name="ARGB_8888" value="0" />
+            <enum name="ARGB_4444" value="1" />
+            <enum name="RGB_565" value="2" />
+        </attr>
+    </declare-styleable>-->
+
+
+    <declare-styleable name="FlipView">
+        <attr name="orientation" format="enum">
+            <enum name="vertical" value="0" />
+            <enum name="horizontal" value="1" />
+        </attr>
+        <attr name="overFlipMode" format="enum">
+            <enum name="glow" value="0" />
+            <enum name="rubber_band" value="1" />
+        </attr>
+    </declare-styleable>
+
+
+
+
+    <declare-styleable name="NeomorphFrameLayout">
+        <attr name="neomorph_view_type" />
+        <attr name="neomorph_shadow_type" />
+        <attr name="neomorph_elevation" format="dimension" />
+        <attr name="neomorph_corner_radius" format="dimension" />
+        <attr name="neomorph_background_color" format="color" />
+        <attr name="neomorph_shadow_color" format="color" />
+        <attr name="neomorph_highlight_color" format="color" />
+        <attr name="neomorph_layer_type"/>
+        <attr name="neomorph_shadow_visible" format="boolean" />
+    </declare-styleable>
+
+    <attr name="neomorph_view_type">
+        <enum name="rectangular" value="1" />
+        <enum name="circular" value="2" />
+    </attr>
+
+    <attr name="neomorph_shadow_type">
+        <enum name="outer" value="1" />
+        <enum name="inner" value="2" />
+    </attr>
+
+    <attr name="neomorph_layer_type">
+        <enum name="software" value="1" />
+        <enum name="hardware" value="2" />
+    </attr>
+
+</resources>

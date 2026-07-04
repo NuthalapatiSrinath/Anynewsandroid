@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".Activities.StartingActivity">
+
+    <LinearLayout
+        android:id="@+id/net_avilable"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="visible">
+        <TextView
+            android:visibility="gone"
+            android:layout_marginTop="@dimen/_40sdp"
+            android:id="@+id/welcome"
+            android:gravity="center"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/red_one">
+
+        </TextView>
+
+        <ImageView
+            android:scaleType="fitXY"
+            android:id="@+id/logo_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+        </ImageView>
+        <ImageView
+            android:scaleType="fitXY"
+            android:id="@+id/logo_image_server"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+        </ImageView>
+
+        <TextView
+            android:visibility="gone"
+            style="@style/TextStyle4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/layout1"
+            android:layout_centerHorizontal="true"
+            android:layout_gravity="center"
+            android:layout_marginTop="70dp"
+            android:text="Loading..." />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/net_not_avilable"
+        android:visibility="gone"
+        android:theme="@style/AppThemeBG"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <include layout="@layout/no_internet_scrren"></include>
+    </LinearLayout>
+</RelativeLayout>

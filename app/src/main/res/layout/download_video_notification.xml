@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+
+    <TextView
+        android:id="@+id/notification_titleTEL"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="@dimen/_10sdp"
+        android:layout_marginRight="@dimen/_10sdp"
+        android:fontFamily="@font/subhadra_regular"
+        android:maxLines="3"
+        android:text="@string/your_video_downloaded"
+        android:textColor="@color/black"
+        android:textSize="@dimen/_12sdp"
+        android:visibility="visible" />
+
+    <ProgressBar
+        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_10sdp"
+        android:layout_below="@+id/notification_titleTEL"
+        android:layout_marginLeft="@dimen/_10sdp"
+        android:layout_marginRight="@dimen/_40sdp"
+        android:max="100"
+        android:progress="100"
+        android:layout_marginTop="@dimen/_3sdp"
+        android:progressDrawable="@drawable/reactangle_progressbar"
+        android:progressTint="@color/live_red" />
+
+
+</RelativeLayout>
