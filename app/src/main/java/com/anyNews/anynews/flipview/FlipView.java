@@ -515,6 +515,23 @@ public class FlipView extends FrameLayout {
         dst.valid = src.valid;
     }
 
+    /** Re-inflate only the visible page (e.g. ad finished loading). Avoids full adapter refresh. */
+    public void refreshCurrentPage() {
+        if (mAdapter == null || mPageCount < 1 || !mCurrentPage.valid
+                || mCurrentPageIndex == INVALID_PAGE_POSITION) {
+            return;
+        }
+        try {
+            removeView(mCurrentPage.v);
+            mRecycler.addScrapView(mCurrentPage.v, mCurrentPage.position, mCurrentPage.viewType);
+            fillPageForIndex(mCurrentPage, mCurrentPageIndex, mCurrentPageIndex % 3);
+            addView(mCurrentPage.v);
+            invalidate();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private void fillPageForIndex(Page p, int i, int l) {
         // if (st45.get(i) != null) {
         p.position = i;
@@ -620,18 +637,11 @@ public class FlipView extends FrameLayout {
         // get a view from the adapter if a scrap was not found or it is
         // invalid.
         View v = null;
-        // ////System.out.println("scrapscrap  ::::" + scrap);
         if (scrap == null || !scrap.valid) {
             v = mAdapter.getView(index, scrap == null ? null : scrap.v, this);
-            /*
-             * mAdapter.getView(index+1, scrap == null ? null : scrap.v, this);
-             * mAdapter.getView(index+2, scrap == null ? null : scrap.v, this);
-             * mAdapter.getView(index+3, scrap == null ? null : scrap.v, this);
-             */
         } else {
             v = scrap.v;
         }
-        // return view
         return v;
     }
 

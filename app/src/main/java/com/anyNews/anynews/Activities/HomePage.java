@@ -144,6 +144,7 @@ import com.google.android.exoplayer2.ui.PlayerView;
 import com.google.android.gms.ads.AdListener;
 import com.google.android.gms.ads.AdLoader;
 import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.admanager.AdManagerAdRequest;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.RequestConfiguration;
@@ -181,7 +182,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Random;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -246,6 +249,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean isConnected = false;
     private boolean isApiRequested = false;
     int positionx=0,requestPostition=1;
+
+    public int getCurrentFlipPosition() {
+        return positionx;
+    }
     int requestSize=0;
     boolean isFromLocalArticles=false;
     FCMTrackingEvents trackingEvents;
@@ -413,6 +420,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean fullscreen=false;
     static  public List<FlipGoogleNativeAds> nativeGoogleAdList =new ArrayList<>();
     static  public List<FlipGoogleNativeAds> nativeFBAdList =new ArrayList<>();
+    /** Ad slots where Google native load failed — FlipperAdapter shows share fallback instead of white screen. */
+    public static final Set<Integer> failedGoogleAdPositions = new HashSet<>();
     static  public List<Integer> nativeGoogleAdArray =new ArrayList<>();
     static  public List<Integer> nativeFBAdArray =new ArrayList<>();
     public List<AdsPojo> adsPojoList =new ArrayList<>();
@@ -895,6 +904,59 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    private boolean hasPreloadedGoogleAd(Integer ad_req_position) {
+        if (ad_req_position == null || nativeGoogleAdList == null) {
+            return false;
+        }
+        for (FlipGoogleNativeAds cachedAd : nativeGoogleAdList) {
+            if (cachedAd != null && cachedAd.getReqPos() == ad_req_position && cachedAd.getAd() != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void preloadAdsFromResponse(EncreptionRequest encreptionRequest, int reqPos) {
+        if (encreptionRequest == null || !encreptionRequest.isShow_ads() || encreptionRequest.getAd_positions() == null) {
+            return;
+        }
+        // Production behavior: bulk preload only on first feed load. Pagination
+        // responses only fetch slots that are not cached yet.
+        boolean initialFeedLoad = (reqPos != 3 && positionx == 0);
+        for (int i = 0; i < encreptionRequest.getAd_positions().size(); i++) {
+            Integer adReqPos = encreptionRequest.getAd_positions().get(i).getAd_req_position();
+            if (!initialFeedLoad && hasPreloadedGoogleAd(adReqPos)) {
+                continue;
+            }
+            showLog("ListAll Articles Api trigger and AD Loading 22");
+            loadAds(
+                    encreptionRequest.getAd_positions().get(i).getAd_code(),
+                    adReqPos,
+                    encreptionRequest.getAd_positions().get(i).getAd_type()
+            );
+        }
+        showLog("ListAll Articles Api trigger and AD Loading");
+    }
+
+    private void refreshCurrentAdIfNeeded(int adReqPosition) {
+        if (mFlipView == null || list == null || positionx < 0 || positionx >= list.size()) {
+            return;
+        }
+        ModelClass.Datum item = list.get(positionx);
+        if (item == null || item.getPostType() == null || !item.getPostType().equalsIgnoreCase("ad")) {
+            return;
+        }
+        if (item.getAd_req_position() != adReqPosition) {
+            return;
+        }
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mFlipView.refreshCurrentPage();
+            }
+        });
+    }
+
     private void loadAds(String ad_code, Integer ad_req_position, String ad_type) {
        showLog("Ad loading ad_code 1 :"+ad_code);
        showLog("Ad loading ad_req_position :"+ad_req_position);
@@ -904,17 +966,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
        //new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("CEB66515B6C9B2ECD92786955DF252CD"));
 //        showLog("Ad loading ad_code 2 :"+ad_code);
        // ad_type="google";
+        if (ad_code == null || ad_req_position == null || ad_type == null) {
+            return;
+        }
         if(ad_type.equalsIgnoreCase("google")){
-            if(nativeGoogleAdList !=null && nativeGoogleAdArray !=null && nativeGoogleAdList.size()>0){
-                if (!nativeGoogleAdArray.contains(positionx) || !nativeGoogleAdArray.contains(ad_req_position)) {
-                    loadGoogleAds(ad_code,ad_req_position,0);
-                }
-            }else{
+            if (!hasPreloadedGoogleAd(ad_req_position)) {
                 loadGoogleAds(ad_code, ad_req_position,0);
             }
         }else{
             if(nativeFBAdList !=null && nativeFBAdArray !=null && nativeGoogleAdList.size()>0){
-                if (!nativeFBAdArray.contains(positionx) || !nativeFBAdArray.contains(list.get(positionx).getAd_req_position())) {
+                if (!nativeFBAdArray.contains(ad_req_position)) {
                     loadFBAds(ad_code,ad_req_position);
                 }
             }else{
@@ -966,7 +1027,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             String errorMessage = error.getMessage();
                             com.google.android.gms.ads.AdError cause = error.getCause();
                             // All of this information is available via the error's toString() method.
-                            Log.d("Ads", error.toString());
+                            Log.e("Ads", "onAdFailedToLoad pos=" + ad_req_position + " code=" + adCode + " " + error);
                             JSONObject object=new JSONObject();
                             object.put("errorDomain",errorDomain);
                             object.put("errorCode",errorCode);
@@ -978,6 +1039,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }catch (Exception e){
                             e.printStackTrace();
                         }
+                        failedGoogleAdPositions.add(ad_req_position);
+                        refreshCurrentAdIfNeeded(ad_req_position);
                     }
 
                     @Override
@@ -1008,7 +1071,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 flipGoogleNativeAds.setAd(nativeAd);
                                 flipGoogleNativeAds.setAdCode(adCode);
                                 flipGoogleNativeAds.setReqPos(ad_req_position);
-                                if (!nativeGoogleAdArray.contains(list.get(positionx).getAd_req_position())) {
+                                failedGoogleAdPositions.remove(ad_req_position);
+                                if (!nativeGoogleAdArray.contains(ad_req_position)) {
                                     nativeGoogleAdArray.add(ad_req_position);
                                 }
                                 nativeGoogleAdList.add(flipGoogleNativeAds);
@@ -1020,6 +1084,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 }catch (Exception e){
                                     e.printStackTrace();
                                 }
+                                refreshCurrentAdIfNeeded(ad_req_position);
                             }
                         }catch (Exception e){
                             e.printStackTrace();
@@ -1029,8 +1094,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 })
                 .build();
-        adLoader.loadAd(new AdRequest.Builder().build());
-        //  adLoader.loadAd(new AdManagerAdRequest.Builder().build());
+        if (adCode != null && adCode.startsWith("/")) {
+            adLoader.loadAd(new AdManagerAdRequest.Builder().build());
+        } else {
+            adLoader.loadAd(new AdRequest.Builder().build());
+        }
 
     }
 
@@ -2979,12 +3047,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Prevents the same post showing twice when pagination returns overlapping data.
      * Ads / share_app / ratings (postId == null) are always kept since they are positional.
      */
+    private String articleDedupKey(ModelClass.Datum d) {
+        if (d == null || d.getPostId() == null) {
+            return null;
+        }
+        String postType = d.getPostType();
+        if (postType != null && (postType.equalsIgnoreCase("ad")
+                || postType.equalsIgnoreCase("web_ads")
+                || postType.equalsIgnoreCase("web")
+                || postType.equalsIgnoreCase("ratings")
+                || postType.equalsIgnoreCase("share_app"))) {
+            return d.getPostId() + "_" + d.getSubPostId() + "_" + postType + "_" + d.getAd_req_position();
+        }
+        return d.getPostId() + "_" + d.getSubPostId();
+    }
+
     private void addUniqueArticles(java.util.List<ModelClass.Datum> newData) {
         if (newData == null) return;
         java.util.HashSet<String> existing = new java.util.HashSet<>();
         for (ModelClass.Datum d : list) {
-            if (d != null && d.getPostId() != null) {
-                existing.add(d.getPostId() + "_" + d.getSubPostId());
+            String key = articleDedupKey(d);
+            if (key != null) {
+                existing.add(key);
             }
         }
         for (ModelClass.Datum d : newData) {
@@ -2993,10 +3077,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 list.add(d);
                 continue;
             }
-            String key = d.getPostId() + "_" + d.getSubPostId();
-            if (!existing.contains(key)) {
+            String key = articleDedupKey(d);
+            if (key == null || !existing.contains(key)) {
                 list.add(d);
-                existing.add(key);
+                if (key != null) {
+                    existing.add(key);
+                }
             } else {
                 showLog("DEDUP skipped duplicate post key=" + key);
             }
@@ -3047,14 +3133,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (encreptionRequest.getUpdateMenuStatus() != null && encreptionRequest.getUpdateMenuStatus()==2 ){
                         PlaystoreUpdateDialog();
                     }
-                    if(encreptionRequest.isShow_ads() && positionx==0 && encreptionRequest.getAd_positions() != null){
-                        for (int i = 0; i < encreptionRequest.getAd_positions().size(); i++) {
-                            showLog("ListAll Articles Api trigger and AD Loading 22");
-                            loadAds(encreptionRequest.getAd_positions().get(i).getAd_code(),encreptionRequest.getAd_positions().get(i).getAd_req_position(),encreptionRequest.getAd_positions().get(i).getAd_type());
-                        }
-                        showLog("ListAll Articles Api trigger and AD Loading");
-
-                    }
+                    preloadAdsFromResponse(encreptionRequest, reqPos);
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
                         addUniqueArticles(validateUserOtp.getData());
                         requestSize=list.size();
@@ -3456,15 +3535,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 player.stop();
                 player.seekTo(0);
             }
-            if(progress_bar_for_video!=null){
-                progress_bar_for_video.setVisibility(View.VISIBLE);
+            if ("full_video".equalsIgnoreCase(post_type) || "normal_video".equalsIgnoreCase(post_type)) {
+                if (progress_bar_for_video != null) {
+                    progress_bar_for_video.setVisibility(View.VISIBLE);
+                }
+                if (mute_video_player_image != null) {
+                    mute_video_player_image.setImageResource(R.drawable.ic_volume_off);
+                }
+                if (mute_video_player_text != null) {
+                    mute_video_player_text.setText("Unmute");
+                }
+                if (time_for_video != null) {
+                    time_for_video.setText("00:00");
+                }
+                if (simpleSeekBar != null) {
+                    simpleSeekBar.setMax(0);
+                }
             }
-            mute_video_player_image.setImageResource(R.drawable.ic_volume_off);
-            mute_video_player_text.setText("Unmute");
-            time_for_video.setText("00:00");
-            simpleSeekBar.setMax(0);
 
-        } catch (NullPointerException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
         showLog("CHECK POINT ONFLIPPEDTOPAGE 6");
@@ -3493,9 +3582,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
 
-        //loading Ad
+        //loading Ad — bind deferred ad UI now that this page is visible
         if(list.get(positionx).getPostType().equalsIgnoreCase("ad")){
+            Log.e("AnyNewsAds", "onFlippedToPage1 ad pos=" + positionx
+                    + " adCode=" + list.get(positionx).getAd_code()
+                    + " adType=" + list.get(positionx).getAd_type()
+                    + " adsFrom=" + list.get(positionx).getAds_from());
             showLog("ONFLIPPEDTOPAGE AD Loading");
+            if (mFlipView != null) {
+                mFlipView.refreshCurrentPage();
+            }
+            if (!hasPreloadedGoogleAd(list.get(positionx).getAd_req_position())) {
+                loadAds(list.get(positionx).getAd_code(), list.get(positionx).getAd_req_position(), list.get(position).getAd_type());
+            }
             loadAds(list.get(positionx).getNext_req_ad_code(), list.get(positionx).getNext_ad_req_position(), list.get(position).getAd_type());
         }
         showLog("CHECK POINT ONFLIPPEDTOPAGE 7");
@@ -3723,18 +3822,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             e.printStackTrace();
         }
         try {
-            if(adapter.nativeAd!=null){
+            if (adapter != null && adapter.nativeAd != null) {
                 showLog("native Ad");
-                if(adapter.nativeAd.getMediaContent()!=null){
-                    showLog("native Ad getMediaContent");
-                    if(adapter.nativeAd.getMediaContent().getVideoController()!=null){
-                        showLog("native Ad getMediaContent pause");
-                        adapter.nativeAd.getMediaContent().getVideoController().mute(true);
-                        adapter.nativeAd.getMediaContent().getVideoController().pause();
-                    }
+                NativeAd activeNativeAd = adapter.nativeAd;
+                if (activeNativeAd.getMediaContent() != null
+                        && activeNativeAd.getMediaContent().getVideoController() != null) {
+                    showLog("native Ad getMediaContent pause");
+                    activeNativeAd.getMediaContent().getVideoController().mute(true);
+                    activeNativeAd.getMediaContent().getVideoController().pause();
                 }
             }
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
 
@@ -4423,7 +4521,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if(list!=null){
                 if(list.get(positionx).getPostType().equalsIgnoreCase("ad")){
                     try{
-                        if(adapter!=null && adapter.nativeAd.getResponseInfo()!=null && adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo()!=null &&
+                        if(adapter!=null && adapter.nativeAd != null && adapter.nativeAd.getResponseInfo()!=null && adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo()!=null &&
                                 adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName()!=null){
                             data.put("AD Type", adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName());
                             data.put("AD Imps", ""+adImpress);

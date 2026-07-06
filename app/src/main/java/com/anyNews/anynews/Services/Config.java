@@ -7,7 +7,7 @@ public class Config {
     public static final int NEWS_TOTAL_ROWS = 100;
     public static final int COMMENTS_TOTAL_ROWS = 15;
 
-    public static final String SITE_URL = "https://anynews.fusionvertexsolutions.com/";// http://mywebsite.com/
+    public static final String SITE_URL = "https://anynews.fusionvertexsolutions.com/";
 
     static final String API_URL = SITE_URL+"api/mobileapi/";
 

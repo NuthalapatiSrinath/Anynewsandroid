@@ -825,64 +825,73 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         break;
                     case "ad":
                         pauseVideo();
-                        String TAG = "AD DATA";
                         adsScreenViewHolder = new AdsScreenViewHolder();
                         showLog("HomePage getAd_type::" + list.get(position).getAd_type());
-                        if (list.get(position).getAd_type().equalsIgnoreCase("google")) {
+                        String adType = list.get(position).getAd_type();
+                        if (adType != null && adType.equalsIgnoreCase("google")) {
                             convertView = inflater.inflate(R.layout.ads_screen, parent, false);
                             final RelativeLayout layoutParent = convertView.findViewById(R.id.layoutParent);
-                            layoutParent.getLayoutParams().height = screenHeight;
+                            if (layoutParent != null) {
+                                layoutParent.getLayoutParams().height = screenHeight;
+                            }
                             final FrameLayout fl_adplaceholder = convertView.findViewById(R.id.fl_adplaceholder);
+                            if (fl_adplaceholder == null) {
+                                break;
+                            }
                             fl_adplaceholder.setVisibility(VISIBLE);
-                            adapterCallback.closeBottomStrip(true);
+                            if (adapterCallback != null) {
+                                adapterCallback.closeBottomStrip(true);
+                            }
+
+                            int visiblePosition = (context instanceof HomePage)
+                                    ? ((HomePage) context).getCurrentFlipPosition() : position;
+                            if (position != visiblePosition) {
+                                showAdLoadingPlaceholder(fl_adplaceholder);
+                                break;
+                            }
+
                             View myView = LayoutInflater.from(context).inflate(R.layout.custom_ad_native, null);
-                            int fromView = 0;
-                            if (list.get(position).getAd_view_type().equalsIgnoreCase(Constants.AD_FULL_IMAGE)) {
+                            int fromView = 2;
+                            String adViewType = list.get(position).getAd_view_type();
+                            if (adViewType != null && adViewType.equalsIgnoreCase(Constants.AD_FULL_IMAGE)) {
                                 fromView = 0;
                                 myView = LayoutInflater.from(context).inflate(R.layout.anynews_ad_full_template_view, null);
-                            } else if (list.get(position).getAd_view_type().equalsIgnoreCase(Constants.AD_MEDIUM)) {
+                            } else if (adViewType != null && adViewType.equalsIgnoreCase(Constants.AD_MEDIUM)) {
                                 fromView = 1;
                                 myView = LayoutInflater.from(context).inflate(R.layout.anynews_ad_medium_template_view, null);
-                            } else {
-                                fromView = 2;
-                                myView = LayoutInflater.from(context).inflate(R.layout.custom_ad_native, null);
                             }
 
                             NativeAd ad = null;
-                            //   myView = LayoutInflater.from(context).inflate(R.layout.anynews_ad_medium_template_view, null);
-                            if (HomePage.nativeGoogleAdList != null && HomePage.nativeGoogleAdList.size() > 0) {
-                                showLog("HomePage.nativeAdList is not empty");
+                            if (HomePage.nativeGoogleAdList != null && !HomePage.nativeGoogleAdList.isEmpty()) {
                                 for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
-                                    showLog("AD CODE@ STORE DATA:::" + HomePage.nativeGoogleAdList.get(i).getAdCode() + "::POS::" + HomePage.nativeGoogleAdList.get(i).getReqPos());
-                                    showLog("AD CODE@ LIST DATA:::" + list.get(position).getAd_code() + "::POS:::" + list.get(position).getAd_req_position());
-                                    if (HomePage.nativeGoogleAdList.get(i).getAdCode().equalsIgnoreCase(list.get(position).getAd_code()) && HomePage.nativeGoogleAdList.get(i).getReqPos() == list.get(position).getAd_req_position()) {
-                                        showLog("HomePage.nativeAdList displaying native ad:");
-                                        ad = HomePage.nativeGoogleAdList.get(i).getAd();
-                                        nativeAd = HomePage.nativeGoogleAdList.get(i).getAd();
+                                    com.anyNews.anynews.Pojo.FlipGoogleNativeAds cached = HomePage.nativeGoogleAdList.get(i);
+                                    if (cached == null || cached.getAd() == null) {
+                                        continue;
+                                    }
+                                    if (cached.getAdCode().equalsIgnoreCase(list.get(position).getAd_code())
+                                            && cached.getReqPos() == list.get(position).getAd_req_position()) {
+                                        ad = cached.getAd();
+                                        nativeAd = cached.getAd();
+                                        break;
                                     }
                                 }
-                                if (ad == null) {
-                                    showLog("AD ERORRRRRRRRRRRR@@@");
-                                    if(null != list.get(position).getAds_from()){
-                                        if (list.get(position).getAds_from().equalsIgnoreCase("admanager")) {
-                                            ad = nativeAd;
-                                        } else if (list.get(position).getAds_from().equalsIgnoreCase("admob")) {
-                                            ad = nativeAd;
-                                        }
+                                if (ad == null && list.get(position).getAds_from() != null) {
+                                    if (list.get(position).getAds_from().equalsIgnoreCase("admanager")
+                                            || list.get(position).getAds_from().equalsIgnoreCase("admob")) {
+                                        ad = nativeAd;
                                     }
                                 }
+                            }
 
-
-                                if (ad != null) {
-                                    View finalConvertView2 = convertView;
-                                    View finalMyView = myView;
-                                    int finalFromView = fromView;
-                                    NativeAd finalAd = ad;
-                                    new Handler().postDelayed(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            showLog("HomePage.nativeAdList 222 displaying native ad:");
-                                            showLog("fromView:;" + finalFromView);
+                            if (ad != null) {
+                                View finalConvertView2 = convertView;
+                                View finalMyView = myView;
+                                int finalFromView = fromView;
+                                NativeAd finalAd = ad;
+                                new Handler().postDelayed(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        try {
                                             if (finalFromView == 0) {
                                                 displayGoogleFullNativeAd(fl_adplaceholder, finalAd, finalMyView, finalConvertView2);
                                             } else if (finalFromView == 1) {
@@ -890,20 +899,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                             } else {
                                                 displayGoogleNativeAd(fl_adplaceholder, finalAd, finalMyView, finalConvertView2);
                                             }
-                                            //  displayGoogleNativeMediumAd(position, nativeAd,finalConvertView2);
-                                            // displayGoogleNativeIntertitialsAd(fl_adplaceholder, nativeAd,myView, finalConvertView2);
+                                            if (fl_adplaceholder.getChildCount() == 0) {
+                                                showShareInAdPlaceholder(fl_adplaceholder);
+                                            }
+                                        } catch (Exception e) {
+                                            e.printStackTrace();
+                                            showShareInAdPlaceholder(fl_adplaceholder);
                                         }
-                                    }, 500);
-
-                                } else {
-                                    showLog("SHARE #1");
-                                    convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
-                                    showShareScreen(convertView);
-                                }
+                                    }
+                                }, 0L);
+                            } else if (HomePage.failedGoogleAdPositions.contains(list.get(position).getAd_req_position())) {
+                                showShareInAdPlaceholder(fl_adplaceholder);
                             } else {
-                                showLog("SHARE #2");
-                                convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
-                                showShareScreen(convertView);
+                                showAdLoadingPlaceholder(fl_adplaceholder);
                             }
                         } else {
                             convertView = inflater.inflate(R.layout.fb_ad_post, parent, false);
@@ -1799,10 +1807,114 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     }
 
-    public void showShareScreen(View convertView ){
+    private NativeAd findCachedGoogleAd(ModelClass.Datum item) {
+        if (item == null || HomePage.nativeGoogleAdList == null || HomePage.nativeGoogleAdList.isEmpty()) {
+            return null;
+        }
+        int reqPos = item.getAd_req_position();
+        String adCode = item.getAd_code();
+        NativeAd matchedByPos = null;
+        for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
+            com.anyNews.anynews.Pojo.FlipGoogleNativeAds cached = HomePage.nativeGoogleAdList.get(i);
+            if (cached == null || cached.getAd() == null) {
+                continue;
+            }
+            if (cached.getReqPos() == reqPos) {
+                matchedByPos = cached.getAd();
+                if (adCode != null && adCode.equalsIgnoreCase(cached.getAdCode())) {
+                    return cached.getAd();
+                }
+            }
+        }
+        if (matchedByPos != null) {
+            return matchedByPos;
+        }
+        // Legacy fallback: Ad Manager / AdMob slots may reuse the last loaded native ad.
+        String adsFrom = item.getAds_from();
+        if (adsFrom != null
+                && (adsFrom.equalsIgnoreCase("admanager") || adsFrom.equalsIgnoreCase("admob"))
+                && nativeAd != null) {
+            return nativeAd;
+        }
+        return null;
+    }
 
+    private void showAdLoadingPlaceholder(FrameLayout placeholder) {
+        if (placeholder == null) {
+            return;
+        }
+        placeholder.removeAllViews();
+        placeholder.setVisibility(VISIBLE);
+        View loading = LayoutInflater.from(context).inflate(R.layout.layout_loading, placeholder, false);
+        placeholder.addView(loading);
+    }
+
+    private void showShareInAdPlaceholder(FrameLayout placeholder) {
+        if (placeholder == null) {
+            return;
+        }
+        placeholder.removeAllViews();
+        placeholder.setVisibility(VISIBLE);
+        View shareView = LayoutInflater.from(context).inflate(R.layout.share_app_layout, placeholder, false);
+        placeholder.addView(shareView);
+        showShareScreen(shareView);
+    }
+
+    private void bindGoogleNativeAdView(FrameLayout fl_adplaceholder, NativeAd ad, ModelClass.Datum item, View convertView) {
+        if (ad == null || fl_adplaceholder == null || item == null) {
+            if (fl_adplaceholder != null) {
+                showShareInAdPlaceholder(fl_adplaceholder);
+            }
+            return;
+        }
+        View myView;
+        int fromView;
+        if (item.getAd_view_type() != null && item.getAd_view_type().equalsIgnoreCase(Constants.AD_FULL_IMAGE)) {
+            fromView = 0;
+            myView = LayoutInflater.from(context).inflate(R.layout.anynews_ad_full_template_view, null);
+        } else if (item.getAd_view_type() != null && item.getAd_view_type().equalsIgnoreCase(Constants.AD_MEDIUM)) {
+            fromView = 1;
+            myView = LayoutInflater.from(context).inflate(R.layout.anynews_ad_medium_template_view, null);
+        } else {
+            fromView = 2;
+            myView = LayoutInflater.from(context).inflate(R.layout.custom_ad_native, null);
+        }
+        View finalMyView = myView;
+        View finalConvertView = convertView;
+        NativeAd finalAd = ad;
+        int finalFromView = fromView;
+        final FrameLayout adPlaceholder = fl_adplaceholder;
+        new Handler().post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (finalFromView == 0) {
+                        displayGoogleFullNativeAd(adPlaceholder, finalAd, finalMyView, finalConvertView);
+                    } else if (finalFromView == 1) {
+                        displayGoogleMediumNativeAd(adPlaceholder, finalAd, finalMyView, finalConvertView);
+                    } else {
+                        displayGoogleNativeAd(adPlaceholder, finalAd, finalMyView, finalConvertView);
+                    }
+                    if (adPlaceholder.getChildCount() == 0) {
+                        showShareInAdPlaceholder(adPlaceholder);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    showShareInAdPlaceholder(adPlaceholder);
+                }
+            }
+        });
+    }
+
+    public void showShareScreen(View convertView ){
+        if (convertView == null) {
+            return;
+        }
         ImageView imageViewShare=convertView.findViewById(R.id.imageViewShare);
         ImageView imageViewWhatsapp=convertView.findViewById(R.id.imageViewWhatsapp);
+        if (imageViewShare == null || imageViewWhatsapp == null) {
+            return;
+        }
         imageViewShare.setImageResource(R.drawable.ic_app_share_socail);
         imageViewWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
         imageViewWhatsapp.setOnClickListener(new View.OnClickListener() {
@@ -2135,7 +2247,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     ((ImageView) adView.getIconView()).setVisibility(GONE);
                 }
 
-                Double starRating = nativeAd.getStarRating();
+                Double starRating = ad.getStarRating();
                 if (starRating != null && starRating > 0) {
                     ((RatingBar)adView.getStarRatingView()).setRating(ad.getStarRating().floatValue());
                     Log.e("ADDDD","setNativeAd 4");
