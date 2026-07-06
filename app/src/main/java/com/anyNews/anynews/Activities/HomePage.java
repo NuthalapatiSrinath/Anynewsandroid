@@ -121,6 +121,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.anyNews.anynews.Utils.Allsharedpreference;
+import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
@@ -439,8 +440,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
-        MobileAds.initialize(this, initializationStatus -> {
-        });
+        AdMobInitializer.initializeFromManifestIfNeeded(this);
 //        RequestConfiguration.Builder requestConfiguration=new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("CEB66515B6C9B2ECD92786955DF252CD"));
 //        MobileAds.setRequestConfiguration(requestConfiguration.build());
 
@@ -3135,6 +3135,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                     if (encreptionRequest.getUpdateMenuStatus() != null && encreptionRequest.getUpdateMenuStatus()==2 ){
                         PlaystoreUpdateDialog();
+                    }
+                    if (encreptionRequest.getAdmob_app_id() != null && !encreptionRequest.getAdmob_app_id().isEmpty()) {
+                        AdMobInitializer.initialize(HomePage.this, encreptionRequest.getAdmob_app_id());
                     }
                     preloadAdsFromResponse(encreptionRequest, reqPos);
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {

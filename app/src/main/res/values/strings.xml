@@ -19,6 +19,7 @@
 
     <string name="facebook_app_id">235381625264376</string>
     <string name="fb_login_protocol_scheme">fb235381625264376</string>
+    <string name="admob_app_id_fallback" translatable="false">ca-app-pub-8562336752221105~9851429858</string>
 
 
     <string name="todo">TODO</string>

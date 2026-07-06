@@ -44,6 +44,7 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
+import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -685,6 +686,11 @@ public class StartingActivity extends AppCompatActivity {
                     showLog("CHECK POINT 6");
 
                     if (startActivityReqModel.getSuccess()) {
+
+                        if (startActivityReqModel.getData().getAdmobAppId() != null
+                                && !startActivityReqModel.getData().getAdmobAppId().isEmpty()) {
+                            AdMobInitializer.initialize(StartingActivity.this, startActivityReqModel.getData().getAdmobAppId());
+                        }
 
                         // if getting null then uninstall app
 

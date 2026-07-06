@@ -93,6 +93,19 @@ public class EncreptionRequest {
     @SerializedName("ads_data")
     @Expose
     private List<AdsPojo> ad_positions;
+
+    @SerializedName("admob_app_id")
+    @Expose
+    private String admob_app_id;
+
+    public String getAdmob_app_id() {
+        return admob_app_id;
+    }
+
+    public void setAdmob_app_id(String admob_app_id) {
+        this.admob_app_id = admob_app_id;
+    }
+
     public Integer getUpdateMenuStatus() {
         return updateMenuStatus;
     }

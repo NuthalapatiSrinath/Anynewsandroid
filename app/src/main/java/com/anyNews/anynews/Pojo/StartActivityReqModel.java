@@ -58,6 +58,18 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean eventStatus;
 
+        @SerializedName("admob_app_id")
+        @Expose
+        private String admobAppId;
+
+        public String getAdmobAppId() {
+            return admobAppId;
+        }
+
+        public void setAdmobAppId(String admobAppId) {
+            this.admobAppId = admobAppId;
+        }
+
         public Integer getDraftId() {
             return draftId;
         }

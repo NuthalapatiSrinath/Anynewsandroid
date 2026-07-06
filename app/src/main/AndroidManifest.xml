@@ -304,7 +304,7 @@
 
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-8562336752221105~9851429858"/>
+            android:value="@string/admob_app_id_fallback"/>
 
         <meta-data android:name="com.google.android.gms.ads.flag.NATIVE_AD_DEBUGGER_ENABLED"
             android:value="false" />
