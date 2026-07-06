@@ -26,7 +26,7 @@ public final class AdMobInitializer {
         }
 
         Context appContext = context.getApplicationContext();
-        MobileAds.initialize(appContext, trimmedAppId, initializationStatus -> {
+        MobileAds.initialize(appContext, initializationStatus -> {
             initialized = true;
             initializedAppId = trimmedAppId;
         });
