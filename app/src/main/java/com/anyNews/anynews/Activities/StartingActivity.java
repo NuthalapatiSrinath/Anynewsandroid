@@ -662,11 +662,9 @@ public class StartingActivity extends AppCompatActivity {
         showLog("CHECK POINT 11::"+token);
         showLog("languageId:"+languageId);
         showLog("stored link:"+SharedPrefsData.getString(getApplicationContext(), Constants.REFERRER_POST,  Constants.PREF_NAME));
-        if(/*referlink!=null || */languageId==0 ||  token == null || token.equalsIgnoreCase("")){
-            callSplashRequest();
-        }else{
-            routeReturningUser();
-        }
+        // Always call splash so remote config (typography, ads, engagement color) stays fresh.
+        // Returning users previously skipped this and never picked up admin font changes.
+        callSplashRequest();
     }
 
     private void routeReturningUser() {
@@ -952,16 +950,16 @@ public class StartingActivity extends AppCompatActivity {
                     }
 
                 } else {
-
-                    Toast.makeText(StartingActivity.this, "Something went wrong..please try again after some time  ", Toast.LENGTH_LONG).show();
+                    showLog("Splash response unsuccessful, using cached route");
+                    routeReturningUser();
                 }
 
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
+                showLog("Splash request failed, using cached route::" + t);
+                routeReturningUser();
             }
         });
 
