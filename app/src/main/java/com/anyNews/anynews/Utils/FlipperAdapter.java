@@ -94,6 +94,7 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.widget.TextViewCompat;
 import androidx.lifecycle.Lifecycle;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.viewpager.widget.ViewPager;
@@ -385,8 +386,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         hindi_text_dp = FontSettingsHelper.getProgrammaticBodySize(context, 2);
         malayalam_text_dp = FontSettingsHelper.getProgrammaticBodySize(context, 1);
         other_font = FontSettingsHelper.getForLanguage(context, LanguageId).getBodyFontSize();
-
+        android.util.Log.d(
+                FontSettingsHelper.TAG,
+                "FlipperAdapter init lang=" + LanguageId
+                        + " tamil=" + tamil_text_dp
+                        + " hindi=" + hindi_text_dp
+                        + " malayalam=" + malayalam_text_dp
+                        + " other=" + other_font
+        );
     }
+
     public  float dipToPixels( float dipValue) {
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
          showLog("Article Data:"+ "DIPCONVERT VALUEINT VALUE>>>>" + dipValue);
@@ -405,7 +414,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (stripView == null) {
             return;
         }
-        stripView.setTextSize(TypedValue.COMPLEX_UNIT_SP, FontSettingsHelper.getStripSize(context, LanguageId));
+        float stripSize = FontSettingsHelper.getStripSize(context, LanguageId);
+        android.util.Log.d(
+                FontSettingsHelper.TAG,
+                "applyStripFont lang=" + LanguageId + " stripSize=" + stripSize + " view=" + stripView.getId()
+        );
+        TextViewCompat.setAutoSizeTextTypeWithDefaults(stripView, TextViewCompat.AUTO_SIZE_TEXT_TYPE_NONE);
+        int resId = context.getResources().getIdentifier(
+                "_" + Math.round(stripSize) + "sdp",
+                "dimen",
+                context.getPackageName()
+        );
+        if (resId != 0) {
+            stripView.setTextSize(TypedValue.COMPLEX_UNIT_PX, context.getResources().getDimension(resId));
+        } else {
+            stripView.setTextSize(TypedValue.COMPLEX_UNIT_SP, stripSize);
+        }
     }
 
     public int getStatusBarHeight() {
@@ -3736,7 +3760,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     context,
                     4,
                     halfImageActivity.tamil_half_content_title,
-                    halfImageActivity.tamil_half_content_description
+                    halfImageActivity.tamil_half_content_description,
+                    "half_image_tamil"
             );
 
         } else if (LanguageId == 1) {
@@ -3757,7 +3782,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     context,
                     1,
                     halfImageActivity.english_half_content_title,
-                    halfImageActivity.english_half_content_description
+                    halfImageActivity.english_half_content_description,
+                    "half_image_english"
             );
         } else {
 
@@ -3776,7 +3802,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     context,
                     LanguageId,
                     halfImageActivity.half_content_title,
-                    halfImageActivity.half_content_description
+                    halfImageActivity.half_content_description,
+                    "half_image_default"
             );
 
         }
@@ -4516,7 +4543,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             tamil_half_content_title.setText("" + list.get(position).getTitle());
             halfVideoExoPlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
             applyStripFont(halfVideoExoPlayerHolder.strip_text_name);
-            FontSettingsHelper.applyArticleTypography(context, 4, tamil_half_content_title, tamil_half_content_description);
+            FontSettingsHelper.applyArticleTypography(context, 4, tamil_half_content_title, tamil_half_content_description, "half_video_tamil");
 
         } else if (LanguageId == 1) {
 
@@ -4532,7 +4559,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             english_half_content_title.setText("" + list.get(position).getTitle());
             halfVideoExoPlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
             applyStripFont(halfVideoExoPlayerHolder.strip_text_name);
-            FontSettingsHelper.applyArticleTypography(context, 1, english_half_content_title, english_half_content_description);
+            FontSettingsHelper.applyArticleTypography(context, 1, english_half_content_title, english_half_content_description, "half_video_english");
 
         } else {
             english_half_content_description.setVisibility(View.GONE);
@@ -4545,7 +4572,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             half_content_title.setText("" + list.get(position).getTitle());
             halfVideoExoPlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
             applyStripFont(halfVideoExoPlayerHolder.strip_text_name);
-            FontSettingsHelper.applyArticleTypography(context, LanguageId, half_content_title, half_content_description);
+            FontSettingsHelper.applyArticleTypography(context, LanguageId, half_content_title, half_content_description, "half_video_default");
         }
         halfVideoExoPlayerHolder.writer_name.setText("" + list.get(position).getWriterName());
         halfVideoExoPlayerHolder.writer_designation.setText("" + list.get(position).getRole());
@@ -5152,7 +5179,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             tamil_half_content_title.setText("" + list.get(position).getTitle());
             half_youTubePlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
             applyStripFont(half_youTubePlayerHolder.strip_text_name);
-            FontSettingsHelper.applyArticleTypography(context, 4, tamil_half_content_title, tamil_half_content_description);
+            FontSettingsHelper.applyArticleTypography(context, 4, tamil_half_content_title, tamil_half_content_description, "half_video_tamil");
 
         } else if (LanguageId == 1) {
 
@@ -5168,7 +5195,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             english_half_content_title.setText("" + list.get(position).getTitle());
             half_youTubePlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
             applyStripFont(half_youTubePlayerHolder.strip_text_name);
-            FontSettingsHelper.applyArticleTypography(context, 1, english_half_content_title, english_half_content_description);
+            FontSettingsHelper.applyArticleTypography(context, 1, english_half_content_title, english_half_content_description, "half_video_english");
 
         } else {
             english_half_content_description.setVisibility(View.GONE);
@@ -5181,7 +5208,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             half_content_title.setText("" + list.get(position).getTitle());
             half_youTubePlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
             applyStripFont(half_youTubePlayerHolder.strip_text_name);
-            FontSettingsHelper.applyArticleTypography(context, LanguageId, half_content_title, half_content_description);
+            FontSettingsHelper.applyArticleTypography(context, LanguageId, half_content_title, half_content_description, "half_video_default");
         }
         half_youTubePlayerHolder.writer_name.setText("" + list.get(position).getWriterName());
         half_youTubePlayerHolder.writer_designation.setText("" + list.get(position).getRole());

@@ -47,6 +47,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Pojo.LanguageFontConfig;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -81,6 +82,8 @@ import static com.facebook.FacebookSdk.setAutoLogAppEventsEnabled;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -758,12 +761,43 @@ public class StartingActivity extends AppCompatActivity {
                             );
                         }
 
-                        if (startActivityReqModel.getData().getLanguageFontSettings() != null
-                                && !startActivityReqModel.getData().getLanguageFontSettings().isEmpty()) {
+                        LanguageFontConfig splashFontConfig = startActivityReqModel.getData().getFontConfig();
+                        Map<String, LanguageFontConfig> splashFontSettings =
+                                startActivityReqModel.getData().getLanguageFontSettings();
+                        int splashLanguageId = startActivityReqModel.getData().getLanguageId() != null
+                                ? startActivityReqModel.getData().getLanguageId()
+                                : 0;
+                        android.util.Log.d(
+                                FontSettingsHelper.TAG,
+                                "splash response font_config=" + new Gson().toJson(splashFontConfig)
+                                        + " legacy_font_size=" + startActivityReqModel.getData().getFontSize()
+                                        + " language_id=" + splashLanguageId
+                        );
+                        if (splashFontSettings != null && !splashFontSettings.isEmpty()) {
+                            android.util.Log.d(
+                                    FontSettingsHelper.TAG,
+                                    "splash language_font_settings count=" + splashFontSettings.size()
+                                            + " payload=" + new Gson().toJson(splashFontSettings)
+                            );
                             FontSettingsHelper.saveLanguageFontSettings(
                                     getApplicationContext(),
-                                    startActivityReqModel.getData().getLanguageFontSettings()
+                                    splashFontSettings
                             );
+                        } else {
+                            android.util.Log.w(
+                                    FontSettingsHelper.TAG,
+                                    "splash language_font_settings missing/empty; font_config only="
+                                            + new Gson().toJson(splashFontConfig)
+                            );
+                            if (splashFontConfig != null && splashLanguageId > 0) {
+                                Map<String, LanguageFontConfig> fallback = new HashMap<>();
+                                fallback.put(String.valueOf(splashLanguageId), splashFontConfig);
+                                FontSettingsHelper.saveLanguageFontSettings(getApplicationContext(), fallback);
+                                android.util.Log.d(
+                                        FontSettingsHelper.TAG,
+                                        "saved font_config fallback for language_id=" + splashLanguageId
+                                );
+                            }
                         }
 
                         showLog("SplashUpdateMenu::::"+ startActivityReqModel.getData().getUpdateMenuStatus());
