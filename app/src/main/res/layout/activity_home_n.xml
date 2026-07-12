@@ -272,7 +272,7 @@
                         android:autoSizePresetSizes="12dp"
                         android:autoSizeTextType="none"
                         android:ellipsize="end"
-                        android:fontFamily="@string/stfEmptyMessage"
+                        android:fontFamily="@font/mallannaregular"
                         android:gravity="start"
                         android:letterSpacing="0.01"
                         android:lineSpacingExtra="5sp"

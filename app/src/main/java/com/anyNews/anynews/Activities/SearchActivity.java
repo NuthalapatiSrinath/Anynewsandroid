@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ImageView;
@@ -74,7 +75,6 @@ public class SearchActivity extends AppCompatActivity {
         recyclerView.setAdapter(adapter);
         setStaticdata();
 
-
         getDataFromServer();
 
         backButtonSearch.setOnClickListener(new View.OnClickListener() {
@@ -103,7 +103,11 @@ public class SearchActivity extends AppCompatActivity {
         Gson gson = new Gson();
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
-        chooseCategories.setText(" "+languageModelResponse.getData().getChooseThreeOrMoreCategories());
+        try {
+            chooseCategories.setText(" "+languageModelResponse.getData().getChooseThreeOrMoreCategories());
+        } catch (Exception e) {
+            chooseCategories.setText(" Choose categories");
+        }
     }
     public void getDataFromServer(){
 
@@ -150,11 +154,6 @@ public class SearchActivity extends AppCompatActivity {
 
                 @Override
                 public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
-                    //       Toast.makeText(getActivity(),"VVVVV  "+t.getMessage(),Toast.LENGTH_LONG).show();
-
-
                 }
             });
 

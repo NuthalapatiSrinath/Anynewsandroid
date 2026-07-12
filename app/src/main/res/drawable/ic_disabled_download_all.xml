@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22.979dp"
+    android:height="23.322dp"
+    android:viewportWidth="22.979"
+    android:viewportHeight="23.322">
+  <path
+      android:pathData="M11.476,0.375L12.351,0.375A0.586,0.586 0,0 1,12.937 0.961L12.937,14.735A0.586,0.586 0,0 1,12.351 15.321L11.476,15.321A0.586,0.586 0,0 1,10.89 14.735L10.89,0.961A0.586,0.586 0,0 1,11.476 0.375z"
+      android:strokeWidth=".75"
+      android:fillColor="@color/share_download_icon_disabled"
+      android:strokeColor="@color/share_download_icon_disabled"/>
+  <path
+      android:strokeWidth="1"
+      android:pathData="M12.008,17.825L11.663,17.544A0.445,0.445 84.13,0 1,11.598 16.918L18.387,8.573A0.445,0.445 84.13,0 1,19.013 8.509L19.358,8.79A0.445,0.445 84.13,0 1,19.423 9.416L12.634,17.761A0.445,0.445 84.13,0 1,12.008 17.825z"
+      android:fillColor="@color/share_download_icon_disabled"
+      android:strokeColor="@color/share_download_icon_disabled"/>
+  <path
+      android:strokeWidth="1"
+      android:pathData="M5.079,8.924L5.434,8.655A0.445,0.445 97.791,0 1,6.057 8.74L12.563,17.307A0.445,0.445 97.791,0 1,12.477 17.931L12.123,18.2A0.445,0.445 97.791,0 1,11.499 18.115L4.994,9.547A0.445,0.445 97.791,0 1,5.079 8.924z"
+      android:fillColor="@color/share_download_icon_disabled"
+      android:strokeColor="@color/share_download_icon_disabled"/>
+  <path
+      android:pathData="M1.787,17.768L1.787,22.556A0.606,0.606 0,0 1,1.181 23.162L0.606,23.162A0.606,0.606 0,0 1,0 22.556L0,17.768A0.606,0.606 0,0 1,0.606 17.162L1.181,17.162A0.606,0.606 0,0 1,1.787 17.768z"
+      android:fillColor="@color/share_download_icon_disabled"/>
+  <path
+      android:pathData="M22.979,17.768L22.979,22.556A0.606,0.606 0,0 1,22.372 23.162L21.894,23.162A0.606,0.606 0,0 1,21.288 22.556L21.288,17.768A0.606,0.606 0,0 1,21.894 17.162L22.372,17.162A0.606,0.606 0,0 1,22.979 17.768z"
+      android:fillColor="@color/share_download_icon_disabled"/>
+  <path
+      android:pathData="M0.606,21.247L22.372,21.247A0.606,0.606 0,0 1,22.979 21.854L22.979,22.715A0.606,0.606 0,0 1,22.372 23.322L0.606,23.322A0.606,0.606 0,0 1,0 22.715L0,21.854A0.606,0.606 0,0 1,0.606 21.247z"
+      android:fillColor="@color/share_download_icon_disabled"/>
+</vector>

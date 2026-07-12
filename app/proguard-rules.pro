@@ -21,3 +21,44 @@
 #-renamesourcefileattribute SourceFile
 -keep class com.google.firebase.example.fireeats.model.** { *; }
 -keep class com.anyNews.anynews.Pojo.** { *; }
+
+# ==== Rules ported from production (AnyNews_2026) proguard-rules.pro ====
+
+# Keep app classes
+-keep class com.anyNews.anynews.** { *; }
+
+# Missing optional classes (suppress R8 missing-class errors)
+-dontwarn com.facebook.infer.annotation.Nullsafe$Mode
+-dontwarn com.facebook.infer.annotation.Nullsafe
+-dontwarn com.google.android.exoplayer2.analytics.AnalyticsCollector$Factory
+-dontwarn com.google.protobuf.java_com_google_android_gmscore_sdk_target_granule__proguard_group_gtm_N1281923064GeneratedExtensionRegistryLite$Loader
+-dontwarn org.bouncycastle.jsse.BCSSLParameters
+-dontwarn org.bouncycastle.jsse.BCSSLSocket
+-dontwarn org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
+-dontwarn org.conscrypt.Conscrypt$Version
+-dontwarn org.conscrypt.Conscrypt
+-dontwarn org.conscrypt.ConscryptHostnameVerifier
+-dontwarn org.openjsse.javax.net.ssl.SSLParameters
+-dontwarn org.openjsse.javax.net.ssl.SSLSocket
+-dontwarn org.openjsse.net.ssl.OpenJSSE
+
+# Retrofit
+-keep interface retrofit2.** { *; }
+-keep class retrofit2.** { *; }
+
+# Keep the method parameters for Retrofit interface methods
+-keepclassmembers,allowobfuscation interface * {
+    @retrofit2.http.* <methods>;
+}
+
+# Gson
+-keep class com.google.gson.reflect.TypeToken
+-keep class * extends com.google.gson.reflect.TypeToken
+-keep public class * implements java.lang.reflect.Type
+
+# Media3 / ExoPlayer
+-dontwarn androidx.media3.**
+-keep class androidx.media3.** { *; }
+
+# YouTube player (pierfrancescosoffritti)
+-keep class com.pierfrancescosoffritti.androidyoutubeplayer.** { *; }

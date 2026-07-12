@@ -253,6 +253,16 @@
     </style>
 
 
+    <style name="BottomNavLabelActive" parent="TextAppearance.AppCompat.Caption">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="BottomNavLabelInactive" parent="TextAppearance.AppCompat.Caption">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
     <style name="AppStarting" parent="Theme.SplashScreen">
         <!-- Set the splash screen background, animated icon, and animation
         duration. -->

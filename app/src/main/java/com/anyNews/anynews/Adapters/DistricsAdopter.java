@@ -166,6 +166,8 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
 
                     SharedPrefsData.putString(context, Constants.Selected_Distric_Name, distric_name, Constants.PREF_NAME);
                     SharedPrefsData.putString(context, Constants.Selected_Distric_Name1, distric_name, Constants.PREF_NAME);
+                    SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
+                    SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
 
                     Intent intent=new Intent(context,HomePage.class);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);

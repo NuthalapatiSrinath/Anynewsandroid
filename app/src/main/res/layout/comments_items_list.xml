@@ -49,6 +49,7 @@
                     android:layout_gravity="left"
                     android:layout_weight="8"
                     android:text="Akkisetty Narasimha Rao"
+                    android:textColor="@color/text_color_primary"
                     android:textSize="@dimen/_12sdp"
                     android:textStyle="normal" />
 
@@ -60,6 +61,7 @@
                     android:layout_weight="2"
                     android:gravity="center"
                     android:text="3 min"
+                    android:textColor="@color/warm_grey_two"
                     android:textSize="@dimen/_8sdp"
                     android:textStyle="normal" />
             </LinearLayout>
@@ -72,6 +74,7 @@
                 android:layout_gravity="left"
                 android:layout_marginBottom="@dimen/two"
                 android:text="Akkisetty Narasimha Raofjrelgnegjgntpjgn eroggj reorb reperoirejepogeipo reigjrgorigroin  ijgigjt"
+                android:textColor="@color/text_color_primary"
                 android:textSize="@dimen/_9sdp"
                 android:textStyle="normal" />
         </LinearLayout>

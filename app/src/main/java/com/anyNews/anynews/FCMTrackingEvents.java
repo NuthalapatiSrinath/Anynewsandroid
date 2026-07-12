@@ -29,4 +29,26 @@ public class FCMTrackingEvents {
         mFirebaseAnalytics.logEvent(Name, bundle);
     }
 
+    public void trackFirebaseAnalytics(int ID, String Name) {
+        AppHelper.showLog("Firebse triggered on.." + ID);
+        AppHelper.showLog( "Firebse triggered on ..." + Name);
+        Bundle bundle = new Bundle();
+        bundle.putInt(FirebaseAnalytics.Param.ITEM_ID, ID);
+        bundle.putString(FirebaseAnalytics.Param.ITEM_NAME, Name);
+        mFirebaseAnalytics.logEvent(Name, bundle);
+    }
+
+    public void trackFirebaseAnalytics(String bundle2, String Name, String ID) {
+        AppHelper.showLog("Firebse triggered on.." + ID);
+        AppHelper.showLog( "Firebse triggered on ..." + Name);
+        Bundle bundle = new Bundle();
+        bundle.putInt(FirebaseAnalytics.Param.ITEM_ID, 3);
+        bundle.putString(FirebaseAnalytics.Param.ITEM_NAME, bundle2);
+        mFirebaseAnalytics.logEvent(Name, bundle);
+    }
+
+    public void trackFirebaseAnalytics(Bundle bundle, String Name) {
+        mFirebaseAnalytics.logEvent(Name, bundle);
+    }
+
 }

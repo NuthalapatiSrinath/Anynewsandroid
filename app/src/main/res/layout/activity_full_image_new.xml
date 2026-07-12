@@ -188,6 +188,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/five"
+                    android:shadowColor="@color/black"
                     android:text="Comment"
                     android:textColor="@color/full_gallery_text_color"
                     android:textSize="9dp"
@@ -223,7 +224,7 @@
             <LinearLayout
                 android:id="@+id/full_image_share"
                 android:layout_width="wrap_content"
-                android:layout_height="45dp"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="17dp"
                 android:layout_marginBottom="@dimen/ten"
                 android:gravity="center_horizontal"
@@ -231,15 +232,19 @@
 
                 <ImageView
                     android:id="@+id/full_image_share_bg"
-                    android:layout_width="25dp"
-                    android:layout_height="25dp"
-                    android:scaleType="fitCenter" />
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/magazine_share_pulse_bg"
+                    android:contentDescription="@string/share_more_options"
+                    android:padding="12dp"
+                    android:scaleType="centerInside" />
 
                 <TextView
                     android:id="@+id/full_image_share_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/five"
+                    android:shadowColor="@color/black"
                     android:text="Share"
                     android:textColor="@color/full_gallery_text_color"
                     android:textSize="9dp"

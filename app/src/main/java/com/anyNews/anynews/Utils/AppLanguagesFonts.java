@@ -25,7 +25,7 @@ public class AppLanguagesFonts {
     }
 
     public static Typeface getTeluguFont() {
-        return ResourcesCompat.getFont(context, R.font.robotolighttelugu);
+        return ResourcesCompat.getFont(context, R.font.sreekrushnadevaraya_regular);
     }
 
     public static Typeface getTamilLanguage() {

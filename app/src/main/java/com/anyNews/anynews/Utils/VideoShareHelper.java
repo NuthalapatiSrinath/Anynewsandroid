@@ -2,6 +2,7 @@ package com.anyNews.anynews.Utils;
 
 import android.app.Activity;
 import android.app.ProgressDialog;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -28,6 +29,7 @@ public class VideoShareHelper {
 
     public enum ShareMode {
         GENERAL,
+        WHATSAPP_CHAT,
         WHATSAPP_STATUS
     }
 
@@ -138,25 +140,50 @@ public class VideoShareHelper {
         progressDialog = null;
     }
 
+    private static String buildShareMessage(String title, String shareLink) {
+        String safeTitle = title != null ? title.trim() : "";
+        String safeLink = shareLink != null ? shareLink.trim() : "";
+        if (!safeTitle.isEmpty() && !safeLink.isEmpty()) {
+            return safeTitle + "\n" + safeLink;
+        }
+        if (!safeTitle.isEmpty()) {
+            return safeTitle;
+        }
+        return safeLink;
+    }
+
+    private static String resolveMimeType(File videoFile, String videoUrl) {
+        String extension = getExtension(videoUrl != null ? videoUrl : videoFile.getName());
+        String mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+        return mimeType != null ? mimeType : "video/*";
+    }
+
     private static void launchShareIntent(Context context, Activity activity, File videoFile,
                                             String title, String shareLink, ShareMode mode) {
         try {
             Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", videoFile);
-            String msg = title + " " + (shareLink != null ? shareLink : "");
+            String mimeType = resolveMimeType(videoFile, videoFile.getName());
+            String shareMessage = buildShareMessage(title, shareLink);
 
             Intent intent = new Intent(Intent.ACTION_SEND);
-            intent.setType("video/*");
+            intent.setType(mimeType);
             intent.putExtra(Intent.EXTRA_STREAM, uri);
-            intent.putExtra(Intent.EXTRA_TEXT, msg);
+            if (!shareMessage.isEmpty()) {
+                intent.putExtra(Intent.EXTRA_TEXT, shareMessage);
+                intent.putExtra(Intent.EXTRA_SUBJECT, shareMessage);
+            }
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setClipData(ClipData.newUri(context.getContentResolver(), "shared_video", uri));
 
-            if (mode == ShareMode.WHATSAPP_STATUS) {
+            if (mode == ShareMode.WHATSAPP_CHAT || mode == ShareMode.WHATSAPP_STATUS) {
                 if (!isAppInstalled(context, "com.whatsapp")) {
                     Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 intent.setPackage("com.whatsapp");
-                intent.putExtra("jid", "status@broadcast");
+                if (mode == ShareMode.WHATSAPP_STATUS) {
+                    intent.putExtra("jid", "status@broadcast");
+                }
             }
 
             List<ResolveInfo> resInfoList = context.getPackageManager()
@@ -166,7 +193,7 @@ public class VideoShareHelper {
                 context.grantUriPermission(packageName, uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             }
-            if (activity != null && mode == ShareMode.WHATSAPP_STATUS) {
+            if (activity != null && (mode == ShareMode.WHATSAPP_CHAT || mode == ShareMode.WHATSAPP_STATUS)) {
                 activity.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
             }
 

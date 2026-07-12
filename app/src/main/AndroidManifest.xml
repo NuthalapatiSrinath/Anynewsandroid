@@ -53,6 +53,10 @@
         tools:replace="android:allowBackup"
         tools:targetApi="m">
         <activity
+            android:name=".Activities.BaseActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"/>
+        <activity
             android:name=".Activities.NewHomePage"
             android:exported="false"
             android:theme="@style/AppTheme"/>
@@ -192,6 +196,7 @@
         <activity
             android:name=".Activities.SearchActivity"
             android:theme="@style/AppTheme"
+            android:exported="true"
             android:screenOrientation="portrait" />
         <activity
             android:name=".Activities.LoginActivityDetails"
@@ -222,6 +227,7 @@
         <activity
             android:name=".Activities.LanguageActivity"
             android:theme="@style/AppTheme"
+            android:exported="true"
             android:screenOrientation="portrait" />
         <activity
             android:name=".Activities.TouchActivity"
@@ -314,6 +320,10 @@
 
         <meta-data android:name="com.facebook.sdk.AdvertiserIDCollectionEnabled"
             android:value="false"/>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="AnyNewsApp" />
 
     </application>
 

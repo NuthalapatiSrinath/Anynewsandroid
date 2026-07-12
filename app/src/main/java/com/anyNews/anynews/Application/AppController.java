@@ -8,10 +8,15 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.multidex.MultiDexApplication;
 
 import com.android.volley.Request;
@@ -20,10 +25,14 @@ import com.android.volley.toolbox.HurlStack;
 import com.android.volley.toolbox.ImageLoader;
 import com.android.volley.toolbox.Volley;
 import com.anyNews.anynews.Activities.HomePage;
+import com.anyNews.anynews.Activities.StartingActivity;
+import com.anyNews.anynews.BuildConfig;
+import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.ConnectivityReceiver;
 import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.ImageLoaderInit;
 import com.anyNews.anynews.Utils.Logone;
 import com.facebook.ads.AdSettings;
 import com.facebook.ads.AudienceNetworkAds;
@@ -31,6 +40,7 @@ import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.initialization.AdapterStatus;
 import com.google.android.gms.ads.initialization.InitializationStatus;
 import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
+import com.google.firebase.FirebaseApp;
 
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -61,16 +71,47 @@ public class AppController extends MultiDexApplication {
     public void onCreate() {
         AppHelper.showLog("onCreate for AppController");
         super.onCreate();
+        FirebaseApp.initializeApp(this);
         mInstance = this;
+        ImageLoaderInit.ensureInitialized(this);
         createNotificationChannel(getApplicationContext());
         appLanguagesFonts=AppLanguagesFonts.getInstance(getApplicationContext());
 
        // MobileAds.initialize(this, new adsLoadingInit());
         //AudienceNetworkAds.initialize(this);
+        MobileAds.initialize(this, initializationStatus -> {
+        });
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle bundle) {
+                Window window = activity.getWindow();
+                if (Build.VERSION.SDK_INT >= 35 ) {
+                    if (!(activity instanceof StartingActivity)) {
+                        WindowCompat.setDecorFitsSystemWindows(window, true);
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+                        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+                        window.getDecorView().setSystemUiVisibility(0);
+
+                        window.setStatusBarColor(ContextCompat.getColor(activity, R.color.app_bg_color));
+                        window.setNavigationBarColor(ContextCompat.getColor(activity, R.color.app_bg_color));
+
+                        WindowInsetsControllerCompat insetsController =
+                                WindowCompat.getInsetsController(window, window.getDecorView());
+
+                        if (insetsController != null) {
+                            insetsController.setAppearanceLightStatusBars(false);
+                            insetsController.setAppearanceLightNavigationBars(false);
+                        }
+                    }
+                }
+                if (!(activity instanceof StartingActivity)) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        View decorView = window.getDecorView();
+                        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+                    }
+                }
+
                 if(activity instanceof HomePage){
                     activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
                 }else{
@@ -122,6 +163,15 @@ public class AppController extends MultiDexApplication {
     }
 
     private static SSLSocketFactory createSslSocketFactory() {
+        if (!BuildConfig.DEBUG) {
+            try {
+                return SSLContext.getDefault().getSocketFactory();
+            } catch (NoSuchAlgorithmException e) {
+                Logone.e("sanjay", e.toString());
+                return null;
+            }
+        }
+
         TrustManager[] byPassTrustManagers = new TrustManager[]{new X509TrustManager() {
             public X509Certificate[] getAcceptedIssuers() {
                 return new X509Certificate[0];
@@ -163,7 +213,16 @@ public class AppController extends MultiDexApplication {
     }
     public RequestQueue getRequestQueue() {
         if (mRequestQueue == null) {
-            mRequestQueue = Volley.newRequestQueue(getApplicationContext(), new HurlStack(null, createSslSocketFactory()));
+            if (BuildConfig.DEBUG) {
+                SSLSocketFactory sslSocketFactory = createSslSocketFactory();
+                if (sslSocketFactory != null) {
+                    mRequestQueue = Volley.newRequestQueue(getApplicationContext(), new HurlStack(null, sslSocketFactory));
+                } else {
+                    mRequestQueue = Volley.newRequestQueue(getApplicationContext());
+                }
+            } else {
+                mRequestQueue = Volley.newRequestQueue(getApplicationContext());
+            }
         }
 
         return mRequestQueue;

@@ -25,7 +25,7 @@
             android:paddingLeft="@dimen/_10sdp"
             android:paddingTop="@dimen/_10sdp"
             android:text="Report Comment"
-            android:textColor="@color/black"
+            android:textColor="@color/text_color_primary"
             android:textSize="@dimen/_14sdp" />
         <TextView
             android:id="@+id/textViewBlockUser"
@@ -35,7 +35,7 @@
             android:paddingTop="@dimen/_10sdp"
             android:text="Block User"
             android:layout_below="@+id/textViewReport"
-            android:textColor="@color/black"
+            android:textColor="@color/text_color_primary"
             android:textSize="@dimen/_14sdp" />
 
 

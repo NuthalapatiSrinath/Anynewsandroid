@@ -79,6 +79,7 @@
                             android:paddingRight="10dp"
                             android:paddingBottom="2dp"
                             android:text=" "
+                            android:textColor="@color/content_title_color"
                             android:textSize="@dimen/_14sdp"
                             android:textStyle="bold"
                             app:autoSizeMaxTextSize="@dimen/_13sdp"

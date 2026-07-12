@@ -16,6 +16,18 @@ public class ModelClass implements Serializable {
         @Expose
         private Boolean is_source;
 
+        public Boolean getDownloadable() {
+            return downloadable;
+        }
+
+        public void setDownloadable(Boolean downloadable) {
+            this.downloadable = downloadable;
+        }
+
+        @SerializedName("downloadable")
+        @Expose
+        private Boolean downloadable;
+
 
         @SerializedName("source_link")
         @Expose
@@ -160,6 +172,18 @@ public class ModelClass implements Serializable {
         @SerializedName("post_date_time")
         @Expose
         private String post_date_time;
+
+        public String getImage_type() {
+            return image_type;
+        }
+
+        public void setImage_type(String image_type) {
+            this.image_type = image_type;
+        }
+
+        @SerializedName("image_type")
+        @Expose
+        private String image_type;
         @SerializedName("load_ads")
         @Expose
         private boolean load_ads;
@@ -264,6 +288,19 @@ public class ModelClass implements Serializable {
         public boolean isLoad_ads() {
             return load_ads;
         }
+
+        public Boolean getAd_audio_mute() {
+            return ad_audio_mute;
+        }
+
+        public void setAd_audio_mute(Boolean ad_audio_mute) {
+            this.ad_audio_mute = ad_audio_mute;
+        }
+
+        @SerializedName("ad_audio_mute")
+        @Expose
+        private Boolean ad_audio_mute;
+
 
         public void setLoad_ads(boolean load_ads) {
             this.load_ads = load_ads;

@@ -5,23 +5,29 @@
     android:orientation="vertical"
     android:animateLayoutChanges="true"
     android:padding="5dp"
-    android:background="@color/whitewithblack"
+    android:background="@android:color/transparent"
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <ProgressBar
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:indeterminate="true" />
+    <com.anyNews.anynews.dotsloader.loaders.CircularDotsLoader
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:loader_animDur="100"
+        app:loader_bigCircleRadius="20dp"
+        app:loader_circleRadius="5dp"
+        app:loader_defaultColor="#33AA4747"
+        app:loader_firstShadowColor="@color/red_one"
+        app:loader_secondShadowColor="@color/red"
+        app:loader_selectedColor="#C6FF5722"
+        app:loader_showRunningShadow="true" />
 
     <TextView
         android:layout_marginTop="10dp"
         android:layout_width="match_parent"
         android:gravity="center"
         android:textSize="@dimen/_12sdp"
+        android:textColor="@color/red_one"
         android:layout_height="wrap_content"
-        android:text="Loading...">
-
-    </TextView>
+        android:text="Loading..."/>
 
 </LinearLayout>

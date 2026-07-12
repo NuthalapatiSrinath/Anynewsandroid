@@ -2,6 +2,9 @@ package com.anyNews.anynews.Adapters;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.CountDownTimer;
 import android.view.LayoutInflater;
@@ -161,11 +164,14 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                         String json = gson.toJson(languageSelectionResponse); // myObject - instance of MyObject
 
                         prefManager.setShared_String(Allsharedpreference.Translator, json);
-                        SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
+                        SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN,
+                                languageSelectionResponse.getNextScreen(), Constants.PREF_NAME);
                         SharedPrefsData.putString(context, Constants.State_Name, languageSelectionResponse.getNextScreen(), Constants.PREF_NAME);
 
                         if(languageSelectionResponse.getNextScreen().equals("main")){
 
+                            SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
+                            SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
                             Intent intent = new Intent(context, AreaSelection.class);
                             SharedPrefsData.putInt(context, Constants.Back_Button_Move, 1, Constants.PREF_NAME);
                             SharedPrefsData.putString(context, Constants.Selected_Distric_Name,"India",  Constants.PREF_NAME);

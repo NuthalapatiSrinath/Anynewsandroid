@@ -34,7 +34,6 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.bumptech.glide.Glide;
-import com.google.android.exoplayer2.C;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 

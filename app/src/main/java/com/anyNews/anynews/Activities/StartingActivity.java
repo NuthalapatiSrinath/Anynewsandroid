@@ -46,6 +46,8 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.facebook.FacebookSdk;
@@ -210,16 +212,26 @@ public class StartingActivity extends AppCompatActivity {
                             SharedPrefsData.putString(getApplicationContext(), Constants.REFERAL_LINK, referlink, Constants.PREF_NAME);
 
                             try {
-
-                                referlink = referlink.substring(referlink.indexOf("=") + 1);
+                                String referLinkValue = referlink;
+                                int firstEq = referLinkValue.indexOf("=");
+                                if (firstEq < 0 || firstEq >= referLinkValue.length() - 1) {
+                                    return;
+                                }
+                                referlink = referLinkValue.substring(firstEq + 1);
                                 showLog("REFER_LINK " + referlink);
 
-                                //   String ddd=referlink.substring(28);
-                                String ddd = referlink.substring(referlink.indexOf("=") + 1);
+                                int secondEq = referlink.indexOf("=");
+                                if (secondEq < 0 || secondEq >= referlink.length() - 1) {
+                                    return;
+                                }
+                                String ddd = referlink.substring(secondEq + 1);
                                 showLog("REFER_LINKDDD" + ddd);
 
                                 String[] parts = ddd.split("&");
-                                String part1 = parts[0]; // 004
+                                if (parts.length < 2) {
+                                    return;
+                                }
+                                String part1 = parts[0].trim();
                                 String part2 = parts[1];
 
                                 showLog("SHARE TYPE " + part1 + "  ,  " + part2);
@@ -228,12 +240,13 @@ public class StartingActivity extends AppCompatActivity {
                                 SharedPrefsData.putLong(getApplicationContext(), Constants.CUSST_ID, share_id, Constants.PREF_NAME);
                                 try {
                                     String[] custid = part2.split("=");
-                                    String custid1 = custid[0]; // 004
-                                    String custid2 = custid[1];
-                                    showLog("REFERAL COMPLETE DATA " + part1 + "  ,  " + custid2);
-                                    welcome.setText(" USER ID :" + part1 + "  TYPE :" + custid2);
-                                    welcome.setVisibility(View.GONE);
-                                }catch (Exception e){
+                                    if (custid.length >= 2) {
+                                        String custid2 = custid[1];
+                                        showLog("REFERAL COMPLETE DATA " + part1 + "  ,  " + custid2);
+                                        welcome.setText(" USER ID :" + part1 + "  TYPE :" + custid2);
+                                        welcome.setVisibility(View.GONE);
+                                    }
+                                } catch (Exception e) {
                                     e.printStackTrace();
                                 }
 
@@ -532,7 +545,7 @@ public class StartingActivity extends AppCompatActivity {
                 Settings.Secure.ANDROID_ID);
         SharedPrefsData.putString(getApplicationContext(), Constants.DeviceID, DeviceID, Constants.PREF_NAME);
         String App_version_id_sending = "" + version_name;
-        String version_id = "v" + App_version_id_sending.substring(0, 1);
+        String version_id = getVersionIdPrefix();
         SharedPrefsData.putString(getApplicationContext(), Constants.Version_ID, version_id, Constants.PREF_NAME);
 
         /* */
@@ -544,6 +557,11 @@ public class StartingActivity extends AppCompatActivity {
                 public void onComplete(@NonNull Task<String> task) {
                     if (!task.isSuccessful()) {
                         Logone.w("FCM Token", "getInstanceId failed", task.getException());
+                        if (BuildConfig.DEBUG) {
+                            String fallbackToken = "debug-" + DeviceID;
+                            SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, fallbackToken, Constants.PREF_NAME);
+                            sendDeviceDetails(fallbackToken);
+                        }
                         return;
                     }
                     showLog("CHECK POINT 12::");
@@ -615,13 +633,21 @@ public class StartingActivity extends AppCompatActivity {
     }
 
 
+    private String getVersionIdPrefix() {
+        String version = version_name != null ? version_name : "";
+        if (version.isEmpty()) {
+            return "v0";
+        }
+        return "v" + version.substring(0, 1);
+    }
+
     private void sendDeviceDetails(final String token) {
 
 
         showLog("CHECK POINT 13 REQUEST::");
         // sending app version id through url  and saveing inside database
         String App_version_id_sending = "" + version_name;
-        String version_id = "v" + App_version_id_sending.substring(0, 1);
+        String version_id = getVersionIdPrefix();
         SharedPrefsData.putString(getApplicationContext(), Constants.Version_ID, version_id, Constants.PREF_NAME);
         String DRAFT_ID = "" + SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
 
@@ -639,28 +665,45 @@ public class StartingActivity extends AppCompatActivity {
         if(/*referlink!=null || */languageId==0 ||  token == null || token.equalsIgnoreCase("")){
             callSplashRequest();
         }else{
-
-            boolean isLanguageSelected = SharedPrefsData.getBool(this, Constants.IS_LANGUAGE_SELECTED, Constants.PREF_NAME);
-            showLog("CHECK POINT HOMEPAGE 7::"+isLanguageSelected);
-            if(!isLanguageSelected){
-                Intent intent = new Intent(StartingActivity.this, LanguageActivity.class);
-                startActivity(intent);
-                finish();
-            }else{
-                showLog("CHECK POINT articleId1 to home:TITLE:"+TITLE);
-                Intent intent = new Intent(StartingActivity.this, HomePage.class);
-                intent.putExtra("EXTRA_SESSION_ID", "0");
-                intent.putExtra("TITLE", TITLE);
-                intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
-                intent.putExtra("SHARE_REDIRECT_ID",articleId1);
-                intent.putExtra("DATAFROM2G",DATAFROM2G);
-                startActivity(intent);
-                finish();
-            }
-
-
-           // callSplashRequest();
+            routeReturningUser();
         }
+    }
+
+    private void routeReturningUser() {
+        String nextScreen = SharedPrefsData.getString(this, Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
+        if (nextScreen == null) {
+            nextScreen = "";
+        }
+        showLog("CHECK POINT returning user nextScreen::" + nextScreen);
+
+        if ("main".equalsIgnoreCase(nextScreen)) {
+            openHomeFromSplash();
+            return;
+        }
+        if ("state".equalsIgnoreCase(nextScreen)) {
+            startActivity(new Intent(StartingActivity.this, States.class));
+            finish();
+            return;
+        }
+        if ("district".equalsIgnoreCase(nextScreen)) {
+            startActivity(new Intent(StartingActivity.this, Districs.class));
+            finish();
+            return;
+        }
+        if ("language".equalsIgnoreCase(nextScreen)) {
+            startActivity(new Intent(StartingActivity.this, LanguageActivity.class));
+            finish();
+            return;
+        }
+
+        // Completed onboarding from older builds may only have the flag set.
+        if (SharedPrefsData.getBool(this, Constants.IS_LANGUAGE_SELECTED, Constants.PREF_NAME)) {
+            openHomeFromSplash();
+            return;
+        }
+
+        // Unknown local state — ask server where this device should go.
+        callSplashRequest();
     }
     public void callSplashRequest(){
         APIService apiService = RestApiClient.getClient().create(APIService.class);
@@ -685,7 +728,7 @@ public class StartingActivity extends AppCompatActivity {
                     StartActivityReqModel startActivityReqModel = gsonObj.fromJson(encrpt_data, StartActivityReqModel.class);
                     showLog("CHECK POINT 6");
 
-                    if (startActivityReqModel.getSuccess()) {
+                    if (Boolean.TRUE.equals(startActivityReqModel.getSuccess())) {
 
                         if (startActivityReqModel.getData().getAdmobAppId() != null
                                 && !startActivityReqModel.getData().getAdmobAppId().isEmpty()) {
@@ -703,10 +746,27 @@ public class StartingActivity extends AppCompatActivity {
                         SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Distric_Name, startActivityReqModel.getData().getDistName(), Constants.PREF_NAME);
                         SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Distric_Name1, startActivityReqModel.getData().getDistName(), Constants.PREF_NAME);
                         SharedPrefsData.putString(getApplicationContext(), Constants.MOVE_NEXT_SCREEN, startActivityReqModel.getData().getNextScreen(), Constants.PREF_NAME);
+                        markOnboardingCompleteIfNeeded(startActivityReqModel.getData().getNextScreen());
 
                         SharedPrefsData.putBool(getApplicationContext(), Constants.is_login, startActivityReqModel.getData().getIsLogin(), Constants.PREF_NAME);
 
                         SharedPrefsData.putBool(getApplicationContext(), Constants.Event_Status, startActivityReqModel.getData().getEventStatus(), Constants.PREF_NAME);
+
+                        if (startActivityReqModel.getData().getEngagementBadgeColor() != null
+                                && !startActivityReqModel.getData().getEngagementBadgeColor().isEmpty()) {
+                            EngagementCountHelper.saveColor(
+                                    getApplicationContext(),
+                                    startActivityReqModel.getData().getEngagementBadgeColor()
+                            );
+                        }
+
+                        if (startActivityReqModel.getData().getLanguageFontSettings() != null
+                                && !startActivityReqModel.getData().getLanguageFontSettings().isEmpty()) {
+                            FontSettingsHelper.saveLanguageFontSettings(
+                                    getApplicationContext(),
+                                    startActivityReqModel.getData().getLanguageFontSettings()
+                            );
+                        }
 
                         showLog("SplashUpdateMenu::::"+ startActivityReqModel.getData().getUpdateMenuStatus());
 
@@ -1009,7 +1069,14 @@ public class StartingActivity extends AppCompatActivity {
 
     }
 
+    private void markOnboardingCompleteIfNeeded(String nextScreen) {
+        if ("main".equalsIgnoreCase(nextScreen)) {
+            SharedPrefsData.putBool(getApplicationContext(), Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
+        }
+    }
+
     private void openHomeFromSplash() {
+        markOnboardingCompleteIfNeeded("main");
         showLog("CHECK POINT HOMEPAGE fallback");
         Intent intent = new Intent(StartingActivity.this, HomePage.class);
         intent.putExtra("EXTRA_SESSION_ID", "0");

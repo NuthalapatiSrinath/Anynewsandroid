@@ -254,33 +254,6 @@ public class FlipView extends FrameLayout {
         } else if (currentPage == INVALID_PAGE_POSITION) {
             newPosition = 0;
         }
-
-        // Keep the visible page stable when the adapter refreshes on the same
-        // index (pagination append, like counts, etc.). Avoids the second
-        // settle / shake from flipTo() rebuilding all views.
-        if (currentPage != INVALID_PAGE_POSITION
-                && newPosition == currentPage
-                && mCurrentPage.valid) {
-            int newCount = mAdapter.getCount();
-            if (newCount >= mPageCount && currentPage < newCount) {
-                mPageCount = newCount;
-                if (mCurrentPageIndex < mPageCount - 1 && !mNextPage.valid) {
-                    try {
-                        fillPageForIndex(mNextPage, mCurrentPageIndex + 1,
-                                (mCurrentPageIndex + 1) % 3);
-                        addView(mNextPage.v);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-                updateEmptyStatus();
-                return;
-            }
-            if (newCount == mPageCount) {
-                updateEmptyStatus();
-                return;
-            }
-        }
         // remove all the current views
         try {
 //			if (MainActivity.isNightMode == 1) {
@@ -429,66 +402,49 @@ public class FlipView extends FrameLayout {
             // return;
             // }
             if (mCurrentPageIndex != currentPageIndex) {
-                final int oldIndex = mCurrentPageIndex;
                 mCurrentPageIndex = currentPageIndex;
                 mCurrentPageId = mAdapter.getItemId(mCurrentPageIndex);
-
-                // FAST PATH: single-step flip forward. Reuse the pre-inflated next page
-                // instead of recycling all three views (avoids jank near video posts).
-                if (oldIndex == currentPageIndex - 1 && mCurrentPage.valid && mNextPage.valid
-                        && mNextPage.position == currentPageIndex) {
-                    if (mPreviousPage.valid) {
-                        removeView(mPreviousPage.v);
-                        mRecycler.addScrapView(mPreviousPage.v, mPreviousPage.position,
-                                mPreviousPage.viewType);
-                        mPreviousPage.valid = false;
-                    }
-                    copyPage(mPreviousPage, mCurrentPage);
-                    copyPage(mCurrentPage, mNextPage);
-                    if (mCurrentPageIndex < mPageCount - 1) {
-                        fillPageForIndex(mNextPage, mCurrentPageIndex + 1,
-                                (mCurrentPageIndex + 1) % 3);
-                        addView(mNextPage.v);
-                    } else {
-                        mNextPage.valid = false;
-                    }
+                // TODO be smarter about this. Dont remove a view that will be added
+                // again on the next line.
+                // ////System.out.println("before recycleActiveViews  "
+                // + //System.currentTimeMillis());
+                recycleActiveViews();
+                // ////System.out.println("After recycleActiveViews  "
+                // + //System.currentTimeMillis());
+                // add the new active views
+                if (mCurrentPageIndex > 0) {
+//                removeView(mPreviousPage.v);
+                    fillPageForIndex(mPreviousPage, mCurrentPageIndex - 1,
+                            (mCurrentPageIndex - 1) % 3);
+//                if(mCurrentPageIndex<3){
+//                    removeView(mPreviousPage.v);
+//                }
+                    addView(mPreviousPage.v);
                 }
-                // FAST PATH: single-step flip backward. Reuse the pre-inflated prev page.
-                else if (oldIndex == currentPageIndex + 1 && mCurrentPage.valid && mPreviousPage.valid
-                        && mPreviousPage.position == currentPageIndex) {
-                    if (mNextPage.valid) {
-                        removeView(mNextPage.v);
-                        mRecycler.addScrapView(mNextPage.v, mNextPage.position,
-                                mNextPage.viewType);
-                        mNextPage.valid = false;
-                    }
-                    copyPage(mNextPage, mCurrentPage);
-                    copyPage(mCurrentPage, mPreviousPage);
-                    if (mCurrentPageIndex > 0) {
-                        fillPageForIndex(mPreviousPage, mCurrentPageIndex - 1,
-                                (mCurrentPageIndex - 1) % 3);
-                        addView(mPreviousPage.v);
-                    } else {
-                        mPreviousPage.valid = false;
-                    }
+                if (mCurrentPageIndex >= 0 && mCurrentPageIndex < mPageCount) {
+                    fillPageForIndex(mCurrentPage, mCurrentPageIndex, (mCurrentPageIndex) % 3);
+//                if(mCurrentPageIndex<3){
+//                    removeView(mCurrentPage.v);
+//                }
+//          
+                    addView(mCurrentPage.v);
                 }
-                // SLOW PATH: jumps (>1 page), initial fill, or invalid state.
-                else {
-                    recycleActiveViews();
-                    if (mCurrentPageIndex > 0) {
-                        fillPageForIndex(mPreviousPage, mCurrentPageIndex - 1,
-                                (mCurrentPageIndex - 1) % 3);
-                        addView(mPreviousPage.v);
-                    }
-                    if (mCurrentPageIndex >= 0 && mCurrentPageIndex < mPageCount) {
-                        fillPageForIndex(mCurrentPage, mCurrentPageIndex, (mCurrentPageIndex) % 3);
-                        addView(mCurrentPage.v);
-                    }
-                    if (mCurrentPageIndex < mPageCount - 1) {
-                        fillPageForIndex(mNextPage, mCurrentPageIndex + 1,
-                                (mCurrentPageIndex + 1) % 3);
-                        addView(mNextPage.v);
-                    }
+                if (mCurrentPageIndex < mPageCount - 1) {
+//                removeView(mNextPage.v);
+                    fillPageForIndex(mNextPage, mCurrentPageIndex + 1,
+                            (mCurrentPageIndex + 1) % 3);
+//                if(mCurrentPageIndex<3){
+//                    removeView(mNextPage.v);
+//                }
+                    addView(mNextPage.v);
+                    // ////System.out.println("aaaaa adview  "
+                    // + //System.currentTimeMillis());
+                    /*
+                     * setViewscrap(mCurrentPageIndex + 2);
+                     * setViewscrap(mCurrentPageIndex + 3);
+                     * setViewscrap(mCurrentPageIndex + 4);
+                     * setViewscrap(mCurrentPageIndex + 5);
+                     */
                 }
 
             } else {
@@ -503,33 +459,6 @@ public class FlipView extends FrameLayout {
             e.printStackTrace();
         }
         // invalidate();
-    }
-
-    // Copies the page reference/state from src into dst without touching the
-    // underlying view hierarchy. Used to shift the 3-page window on a single-step
-    // flip so overlapping pages are not re-inflated.
-    private void copyPage(Page dst, Page src) {
-        dst.v = src.v;
-        dst.position = src.position;
-        dst.viewType = src.viewType;
-        dst.valid = src.valid;
-    }
-
-    /** Re-inflate only the visible page (e.g. ad finished loading). Avoids full adapter refresh. */
-    public void refreshCurrentPage() {
-        if (mAdapter == null || mPageCount < 1 || !mCurrentPage.valid
-                || mCurrentPageIndex == INVALID_PAGE_POSITION) {
-            return;
-        }
-        try {
-            removeView(mCurrentPage.v);
-            mRecycler.addScrapView(mCurrentPage.v, mCurrentPage.position, mCurrentPage.viewType);
-            fillPageForIndex(mCurrentPage, mCurrentPageIndex, mCurrentPageIndex % 3);
-            addView(mCurrentPage.v);
-            invalidate();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
     private void fillPageForIndex(Page p, int i, int l) {
@@ -637,11 +566,18 @@ public class FlipView extends FrameLayout {
         // get a view from the adapter if a scrap was not found or it is
         // invalid.
         View v = null;
+        // ////System.out.println("scrapscrap  ::::" + scrap);
         if (scrap == null || !scrap.valid) {
             v = mAdapter.getView(index, scrap == null ? null : scrap.v, this);
+            /*
+             * mAdapter.getView(index+1, scrap == null ? null : scrap.v, this);
+             * mAdapter.getView(index+2, scrap == null ? null : scrap.v, this);
+             * mAdapter.getView(index+3, scrap == null ? null : scrap.v, this);
+             */
         } else {
             v = scrap.v;
         }
+        // return view
         return v;
     }
 

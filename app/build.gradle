@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
 android {
     signingConfigs {
         release {
@@ -19,6 +20,8 @@ android {
             }
         }
     }
+    namespace "com.anyNews.anynews"
+    compileSdk 35
 
 //    compileSdkVersion 31
 //   // buildToolsVersion "30.0.3"
@@ -31,26 +34,44 @@ android {
 //        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 //        renderscriptTargetApi 31
 //        renderscriptSupportModeEnabled true
-    compileSdkVersion 33
     defaultConfig {
         applicationId "com.anyNews.anynews"
         minSdkVersion 24
-        targetSdkVersion 33
+        targetSdk 35
         multiDexEnabled true
-        versionCode 128
-        versionName "3.40.28"
+        versionCode 147
+        versionName "3.40.47"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
         archivesBaseName = "AnyNews_"+versionName+"_"
+        ndkVersion "27.0.12077973"
+        ndk {
+            // Specify the ABI filters for the native libraries you are using
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
 
     }
-    splits {
+    tasks.withType(JavaCompile).configureEach {
+        options.fork = true
+        options.forkOptions.jvmArgs += [
+                '--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+                '--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+                '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED']
+    }
+    bundle {
+        // Configure the app bundle options
         abi {
-            enable true
-            reset()
-            include 'arm64-v8a', 'armeabi-v7a'
-            universalApk false
+            // Enable split APKs for ABI configurations
+            enableSplit = true
+        }
+        density {
+            // Enable split APKs for screen density configurations
+            enableSplit = true
+        }
+        language {
+            // Enable split APKs for language configurations
+            enableSplit = true
         }
     }
     buildTypes {
@@ -59,6 +80,7 @@ android {
             minifyEnabled false
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles 'proguard-rules.pro'
         }
         release {
 // 3999 0336 2591    155115
@@ -66,13 +88,19 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles 'proguard-rules.pro'
             signingConfig signingConfigs.release
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
         }
     }
     compileOptions {
-
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlin {
+        jvmToolchain(17) // Ensure Java 17 compatibility
     }
 
 
@@ -85,6 +113,9 @@ android {
         exclude("META-INF/*.kotlin_module")
 
     }
+    buildFeatures{
+        buildConfig=true
+    }
 
     lintOptions {
         checkReleaseBuilds false
@@ -92,37 +123,45 @@ android {
         // but continue the build even when errors are found:
         abortOnError false
     }
+
+
 }
 
 dependencies {
     implementation 'com.android.installreferrer:installreferrer:2.2'
-    implementation 'com.google.android.gms:play-services-analytics-impl:18.0.4'
+    implementation 'com.google.android.gms:play-services-analytics-impl:18.2.0'
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.2.0'
+    implementation 'androidx.activity:activity:1.10.1'
     configurations {
         all*.exclude module: "support-core-ui"
     }
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation 'androidx.navigation:navigation-fragment:2.1.0'
-    implementation 'androidx.navigation:navigation-ui:2.1.0'
-    implementation 'androidx.lifecycle:lifecycle-extensions:2.1.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.0'
+    implementation 'androidx.navigation:navigation-fragment:2.8.3'
+    implementation 'androidx.navigation:navigation-ui:2.8.3'
+    implementation 'androidx.lifecycle:lifecycle-extensions:2.2.0'
     testImplementation 'junit:junit:4.12'
-    androidTestImplementation 'androidx.test:runner:1.2.0'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
-    implementation 'com.google.android.gms:play-services-maps:17.0.0'
-    implementation 'com.afollestad.material-dialogs:core:0.9.6.0'
+    implementation 'com.google.android.gms:play-services-maps:19.0.0'
+    implementation 'com.afollestad.material-dialogs:core:0.9.0.1'
     implementation 'androidx.percentlayout:percentlayout:1.0.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.7.2'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
     implementation 'com.squareup.retrofit2:adapter-rxjava:2.1.0'
     implementation 'com.android.volley:volley:1.2.1'
     implementation "androidx.multidex:multidex:2.0.1"
-    implementation 'com.google.firebase:firebase-analytics:17.3.2'
-    implementation 'com.google.firebase:firebase-core:17.3.2'
-    implementation 'com.google.firebase:firebase-messaging:23.1.2'
+    implementation 'com.google.firebase:firebase-analytics:22.1.0'
+    implementation 'com.google.firebase:firebase-core:21.1.1'
+    implementation 'com.google.firebase:firebase-messaging:24.0.1'
     implementation 'com.google.firebase:firebase-invites:17.0.0'
+    implementation 'com.pierfrancescosoffritti.androidyoutubeplayer:chromecast-sender:0.32'
+    implementation 'com.pierfrancescosoffritti.androidyoutubeplayer:core:13.0.0'
+    implementation 'com.pierfrancescosoffritti.androidyoutubeplayer:custom-ui:12.1.2'
 
     implementation 'de.hdodenhof:circleimageview:3.1.0'
     implementation 'com.github.goibibo:ScratchCardView:v0.1.7'
@@ -138,18 +177,16 @@ dependencies {
 
     implementation 'com.rollbar:rollbar-java:1.+'
     implementation 'com.rollbar:rollbar-android:1.+@aar'
-    implementation platform('com.google.firebase:firebase-bom:30.1.0')
+    implementation platform('com.google.firebase:firebase-bom:33.2.0')
     implementation 'com.google.firebase:firebase-dynamic-links'
     implementation 'com.google.firebase:firebase-analytics'
     implementation 'com.github.PierfrancescoSoffritti:AndroidYouTubePlayer:7.0.1'
-    implementation 'com.pierfrancescosoffritti.androidyoutubeplayer:core:11.1.0'
     implementation 'com.github.nostra13:Android-Universal-Image-Loader:458df4da2e'
     implementation 'com.google.android.gms:play-services-auth:19.2.0'
     implementation 'com.google.android.gms:play-services-auth-api-phone:17.5.1'
     implementation 'com.tbuonomo:dotsindicator:4.2' //UI NEED TO CHECK
     implementation 'com.squareup.picasso:picasso:2.71828'
-    implementation "com.google.android.exoplayer:exoplayer:2.17.1"
-    implementation 'com.google.firebase:firebase-database:20.0.1'
+    implementation 'com.google.firebase:firebase-database:21.0.0'
     implementation 'com.github.GrenderG:Toasty:1.5.0'
     implementation 'com.github.bumptech.glide:glide:4.12.0'
     implementation "com.github.skydoves:progressview:1.1.2"
@@ -168,7 +205,13 @@ dependencies {
     implementation 'androidx.media:media:1.6.0'
     implementation 'com.google.ads.interactivemedia.v3:interactivemedia:3.31.0'
     implementation 'com.guolindev.permissionx:permissionx:1.7.1'
-    implementation 'pl.droidsonroids.gif:android-gif-drawable:1.2.28'
+
+    implementation 'androidx.media3:media3-exoplayer:1.1.0'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.1.0'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.1.0'
+    implementation 'androidx.media3:media3-ui:1.1.0'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.0"
+    implementation 'pl.droidsonroids.gif:android-gif-drawable:1.2.31'
   //  implementation group: 'io.github.cleveradvertising', name: 'kotlin_ads_package', version: '1.1'
 
 }

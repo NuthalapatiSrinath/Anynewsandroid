@@ -6,6 +6,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -140,8 +141,6 @@ public class LanguageActivity extends AppCompatActivity {
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
             }
         });
     }

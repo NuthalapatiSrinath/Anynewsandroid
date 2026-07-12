@@ -3,6 +3,9 @@ package com.anyNews.anynews.Adapters;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -48,7 +51,6 @@ public class FlexboxAdapter extends RecyclerView.Adapter<FlexboxAdapter.ViewHold
         SearchModel.Datum searchModel=arrayList.get(position);
         holder.language_name.setText(" + "+searchModel.getName());
         holder.selected_language_name.setText(searchModel.getName());
-
 
         holder.selected_language_name.setOnClickListener(new View.OnClickListener() {
             @Override

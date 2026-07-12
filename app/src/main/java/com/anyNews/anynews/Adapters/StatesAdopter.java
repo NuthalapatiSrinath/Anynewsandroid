@@ -86,6 +86,7 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
 
                 }else {
                     SharedPrefsData.putInt(context, Constants.Back_Button_Move, 2, Constants.PREF_NAME);
+                    SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "district", Constants.PREF_NAME);
                     Intent intent=new Intent(context, Districs.class);
                     context.startActivity(intent);
                 }
@@ -188,6 +189,8 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
 
                     SharedPrefsData.putString(context, Constants.Selected_Distric_Name, languageModel.getDist_name(), Constants.PREF_NAME);
                     SharedPrefsData.putString(context, Constants.Selected_Distric_Name1, languageModel.getDist_name(), Constants.PREF_NAME);
+                    SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
+                    SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
 
                     Intent intent=new Intent(context, HomePage.class);
                      intent.putExtra("EXTRA_SESSION_ID", "0");

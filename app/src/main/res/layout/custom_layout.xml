@@ -28,12 +28,12 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:gravity="center"
-            android:background="#F5F7FB"
+            android:background="@color/chip_background"
             android:paddingLeft="18dp"
             android:paddingRight="18dp"
             android:text="Nilesh"
-            android:textColor="@color/title_color"
-            android:textSize="@dimen/_10sdp"
+            android:textColor="@color/chip_text_color"
+            android:textSize="@dimen/_14sdp"
             android:textStyle="normal" />
 
 
@@ -70,7 +70,7 @@
             android:text="Nilesh"
             android:drawableLeft="@drawable/ic_white_icon"
             android:textColor="#FFFFFF"
-            android:textSize="@dimen/_10sdp"
+            android:textSize="@dimen/_14sdp"
             android:textStyle="normal" />
 
 

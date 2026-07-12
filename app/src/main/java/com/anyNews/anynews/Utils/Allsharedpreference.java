@@ -5,6 +5,14 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.widget.Toast;
 
+import com.anyNews.anynews.models.FlipItems;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Created by barediarjun on 12/12/16.
  */
@@ -134,5 +142,39 @@ public class Allsharedpreference {
     public void setShowFirstTimeAnimation(boolean key) {
         editor.putBoolean( FIRSTFLIPTIMEANIMATION,key);
         editor.commit();
+    }
+    public void setEmptyFlipData(){
+        editor.putString("FlipData", "");
+        editor.apply();
+    }
+    public List<FlipItems> getFlipData(){
+        Gson gson = new Gson();
+        String json = pref.getString("FlipData", "");
+        if(json.equalsIgnoreCase("")){
+            return new ArrayList<FlipItems>();
+        }
+        List<FlipItems> tasks = gson.fromJson(json, new TypeToken<List<FlipItems>>(){}.getType());
+        if (tasks == null) {
+            tasks = new ArrayList<>();
+        }
+        return tasks;
+
+    }
+    public void setFlipData(FlipItems items){
+        Gson gson = new Gson();
+        List<FlipItems> tasks=new ArrayList<>();
+        String json = pref.getString("FlipData", "");
+        if (!json.equalsIgnoreCase("")) {
+            tasks = gson.fromJson(json, new TypeToken<ArrayList<FlipItems>>(){}.getType());
+            if (tasks == null) {
+                tasks = new ArrayList<>();
+            }
+
+        }
+        tasks.add(items);
+        String s = gson.toJson(tasks);
+        editor.putString("FlipData", s);
+        editor.apply();
+
     }
 }

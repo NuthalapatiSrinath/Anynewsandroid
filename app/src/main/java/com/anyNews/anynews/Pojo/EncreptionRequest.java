@@ -46,6 +46,10 @@ public class EncreptionRequest {
     @Expose
     private Integer updateMenuStatus;
 
+    @SerializedName("callAppEvents")
+    @Expose
+    private boolean callAppEvents;
+
     public boolean isShow_ads() {
         return show_ads;
     }
@@ -106,12 +110,32 @@ public class EncreptionRequest {
         this.admob_app_id = admob_app_id;
     }
 
+    @SerializedName("engagement_badge_color")
+    @Expose
+    private String engagement_badge_color;
+
+    public String getEngagement_badge_color() {
+        return engagement_badge_color;
+    }
+
+    public void setEngagement_badge_color(String engagement_badge_color) {
+        this.engagement_badge_color = engagement_badge_color;
+    }
+
     public Integer getUpdateMenuStatus() {
         return updateMenuStatus;
     }
 
     public void setUpdateMenuStatus(Integer updateMenuStatus) {
         this.updateMenuStatus = updateMenuStatus;
+    }
+
+    public boolean isCallAppEvents() {
+        return callAppEvents;
+    }
+
+    public void setCallAppEvents(boolean callAppEvents) {
+        this.callAppEvents = callAppEvents;
     }
 
 }

@@ -32,6 +32,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.PorterDuff;
 import android.media.AudioManager;
 import android.media.RingtoneManager;
 import android.net.ConnectivityManager;
@@ -42,6 +43,7 @@ import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.StrictMode;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -58,8 +60,13 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.animation.Animator;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.inputmethod.InputMethodManager;
@@ -90,6 +97,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.percentlayout.widget.PercentRelativeLayout;
@@ -99,6 +107,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.anyNews.anynews.Adapters.MailAdapter;
 import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.FCMTrackingEvents;
+import com.anyNews.anynews.Pojo.BaseResponse;
 import com.anyNews.anynews.Pojo.AdsPojo;
 import com.anyNews.anynews.Pojo.CommentResponuse;
 import com.anyNews.anynews.Pojo.DialogSendRequest;
@@ -116,14 +125,17 @@ import com.anyNews.anynews.Pojo.ListOfCommentsResponse;
 import com.anyNews.anynews.Pojo.ListOfUserArticlesRequest;
 import com.anyNews.anynews.Pojo.SurveyFeedbackResponse;
 import com.anyNews.anynews.Pojo.SurveyRequestFeedback;
+import com.anyNews.anynews.models.FlipItems;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
+import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
 import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.Logone;
@@ -140,20 +152,23 @@ import com.facebook.ads.AdError;
 import com.facebook.ads.NativeAdBase;
 import com.facebook.ads.NativeAdListener;
 import com.facebook.appevents.AppEventsLogger;
-import com.google.android.exoplayer2.SimpleExoPlayer;
-import com.google.android.exoplayer2.ui.PlayerView;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.PlayerView;
 import com.google.android.gms.ads.AdListener;
 import com.google.android.gms.ads.AdLoader;
 import com.google.android.gms.ads.AdRequest;
-import com.google.android.gms.ads.admanager.AdManagerAdRequest;
 import com.google.android.gms.ads.LoadAdError;
-import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.MediaContent;
 import com.google.android.gms.ads.RequestConfiguration;
-import com.google.android.gms.ads.ResponseInfo;
+import com.google.android.gms.ads.VideoController;
+import com.google.android.gms.ads.VideoOptions;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 import com.google.android.gms.ads.nativead.NativeAd;
+import com.google.android.gms.ads.nativead.NativeAdOptions;
 import com.google.android.gms.common.AccountPicker;
+
+import org.json.JSONObject;
 import com.google.android.material.bottomnavigation.BottomNavigationItemView;
 import com.google.android.material.bottomnavigation.BottomNavigationMenuView;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -164,6 +179,7 @@ import com.google.firebase.database.IgnoreExtraProperties;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.RemoteMessage;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.permissionx.guolindev.PermissionX;
 import com.permissionx.guolindev.callback.ExplainReasonCallback;
@@ -185,6 +201,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.Random;
 import java.util.UUID;
@@ -250,10 +268,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean isConnected = false;
     private boolean isApiRequested = false;
     int positionx=0,requestPostition=1;
-
-    public int getCurrentFlipPosition() {
-        return positionx;
-    }
     int requestSize=0;
     boolean isFromLocalArticles=false;
     FCMTrackingEvents trackingEvents;
@@ -276,7 +290,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     CountDownTimer countDownTimer;
     private PlayerView simpleExoPlayerView;
     private @Nullable
-    SimpleExoPlayer player;
+    ExoPlayer player;
     Runnable onEverySecond;
     CircleImageView full_video_user_pic;
 
@@ -351,6 +365,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     String navigation_home_text = "Home";
     BottomNavigationView bottomNavigationView;
+    private static final int SPECIAL_TAB_INDEX = 1;
+    /** Cleared only on process start; stops Special-tab blink until next app launch. */
+    private static boolean specialTabViewedThisSession = false;
+    private ImageView specialTabBulbOverlay;
+    private Animator specialTabBulbAnimator;
+    private int specialTabBulbSetupRetryCount;
     FloatingActionButton floatingActionButtonHome;
 
     //Survey
@@ -421,8 +441,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean fullscreen=false;
     static  public List<FlipGoogleNativeAds> nativeGoogleAdList =new ArrayList<>();
     static  public List<FlipGoogleNativeAds> nativeFBAdList =new ArrayList<>();
-    /** Ad slots where Google native load failed — FlipperAdapter shows share fallback instead of white screen. */
-    public static final Set<Integer> failedGoogleAdPositions = new HashSet<>();
     static  public List<Integer> nativeGoogleAdArray =new ArrayList<>();
     static  public List<Integer> nativeFBAdArray =new ArrayList<>();
     public List<AdsPojo> adsPojoList =new ArrayList<>();
@@ -443,6 +461,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         AdMobInitializer.initializeFromManifestIfNeeded(this);
 //        RequestConfiguration.Builder requestConfiguration=new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("CEB66515B6C9B2ECD92786955DF252CD"));
 //        MobileAds.setRequestConfiguration(requestConfiguration.build());
+
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(lp);
+        }
 
         setContentView(R.layout.activity_home_page);
         allsharedpreference = new Allsharedpreference(HomePage.this);
@@ -577,6 +602,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             inlist(0);
 
         } else {
+            int parsedSessionId;
+            try {
+                parsedSessionId = Integer.parseInt(sessionId.trim());
+            } catch (NumberFormatException e) {
+                parsedSessionId = 0;
+            }
 
             layout_with_out_data.setVisibility(View.VISIBLE);
             layout_with_data.setVisibility(View.GONE);
@@ -585,10 +616,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             last_post_id = 0;
             skip = 0;
             actual_skip = 0;
-            category_id = Integer.parseInt(sessionId);
+            category_id = parsedSessionId;
             isFromLocalArticles=false;
-            showLog("inlist from oncreate 2:"+Integer.parseInt(sessionId));
-            inlist(Integer.parseInt(sessionId));
+            showLog("inlist from oncreate 2:" + parsedSessionId);
+            inlist(parsedSessionId);
 
             try {
 
@@ -702,7 +733,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         receiver = new NetworkChangeReceiver();
-        registerReceiver(receiver, filter);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(receiver, filter);
+        }
 
 
         un_selected_local.setOnClickListener(new View.OnClickListener() {
@@ -724,7 +759,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 skip = 0;
                 actual_skip = 0;
                 category_id = -1;
-              //  inlist(-1);
+                requestPostition = 1;
+                requestSize = 0;
+                isFromLocalArticles = true;
+                positionx = 0;
+                list = new ArrayList<>();
+                dummyResponse = null;
+                inlist(-1);
 
                 writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_local);
 
@@ -749,7 +790,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 skip = 0;
                 actual_skip = 0;
                 category_id = 0;
-              //  inlist(0);
+                requestPostition = 1;
+                requestSize = 0;
+                isFromLocalArticles = true;
+                positionx = 0;
+                list = new ArrayList<>();
+                dummyResponse = null;
+                inlist(0);
 
                 writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_myfeed);
 
@@ -759,19 +806,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         setStaticData();
 
-        boolean isEventStatus = SharedPrefsData.getBool(HomePage.this, Constants.Event_Status, Constants.PREF_NAME);
-        //boolean isEventStatus = true;
-
-        if (isEventStatus) {
-            Logone.d("HomePage", "EventStatus:" + isEventStatus);
-            if (bottomNavigationView != null) {
-                // New articles available: show only the light blink, no thumb icon
-                bottomNavigationView.getMenu().getItem(1).setIcon(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-                addBadgeView();
-            }
-        } else {
-            // No new articles: show regular special icon
-            bottomNavigationView.getMenu().getItem(1).setIcon(R.drawable.ic_home_specials);
+        // Special tab uses a large bulb overlay (40dp x 50sdp) centered on the tab item.
+        if (bottomNavigationView != null) {
+            bottomNavigationView.post(this::setupSpecialTabBulb);
         }
 
         bottomNavigationView.setOnNavigationItemSelectedListener(mOnNavigationItemSelectedListener);
@@ -904,59 +941,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    private boolean hasPreloadedGoogleAd(Integer ad_req_position) {
-        if (ad_req_position == null || nativeGoogleAdList == null) {
-            return false;
-        }
-        for (FlipGoogleNativeAds cachedAd : nativeGoogleAdList) {
-            if (cachedAd != null && cachedAd.getReqPos() == ad_req_position && cachedAd.getAd() != null) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void preloadAdsFromResponse(EncreptionRequest encreptionRequest, int reqPos) {
-        if (encreptionRequest == null || !encreptionRequest.isShow_ads() || encreptionRequest.getAd_positions() == null) {
-            return;
-        }
-        // Production behavior: bulk preload only on first feed load. Pagination
-        // responses only fetch slots that are not cached yet.
-        boolean initialFeedLoad = (reqPos != 3 && positionx == 0);
-        for (int i = 0; i < encreptionRequest.getAd_positions().size(); i++) {
-            Integer adReqPos = encreptionRequest.getAd_positions().get(i).getAd_req_position();
-            if (!initialFeedLoad && hasPreloadedGoogleAd(adReqPos)) {
-                continue;
-            }
-            showLog("ListAll Articles Api trigger and AD Loading 22");
-            loadAds(
-                    encreptionRequest.getAd_positions().get(i).getAd_code(),
-                    adReqPos,
-                    encreptionRequest.getAd_positions().get(i).getAd_type()
-            );
-        }
-        showLog("ListAll Articles Api trigger and AD Loading");
-    }
-
-    private void refreshCurrentAdIfNeeded(int adReqPosition) {
-        if (mFlipView == null || list == null || positionx < 0 || positionx >= list.size()) {
-            return;
-        }
-        ModelClass.Datum item = list.get(positionx);
-        if (item == null || item.getPostType() == null || !item.getPostType().equalsIgnoreCase("ad")) {
-            return;
-        }
-        if (item.getAd_req_position() != adReqPosition) {
-            return;
-        }
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                mFlipView.refreshCurrentPage();
-            }
-        });
-    }
-
     private void loadAds(String ad_code, Integer ad_req_position, String ad_type) {
        showLog("Ad loading ad_code 1 :"+ad_code);
        showLog("Ad loading ad_req_position :"+ad_req_position);
@@ -966,16 +950,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
        //new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("CEB66515B6C9B2ECD92786955DF252CD"));
 //        showLog("Ad loading ad_code 2 :"+ad_code);
        // ad_type="google";
-        if (ad_code == null || ad_req_position == null || ad_type == null) {
-            return;
-        }
         if(ad_type.equalsIgnoreCase("google")){
-            if (!hasPreloadedGoogleAd(ad_req_position)) {
+            if(nativeGoogleAdList !=null && nativeGoogleAdArray !=null && nativeGoogleAdList.size()>0){
+                if (!nativeGoogleAdArray.contains(positionx) || !nativeGoogleAdArray.contains(ad_req_position)) {
+                    loadGoogleAds(ad_code,ad_req_position,0);
+                }
+            }else{
                 loadGoogleAds(ad_code, ad_req_position,0);
             }
         }else{
-            if(nativeFBAdList !=null && nativeFBAdArray !=null && nativeGoogleAdList.size()>0){
-                if (!nativeFBAdArray.contains(ad_req_position)) {
+            if(nativeFBAdList !=null && nativeFBAdArray !=null && nativeFBAdList.size()>0){
+                if (!nativeFBAdArray.contains(positionx) || !nativeFBAdArray.contains(list.get(positionx).getAd_req_position())) {
                     loadFBAds(ad_code,ad_req_position);
                 }
             }else{
@@ -985,7 +970,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     }
     private void loadGoogleAds(String adCode, Integer ad_req_position,int reqType) {
-     //   adCode="/21833905170,23071623886/Anynews_New_Native";
+        //   adCode="/21833905170,23071623886/Anynews_New_Native";
+         //    adCode="/23071623886/AnyNews_2026";
+                adCode="ca-app-pub-8562336752221105/4901277505";
 
         if(reqType==0){
             loadAdLoader(adCode,ad_req_position);
@@ -1003,7 +990,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void loadAdLoader(String adCode, Integer ad_req_position) {
+        Log.e(TAG, "loadAdLoader: "+adCode );
+        VideoOptions videoOptions = new VideoOptions.Builder()
+                .setStartMuted(true)
+                .build();
+
+        NativeAdOptions adOptions = new NativeAdOptions.Builder()
+                .setVideoOptions(videoOptions)
+                .build();
+
         AdLoader adLoader = new AdLoader.Builder(context, adCode)
+                .withNativeAdOptions(adOptions)
                 .withAdListener(new AdListener() {
                     @Override
                     public void onAdClicked() {
@@ -1027,7 +1024,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             String errorMessage = error.getMessage();
                             com.google.android.gms.ads.AdError cause = error.getCause();
                             // All of this information is available via the error's toString() method.
-                            Log.e("Ads", "onAdFailedToLoad pos=" + ad_req_position + " code=" + adCode + " " + error);
+                            Log.d("Ads", error.toString());
                             JSONObject object=new JSONObject();
                             object.put("errorDomain",errorDomain);
                             object.put("errorCode",errorCode);
@@ -1039,8 +1036,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }catch (Exception e){
                             e.printStackTrace();
                         }
-                        failedGoogleAdPositions.add(ad_req_position);
-                        refreshCurrentAdIfNeeded(ad_req_position);
                     }
 
                     @Override
@@ -1066,13 +1061,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
                         showLog(TAG+  "onNativeAdLoaded: ");
                         try {
+                            MediaContent mediaContent = nativeAd.getMediaContent();
+                            if (mediaContent != null) {
+                                VideoController videoController = mediaContent.getVideoController();
+                                boolean canShowCustomControls = videoController.isCustomControlsEnabled();
+                                showLog("canShowCustomControls::"+canShowCustomControls);
+                            }
                             if (list != null && list.size() > 0) {
                                 FlipGoogleNativeAds flipGoogleNativeAds = new FlipGoogleNativeAds();
                                 flipGoogleNativeAds.setAd(nativeAd);
                                 flipGoogleNativeAds.setAdCode(adCode);
                                 flipGoogleNativeAds.setReqPos(ad_req_position);
-                                failedGoogleAdPositions.remove(ad_req_position);
-                                if (!nativeGoogleAdArray.contains(ad_req_position)) {
+                                if (!nativeGoogleAdArray.contains(list.get(positionx).getAd_req_position())) {
                                     nativeGoogleAdArray.add(ad_req_position);
                                 }
                                 nativeGoogleAdList.add(flipGoogleNativeAds);
@@ -1084,7 +1084,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 }catch (Exception e){
                                     e.printStackTrace();
                                 }
-                                refreshCurrentAdIfNeeded(ad_req_position);
                             }
                         }catch (Exception e){
                             e.printStackTrace();
@@ -1094,11 +1093,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 })
                 .build();
-        if (adCode != null && adCode.startsWith("/")) {
-            adLoader.loadAd(new AdManagerAdRequest.Builder().build());
-        } else {
-            adLoader.loadAd(new AdRequest.Builder().build());
-        }
+        adLoader.loadAd(new AdRequest.Builder().build());
+        //  adLoader.loadAd(new AdManagerAdRequest.Builder().build());
 
     }
 
@@ -1216,11 +1212,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         int uniqID = rand.nextInt(1000);
         try {
             if(page==0){
-                //PDF
-                adapter.downloadPDFWithProgressBar(list.get(positionx).getDownloadUrl(), "anyNews_"+uniqID+"_"+ list.get(positionx).getPostId() + ".pdf", positionx,page);
+                adapter.shareFullMagazine(positionx);
             }else{
                 showLog("getMediaType::"+list.get(positionx).getMediaType());
-                if(list.get(positionx).getMediaType().equals("4") || list.get(positionx).getMediaType().equals("6") ){
+                String mediaType = list.get(positionx).getMediaType();
+                if("4".equals(mediaType) || "6".equals(mediaType) ){
                     //Youtube full and half video download
                     showLog("DATA::"+list.get(positionx).getMediaType());
                     adapter.downloadPDFWithProgressBar(list.get(positionx).getDownloadUrl(), "anyNews_"+uniqID+"_"+ + list.get(positionx).getPostId() + "."+getMimeType(list.get(positionx).getDownloadUrl()), positionx,page);
@@ -1309,7 +1305,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 layout_with_out_data.setVisibility(View.VISIBLE);
                 layout_with_data.setVisibility(View.GONE);
                 comment_page.setVisibility(View.GONE);
-                new Handler().postDelayed(new Runnable() {
+                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                     @Override
                     public void run() {
 
@@ -1339,7 +1335,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
 
-                new Handler().postDelayed(new Runnable() {
+                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         layout_with_out_data.setVisibility(View.VISIBLE);
@@ -1423,13 +1419,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
         if(v.getPageCount()==list.size() && (list.size()-1)==positionx && loadingOnOverFlip && overFlipDistance>0){
-            if(!isDataParsed){
-                convertListOfArticles(dummyResponse,-1);
+            loadingOnOverFlip = false;
+            boolean paginationInFlight = isApiRequested && dummyResponse == null;
+            if (!isDataParsed) {
+                if (dummyResponse != null) {
+                    convertListOfArticles(dummyResponse, -1);
+                }
+            } else if (paginationInFlight) {
+                // Next page API is in flight; avoid misleading toast.
+            } else if ("No articles to read further".equals(no_article_message)) {
+                Toasty.info(getApplicationContext(), no_article_message, Toast.LENGTH_SHORT, true).show();
             }
-            Toasty.info(getApplicationContext(), no_article_message, Toast.LENGTH_SHORT, true).show();
-            loadingOnOverFlip =false;
         }
-        new Handler().postDelayed(new Runnable() {
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 loadingOnOverFlip =true;
@@ -1491,7 +1493,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
             showLog("WRITER_FOLLOWER 1 :positionx:"+positionx);
 
-            if (list!=null && list.size()>0 && list.get(positionx).getIsFollow() == 0) {
+            if (list == null || positionx < 0 || positionx >= list.size()) {
+                return;
+            }
+            String writerNameAtPos = list.get(positionx).getWriterName();
+
+            if (list.size()>0 && list.get(positionx).getIsFollow() == 0) {
 
 
                 for (int i = 0; i < list.size(); i++) {
@@ -1499,7 +1506,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog(list.get(i).getTitle() + ": Title " + list.get(i).getIsFollow());
 
 
-                    if (list.get(positionx).getWriterName().equals(list.get(i).getWriterName())) {
+                    if (writerNameAtPos != null && writerNameAtPos.equals(list.get(i).getWriterName())) {
                         ModelClass.Datum datum_1 =list.get(i);
 //
 //                        datum_1.setLikeStatus(list.get(i).getLikeStatus());
@@ -1560,7 +1567,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 for (int j = 0; j < list.size(); j++) {
 
 
-                    if (list.get(positionx).getWriterName().equals(list.get(j).getWriterName())) {
+                    if (writerNameAtPos != null && writerNameAtPos.equals(list.get(j).getWriterName())) {
                         ModelClass.Datum datum_1 = list.get(j);
 //
 //                        datum_1.setLikeStatus(list.get(j).getLikeStatus());
@@ -1631,15 +1638,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 writer_follow = findViewById(R.id.writer_follow);
                 writer_follower = findViewById(R.id.writer_follower);
-                test_folloew = mFlipView.getChildAt(ppi).findViewById(R.id.test_folloew);
+                if (mFlipView == null || ppi < 0 || ppi >= mFlipView.getChildCount()) {
+                    return;
+                }
+                View flipChild = mFlipView.getChildAt(ppi);
+                if (flipChild == null) {
+                    return;
+                }
+                test_folloew = flipChild.findViewById(R.id.test_folloew);
                 showLog("WRITER_FOLLOW positionx:"+positionx);
 
-                if (list!=null && list.size()>0 && list.get(positionx).getIsFollow() == 0) {
+                if (list == null || positionx < 0 || positionx >= list.size()) {
+                    return;
+                }
+                String writerNameAtPos = list.get(positionx).getWriterName();
+
+                if (list.size()>0 && list.get(positionx).getIsFollow() == 0) {
 
                     for (int i = 0; i < list.size(); i++) {
 
 
-                        if (list.get(positionx).getWriterName().equals(list.get(i).getWriterName())) {
+                        if (writerNameAtPos != null && writerNameAtPos.equals(list.get(i).getWriterName())) {
                             ModelClass.Datum datum_1 = list.get(i);
 
 //                        datum_1.setLikeStatus(list.get(i).getLikeStatus());
@@ -1696,7 +1715,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     for (int j = 0; j < list.size(); j++) {
 
 
-                        if (list.get(positionx).getWriterName().equals(list.get(j).getWriterName())) {
+                        if (writerNameAtPos != null && writerNameAtPos.equals(list.get(j).getWriterName())) {
                             ModelClass.Datum datum_1 = list.get(j);
 
 //                        datum_1.setLikeStatus(list.get(j).getLikeStatus());
@@ -1756,13 +1775,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public BroadcastReceiver SURVEY_STATUS = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (list == null || positionx < 0 || positionx >= list.size()) {
+                return;
+            }
+            Integer surveyStatusAtPos = list.get(positionx).getSurveyStatus();
+            if (surveyStatusAtPos == null) {
+                return;
+            }
 
-            if (list.get(positionx).getSurveyStatus() == 0) {
+            if (surveyStatusAtPos == 0) {
 
 
                 for (int i = 0; i < list.size(); i++) {
 
-                    if (list.get(positionx).getSurveyStatus().equals(list.get(i).getSurveyStatus())) {
+                    if (surveyStatusAtPos.equals(list.get(i).getSurveyStatus())) {
                         ModelClass.Datum datum_1 =list.get(i);
 
 //                        datum_1.setLikeStatus(list.get(i).getLikeStatus());
@@ -1801,7 +1827,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 for (int j = 0; j < list.size(); j++) {
 
-                    if (list.get(positionx).getSurveyStatus().equals(list.get(j).getSurveyStatus())) {
+                    if (surveyStatusAtPos.equals(list.get(j).getSurveyStatus())) {
 
                         ModelClass.Datum datum_1 =list.get(j);
 
@@ -1988,6 +2014,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     datum.setVideoUrl(list.get(positionx).getVideoUrl());
                     datum.setThumbnail(list.get(positionx).getThumbnail());
                     datum.setPublishedTime(list.get(positionx).getPublishedTime());
+                    datum.setLikes(list.get(positionx).getLikes());
+                    datum.setComments(list.get(positionx).getComments());
                     datum.setShares(list.get(positionx).getShares());
                     datum.setDownloads(list.get(positionx).getDownloads());
                     datum.setStickyPosition(list.get(positionx).getStickyPosition());
@@ -2292,7 +2320,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_local);
 
                 LocalBroadcastManager.getInstance(HomePage.this).unregisterReceiver(CURRENT_LOCATION);
-                new Handler().postDelayed(new Runnable() {
+                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         LocalBroadcastManager.getInstance(getContext()).registerReceiver(CURRENT_LOCATION,
@@ -2454,7 +2482,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             public void updateDrawState(TextPaint ds) {
                 super.updateDrawState(ds);
                 ds.setUnderlineText(false);
-                ds.setColor(getResources().getColor(R.color.com_facebook_blue));
+                ds.setColor(getResources().getColor(R.color.colorPrimary));
             }
         };
         try {
@@ -2495,6 +2523,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 @Override
                 public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
                     EncreptionRequest encreptionRequest = response.body();
+                    if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                        hideProgress();
+                        return;
+                    }
                     String encrpt_data = null;
                     /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                         encrpt_data = decrypt(encreptionRequest.getData());
@@ -2567,12 +2599,67 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     }
 
+    private View getFlipChildForShare() {
+        if (mFlipView == null || ppi < 0 || ppi >= mFlipView.getChildCount()) {
+            return null;
+        }
+        return mFlipView.getChildAt(ppi);
+    }
+
+    private void shareCurrentPostViaWhatsAppFooter() {
+        if (adapter == null) {
+            return;
+        }
+        if (list == null || positionx < 0 || positionx >= list.size()) {
+            return;
+        }
+        ModelClass.Datum item = list.get(positionx);
+        if (item == null || item.getPostType() == null) {
+            return;
+        }
+        String postType = item.getPostType();
+        if (postType.equalsIgnoreCase("ad")
+                || postType.equalsIgnoreCase("web_ads")
+                || postType.equalsIgnoreCase("web")
+                || postType.equalsIgnoreCase("ratings")
+                || postType.equalsIgnoreCase("share_app")) {
+            return;
+        }
+
+        View flipChild = getFlipChildForShare();
+        if (flipChild == null) {
+            return;
+        }
+
+        if (postType.equalsIgnoreCase("image_gallery")) {
+            adapter.shareGalleryScreenShotUI(flipChild);
+        } else if (postType.equalsIgnoreCase("full_image")) {
+            adapter.shareFullImageScree(flipChild, positionx);
+        } else if (postType.equalsIgnoreCase("normal_image")) {
+            adapter.takeNormalImageScreenshot(flipChild, positionx, 1);
+        } else if (postType.equalsIgnoreCase("magazine")) {
+            adapter.showMagazineShareOptions(flipChild, 1);
+        } else if (postType.equalsIgnoreCase("normal_video")
+                || postType.equalsIgnoreCase("full_video")) {
+            adapter.showVideoShareChooserForPost(positionx, flipChild);
+        } else if (postType.equalsIgnoreCase("survey")
+                || postType.equalsIgnoreCase("survey_poll")) {
+            adapter.shareSurveyScreenshot(flipChild, positionx);
+        }
+    }
+
     @Override
     public void closeBottomStrip(boolean closeStrip) {
         showLog("closeBottomStrip:"+closeStrip);
-        if(list.get(positionx).getPostType().equalsIgnoreCase("ad") ||list.get(positionx).getPostType().equalsIgnoreCase("share_app") ||list.get(positionx).getPostType().equalsIgnoreCase("ratings")  ){
+        if (list == null || positionx < 0 || positionx >= list.size()) {
+            return;
+        }
+        String postType = list.get(positionx).getPostType();
+        if (postType != null && (postType.equalsIgnoreCase("ad")
+                || postType.equalsIgnoreCase("share_app")
+                || postType.equalsIgnoreCase("ratings"))) {
             home_page_navigation.setVisibility(View.GONE);
-        }else{
+        } else {
             home_page_navigation.setVisibility(View.VISIBLE);
         }
 
@@ -2628,30 +2715,63 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
     public  void pauseVideo(){
         try{
-            showLog("youTubePlayerViewHalf pause");
+            showLog("pauseVideo: stopping active players");
             if (FlipperAdapter.youTubePlayerViewHalf != null) {
-                showLog("youTubePlayerViewHalf pause");
-                FlipperAdapter. youTubePlayerViewHalf.pause();
-                if(adapter.customPlayerUiController!=null){
-                    adapter.customPlayerUiController.showUiControlls();
-                }
-                if(adapter.fullVideocustomPlayerUiController!=null){
-                    adapter.fullVideocustomPlayerUiController.showUiControlls();
+                FlipperAdapter.youTubePlayerViewHalf.pause();
+                if (adapter != null) {
+                    if (adapter.customPlayerUiController != null) {
+                        adapter.customPlayerUiController.showUiControlls();
+                    }
+                    if (adapter.fullVideocustomPlayerUiController != null) {
+                        adapter.fullVideocustomPlayerUiController.showUiControlls();
+                    }
                 }
             }
+            FlipperAdapter.isFullYoutubeVideoIsInitialized = false;
         }catch (Exception e){
             e.printStackTrace();
         }
         try{
             if (FlipperAdapter.exoPlayer != null) {
                 FlipperAdapter.exoPlayer.setPlayWhenReady(false);
+                FlipperAdapter.exoPlayer.pause();
                 FlipperAdapter.exoPlayer.stop();
-                FlipperAdapter.exoPlayer.seekTo(0);
-                //youTubePlayerViewHalf.cueVideo(videoURL,0);
+                FlipperAdapter.exoPlayer.release();
+                FlipperAdapter.exoPlayer = null;
             }
         }catch (Exception e){
             e.printStackTrace();
         }
+        try {
+            if (adapter != null && mFlipView != null) {
+                adapter.resetAllFlipChildrenVideoPlayers(mFlipView);
+                for (int i = 0; i < mFlipView.getChildCount(); i++) {
+                    View flipChild = mFlipView.getChildAt(i);
+                    ImageView imageViewItems = flipChild.findViewById(R.id.imageViewItem__);
+                    LinearLayout halfyoutubecontainer = flipChild.findViewById(R.id.halfyoutubecontainer);
+                    adapter.callYoutubeReInit(imageViewItems, halfyoutubecontainer);
+                    if (imageViewItems != null) {
+                        imageViewItems.setVisibility(View.VISIBLE);
+                    }
+                    if (halfyoutubecontainer != null) {
+                        halfyoutubecontainer.setVisibility(View.GONE);
+                    }
+                }
+            }
+            if (list != null && positionx >= 0 && positionx < list.size()) {
+                showLog("pauseVideo post_type::: "+list.get(positionx).getPostType());
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    private void resetFullVideoUi(View flipChild) {
+        if (flipChild == null || adapter == null) {
+            return;
+        }
+        adapter.resetFullExoVideoView(flipChild);
+        adapter.resetFullYoutubeVideoView(flipChild);
     }
 
     @Override
@@ -2742,6 +2862,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     hideProgress();
 
                     EncreptionRequest encreptionRequest = response.body();
+                    if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                        return;
+                    }
                     String encrpt_data = null;
                     /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                         encrpt_data = decrypt(encreptionRequest.getData());
@@ -2755,6 +2878,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (validateUserOtp.getSuccess()) {
 
                         leave_comment_white.setText("");
+                        if (adapter != null) {
+                            adapter.incrementCommentCount(positionx);
+                        } else {
+                            ModelClass.Datum item = list.get(positionx);
+                            int comments = item.getComments() != null ? item.getComments() : 0;
+                            item.setComments(comments + 1);
+                        }
+                        if (validateUserOtp.getComments() != null && adapter != null) {
+                            adapter.syncCommentCountFromServer(
+                                    list.get(positionx).getPostId(),
+                                    list.get(positionx).getSubPostId(),
+                                    validateUserOtp.getComments());
+                        }
 
                         comment_recycler_view.setVisibility(View.GONE);
                         comment_totoal_count.setVisibility(View.GONE);
@@ -2818,6 +2954,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
                     hideProgress();
                     EncreptionRequest encreptionRequest = response.body();
+                    if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                        return;
+                    }
                     String encrpt_data = null;
                     /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                         encrpt_data = decrypt(encreptionRequest.getData());
@@ -2887,6 +3026,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         list = new ArrayList<>();
         dummyResponse=null;
+        nativeGoogleAdList.clear();
+        nativeFBAdList.clear();
+        nativeGoogleAdArray.clear();
+        nativeFBAdArray.clear();
         showLog("inlist called:"+category_id);
         initialCall=false;
         ShowNews_Data_Values(category_id,-1);
@@ -2931,7 +3074,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 showLog("List size:"+list.size());
 
-                ensureFlipperAdapter(category_id);
+                adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());
+                adapter.setCallback(this);
+                mFlipView.setAdapter(adapter);
+                mFlipView.setOnFlipListener(this);
+                mFlipView.setOverFlipMode(OverFlipMode.GLOW);
+                mFlipView.peakNext(false);
+                mFlipView.setOnOverFlipListener(this);
+                mFlipView.setOnFlipAppear(this);
 
             }
 
@@ -2941,29 +3091,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     }
 
-    private void ensureFlipperAdapter(int category_id) {
-        if (adapter != null) {
-            return;
-        }
-        if (languageModelResponse == null || languageModelResponse.getData() == null) {
-            return;
-        }
-        if (category_id == 0) {
-            type = "" + String.valueOf(SharedPrefsData.getString(HomePage.this, Constants.Selected_Distric_Name1, Constants.PREF_NAME));
-        } else {
-            type = languageModelResponse.getData().getMyFeed().toString();
-        }
-        adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());
-        adapter.setCallback(this);
-        mFlipView.setAdapter(adapter);
-        mFlipView.setOnFlipListener(this);
-        mFlipView.setOverFlipMode(OverFlipMode.GLOW);
-        mFlipView.peakNext(false);
-        mFlipView.setOnOverFlipListener(this);
-        mFlipView.setOnFlipAppear(this);
-    }
-
-
     private JsonObject Articles_All(int category_id) {
         int height=0,width=0;
         getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
@@ -2971,7 +3098,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         height = displayMetrics.heightPixels;
         int isPermissionGranted=0;
         int SDK_VERSION=Build.VERSION.SDK_INT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 isPermissionGranted=0;
             }else{
@@ -3017,6 +3144,34 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         Encriton_Request.setData(encrpt_data);
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
 
+    }
+
+    public void sendEvents(){
+        List<FlipItems> flipItemsList= allsharedpreference.getFlipData();
+        JsonArray array= new Gson().toJsonTree(flipItemsList).getAsJsonArray();
+        APIService apiService=RestApiClient.getClient().create(APIService.class);
+
+        String jsonString = new com.google.gson.Gson().toJson(array);
+        String encrpt_data = null;
+        encrpt_data = encrypt(jsonString);
+        showLog("API REQUEST E" + jsonString.toString());
+        EncritonRequestData Encriton_Request = new EncritonRequestData();
+        Encriton_Request.setData(encrpt_data);
+        JsonObject array1= new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
+
+        Call<BaseResponse> eventCall=apiService.sendEvents("v3",array1);
+        eventCall.enqueue(new Callback<BaseResponse>() {
+            @Override
+            public void onResponse(Call<BaseResponse> call, Response<BaseResponse> response) {
+                if(response.body() != null && 200 == response.body().getStatusCode()){
+                    allsharedpreference.setEmptyFlipData();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<BaseResponse> call, Throwable t) {
+            }
+        });
     }
 
     private void ShowNews_Data_Values(int category_id,int reqPos) {
@@ -3097,6 +3252,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("reqPos:::::"+reqPos);
         showLog("isFromLocalArticles:::::"+isFromLocalArticles);
         if(reqPos==3 && !isFromLocalArticles){
+            if (response != null && response.body() != null) {
+                showReporterLogin = response.body().isShow_reporter_login();
+                showLog("showReporterLogin (stored early):" + showReporterLogin);
+            }
             isDataParsed=false;
             dummyResponse=response;
             showLog("requestPosition::"+requestPostition);
@@ -3136,12 +3295,56 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (encreptionRequest.getUpdateMenuStatus() != null && encreptionRequest.getUpdateMenuStatus()==2 ){
                         PlaystoreUpdateDialog();
                     }
+                    if(encreptionRequest.isCallAppEvents()){
+                        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                sendEvents();
+                            }
+                        },1000);
+                    }
                     if (encreptionRequest.getAdmob_app_id() != null && !encreptionRequest.getAdmob_app_id().isEmpty()) {
                         AdMobInitializer.initialize(HomePage.this, encreptionRequest.getAdmob_app_id());
                     }
-                    preloadAdsFromResponse(encreptionRequest, reqPos);
+                    if (encreptionRequest.getEngagement_badge_color() != null
+                            && !encreptionRequest.getEngagement_badge_color().isEmpty()) {
+                        EngagementCountHelper.saveColor(HomePage.this, encreptionRequest.getEngagement_badge_color());
+                    }
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
-                        addUniqueArticles(validateUserOtp.getData());
+                        int listSizeBeforeAppend = list.size();
+                        if (list.isEmpty()) {
+                            list.addAll(validateUserOtp.getData());
+                        } else {
+                            addUniqueArticles(validateUserOtp.getData());
+                        }
+                        if (encreptionRequest.isShow_ads() && encreptionRequest.getAd_positions() != null) {
+                            final EncreptionRequest adEncRequest = encreptionRequest;
+                            final int adListSizeBeforeAppend = listSizeBeforeAppend;
+                            Runnable preloadAds = new Runnable() {
+                                @Override
+                                public void run() {
+                                    for (int i = 0; i < adEncRequest.getAd_positions().size(); i++) {
+                                        Integer adReqPos = adEncRequest.getAd_positions().get(i).getAd_req_position();
+                                        if (adListSizeBeforeAppend > 0 && adReqPos != null
+                                                && nativeGoogleAdArray.contains(adReqPos)) {
+                                            continue;
+                                        }
+                                        showLog("ListAll Articles Api trigger and AD Loading 22");
+                                        loadAds(
+                                                adEncRequest.getAd_positions().get(i).getAd_code(),
+                                                adReqPos,
+                                                adEncRequest.getAd_positions().get(i).getAd_type()
+                                        );
+                                    }
+                                    showLog("ListAll Articles Api trigger and AD Loading");
+                                }
+                            };
+                            if (listSizeBeforeAppend > 0) {
+                                new Handler(Looper.getMainLooper()).post(preloadAds);
+                            } else {
+                                preloadAds.run();
+                            }
+                        }
                         requestSize=list.size();
                         last_post_id = validateUserOtp.getLastPostId();
                         skip = validateUserOtp.getSkip();
@@ -3153,49 +3356,65 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         //writeNewUser("User", type_firebase, current_time_firebase, draft_id_firebase, device_id_firebase, language_id_firebase, updated_post_id_firebase, positionx);
                         if(isFromLocalArticles){
                            isFromLocalArticles=false;
-                           ensureFlipperAdapter(category_id);
+                           if (languageModelResponse != null && languageModelResponse.getData() != null) {
+                               if (category_id == 0) {
+                                   type = "" + String.valueOf(SharedPrefsData.getString(HomePage.this, Constants.Selected_Distric_Name1, Constants.PREF_NAME));
+                               } else {
+                                   type = languageModelResponse.getData().getMyFeed().toString();
+                               }
+                           }
+                           adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());
+                           adapter.setCallback(this);
+                           mFlipView.setAdapter(adapter);
+                           mFlipView.setOnFlipListener(this);
+                           mFlipView.setOverFlipMode(OverFlipMode.GLOW);
+                           mFlipView.peakNext(false);
+                           mFlipView.setOnOverFlipListener(this);
+                           mFlipView.setOnFlipAppear(this);
                        }
-                        ensureFlipperAdapter(category_id);
                         if (adapter == null) {
                             showLog("adapter null after articles response");
-                            return;
-                        }
-                        showLog("response body not null after load data:");
-                        adapter.hasStableIds();
-                        //adapter.notifyDataSetChanged();
-                        adapter.setData(list);
-                        mFlipView.setVisibility(View.VISIBLE);
-                        txtNoData.setVisibility(View.GONE);
-                        layout_with_out_data.setVisibility(View.GONE);
-                        layout_with_data.setVisibility(View.VISIBLE);
-
-                        if(allsharedpreference.getShowFirstTimeAnimation()){
-                            Display display = getWindowManager().getDefaultDisplay();
-                            DisplayMetrics displayMetrics = new DisplayMetrics();
-                            getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
-                            int height = displayMetrics.heightPixels;
-                            int width = displayMetrics.widthPixels;
-
-                            int resourceId = getResources().getIdentifier(
-                                    "status_bar_height", "dimen", "android");
-                            int  screenheight = (height - getResources().getDimensionPixelSize(
-                                    resourceId));
-                            int distance=0;
-                            if (getResources().getDisplayMetrics().density <= 1.0) {
-                                distance = (int) (screenheight / 2.0);
+                        } else {
+                            showLog("response body not null after load data:");
+                            adapter.hasStableIds();
+                            if (listSizeBeforeAppend > 0 && listSizeBeforeAppend < list.size()) {
+                                adapter.appendData(list, listSizeBeforeAppend);
                             } else {
-                                distance = (int) (screenheight / getResources()
-                                        .getDisplayMetrics().density);
+                                adapter.setData(list);
                             }
-                            showLog("DISTANCE1:"+distance);
-                            showLog("DISTANCE2:"+getResources()
-                                    .getDisplayMetrics().density);
-                            mFlipView.peakNext(false);
+                            mFlipView.setVisibility(View.VISIBLE);
+                            txtNoData.setVisibility(View.GONE);
+                            layout_with_out_data.setVisibility(View.GONE);
+                            layout_with_data.setVisibility(View.VISIBLE);
 
-                            mFlipView.setFlipDistanceperpage(200, getResources()
-                                    .getDisplayMetrics().density);
-                            allsharedpreference.setShowFirstTimeAnimation(false);
+                            if(allsharedpreference.getShowFirstTimeAnimation()){
+                                Display display = getWindowManager().getDefaultDisplay();
+                                DisplayMetrics displayMetrics = new DisplayMetrics();
+                                getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
+                                int height = displayMetrics.heightPixels;
+                                int width = displayMetrics.widthPixels;
 
+                                int resourceId = getResources().getIdentifier(
+                                        "status_bar_height", "dimen", "android");
+                                int  screenheight = (height - getResources().getDimensionPixelSize(
+                                        resourceId));
+                                int distance=0;
+                                if (getResources().getDisplayMetrics().density <= 1.0) {
+                                    distance = (int) (screenheight / 2.0);
+                                } else {
+                                    distance = (int) (screenheight / getResources()
+                                            .getDisplayMetrics().density);
+                                }
+                                showLog("DISTANCE1:"+distance);
+                                showLog("DISTANCE2:"+getResources()
+                                        .getDisplayMetrics().density);
+                                mFlipView.peakNext(false);
+
+                                mFlipView.setFlipDistanceperpage(200, getResources()
+                                        .getDisplayMetrics().density);
+                                allsharedpreference.setShowFirstTimeAnimation(false);
+
+                            }
                         }
 
                     } else {
@@ -3257,6 +3476,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
             initialCall=true;
             home_page_navigation.setVisibility(View.VISIBLE);
+            isApiRequested=false;
 
         } catch (NullPointerException e) {
             e.printStackTrace();
@@ -3294,16 +3514,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     finish();
                 }else if(FlipperAdapter.fullscreen){
                     try{
-                        PlayerView  simpleExoPlayerView = mFlipView.getChildAt(ppi).findViewById(R.id.normal_video_player);
-                        ConstraintLayout layoutParentTop;
-                        LinearLayout layoutParentTitle;
-                        LinearLayout layoutParentReportDetails;
-                        LinearLayout layoutParentMiddle;
-                        layoutParentTop = mFlipView.getChildAt(ppi).findViewById(R.id.layoutParentTop);
-                        layoutParentTitle = mFlipView.getChildAt(ppi).findViewById(R.id.layoutParentTitle);
-                        layoutParentReportDetails = mFlipView.getChildAt(ppi).findViewById(R.id.ll_footer_layout);
-                        layoutParentMiddle = mFlipView.getChildAt(ppi).findViewById(R.id.layoutParentMiddle);
-                        adapter.showExoPlayerInFullScreen(FlipperAdapter.fullscreen,simpleExoPlayerView, layoutParentTop, layoutParentMiddle, layoutParentReportDetails, layoutParentTitle);
+                        if (mFlipView != null && ppi >= 0 && ppi < mFlipView.getChildCount()) {
+                            View flipChild = mFlipView.getChildAt(ppi);
+                            if (flipChild != null) {
+                                PlayerView simpleExoPlayerView = flipChild.findViewById(R.id.normal_video_player);
+                                ConstraintLayout layoutParentTop;
+                                LinearLayout layoutParentTitle;
+                                LinearLayout layoutParentReportDetails;
+                                LinearLayout layoutParentMiddle;
+                                layoutParentTop = flipChild.findViewById(R.id.layoutParentTop);
+                                layoutParentTitle = flipChild.findViewById(R.id.layoutParentTitle);
+                                layoutParentReportDetails = flipChild.findViewById(R.id.ll_footer_layout);
+                                layoutParentMiddle = flipChild.findViewById(R.id.layoutParentMiddle);
+                                adapter.showExoPlayerInFullScreen(FlipperAdapter.fullscreen, simpleExoPlayerView, layoutParentTop, layoutParentMiddle, layoutParentReportDetails, layoutParentTitle);
+                            }
+                        }
                     }catch (Exception e){
                         e.printStackTrace();
                     }
@@ -3340,7 +3565,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                     } else {
 
-                        Toast.makeText(getBaseContext(), languageModelResponse.getData().getTapToExit(), Toast.LENGTH_SHORT).show();
+                        if (languageModelResponse != null && languageModelResponse.getData() != null
+                                && languageModelResponse.getData().getTapToExit() != null) {
+                            Toast.makeText(getBaseContext(), languageModelResponse.getData().getTapToExit(), Toast.LENGTH_SHORT).show();
+                        }
                         mBackPressed = System.currentTimeMillis();
                     }
                 }
@@ -3404,7 +3632,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             yes_internet.setVisibility(View.VISIBLE);
             no_internet.setVisibility(View.GONE);
 
-            Handler handler = new Handler();
+            Handler handler = new Handler(Looper.getMainLooper());
             Runnable delayrunnable = new Runnable() {
                 @Override
                 public void run() {
@@ -3430,30 +3658,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             ShowNews_Data_Values(category_id,3);
         }
 
-        if ( positionx == ((list.size() - 2)) || (positionx==list.size())) {
-            showProgress();
-            if(dummyResponse!=null){
-                //Toasty.info(getApplicationContext(), "Please wait while loading data...", Toast.LENGTH_SHORT, true).show();
-                new Handler().postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        showLog("request at position:: convertListOfArticles");
-                        convertListOfArticles(dummyResponse,-1);
-                        hideProgress();
-                    }
-                },100);
-
-
-            }else{
-                showLog("request at position::"+requestSize+isApiRequested);
-
-                //Toasty.info(getApplicationContext(), "Please wait while loading ...", Toast.LENGTH_SHORT, true).show();
-//                if(isApiRequested){
-//                    ShowNews_Data_Values(category_id,0);
-//                }
+        if (positionx == ((list.size() - 2)) || (positionx == list.size())) {
+            if (dummyResponse != null) {
+                showLog("request at position:: convertListOfArticles");
+                convertListOfArticles(dummyResponse, -1);
+            } else {
+                showLog("request at position::" + requestSize + isApiRequested);
             }
-
-
         } else {
             bottomNavigationView.getMenu().getItem(0).setIcon(R.drawable.refresh_icon);
             bottomNavigationView.getMenu().getItem(0).setTitle("" + languageModelResponse.getData().getReload());
@@ -3486,30 +3697,37 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @SuppressLint("SetTextI18n")
     @Override
     public void onFlippedToPage(FlipView view, int position, long id) {
-        pauseVideo();
-        new Handler().postDelayed(new Runnable() {
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
-                onFlippedToPage1(view,position,id);
+                onFlippedToPage1(view, position, id);
             }
-        },50);
-
+        }, 60);
     }
     public void onFlippedToPage1(FlipView view, int position, long id) {
+        if (list == null || position < 0 || position >= list.size()) {
+            return;
+        }
         showLog("onFlippedToPage1:::");
+        showLog("onFlippedToPage1::POS::"+position+"....post_type.."+list.get(position).getPostType());
         isPlayingVideoInFullScreen=false;
         currentView=view;
         initialCall=true;
         positionx = position;
-        post_type=list.get(position).getPostType();
+        post_type = list.get(position).getPostType();
+        if (post_type == null) {
+            post_type = "";
+        }
 
-        if (list.get(positionx).getPostType().equalsIgnoreCase("ad") || list.get(positionx).getPostType().equalsIgnoreCase("share_app") || list.get(positionx).getPostType().equalsIgnoreCase("ratings")) {
+        if (post_type.equalsIgnoreCase("ad") || post_type.equalsIgnoreCase("share_app") || post_type.equalsIgnoreCase("ratings")) {
             home_page_navigation.setVisibility(View.INVISIBLE);
         }else{
             home_page_navigation.setVisibility(View.VISIBLE);
         }
         try {
             updated_post_id_firebase = list.get(positionx).getPostId().intValue();
+            // REST fallback so views are counted even when the GCM upstream path fails
+            setViewsApi();
         } catch (NullPointerException e) {
             e.printStackTrace();
         }
@@ -3526,7 +3744,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         }
         if(post_type.equalsIgnoreCase("image_gallery")){
-            adapter.closeGalleryShareLayout(mFlipView.getChildAt(ppi));
+            if (mFlipView != null && ppi >= 0 && ppi < mFlipView.getChildCount()) {
+                View flipChild = mFlipView.getChildAt(ppi);
+                if (flipChild != null && flipChild.findViewById(R.id.relativeLayoutShareOpt) != null) {
+                    adapter.closeGalleryShareLayout(flipChild);
+                }
+            }
         }
         refreshDetails();
         showLog("CHECK POINT ONFLIPPEDTOPAGE 4");
@@ -3588,19 +3811,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
 
-        //loading Ad — bind deferred ad UI now that this page is visible
-        if(list.get(positionx).getPostType().equalsIgnoreCase("ad")){
-            Log.e("AnyNewsAds", "onFlippedToPage1 ad pos=" + positionx
-                    + " adCode=" + list.get(positionx).getAd_code()
-                    + " adType=" + list.get(positionx).getAd_type()
-                    + " adsFrom=" + list.get(positionx).getAds_from());
+        //loading Ad
+        String postTypeAtPos = list.get(positionx).getPostType();
+        if (postTypeAtPos != null && postTypeAtPos.equalsIgnoreCase("ad")) {
             showLog("ONFLIPPEDTOPAGE AD Loading");
-            if (mFlipView != null) {
-                mFlipView.refreshCurrentPage();
-            }
-            if (!hasPreloadedGoogleAd(list.get(positionx).getAd_req_position())) {
-                loadAds(list.get(positionx).getAd_code(), list.get(positionx).getAd_req_position(), list.get(position).getAd_type());
-            }
             loadAds(list.get(positionx).getNext_req_ad_code(), list.get(positionx).getNext_ad_req_position(), list.get(position).getAd_type());
         }
         showLog("CHECK POINT ONFLIPPEDTOPAGE 7");
@@ -3638,6 +3852,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             lbm.unregisterReceiver(WRITER_FOLLOWER);
             lbm.unregisterReceiver(SURVEY_STATUS);
             lbm.unregisterReceiver(SURVEY_POLL);
+            lbm.unregisterReceiver(CURRENT_LOCATION);
             if (receiver != null) unregisterReceiver(receiver);
         } catch (Exception e) {
             e.printStackTrace();
@@ -3649,6 +3864,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void onResume() {
         super.onResume();
+        updateSpecialTabBlinkIndicator();
         try {
 
             if (player != null) {
@@ -3675,7 +3891,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showLog("onResume");
                 if(list!=null && list.size()>0 && list.get(positionx).getPostType()!=null && list.get(positionx).getPostType().equalsIgnoreCase("normal_video")){
                     showLog("onResume"+"normal_video");
-                    if(list.get(positionx).getMediaType().equalsIgnoreCase("3")){
+                    if("3".equalsIgnoreCase(list.get(positionx).getMediaType())){
                        // adapter.showNormalVideo(currentView,positionx);
                         showLog("onResume "+" normal_vide 1");
                     }
@@ -3790,8 +4006,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
                 EncreptionRequest encreptionRequest = response.body();
-                String encrpt_data = null;
-                encrpt_data = decrypt(encreptionRequest.getData());
+                if (encreptionRequest == null || encreptionRequest.getData() == null) return;
+                String encrpt_data = decrypt(encreptionRequest.getData());
 
                 showLog("ENCRYPT" + encrpt_data);
 
@@ -3799,7 +4015,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 LikeDownloadRespouse likeDownloadRespouse = gsonObj.fromJson(encrpt_data, LikeDownloadRespouse.class);
 
 
-                if (likeDownloadRespouse.getSuccess()) {
+                if (likeDownloadRespouse != null && Boolean.TRUE.equals(likeDownloadRespouse.getSuccess())) {
 
                 }
 
@@ -3817,12 +4033,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void onPause() {
         //new flip
+        pauseVideo();
         super.onPause();
         try {
             if (FlipperAdapter.exoPlayer != null) {
                 FlipperAdapter.exoPlayer.setPlayWhenReady(false);
+                FlipperAdapter.exoPlayer.pause();
                 FlipperAdapter.exoPlayer.stop();
-
+                FlipperAdapter.exoPlayer.release();
+                FlipperAdapter.exoPlayer = null;
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -3892,8 +4111,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog(" layout_with_data:::" + layout_with_data.getVisibility());
                     showLog(" txtNoData:::" + txtNoData.getVisibility());
                     if(initialCall){
-                        nativeGoogleAdList =new ArrayList<>();
-                        nativeFBAdList =new ArrayList<>();
+                        nativeGoogleAdList.clear();
+                        nativeFBAdList.clear();
+                        nativeGoogleAdArray.clear();
+                        nativeFBAdArray.clear();
                         showLog("isUnreadPostsSelected set to false #5");
                         SharedPrefsData.putBool(HomePage.this, Constants.isUnreadPostsSelected, false, Constants.PREF_NAME);
                         showLog("Check Point #3 : HomePage.setOnClickListener ");
@@ -3928,6 +4149,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 //                    }
                     return true;
                 case R.id.navigation_catagiries:
+                    nativeGoogleAdList.clear();
+                    nativeFBAdList.clear();
+                    nativeGoogleAdArray.clear();
+                    nativeFBAdArray.clear();
+                    clearSpecialTabBlink();
                     SharedPrefsData.putBool(HomePage.this, Constants.isUnreadPostsSelected, true, Constants.PREF_NAME);
                     // firebase events triggered
                   //  Toast.makeText(HomePage.this, "Coming soon..", Toast.LENGTH_SHORT).show();
@@ -3963,60 +4189,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog("showReporterLogin:"+showReporterLogin);
                     if (!showReporterLogin) {
                         showLog("onClick of whatsapp");
-                        CallShareListener listener = new CallShareListener();
-                        listener.setShareInterfaceListener(adapter);
-                        listener.triggerEvent();
-                        showLog("onClick of whatsapp:" + ppi);
-                        if (list!=null && list.size()>0 && list.get(positionx).getPostType().equalsIgnoreCase("image_gallery")) {
-                            //adapter.shareGalleryScreenShot(positionx, 1);
-                            adapter.shareGalleryScreenShotUI(mFlipView.getChildAt(ppi));
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("full_image")) {
-                            adapter.shareFullImageScree(mFlipView.getChildAt(ppi), positionx);
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("normal_image")) {
-                            adapter.takeNormalImageScreenshot(mFlipView.getChildAt(ppi), positionx, 1);
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("magazine")) {
-                            adapter.showMagazineShareOptions(mFlipView.getChildAt(ppi), 1);
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("normal_video")) {
-                            if (list.get(positionx).getMediaType().equals("3")) {
-                                PlayerView simpleExoPlayerView = mFlipView.getChildAt(ppi).findViewById(R.id.normal_video_player);
-                                final ImageView thaumbnail_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.thaumbnail_for_video);
-                                final ImageView imageViewExoVideoPlayVideo = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewVideoPlayVideo);
-                                final ProgressBar progress_bar_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.progress_bar_for_video);
-                                adapter.shareExoPlayerVideoScreenShot(mFlipView.getChildAt(ppi), positionx, 1, simpleExoPlayerView, thaumbnail_for_video, imageViewExoVideoPlayVideo, progress_bar_for_video);
-
-
-                            } else if (list.get(positionx).getMediaType().equals("4")) {
-                                final ImageView thaumbnail_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.thaumbnail_for_video);
-                                final ImageView imageViewItem__ = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewItem__);
-                                final ImageView imageViewExoVideoPlayVideo = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewVideoPlayVideo);
-                                final ProgressBar progress_bar_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.progress_bar_for_video);
-                                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView youTubePlayerView = mFlipView.getChildAt(ppi).findViewById(R.id.youtube_view_half_video);
-                                adapter.shareYoutubeVideoScreenShot(mFlipView.getChildAt(ppi), positionx, youTubePlayerView, 1, imageViewItem__);
-                            }
-
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("full_video")) {
-                            if (list.get(positionx).getMediaType().equals("5")) {
-                                final ImageView thaumbnail_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.thaumbnail_for_video);
-                                final RelativeLayout exo_play_layout = mFlipView.getChildAt(ppi).findViewById(R.id.exo_play_layout);
-                                final ImageView imageViewExoVideoPlayVideo = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewVideoPlayVideo);
-                                PlayerView simpleExoPlayerViewFull = mFlipView.getChildAt(ppi).findViewById(R.id.normal_video_player);
-                                adapter.shareExoPlayerFullVideoShare(positionx, 1, thaumbnail_for_video, exo_play_layout, imageViewExoVideoPlayVideo, simpleExoPlayerViewFull);
-
-
-                            } else if (list.get(positionx).getMediaType().equals("6")) {
-                                ImageView newFullImageView1 = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewItem1);
-                                RelativeLayout layoutYoutubeFullView = mFlipView.getChildAt(ppi).findViewById(R.id.layoutYoutubeFullView);
-                                final com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView youTubePlayerView = mFlipView.getChildAt(ppi).findViewById(R.id.youtube_full_video);
-                                ImageView imageViewYoutubePlayVideo = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewPlayVideo);
-                                LinearLayout side_menu = mFlipView.getChildAt(ppi).findViewById(R.id.video_side_menu);
-                                adapter.shareYoutubePlayerFullVideoShare(positionx, 1, newFullImageView1, youTubePlayerView, layoutYoutubeFullView, imageViewYoutubePlayVideo, side_menu);
-                            }
-
+                        try {
+                            CallShareListener listener = new CallShareListener();
+                            listener.setShareInterfaceListener(adapter);
+                            listener.triggerEvent();
+                            showLog("onClick of whatsapp:" + ppi);
+                            shareCurrentPostViaWhatsAppFooter();
+                        } catch (Exception waEx) {
+                            throw waEx;
                         }
 
                     } else {
@@ -4159,13 +4339,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (response.isSuccessful()) {
 
                     EncreptionRequest encreptionRequest = response.body();
+                    if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                        return;
+                    }
                     String encrpt_data = null;
                     encrpt_data = decrypt(encreptionRequest.getData());
 
                     Gson gsonObj = new Gson();
                     surveyFeedbackResponse = gsonObj.fromJson(encrpt_data, SurveyFeedbackResponse.class);
 
-                    if (surveyFeedbackResponse.getSuccess()) {
+                    if (surveyFeedbackResponse != null && surveyFeedbackResponse.getSuccess()
+                            && surveyFeedbackResponse.getData() != null
+                            && surveyFeedbackResponse.getData().size() >= 2) {
                         //list.get(position).setSurveyStatus(1);
                         ModelClass.Datum datum = new ModelClass.Datum();
 
@@ -4181,6 +4366,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         datum.setVideoUrl(list.get(position).getVideoUrl());
                         datum.setThumbnail(list.get(position).getThumbnail());
                         datum.setPublishedTime(list.get(position).getPublishedTime());
+                        datum.setLikes(list.get(position).getLikes());
+                        datum.setComments(list.get(position).getComments());
+                        datum.setLikeStatus(list.get(position).getLikeStatus());
                         datum.setShares(list.get(position).getShares());
                         datum.setDownloads(list.get(position).getDownloads());
                         datum.setStickyPosition(list.get(position).getStickyPosition());
@@ -4353,12 +4541,202 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     }
 
-    private void addBadgeView() {
+    private void setupSpecialTabBulb() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        bottomNavigationView.getMenu().getItem(SPECIAL_TAB_INDEX)
+                .setIcon(R.drawable.ic_nav_icon_transparent);
+        ensureSpecialTabBulbOverlay();
+        updateSpecialTabBlinkIndicator();
+    }
+
+    private void ensureSpecialTabBulbOverlay() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        if (specialTabBulbOverlay != null) {
+            return;
+        }
+
+        BottomNavigationItemView itemView = findSpecialTabItemView();
+        if (itemView == null) {
+            if (specialTabBulbSetupRetryCount < 10) {
+                specialTabBulbSetupRetryCount++;
+                bottomNavigationView.postDelayed(this::ensureSpecialTabBulbOverlay, 50);
+            }
+            return;
+        }
+        specialTabBulbSetupRetryCount = 0;
+
+        View existingOverlay = itemView.findViewById(R.id.special_tab_bulb_overlay);
+        if (existingOverlay instanceof ImageView) {
+            specialTabBulbOverlay = (ImageView) existingOverlay;
+        } else {
+            LayoutInflater.from(this).inflate(R.layout.badge_layout, itemView, true);
+            specialTabBulbOverlay = itemView.findViewById(R.id.special_tab_bulb_overlay);
+        }
+
+        if (specialTabBulbOverlay != null) {
+            specialTabBulbOverlay.setImageResource(R.drawable.ic_bulb_blinking);
+            specialTabBulbOverlay.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            specialTabBulbOverlay.setAlpha(1f);
+        }
+
+        View defaultIcon = itemView.findViewById(
+                com.google.android.material.R.id.navigation_bar_item_icon_view);
+        if (defaultIcon != null) {
+            defaultIcon.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    private void updateSpecialTabBlinkIndicator() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        Logone.d("HomePage", "SpecialTabBlink pending:" + !specialTabViewedThisSession);
+        ensureSpecialTabBulbOverlay();
+        if (!specialTabViewedThisSession) {
+            showSpecialTabBlink();
+        } else {
+            showSpecialTabStaticBulb();
+        }
+    }
+
+    private void showSpecialTabBlink() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        ensureSpecialTabBulbOverlay();
+        if (specialTabBulbOverlay == null) {
+            if (specialTabBulbSetupRetryCount < 10) {
+                specialTabBulbSetupRetryCount++;
+                bottomNavigationView.postDelayed(this::showSpecialTabBlink, 50);
+            }
+            return;
+        }
+        specialTabBulbSetupRetryCount = 0;
+        specialTabBulbOverlay.setVisibility(View.VISIBLE);
+        BottomNavigationItemView itemView = findSpecialTabItemView();
+        if (itemView != null) {
+            View defaultIcon = itemView.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_view);
+            if (defaultIcon != null) {
+                defaultIcon.setVisibility(View.INVISIBLE);
+            }
+        }
+        startSpecialTabBlinkAnimation();
+    }
+
+    private void clearSpecialTabBlink() {
+        specialTabViewedThisSession = true;
+        SharedPrefsData.putBool(HomePage.this, Constants.Event_Status, false, Constants.PREF_NAME);
+        showSpecialTabStaticBulb();
+    }
+
+    private void showSpecialTabStaticBulb() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        ensureSpecialTabBulbOverlay();
+        if (specialTabBulbOverlay == null) {
+            return;
+        }
+        specialTabBulbSetupRetryCount = 0;
+        stopSpecialTabBlinkAnimation();
+        specialTabBulbOverlay.setImageResource(R.drawable.ic_bulb_blinking);
+        specialTabBulbOverlay.setAlpha(1f);
+        specialTabBulbOverlay.setVisibility(View.VISIBLE);
+        BottomNavigationItemView itemView = findSpecialTabItemView();
+        if (itemView != null) {
+            View defaultIcon = itemView.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_view);
+            if (defaultIcon != null) {
+                defaultIcon.setVisibility(View.INVISIBLE);
+            }
+        }
+    }
+
+    private void restoreSpecialTabIcon() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        specialTabBulbSetupRetryCount = 0;
+        stopSpecialTabBlinkAnimation();
+        if (specialTabBulbOverlay != null) {
+            specialTabBulbOverlay.setVisibility(View.GONE);
+            specialTabBulbOverlay.setImageResource(R.drawable.ic_bulb_blinking);
+            specialTabBulbOverlay.setAlpha(1f);
+        }
+        BottomNavigationItemView itemView = findSpecialTabItemView();
+        if (itemView != null) {
+            View defaultIcon = itemView.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_view);
+            if (defaultIcon != null) {
+                defaultIcon.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
+    /**
+     * Locates the Material bottom-nav item view for the Special tab so the large
+     * bulb overlay can be centered on it (40dp x 50sdp, matching legacy badge_layout).
+     */
+    @Nullable
+    private BottomNavigationItemView findSpecialTabItemView() {
+        if (bottomNavigationView == null) {
+            return null;
+        }
         BottomNavigationMenuView bottomNavigationMenuView =
                 (BottomNavigationMenuView) bottomNavigationView.getChildAt(0);
-        View v = bottomNavigationMenuView.getChildAt(1);
-        BottomNavigationItemView itemView = (BottomNavigationItemView) v;
-        LayoutInflater.from(this).inflate(R.layout.badge_layout, itemView, true);
+        if (bottomNavigationMenuView == null) {
+            return null;
+        }
+        bottomNavigationMenuView.setClipChildren(false);
+        bottomNavigationMenuView.setClipToPadding(false);
+        for (int i = 0; i < bottomNavigationMenuView.getChildCount(); i++) {
+            View item = bottomNavigationMenuView.getChildAt(i);
+            if (!(item instanceof BottomNavigationItemView)) {
+                continue;
+            }
+            BottomNavigationItemView itemView = (BottomNavigationItemView) item;
+            if (itemView.getItemData().getItemId() != R.id.navigation_catagiries) {
+                continue;
+            }
+            itemView.setClipChildren(false);
+            itemView.setClipToPadding(false);
+            return itemView;
+        }
+        return null;
+    }
+
+    private void startSpecialTabBlinkAnimation() {
+        if (specialTabBulbOverlay == null || specialTabViewedThisSession) {
+            return;
+        }
+        stopSpecialTabBlinkAnimation();
+        specialTabBulbOverlay.setVisibility(View.VISIBLE);
+        specialTabBulbOverlay.setColorFilter(
+                ContextCompat.getColor(this, R.color.red), PorterDuff.Mode.SRC_ATOP);
+        ObjectAnimator animator = ObjectAnimator.ofFloat(specialTabBulbOverlay, View.ALPHA, 1f, 0.35f);
+        animator.setDuration(700);
+        animator.setRepeatCount(ValueAnimator.INFINITE);
+        animator.setRepeatMode(ValueAnimator.REVERSE);
+        animator.setInterpolator(new AccelerateDecelerateInterpolator());
+        specialTabBulbAnimator = animator;
+        animator.start();
+    }
+
+    private void stopSpecialTabBlinkAnimation() {
+        if (specialTabBulbAnimator != null) {
+            specialTabBulbAnimator.cancel();
+            specialTabBulbAnimator = null;
+        }
+        if (specialTabBulbOverlay != null) {
+            specialTabBulbOverlay.clearAnimation();
+            specialTabBulbOverlay.clearColorFilter();
+            specialTabBulbOverlay.setAlpha(1f);
+        }
     }
     private void sendNotification2() {
         showLog("Notification:4444444444");
@@ -4388,31 +4766,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         RemoteViews expandedView = new RemoteViews(getPackageName(), R.layout.new_request);
         final Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         String GROUP_KEY_WORK_EMAIL = "com.anyNews.anynews.Services.WORK_EMAIL";
-        Spannable pnTitle=new SpannableString(title);
-        try {
-            // String  content = title.substring(title.indexOf("#") + 1);
-            Pattern p = Pattern.compile("\\[.*?\\]");
-            Matcher matcher = p.matcher(title);
-            if(matcher.find()){
-                String  content = (matcher.group().subSequence(1, matcher.group().length()-1)).toString();
-                showLog("Content:"+content);
-                showLog("Content:"+content.length());
-                showLog("Content:"+title.length());
-                title= title.replace("[","").replace("]","");
-                Spannable spannable = new SpannableString(title);
-                String str = spannable.toString();
-                int iStart = str.indexOf(content);
-                int length = content.length();
-                int iEnd = iStart + length;/*10 characters = in-network. */
-                final StyleSpan bss = new StyleSpan(android.graphics.Typeface.BOLD);
-                spannable.setSpan(new ForegroundColorSpan(Color.BLUE), iStart, iEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                spannable.setSpan(bss, iStart, iEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                pnTitle=spannable;
-            }
-
-        } catch (IndexOutOfBoundsException e    ) {
-            e.printStackTrace();
-        }
+        Spannable pnTitle=makeSpannable(title,"\\[.*?\\]");
 
         collapsedView.setTextViewText(R.id.notification_titleE,pnTitle);
         collapsedView.setTextViewText(R.id.notification_titleTEL,pnTitle);
@@ -4514,8 +4868,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void BundleDataToGcmPush(int pos) {
+        showLog("BundleDataToGcmPush");
         try {
-            HashMap data = new HashMap();
+            FlipItems flipItems=new FlipItems();
+            HashMap<String,String> data = new HashMap<>();
+
             data.put("POST_TYPE",list.get(pos).getPostType());
             data.put("POSTID", ""+list.get(pos).getPostId());
             data.put("POST_POS", ""+pos);
@@ -4523,14 +4880,35 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             data.put("VERSION_NAME", ""+BuildConfig.VERSION_NAME);
             data.put("EVENT_NAME", "onFlip");
             data.put("PLATFORM", "ANDROID");
+            flipItems.setPOST_TYPE(list.get(pos).getPostType());
+            flipItems.setPOSTID(""+list.get(pos).getPostId());
+            flipItems.setPOST_POS(""+pos);
+            flipItems.setVERSION_CODE(""+BuildConfig.VERSION_CODE);
+            flipItems.setVERSION_NAME(BuildConfig.VERSION_NAME);
+            flipItems.setPLATFORM("ANDROID");
+            flipItems.setEVENT_NAME("onFlip");
+            flipItems.setDraft_id(SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME));
+
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"POST_TYPE_"+list.get(pos).getPostType());
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"POSTID_"+list.get(pos).getPostId());
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"POST_POS_"+pos);
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"VERSION_CODE_"+BuildConfig.VERSION_CODE);
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"VERSION_NAME_"+BuildConfig.VERSION_NAME.replace(".","_"));
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"EVENT_NAME_onFlip");
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"PLATFORM_ANDROID");
             data.put("DRAFTID", ""+SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
-            if(list!=null){
-                if(list.get(positionx).getPostType().equalsIgnoreCase("ad")){
+            if(list!=null && positionx >= 0 && positionx < list.size()){
+                String pt = list.get(positionx).getPostType();
+                if(pt != null && pt.equalsIgnoreCase("ad")){
                     try{
                         if(adapter!=null && adapter.nativeAd != null && adapter.nativeAd.getResponseInfo()!=null && adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo()!=null &&
                                 adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName()!=null){
                             data.put("AD Type", adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName());
                             data.put("AD Imps", ""+adImpress);
+                            flipItems.setAD_Type(adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName());
+                            flipItems.setADImps(""+adImpress);
+                            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"AD_Type_"+adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName().replace("","_"));
+                            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"AD_Imps_"+adImpress);
                             adImpress=false;
                         }
                     }catch (Exception e){
@@ -4539,21 +4917,42 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
 
                     data.put("ADERROR", adError);
+                    trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"ADERROR_"+adError);
                     adError="";
                 }
             }
 
             try {
 
-                SimpleDateFormat s = new SimpleDateFormat("dd-MM-yyyy-hh-mm-ss aa");
+                SimpleDateFormat s = new SimpleDateFormat("dd-MM-yyyy-hh-mm-ss aa", Locale.ENGLISH);
                 String format = s.format(new Date());
+                String regex = "(?i)A.M.|a.m.|A.M";
+                String regexPM = "(?i)P.M.|p.m.|P.M";
+                if(format.contains(regexPM)){
+                    format=format.replaceAll(regexPM, "PM");
+                }
+                if(format.contains(regex)){
+                    format=format.replaceAll(regex, "AM");
+                }
                 data.put("DATE_TIME", format);
+                flipItems.setDATE_TIME(format);
 
             } catch (Exception e) {
 
                 e.printStackTrace();
 
             }
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ENGLISH);
+                String format = sdf.format(new Date());
+                showLog("DATE_TIME ###" + format);
+                showLog("DATE_TIME ###;;;" + new Date().toString());
+                flipItems.setDATE_TIME_1(format);
+                flipItems.setDATE_TIME_2(new Date().toString());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            allsharedpreference.setFlipData(flipItems);
 
             UUID uuid = UUID.randomUUID();
             String uuidAsString = uuid.toString();
@@ -4581,6 +4980,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
 
     }
+    public SpannableStringBuilder makeSpannable(String text, String regex) {
+        String colorCode="#FF0000,#02a6d8";
+        int colorIndex=0;
+        ArrayList<String> colorCodeList=new ArrayList<>();
+        if(colorCode.contains(",")){
+            colorCodeList=new ArrayList<>(Arrays.asList(colorCode.split(",")));
+        }else{
+            colorCodeList.add(colorCode);
+        }
+
+        StringBuffer sb = new StringBuffer();
+        SpannableStringBuilder spannable = new SpannableStringBuilder();
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(text);
+
+        while (matcher.find()) {
+            sb.setLength(0);
+            String group = matcher.group();
+            String spanText = group.substring(1, group.length() - 1);
+            matcher.appendReplacement(sb, spanText);
+            spannable.append(sb.toString());
+            int start = spannable.length() - spanText.length();
+            final StyleSpan boldSpan = new StyleSpan(android.graphics.Typeface.BOLD);
+            spannable.setSpan(new ForegroundColorSpan(Color.parseColor(colorCodeList.get(colorIndex % colorCodeList.size()))), start, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            spannable.setSpan(boldSpan, start, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            colorIndex++;
+        }
+
+        sb.setLength(0);
+        matcher.appendTail(sb);
+        spannable.append(sb.toString());
+        return spannable;
+    }
+
     private void PlaystoreUpdateDialog() {
 
         androidx.appcompat.app.AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);

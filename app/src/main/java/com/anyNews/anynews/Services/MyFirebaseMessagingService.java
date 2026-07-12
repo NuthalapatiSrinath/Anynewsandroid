@@ -2,11 +2,13 @@ package com.anyNews.anynews.Services;
 
 import static com.anyNews.anynews.Utils.AppHelper.showLog;
 
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -16,6 +18,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.text.Spannable;
 import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
@@ -27,10 +30,16 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 
 import com.anyNews.anynews.Activities.HomePage;
 import com.anyNews.anynews.Activities.StartingActivity;
+import com.anyNews.anynews.Pojo.AddLikeResponse;
+import com.anyNews.anynews.Pojo.EncritonRequestData;
+import com.anyNews.anynews.Pojo.StartingAppRequest;
 import com.anyNews.anynews.R;
+import com.anyNews.anynews.Services.APIService;
+import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -42,10 +51,21 @@ import com.google.firebase.messaging.RemoteMessage;
 
 import org.json.JSONObject;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+import static com.anyNews.anynews.Utils.MyUtils.encrypt;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Map;
 import java.util.Random;
@@ -118,6 +138,70 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     @Override
     public void onNewToken(@NonNull String s) {
         super.onNewToken(s);
+        SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, s, Constants.PREF_NAME);
+        int draftId = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+        if (draftId != 0) {
+            sendFcmTokenToServer(s);
+        }
+    }
+
+    private void sendFcmTokenToServer(String token) {
+        try {
+            StartingAppRequest requestModel = new StartingAppRequest();
+            requestModel.setDraftId(draftIdFromPrefs());
+            requestModel.setFcmToken(token);
+            String jsonString = new Gson().toJson(requestModel);
+            String encrpt_data = encrypt(jsonString);
+            EncritonRequestData encritonRequestData = new EncritonRequestData();
+            encritonRequestData.setData(encrpt_data);
+            JsonObject body = new Gson().toJsonTree(encritonRequestData).getAsJsonObject();
+            String versionId = SharedPrefsData.getString(getApplicationContext(), Constants.Version_ID, Constants.PREF_NAME);
+            if (versionId == null || versionId.isEmpty()) {
+                versionId = "v3";
+            }
+            APIService apiService = RestApiClient.getClient().create(APIService.class);
+            apiService.tokens(versionId, body).enqueue(new Callback<AddLikeResponse>() {
+                @Override
+                public void onResponse(Call<AddLikeResponse> call, Response<AddLikeResponse> response) {
+                    showLog("FCM token updated on server");
+                }
+
+                @Override
+                public void onFailure(Call<AddLikeResponse> call, Throwable t) {
+                    Logone.e("FCM Token", "Failed to update token on server", t);
+                }
+            });
+        } catch (Exception e) {
+            Logone.e("FCM Token", "Error sending token to server", e);
+        }
+    }
+
+    private int draftIdFromPrefs() {
+        return SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+    }
+
+    private int safeNotificationId(String postId) {
+        try {
+            return Integer.parseInt(postId);
+        } catch (NumberFormatException e) {
+            return postId != null ? Math.abs(postId.hashCode()) : 0;
+        }
+    }
+
+    private int safeParseColor(String colorString) {
+        try {
+            return Color.parseColor(colorString);
+        } catch (IllegalArgumentException e) {
+            return Color.parseColor("#000000");
+        }
+    }
+
+    private boolean canPostNotifications() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return true;
+        }
+        return ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     private void fetchArticleDetails(final String body, String title, String post_id, String object, String pnColor) {
@@ -146,36 +230,47 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     }
 
 
+    public SpannableStringBuilder makeSpannable(String text, String regex, String colorCode) {
+        int colorIndex = 0;
+        ArrayList<String> colorCodeList = new ArrayList<>();
+        if (colorCode != null && colorCode.contains(",")) {
+            colorCodeList = new ArrayList<>(Arrays.asList(colorCode.split(",")));
+        } else if (colorCode != null) {
+            colorCodeList.add(colorCode);
+        } else {
+            colorCodeList.add("#000000");
+        }
+
+        StringBuffer sb = new StringBuffer();
+        SpannableStringBuilder spannable = new SpannableStringBuilder();
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(text);
+
+        while (matcher.find()) {
+            sb.setLength(0);
+            String group = matcher.group();
+            String spanText = group.substring(1, group.length() - 1);
+            matcher.appendReplacement(sb, spanText);
+            spannable.append(sb.toString());
+            int start = spannable.length() - spanText.length();
+            final StyleSpan boldSpan = new StyleSpan(android.graphics.Typeface.BOLD);
+            spannable.setSpan(new ForegroundColorSpan(safeParseColor(colorCodeList.get(colorIndex % colorCodeList.size()))), start, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            spannable.setSpan(boldSpan, start, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            colorIndex++;
+        }
+
+        sb.setLength(0);
+        matcher.appendTail(sb);
+        spannable.append(sb.toString());
+        return spannable;
+    }
+
     private void sendNotification(Bitmap imgUrl, String title, String post_id, String object,String pnColor,boolean showPNTime) {
         RemoteViews collapsedView = new RemoteViews(getPackageName(), R.layout.new_collapsed_request);
         RemoteViews expandedView = new RemoteViews(getPackageName(), R.layout.new_request);
         final Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
 
-        Spannable pnTitle=new SpannableString(title);
-        try {
-            // String  content = title.substring(title.indexOf("#") + 1);
-            Pattern p = Pattern.compile("\\[.*?\\]");
-            Matcher matcher = p.matcher(title);
-            if(matcher.find()){
-                String  content = (matcher.group().subSequence(1, matcher.group().length()-1)).toString();
-                showLog("Content:"+content);
-                showLog("Content:"+content.length());
-                showLog("Content:"+title.length());
-                title= title.replace("[","").replace("]","");
-                Spannable spannable = new SpannableString(title);
-                String str = spannable.toString();
-                int iStart = str.indexOf(content);
-                int length = content.length();
-                int iEnd = iStart + length;
-                final StyleSpan bss = new StyleSpan(android.graphics.Typeface.BOLD);
-                spannable.setSpan(new ForegroundColorSpan(Color.parseColor(pnColor)), iStart, iEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                spannable.setSpan(bss, iStart, iEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                pnTitle=spannable;
-            }
-
-        } catch (IndexOutOfBoundsException e    ) {
-            e.printStackTrace();
-        }
+        Spannable pnTitle = makeSpannable(title, "\\[.*?\\]", pnColor);
 
         String GROUP_KEY_WORK_EMAIL = "com.anyNews.anynews.Services.WORK_EMAIL";
         collapsedView.setTextViewText(R.id.notification_titleE,pnTitle);
@@ -217,11 +312,12 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                         , PendingIntent.FLAG_UPDATE_CURRENT);*/
         // flag mutable |
         PendingIntent pendingIntent;
+        int notificationId = safeNotificationId(post_id);
 
         if (Build.VERSION.SDK_INT >= 31) {
             pendingIntent = PendingIntent.getActivity(
                     getApplicationContext(),
-                    Integer.parseInt(post_id),
+                    notificationId,
                     resultIntent,
                     PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT // setting the mutability flag
             );
@@ -229,11 +325,14 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
         } else {
             pendingIntent = PendingIntent.getActivity(this,
-                    Integer.parseInt(post_id), resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+                    notificationId, resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
 
         }
 
         try {
+            if (!canPostNotifications()) {
+                return;
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 NotificationManager notificationManager =

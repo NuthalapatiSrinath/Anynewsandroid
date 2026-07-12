@@ -1,5 +1,6 @@
 package com.anyNews.anynews.Services;
 
+import com.anyNews.anynews.Pojo.BaseResponse;
 import com.anyNews.anynews.Pojo.AddArticleResponse;
 import com.anyNews.anynews.Pojo.AddBookmarkResponse;
 import com.anyNews.anynews.Pojo.AddLikeResponse;
@@ -383,5 +384,8 @@ public interface APIService {
 
  @POST("app/{version}/delete-account")
     Call<JsonObject> deleteUserAccount(@Path("version") String version, @Body JsonObject shop);
+
+ @POST("app/{version}/events")
+    Call<BaseResponse> sendEvents(@Path("version") String version, @Body JsonObject shop);
 
 }

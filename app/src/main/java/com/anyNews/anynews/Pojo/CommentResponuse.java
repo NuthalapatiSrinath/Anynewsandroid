@@ -29,6 +29,9 @@ public class CommentResponuse implements Serializable
     @SerializedName("success")
     @Expose
     private Boolean success;
+    @SerializedName("comments")
+    @Expose
+    private Integer comments;
     @SerializedName("extras")
     @Expose
     private Extras extras;
@@ -48,6 +51,14 @@ public class CommentResponuse implements Serializable
 
     public void setExtras(Extras extras) {
         this.extras = extras;
+    }
+
+    public Integer getComments() {
+        return comments;
+    }
+
+    public void setComments(Integer comments) {
+        this.comments = comments;
     }
 
 }

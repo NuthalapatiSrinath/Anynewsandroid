@@ -15,14 +15,14 @@ import androidx.core.content.ContextCompat;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Utils.AppHelper;
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.customui.views.YouTubePlayerSeekBar;
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.customui.views.YouTubePlayerSeekBarListener;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener;
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.YouTubePlayerFullScreenListener;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.utils.YouTubePlayerTracker;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView;
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.ui.views.YouTubePlayerSeekBar;
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.ui.views.YouTubePlayerSeekBarListener;
+import com.pierfrancescosoffritti.youtubeplayer.player.YouTubePlayerFullScreenListener;
 
 public class CustomPlayerUiController extends AbstractYouTubePlayerListener implements YouTubePlayerFullScreenListener {
 
@@ -32,12 +32,9 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
     ShowFullScreenVideo showFullScreenVideo;
     boolean isShowFullScreenOption = false;
     ImageButton playPauseButton;
-    // private TextView videoCurrentTimeTextView;
-    // private TextView videoDurationTextView;
     private Context context;
     private YouTubePlayer youTubePlayer;
     private YouTubePlayerView youTubePlayerView;
-    // panel is used to intercept clicks on the WebView, I don't want the user to be able to click the WebView directly.
     private View panel;
     private View progressbar;
     private boolean fullscreen = false;
@@ -46,7 +43,8 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
     YouTubePlayerSeekBar youTubePlayerSeekBar;
     ImageButton enterExitFullscreenButton;
     ImageButton mute;
-    public CustomPlayerUiController(Context context, View customPlayerUi, YouTubePlayer youTubePlayer, YouTubePlayerView youTubePlayerView, int layoutHeight, boolean isShowFullScreenOption,ShowFullScreenVideo showFullScreenVideo) {
+
+    public CustomPlayerUiController(Context context, View customPlayerUi, YouTubePlayer youTubePlayer, YouTubePlayerView youTubePlayerView, int layoutHeight, boolean isShowFullScreenOption, ShowFullScreenVideo showFullScreenVideo) {
         this.playerUi = customPlayerUi;
         this.context = context;
         this.youTubePlayer = youTubePlayer;
@@ -59,16 +57,12 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
         initViews(customPlayerUi);
     }
 
-
-
     private void initViews(View playerUi) {
         panel = playerUi.findViewById(R.id.panel);
         progressbar = playerUi.findViewById(R.id.progressbar);
-        //videoCurrentTimeTextView = playerUi.findViewById(R.id.video_current_time);
-        //videoDurationTextView = playerUi.findViewById(R.id.video_duration);
         playPauseButton = playerUi.findViewById(R.id.play_pause_button);
-         enterExitFullscreenButton = playerUi.findViewById(R.id.enter_exit_fullscreen_button);
-         mute = playerUi.findViewById(R.id.mute);
+        enterExitFullscreenButton = playerUi.findViewById(R.id.enter_exit_fullscreen_button);
+        mute = playerUi.findViewById(R.id.mute);
         youTubePlayerSeekBar = playerUi.findViewById(R.id.youtube_player_seekbar);
         youTubePlayer.addListener(youTubePlayerSeekBar);
         youTubePlayerSeekBar.setYoutubePlayerSeekBarListener(new YouTubePlayerSeekBarListener() {
@@ -86,30 +80,31 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
                 playPauseButton.setImageResource(R.drawable.ic_custom_video_pause);
                 youTubePlayer.play();
             }
-
         });
-        AppHelper.showLog("isShowFullScreenOption:"+isShowFullScreenOption);
+        AppHelper.showLog("isShowFullScreenOption:" + isShowFullScreenOption);
         if (!isShowFullScreenOption) {
-            AppHelper.showLog("isShowFullScreenOption::::"+isShowFullScreenOption);
+            AppHelper.showLog("isShowFullScreenOption::::" + isShowFullScreenOption);
             enterExitFullscreenButton.setVisibility(View.GONE);
         }
-
         enterExitFullscreenButton.setOnClickListener((view) -> {
-            if (fullscreen) youTubePlayerView.exitFullScreen();
-            else youTubePlayerView.enterFullScreen();
+            if (fullscreen) {
+                onYouTubePlayerEnterFullScreen();
+            } else {
+                onYouTubePlayerExitFullScreen();
+            }
             fullscreen = !fullscreen;
         });
         panel.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                AppHelper.showLog("onclick event"+isClicked);
+                AppHelper.showLog("onclick event" + isClicked);
                 if (!isClicked) {
                     AppHelper.showLog("onclick event  !isClicked");
                     playPauseButton.setVisibility(View.GONE);
                     youTubePlayerSeekBar.setVisibility(View.GONE);
                     mute.setVisibility(View.GONE);
                     enterExitFullscreenButton.setVisibility(View.GONE);
-                    if(!isShowFullScreenOption){
+                    if (!isShowFullScreenOption) {
                         showFullScreenVideo.showFullScreenVideo(true);
                     }
                     showFullScreenVideo.showUIControls(false);
@@ -124,7 +119,7 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
                     if (!isShowFullScreenOption) {
                         showFullScreenVideo.showFullScreenVideo(false);
                         enterExitFullscreenButton.setVisibility(View.GONE);
-                    }else{
+                    } else {
                         enterExitFullscreenButton.setVisibility(View.VISIBLE);
                     }
                 }
@@ -142,7 +137,6 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
                     youTubePlayer.unMute();
                     isMutedHalf = false;
                 }
-
             }
         });
     }
@@ -150,53 +144,53 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
     @Override
     public void onReady(@NonNull YouTubePlayer youTubePlayer) {
         AppHelper.showLog("onReady:");
+        showFullScreenVideo.showProgressOnMainPage(false);
         progressbar.setVisibility(View.GONE);
     }
 
     @Override
     public void onStateChange(@NonNull YouTubePlayer youTubePlayer, @NonNull PlayerConstants.PlayerState state) {
+        showFullScreenVideo.showProgressOnMainPage(true);
         AppHelper.showLog("onStateChange:" + state);
         if (state == PlayerConstants.PlayerState.PLAYING) {
             AppHelper.showLog("onStateChange: PLAYING");
             panel.setBackgroundColor(ContextCompat.getColor(context, android.R.color.transparent));
             progressbar.setVisibility(View.GONE);
+            showFullScreenVideo.showProgressOnMainPage(false);
             playPauseButton.setImageResource(R.drawable.ic_custom_video_pause);
-
-            AppHelper.showLog("onclick event  !isClicked");
             playPauseButton.setVisibility(View.GONE);
             youTubePlayerSeekBar.setVisibility(View.GONE);
             mute.setVisibility(View.GONE);
             enterExitFullscreenButton.setVisibility(View.GONE);
-            if(!isShowFullScreenOption){
+            if (!isShowFullScreenOption) {
                 showFullScreenVideo.showFullScreenVideo(true);
             }
             showFullScreenVideo.showUIControls(false);
             isClicked = true;
-
         } else if (state == PlayerConstants.PlayerState.PAUSED || state == PlayerConstants.PlayerState.VIDEO_CUED) {
             AppHelper.showLog("onStateChange: PAUSED|VIDEO_CUED");
             panel.setBackgroundColor(ContextCompat.getColor(context, android.R.color.transparent));
             progressbar.setVisibility(View.GONE);
+            showFullScreenVideo.showProgressOnMainPage(false);
             playPauseButton.setImageResource(R.drawable.ic_video_play);
         } else {
-            AppHelper.showLog("onStateChange: OTHER");
-            if (state == PlayerConstants.PlayerState.BUFFERING)
+            AppHelper.showLog("onStateChange: OTHER $$");
+            if (state == PlayerConstants.PlayerState.BUFFERING) {
                 progressbar.setVisibility(View.VISIBLE);
+            }
+            showFullScreenVideo.showProgressOnMainPage(false);
             panel.setBackgroundColor(ContextCompat.getColor(context, android.R.color.transparent));
         }
-
     }
 
     @SuppressLint("SetTextI18n")
     @Override
     public void onCurrentSecond(@NonNull YouTubePlayer youTubePlayer, float second) {
-        //  videoCurrentTimeTextView.setText(second+"");
     }
 
     @SuppressLint("SetTextI18n")
     @Override
     public void onVideoDuration(@NonNull YouTubePlayer youTubePlayer, float duration) {
-        // videoDurationTextView.setText(duration+"");
     }
 
     @Override
@@ -206,8 +200,6 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
         playerUi.getLayoutParams().width = ViewGroup.LayoutParams.MATCH_PARENT;
         isPlayingVideoInFullScreen = true;
         showFullScreenVideo.showFullScreenVideo(true);
-
-
     }
 
     @Override
@@ -223,18 +215,19 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
         isClicked = false;
         playPauseButton.setVisibility(View.VISIBLE);
         youTubePlayerSeekBar.setVisibility(View.VISIBLE);
+        youTubePlayer.seekTo(0);
         mute.setVisibility(View.VISIBLE);
         if (!isShowFullScreenOption) {
             showFullScreenVideo.showFullScreenVideo(false);
             enterExitFullscreenButton.setVisibility(View.GONE);
-        }else{
+        } else {
             enterExitFullscreenButton.setVisibility(View.VISIBLE);
         }
     }
 
     public interface ShowFullScreenVideo {
-        public void showFullScreenVideo(boolean b);
-        public void showUIControls(boolean b);
+        void showFullScreenVideo(boolean b);
+        void showUIControls(boolean b);
+        void showProgressOnMainPage(boolean b);
     }
-
 }

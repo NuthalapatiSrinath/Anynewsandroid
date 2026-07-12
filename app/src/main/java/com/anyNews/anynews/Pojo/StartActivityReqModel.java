@@ -5,6 +5,7 @@ import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 
 import java.io.Serializable;
+import java.util.Map;
 
 public class StartActivityReqModel implements Serializable {
 
@@ -61,6 +62,34 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("admob_app_id")
         @Expose
         private String admobAppId;
+
+        @SerializedName("engagement_badge_color")
+        @Expose
+        private String engagementBadgeColor;
+
+        @SerializedName("font_config")
+        @Expose
+        private LanguageFontConfig fontConfig;
+
+        @SerializedName("language_font_settings")
+        @Expose
+        private Map<String, LanguageFontConfig> languageFontSettings;
+
+        public LanguageFontConfig getFontConfig() {
+            return fontConfig;
+        }
+
+        public Map<String, LanguageFontConfig> getLanguageFontSettings() {
+            return languageFontSettings;
+        }
+
+        public String getEngagementBadgeColor() {
+            return engagementBadgeColor;
+        }
+
+        public void setEngagementBadgeColor(String engagementBadgeColor) {
+            this.engagementBadgeColor = engagementBadgeColor;
+        }
 
         public String getAdmobAppId() {
             return admobAppId;

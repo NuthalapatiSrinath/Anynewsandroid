@@ -14,7 +14,7 @@
         android:layout_marginTop="@dimen/five"
         app:neomorph_shadow_type="outer"
         app:neomorph_layer_type="hardware"
-        app:neomorph_background_color="@color/white"
+        app:neomorph_background_color="@color/chip_background"
         app:neomorph_corner_radius="20dp"
         app:neomorph_elevation="5dp"
         app:neomorph_view_type="rectangular"
@@ -37,7 +37,7 @@
                 android:layout_margin="2dp"
                 app:neomorph_shadow_type="outer"
                 app:neomorph_layer_type="hardware"
-                app:neomorph_background_color="@color/payment_history_background"
+                app:neomorph_background_color="@color/chip_background"
                 app:neomorph_corner_radius="20dp"
                 app:neomorph_elevation="0dp"
                 app:neomorph_view_type="rectangular"
@@ -87,7 +87,7 @@
                                     android:textSize="@dimen/_18sdp"
                                     android:text="XXXXXXXXXXXXXX"
                                     android:gravity="center"
-                                    android:textColor="@color/black"
+                                    android:textColor="@color/chip_text_color"
                                     android:layout_height="match_parent">
 
                                 </TextView>

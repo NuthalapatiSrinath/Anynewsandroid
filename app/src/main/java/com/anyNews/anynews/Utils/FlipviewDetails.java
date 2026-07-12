@@ -7,7 +7,7 @@ import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.anyNews.anynews.R;
-import com.google.android.exoplayer2.util.Util;
+import androidx.media3.common.util.Util;
 
 import java.util.ArrayList;
 

@@ -4,6 +4,8 @@ package com.anyNews.anynews.Utils;
  * Created by barediarjun on 14/11/17.
  */
 
+import static com.facebook.FacebookSdk.getApplicationContext;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
@@ -82,5 +84,16 @@ public class AppHelper {
         if (BuildConfig.DEBUG) {
             System.out.println(tag + "<-->" + msg);
         }
+    }
+
+    public static boolean isTeluguLanguageSelected() {
+        return 3 == SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+    }
+
+    public static float pxFromDp(final float dp) {
+        showLog("Article Data:" + "DIPCONVERT VALUEINT VALUE>>>>" + dp);
+        float data = dp / getApplicationContext().getResources().getDisplayMetrics().density;
+        showLog("Article Data:" + "DIPCONVERT VALUEINT data>>>>" + data);
+        return data;
     }
 }

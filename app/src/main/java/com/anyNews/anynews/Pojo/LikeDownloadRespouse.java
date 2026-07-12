@@ -16,6 +16,15 @@ public class LikeDownloadRespouse implements Serializable {
     @SerializedName("share_link")
     @Expose
     private String shareLink;
+    @SerializedName("likes")
+    @Expose
+    private Integer likes;
+    @SerializedName("shares")
+    @Expose
+    private Integer shares;
+    @SerializedName("comments")
+    @Expose
+    private Integer comments;
 
     public Boolean getSuccess() {
         return success;
@@ -39,5 +48,29 @@ public class LikeDownloadRespouse implements Serializable {
 
     public void setShareLink(String shareLink) {
         this.shareLink = shareLink;
+    }
+
+    public Integer getLikes() {
+        return likes;
+    }
+
+    public void setLikes(Integer likes) {
+        this.likes = likes;
+    }
+
+    public Integer getShares() {
+        return shares;
+    }
+
+    public void setShares(Integer shares) {
+        this.shares = shares;
+    }
+
+    public Integer getComments() {
+        return comments;
+    }
+
+    public void setComments(Integer comments) {
+        this.comments = comments;
     }
 }

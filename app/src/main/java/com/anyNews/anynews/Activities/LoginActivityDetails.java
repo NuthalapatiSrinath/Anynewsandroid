@@ -709,7 +709,7 @@ public class LoginActivityDetails extends AppCompatActivity {
                     }
                 };
         IntentFilter intentFilter = new IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION);
-        registerReceiver(smsBroadcastReceiver, intentFilter);
+        registerReceiver(smsBroadcastReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
     }
     @Override
     protected void onStart() {
