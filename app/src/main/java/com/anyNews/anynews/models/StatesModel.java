@@ -16,6 +16,9 @@ public class StatesModel {
         @SerializedName("id")
         @Expose
         private Integer id;
+        @SerializedName("icon_url")
+        @Expose
+        private String iconUrl;
 
         public String getName() {
             return name;
@@ -31,6 +34,14 @@ public class StatesModel {
 
         public void setId(Integer id) {
             this.id = id;
+        }
+
+        public String getIconUrl() {
+            return iconUrl;
+        }
+
+        public void setIconUrl(String iconUrl) {
+            this.iconUrl = iconUrl;
         }
 
     }

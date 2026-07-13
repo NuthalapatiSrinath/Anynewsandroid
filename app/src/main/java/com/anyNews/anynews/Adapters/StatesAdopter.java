@@ -2,7 +2,9 @@ package com.anyNews.anynews.Adapters;
 
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,7 +12,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.anyNews.anynews.Activities.Districs;
@@ -26,13 +27,14 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
+import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
-import com.anyNews.anynews.models.DistricsModel;
 import com.anyNews.anynews.models.StatesModel;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.squareup.picasso.Picasso;
 
 import java.util.ArrayList;
 
@@ -74,67 +76,31 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
                 holder.new_states_name,
                 holder.second_new_states_name
         );
-        ThemeColorHelper.applyAccentTint(context, holder.state_landmark);
         ThemeColorHelper.applySelectedNeomorphTree(context, holder.second_states_neomorphFrameLayout);
         ThemeColorHelper.applySelectedChip(context, holder.second_states_neomorphFrameLayout, holder.second_new_states_name);
 
-        holder.new_states_name.setText(arrayList.get(position).getName());
-        holder.second_new_states_name.setText(arrayList.get(position).getName());
+        StatesModel.Datum state = arrayList.get(position);
+        holder.new_states_name.setText(state.getName());
+        holder.second_new_states_name.setText(state.getName());
 
-        int landmark = getLandmarkDrawable(arrayList.get(position).getName(), arrayList.get(position).getId());
-        holder.state_landmark.setImageResource(landmark);
-        holder.second_state_landmark.setImageResource(landmark);
+        bindLandmark(holder.state_landmark, state, false);
+        bindLandmark(holder.second_state_landmark, state, true);
 
-        holder.new_states_name.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                holder.states_neomorphFrameLayout.setVisibility(View.GONE);
-                holder.second_states_neomorphFrameLayout.setVisibility(View.VISIBLE);
-
-                SharedPrefsData.putInt(context, Constants.StateID,arrayList.get(position).getId(),Constants.PREF_NAME);
-
-                index = position;
-                notifyDataSetChanged();
-
-
-                if(arrayList.get(position).getId()==-1){
-                 //   Toast.makeText(context, "AKKISETTY "+arrayList.get(position).getId(), Toast.LENGTH_SHORT).show();
-
-                  UpdateStates(arrayList.get(position).getId());
-
-                }else {
-                    SharedPrefsData.putInt(context, Constants.Back_Button_Move, 2, Constants.PREF_NAME);
-                    SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "district", Constants.PREF_NAME);
-                    Intent intent=new Intent(context, Districs.class);
-                    context.startActivity(intent);
-                }
-
-
-            }
-        });
-        holder.second_new_states_name.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-
-                index = position;
-                notifyDataSetChanged();
-            }
-        });
-
+        View.OnClickListener rowClick = v -> onStateSelected(holder.getBindingAdapterPosition());
+        holder.states_neomorphFrameLayout.setOnClickListener(rowClick);
+        holder.second_states_neomorphFrameLayout.setOnClickListener(rowClick);
+        holder.new_states_name.setOnClickListener(rowClick);
+        holder.second_new_states_name.setOnClickListener(rowClick);
+        holder.state_landmark.setOnClickListener(rowClick);
+        holder.second_state_landmark.setOnClickListener(rowClick);
 
         if(index==position){
 
-            if(arrayList.get(position).getId().equals("-1")){
+            if(state.getId() != null && state.getId() == -1){
 
-                UpdateStates(arrayList.get(position).getId());
+                UpdateStates(state.getId());
 
-            }else {
-                /*    Intent intent=new Intent(context, Districs.class);
-                    context.startActivity(intent);*/
             }
-            // neomorph_background_color
-
             holder.states_neomorphFrameLayout.setVisibility(View.GONE);
             holder.second_states_neomorphFrameLayout.setVisibility(View.VISIBLE);
 
@@ -142,6 +108,51 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
 
             holder.states_neomorphFrameLayout.setVisibility(View.VISIBLE);
             holder.second_states_neomorphFrameLayout.setVisibility(View.GONE);
+        }
+    }
+
+    private void onStateSelected(int position) {
+        if (position < 0 || position >= arrayList.size()) {
+            return;
+        }
+        StatesModel.Datum state = arrayList.get(position);
+
+        index = position;
+        notifyDataSetChanged();
+
+        SharedPrefsData.putInt(context, Constants.StateID, state.getId(), Constants.PREF_NAME);
+
+        if (state.getId() != null && state.getId() == -1) {
+            UpdateStates(state.getId());
+        } else {
+            SharedPrefsData.putInt(context, Constants.Back_Button_Move, 2, Constants.PREF_NAME);
+            SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "district", Constants.PREF_NAME);
+            Intent intent = new Intent(context, Districs.class);
+            context.startActivity(intent);
+        }
+    }
+
+    private void bindLandmark(ImageView imageView, StatesModel.Datum state, boolean selected) {
+        String iconUrl = state.getIconUrl();
+        if (!TextUtils.isEmpty(iconUrl)) {
+            imageView.clearColorFilter();
+            Picasso.get()
+                    .load(MediaUrl.resolve(iconUrl))
+                    .placeholder(getLandmarkDrawable(state.getName(), state.getId()))
+                    .error(getLandmarkDrawable(state.getName(), state.getId()))
+                    .fit()
+                    .centerInside()
+                    .into(imageView);
+            return;
+        }
+
+        int landmark = getLandmarkDrawable(state.getName(), state.getId());
+        imageView.setImageResource(landmark);
+        if (selected) {
+            imageView.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+        } else {
+            imageView.clearColorFilter();
+            ThemeColorHelper.applyAccentTint(context, imageView);
         }
     }
 
@@ -171,13 +182,9 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
     }
 
     /**
-     * Maps a state to an official landmark/symbol icon shown on the selection screen.
-     * Matching is name-based (locale independent where possible) so it also works for
-     * localized state names returned by the API. Update this mapping to add more states
-     * or to swap the placeholder line-art icons for real landmark artwork later.
+     * Fallback landmark icons when no admin-uploaded icon_url is available.
      */
     private int getLandmarkDrawable(String name, Integer id) {
-        // The "All states" entry uses id -1 in the API.
         if (id != null && id == -1) {
             return R.drawable.ic_landmark_all;
         }
@@ -186,10 +193,10 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
         }
         String n = name.toLowerCase();
         if (n.contains("telangana") || n.contains("తెలంగాణ") || n.contains("तेलंगाना")) {
-            return R.drawable.ic_landmark_charminar; // Charminar, Hyderabad
+            return R.drawable.ic_landmark_charminar;
         }
         if (n.contains("andhra") || n.contains("ఆంధ్ర") || n.contains("आंध्र")) {
-            return R.drawable.ic_landmark_buddha; // Amaravati Buddha
+            return R.drawable.ic_landmark_buddha;
         }
         if (n.contains("all") || n.contains("అన్ని") || n.contains("सभी")) {
             return R.drawable.ic_landmark_all;
@@ -219,7 +226,6 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
         Call<EncreptionRequest> apiResponse = apiService.update_state("v3",otp);
 
         apiResponse.enqueue(new Callback<EncreptionRequest>() {
-            //@RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
