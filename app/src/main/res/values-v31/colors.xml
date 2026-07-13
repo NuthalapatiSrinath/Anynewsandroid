@@ -109,6 +109,7 @@
     <color name="profile_background">#EBF5F7FB</color>
 <!-- bottom navigation color -->
     <color name="bottom_navigation_view_color">#F5F7FB</color>
+    <color name="bottom_nav_inactive">#666666</color>
     <color name="selected_feed_color">#808080</color>
     <color name="transparent_white">#00FFFFFF</color>
     <color name="transparent">#00000000</color>
