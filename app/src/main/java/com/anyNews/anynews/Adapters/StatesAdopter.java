@@ -12,6 +12,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.core.widget.ImageViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.anyNews.anynews.Activities.Districs;
@@ -133,23 +134,46 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
     }
 
     private void bindLandmark(ImageView imageView, StatesModel.Datum state, boolean selected) {
+        Picasso.get().cancelRequest(imageView);
+
         String iconUrl = state.getIconUrl();
         if (!TextUtils.isEmpty(iconUrl)) {
-            imageView.clearColorFilter();
+            clearLandmarkTint(imageView);
             Picasso.get()
                     .load(MediaUrl.resolve(iconUrl))
                     .placeholder(getLandmarkDrawable(state.getName(), state.getId()))
                     .error(getLandmarkDrawable(state.getName(), state.getId()))
                     .fit()
                     .centerInside()
-                    .into(imageView);
+                    .into(imageView, new com.squareup.picasso.Callback() {
+                        @Override
+                        public void onSuccess() {
+                            clearLandmarkTint(imageView);
+                        }
+
+                        @Override
+                        public void onError(Exception e) {
+                            bindLandmarkFallback(imageView, state, selected);
+                        }
+                    });
             return;
         }
 
+        bindLandmarkFallback(imageView, state, selected);
+    }
+
+    /** Remote photos must not inherit vector line-art tint from layout or recycled views. */
+    private void clearLandmarkTint(ImageView imageView) {
+        imageView.clearColorFilter();
+        ImageViewCompat.setImageTintList(imageView, null);
+    }
+
+    private void bindLandmarkFallback(ImageView imageView, StatesModel.Datum state, boolean selected) {
         int landmark = getLandmarkDrawable(state.getName(), state.getId());
         imageView.setImageResource(landmark);
         if (selected) {
             imageView.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+            ImageViewCompat.setImageTintList(imageView, null);
         } else {
             imageView.clearColorFilter();
             ThemeColorHelper.applyAccentTint(context, imageView);

@@ -82,7 +82,6 @@
                                 android:layout_marginTop="@dimen/ten"
                                 android:adjustViewBounds="true"
                                 android:scaleType="fitCenter"
-                                android:tint="@color/brand_orange"
                                 android:contentDescription="@string/app_name"
                                 android:src="@drawable/ic_landmark_monument" />
 
@@ -203,7 +202,6 @@
                                 android:layout_marginTop="@dimen/ten"
                                 android:adjustViewBounds="true"
                                 android:scaleType="fitCenter"
-                                android:tint="@color/white"
                                 android:contentDescription="@string/app_name"
                                 android:src="@drawable/ic_landmark_monument" />
 
