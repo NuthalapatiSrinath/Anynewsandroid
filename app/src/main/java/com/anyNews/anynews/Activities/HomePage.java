@@ -734,6 +734,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         LocalBroadcastManager.getInstance(getContext()).registerReceiver(SURVEY_POLL,
                 new IntentFilter("SURVEY_POLL"));
 
+        LocalBroadcastManager.getInstance(getContext()).registerReceiver(REPORTER_STATUS,
+                new IntentFilter(Constants.REPORTER_STATUS_CHANGED));
+
         IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         receiver = new NetworkChangeReceiver();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1775,6 +1778,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
 
     };
+    public BroadcastReceiver REPORTER_STATUS = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null) {
+                return;
+            }
+            isReporterUser = intent.getBooleanExtra(Constants.is_reporter, false);
+            updateCenterFab();
+        }
+    };
+
     public BroadcastReceiver SURVEY_STATUS = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -3874,6 +3888,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             lbm.unregisterReceiver(WRITER_FOLLOWER);
             lbm.unregisterReceiver(SURVEY_STATUS);
             lbm.unregisterReceiver(SURVEY_POLL);
+            lbm.unregisterReceiver(REPORTER_STATUS);
             lbm.unregisterReceiver(CURRENT_LOCATION);
             if (receiver != null) unregisterReceiver(receiver);
         } catch (Exception e) {

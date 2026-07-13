@@ -31,6 +31,7 @@ import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.anyNews.anynews.Activities.HomePage;
 import com.anyNews.anynews.Activities.StartingActivity;
@@ -105,8 +106,13 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
             JSONObject object = new JSONObject(params);
 
-            // Targeted per-user alert: someone replied to this user's comment.
             String type = object.optString("type", "");
+            if ("reporter_status_changed".equals(type)) {
+                handleReporterStatusChanged(object);
+                return;
+            }
+
+            // Targeted per-user alert: someone replied to this user's comment.
             if ("comment_reply".equals(type)) {
                 sendCommentReplyNotification(object);
                 return;
@@ -391,6 +397,34 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         }
 
 
+    }
+
+    private void handleReporterStatusChanged(JSONObject object) {
+        try {
+            boolean isReporter = "true".equalsIgnoreCase(
+                    object.optString("is_reporter", "false"));
+            int reporterLangId = object.optInt("reporter_language_id", 0);
+
+            SharedPrefsData.putBool(
+                    getApplicationContext(), Constants.is_reporter, isReporter, Constants.PREF_NAME);
+            if (reporterLangId > 0) {
+                SharedPrefsData.putInt(
+                        getApplicationContext(),
+                        Constants.reporter_language_id,
+                        reporterLangId,
+                        Constants.PREF_NAME);
+            }
+
+            Intent intent = new Intent(Constants.REPORTER_STATUS_CHANGED);
+            intent.putExtra(Constants.is_reporter, isReporter);
+            if (reporterLangId > 0) {
+                intent.putExtra(Constants.reporter_language_id, reporterLangId);
+            }
+            LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
+            showLog("reporter_status_changed isReporter:" + isReporter);
+        } catch (Exception e) {
+            Logone.e("ReporterStatus", "handleReporterStatusChanged failed", e);
+        }
     }
 
     // Comment-reply alerts show actor + snippet with a standard notification
