@@ -104,6 +104,14 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             }
 
             JSONObject object = new JSONObject(params);
+
+            // Targeted per-user alert: someone replied to this user's comment.
+            String type = object.optString("type", "");
+            if ("comment_reply".equals(type)) {
+                sendCommentReplyNotification(object);
+                return;
+            }
+
             String image = object.optString("image", "");
             String title = object.optString("pn_title", object.optString("title", "AnyNews"));
             String post_id = object.optString("post_id", "0");
@@ -383,6 +391,84 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         }
 
 
+    }
+
+    // Comment-reply alerts show actor + snippet with a standard notification
+    // layout (the news RemoteViews only render a bracket-styled title). Tapping
+    // reuses the existing push-open path: StartingActivity routes to the article
+    // by post_id, where the comments panel lives.
+    private void sendCommentReplyNotification(JSONObject object) {
+        try {
+            if (!canPostNotifications()) {
+                return;
+            }
+
+            String actor = object.optString("actor_name", object.optString("title", "AnyNews"));
+            String snippet = object.optString("snippet", object.optString("body", ""));
+            String post_id = object.optString("post_id", "0");
+
+            Intent resultIntent = new Intent(getApplicationContext(), StartingActivity.class);
+            resultIntent.putExtra("notification", true);
+            resultIntent.putExtra("TITILE", post_id);
+            resultIntent.putExtra("TITLE_REWARDS", actor);
+            resultIntent.putExtra("OBJECT", object.toString());
+            resultIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+            int notificationId = safeNotificationId(post_id);
+            PendingIntent pendingIntent;
+            if (Build.VERSION.SDK_INT >= 31) {
+                pendingIntent = PendingIntent.getActivity(
+                        getApplicationContext(),
+                        notificationId,
+                        resultIntent,
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            } else {
+                pendingIntent = PendingIntent.getActivity(
+                        getApplicationContext(),
+                        notificationId,
+                        resultIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT);
+            }
+
+            final Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationManager notificationManager =
+                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (notificationManager != null
+                        && notificationManager.getNotificationChannel(Constants.Channel_ID) == null) {
+                    NotificationChannel channel = new NotificationChannel(
+                            Constants.Channel_ID,
+                            "Any News",
+                            NotificationManager.IMPORTANCE_HIGH);
+                    channel.enableVibration(true);
+                    notificationManager.createNotificationChannel(channel);
+                }
+            }
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), Constants.Channel_ID)
+                    .setSmallIcon(R.drawable.ic_arman_notificatio)
+                    .setContentTitle(actor)
+                    .setContentText(snippet)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(snippet))
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setVibrate(new long[]{1000, 1000, 1000, 1000})
+                    .setSound(uri)
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setDefaults(NotificationCompat.DEFAULT_ALL)
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                builder.setColor(getResources().getColor(R.color.colorPrimary));
+            }
+
+            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(getApplicationContext());
+            int m = (int) ((new Date().getTime() / 1000L) % Integer.MAX_VALUE);
+            notificationManager.notify(m, builder.build());
+        } catch (Exception e) {
+            Log.v("NotificationData", String.valueOf(e.getMessage()));
+        }
     }
 
     public class GetBitmapURL extends AsyncTask<Void, Void, Void> {
