@@ -259,6 +259,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     EditText leave_comment_white;
     LinearLayout linear_no_comment_page;
     RelativeLayout layoutCommentProgressbar;
+    LinearLayout reply_context_layout;
+    TextView reply_context_text;
+    ImageView reply_context_cancel;
+    Long replyParentCommentId = null;
     public  boolean adImpress=false;
     public  String adError="";
 
@@ -2406,6 +2410,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         comment_totoal_count = findViewById(R.id.comment_totoal_count);
         leave_comment_white = findViewById(R.id.leave_comment_white);
+        reply_context_layout = findViewById(R.id.reply_context_layout);
+        reply_context_text = findViewById(R.id.reply_context_text);
+        reply_context_cancel = findViewById(R.id.reply_context_cancel);
+        reply_context_cancel.setOnClickListener(view -> clearReplyContext());
         send_btn_layout = findViewById(R.id.send_btn_layout);
         goHomePage = findViewById(R.id.goHomePage);
         comment_page.setOnClickListener(new View.OnClickListener() {
@@ -2422,6 +2430,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 //   player.setPlayWhenReady(true);
                 comment_page.setVisibility(View.GONE);
                 leave_comment_white.setText("");
+                clearReplyContext();
                 CommonMethods commonMethods = new CommonMethods(HomePage.this);
 
                 InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -2523,6 +2532,54 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         WriteComments();
     }
 
+    private void bindCommentsAdapter() {
+        comment_linearlayoutmanager = new LinearLayoutManager(getContext());
+        comment_recycler_view.setLayoutManager(comment_linearlayoutmanager);
+        comment_totoal_count.setVisibility(View.VISIBLE);
+        comment_recycler_view.setVisibility(View.VISIBLE);
+        linear_no_comment_page.setVisibility(View.GONE);
+        MailAdapter mMailAdapter = new MailAdapter(
+                HomePage.this,
+                comment_chooseLanguage_models,
+                position -> openReportPage(position),
+                position -> startReplyToComment(position));
+        comment_recycler_view.setAdapter(mMailAdapter);
+        comment_totoal_count.setText(" Comments ( " + comment_chooseLanguage_models.size() + " )");
+    }
+
+    private void startReplyToComment(int position) {
+        if (comment_chooseLanguage_models == null
+                || position < 0
+                || position >= comment_chooseLanguage_models.size()) {
+            return;
+        }
+        ListOfCommentsResponse.Datum datum = comment_chooseLanguage_models.get(position);
+        if (datum.getId() == null) {
+            return;
+        }
+        replyParentCommentId = datum.getId();
+        String userName = datum.getUserName() != null ? datum.getUserName() : "comment";
+        if (allsharedpreference.getEmailId() != null
+                && datum.getEmail() != null
+                && allsharedpreference.getEmailId().equalsIgnoreCase(datum.getEmail())) {
+            userName = "yourself";
+        }
+        reply_context_layout.setVisibility(View.VISIBLE);
+        reply_context_text.setText("Replying to " + userName);
+        leave_comment_white.requestFocus();
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.showSoftInput(leave_comment_white, InputMethodManager.SHOW_IMPLICIT);
+        }
+    }
+
+    private void clearReplyContext() {
+        replyParentCommentId = null;
+        if (reply_context_layout != null) {
+            reply_context_layout.setVisibility(View.GONE);
+        }
+    }
+
     @Override
     public void OpenComments(Long post_id, Long sub_post_id) {
 
@@ -2577,15 +2634,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                             //   comment_progress.setVisibility(View.GONE);
 
-                            comment_linearlayoutmanager = new LinearLayoutManager(getContext());
-                            comment_recycler_view.setLayoutManager(comment_linearlayoutmanager);
-                            comment_totoal_count.setVisibility(View.VISIBLE);
-                            comment_recycler_view.setVisibility(View.VISIBLE);
-                            linear_no_comment_page.setVisibility(View.GONE);
-                            MailAdapter mMailAdapter = new MailAdapter(HomePage.this, comment_chooseLanguage_models,position ->
-                                    openReportPage(position));
-                            comment_recycler_view.setAdapter(mMailAdapter);
-                            comment_totoal_count.setText(" Comments ( " + comment_chooseLanguage_models.size() + " )");
+                            bindCommentsAdapter();
                             //        leave_comment_white.setText(" " + languageModelResponse.getData().getLeaveAComment());
                         }
 
@@ -2732,6 +2781,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             comment_page.setVisibility(View.GONE);
             leave_comment_white.setText("");
+            clearReplyContext();
             CommonMethods commonMethods = new CommonMethods(HomePage.this);
             InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             imm.hideSoftInputFromWindow(leave_comment_white.getWindowToken(), 0);
@@ -2867,6 +2917,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         requestModel.setSubPostId(sub_post_id);
         requestModel.setUserid(allsharedpreference.getEmailId());
         requestModel.setComment("" + leave_comment_white.getText().toString());
+        if (replyParentCommentId != null && replyParentCommentId > 0) {
+            requestModel.setParentCommentId(replyParentCommentId);
+        }
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
@@ -2911,6 +2964,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (validateUserOtp.getSuccess()) {
 
                         leave_comment_white.setText("");
+                        clearReplyContext();
                         if (adapter != null) {
                             adapter.incrementCommentCount(positionx);
                         } else {
@@ -3021,15 +3075,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                             //   comment_progress.setVisibility(View.GONE);
 
-                            comment_linearlayoutmanager = new LinearLayoutManager(getContext());
-                            comment_recycler_view.setLayoutManager(comment_linearlayoutmanager);
-                            comment_totoal_count.setVisibility(View.VISIBLE);
-                            comment_recycler_view.setVisibility(View.VISIBLE);
-                            linear_no_comment_page.setVisibility(View.GONE);
-                            MailAdapter mMailAdapter = new MailAdapter(HomePage.this, comment_chooseLanguage_models,position ->
-                                    openReportPage(position));
-                            comment_recycler_view.setAdapter(mMailAdapter);
-                            comment_totoal_count.setText(" Comments ( " + comment_chooseLanguage_models.size() + " )");
+                            bindCommentsAdapter();
                             //        leave_comment_white.setText(" " + languageModelResponse.getData().getLeaveAComment());
                         }
 

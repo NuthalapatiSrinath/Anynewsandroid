@@ -23,6 +23,18 @@ public class ListOfCommentsRequest implements Serializable {
     @Expose
     private String comment;
 
+    @SerializedName("parent_comment_id")
+    @Expose
+    private Long parentCommentId;
+
+    public Long getParentCommentId() {
+        return parentCommentId;
+    }
+
+    public void setParentCommentId(Long parentCommentId) {
+        this.parentCommentId = parentCommentId;
+    }
+
     public String getUserid() {
         return email;
     }

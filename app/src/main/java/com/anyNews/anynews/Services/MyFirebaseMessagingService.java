@@ -437,9 +437,17 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 return;
             }
 
-            String actor = object.optString("actor_name", object.optString("title", "AnyNews"));
-            String snippet = object.optString("snippet", object.optString("body", ""));
+            String actor = object.optString("actor_name", object.optString("title", "Someone"));
+            String body = object.optString("body", "");
+            if (body == null || body.isEmpty()) {
+                body = actor + " has replied to your message";
+            }
+            String snippet = object.optString("snippet", object.optString("comment", ""));
             String post_id = object.optString("post_id", "0");
+            String bigText = body;
+            if (snippet != null && !snippet.isEmpty()) {
+                bigText = body + "\n\n\"" + snippet + "\"";
+            }
 
             Intent resultIntent = new Intent(getApplicationContext(), StartingActivity.class);
             resultIntent.putExtra("notification", true);
@@ -483,8 +491,8 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), Constants.Channel_ID)
                     .setSmallIcon(R.drawable.ic_arman_notificatio)
                     .setContentTitle(actor)
-                    .setContentText(snippet)
-                    .setStyle(new NotificationCompat.BigTextStyle().bigText(snippet))
+                    .setContentText(body)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(bigText))
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setVibrate(new long[]{1000, 1000, 1000, 1000})
                     .setSound(uri)
