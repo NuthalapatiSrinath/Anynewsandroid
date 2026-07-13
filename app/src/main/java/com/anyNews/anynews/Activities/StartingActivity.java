@@ -551,86 +551,60 @@ public class StartingActivity extends AppCompatActivity {
         String version_id = getVersionIdPrefix();
         SharedPrefsData.putString(getApplicationContext(), Constants.Version_ID, version_id, Constants.PREF_NAME);
 
-        /* */
-        String token=SharedPrefsData.getString(getApplicationContext(), Constants.FCM_TOKEN, Constants.PREF_NAME);
-        showLog("CHECK POINT 11::"+token);
-        if(token == null || token.equalsIgnoreCase("")){
-            FirebaseMessaging.getInstance().getToken().addOnCompleteListener(new OnCompleteListener<String>() {
-                @Override
-                public void onComplete(@NonNull Task<String> task) {
-                    if (!task.isSuccessful()) {
-                        Logone.w("FCM Token", "getInstanceId failed", task.getException());
-                        if (BuildConfig.DEBUG) {
-                            String fallbackToken = "debug-" + DeviceID;
-                            SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, fallbackToken, Constants.PREF_NAME);
-                            sendDeviceDetails(fallbackToken);
-                        }
+        String token = SharedPrefsData.getString(getApplicationContext(), Constants.FCM_TOKEN, Constants.PREF_NAME);
+        showLog("CHECK POINT 11::" + token);
+
+        /* Always refresh FCM token on splash — cached tokens go stale after
+           reinstall, clear-data, or Firebase rotation and inflate push Failed %. */
+        FirebaseMessaging.getInstance().getToken().addOnCompleteListener(new OnCompleteListener<String>() {
+            @Override
+            public void onComplete(@NonNull Task<String> task) {
+                String resolvedToken = token;
+                if (task.isSuccessful() && task.getResult() != null && !task.getResult().isEmpty()) {
+                    resolvedToken = task.getResult();
+                    SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, resolvedToken, Constants.PREF_NAME);
+                } else if (resolvedToken == null || resolvedToken.equalsIgnoreCase("")) {
+                    Logone.w("FCM Token", "getToken failed", task.getException());
+                    if (BuildConfig.DEBUG) {
+                        resolvedToken = "debug-" + DeviceID;
+                        SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, resolvedToken, Constants.PREF_NAME);
+                    } else {
                         return;
                     }
-                    showLog("CHECK POINT 12::");
-
-                    // Get new Instance ID token
-                    String token = task.getResult();
-                    long current_time_firebase = System.currentTimeMillis();
-                    SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, token, Constants.PREF_NAME);
-                    showLog("CHECK POINT token :::"+token);
-                    sendDeviceDetails(token);
-                    int draft_id = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
-                    String device_id = SharedPrefsData.getString(getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
-                    int lang_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-                    Logone.e("Executed","Firebase Deprecated");
-                    // fcm open now
-                    // check article id is there or not ,will decide is it push or another
-                    if (draft_id != 0){
-                        // != null is not working here
-                        if (TITLE.equals("null")){
-                            // do nothing
-                            Logone.e("Push Open", "Post Id "+ TITLE);
-                        } else {
-                            writePushOpen("User",type_firebase ,TITLE , draft_id , current_time_firebase , lang_id , device_id);
-                        }
-                    }
-
-
-                    // Log and toast
-                    String msg = token;
-                    Logone.d("FCM MSg", msg);
-                    //   Toast.makeText(Splash.this, msg, Toast.LENGTH_SHORT).show();
-
                 }
-            });
+                showLog("CHECK POINT token :::" + resolvedToken);
+                sendDeviceDetails(resolvedToken);
+                int draft_id = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+                String device_id = SharedPrefsData.getString(getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
+                int lang_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+                if (draft_id != 0 && !TITLE.equals("null")) {
+                    writePushOpen("User", type_firebase, TITLE, draft_id, System.currentTimeMillis(), lang_id, device_id);
+                }
+                Logone.d("FCM MSg", resolvedToken);
+            }
+        });
 
-
-            FirebaseDynamicLinks.getInstance()
-                    .getDynamicLink(getIntent())
-                    .addOnSuccessListener(this, new OnSuccessListener<PendingDynamicLinkData>() {
-                        @Override
-                        public void onSuccess(PendingDynamicLinkData pendingDynamicLinkData) {
-                            // Get deep link from result (may be null if no link is found)
-                            //Logone.e("Executed","Firebase Dynamics");
-                            Uri deepLink = null;
-                            if (pendingDynamicLinkData != null) {
-                                deepLink = pendingDynamicLinkData.getLink();
-                                articleId = deepLink.getQueryParameter("articleId");
-                                if (articleId != null) {
-                                    Logone.v("NUmber", articleId);
-                                        showLog("CHECK POINT SECOND REQUEST::"+articleId);
-                                    // share open push notification
-                                    int draft_id_firebase_share = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
-                                    long current_time_firebase_share = System.currentTimeMillis();
-                                    writeShareOpen("User",type_firebase_share ,articleId ,draft_id_firebase_share, current_time_firebase_share);
-//                                prefManager.setShared_String(Allsharedpreference.ReferralNumber,referrerUid);
-
-                                } else {
-                                    Logone.v("NUmber", "Empty VAlue");
-                                }
+        FirebaseDynamicLinks.getInstance()
+                .getDynamicLink(getIntent())
+                .addOnSuccessListener(this, new OnSuccessListener<PendingDynamicLinkData>() {
+                    @Override
+                    public void onSuccess(PendingDynamicLinkData pendingDynamicLinkData) {
+                        Uri deepLink = null;
+                        if (pendingDynamicLinkData != null) {
+                            deepLink = pendingDynamicLinkData.getLink();
+                            articleId = deepLink.getQueryParameter("articleId");
+                            if (articleId != null) {
+                                Logone.v("NUmber", articleId);
+                                showLog("CHECK POINT SECOND REQUEST::" + articleId);
+                                int draft_id_firebase_share = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+                                long current_time_firebase_share = System.currentTimeMillis();
+                                writeShareOpen("User", type_firebase_share, articleId, draft_id_firebase_share, current_time_firebase_share);
+                            } else {
+                                Logone.v("NUmber", "Empty VAlue");
                             }
                         }
-                    });
-
-        }else{
-            sendDeviceDetails(token);
-        }
+                    }
+                });
 
 
     }
