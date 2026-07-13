@@ -212,6 +212,7 @@ dependencies {
     implementation 'androidx.media3:media3-ui:1.1.0'
     implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.0"
     implementation 'pl.droidsonroids.gif:android-gif-drawable:1.2.31'
+    implementation 'com.vanniktech:android-image-cropper:4.5.0'
   //  implementation group: 'io.github.cleveradvertising', name: 'kotlin_ads_package', version: '1.1'
 
 }

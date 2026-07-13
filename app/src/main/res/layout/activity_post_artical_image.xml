@@ -81,7 +81,8 @@
                     <soup.neumorphism.NeumorphCardView
                         android:id="@+id/user_name"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
                         android:layout_below="@+id/basin_image_view"
                         android:layout_marginTop="8dp"
                         android:scaleType="centerInside"
@@ -153,7 +154,8 @@
                     <soup.neumorphism.NeumorphCardView
                         style="@style/Widget.Neumorph.ImageButton"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
                         android:layout_below="@+id/basin_image_view"
                         android:layout_marginTop="8dp"
                         android:scaleType="centerInside"

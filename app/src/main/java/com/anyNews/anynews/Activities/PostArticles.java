@@ -1,9 +1,17 @@
 package com.anyNews.anynews.Activities;
 
 import androidx.annotation.NonNull;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import com.anyNews.anynews.Utils.CropHelper;
+import com.canhub.cropper.CropImageContract;
+import com.canhub.cropper.CropImageContractOptions;
+import com.canhub.cropper.CropImageView;
+import com.squareup.picasso.Picasso;
 
 import android.Manifest;
 import android.content.DialogInterface;
@@ -16,6 +24,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.provider.MediaStore;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -116,6 +126,14 @@ public class PostArticles extends AppCompatActivity {
     LinearLayout img_upload_photo_total;
     ProgressBar progressBarLarge, image_upload_progress_bar;
     TextView tv_agree_view;
+    TextView txt_title_count, txt_desc_count;
+
+    // Edit / resubmit rejected article support
+    boolean editMode = false;
+    int editUserPostId = 0;
+    boolean imageChanged = false;
+
+    private ActivityResultLauncher<CropImageContractOptions> cropImage;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -136,82 +154,34 @@ public class PostArticles extends AppCompatActivity {
         progressBarLarge = findViewById(R.id.progressBarLarge);
         image_upload_progress_bar = findViewById(R.id.image_upload_progress_bar);
         tv_agree_view = findViewById(R.id.tv_agree_view);
+        txt_title_count = findViewById(R.id.txt_title_count);
+        txt_desc_count = findViewById(R.id.txt_desc_count);
         mCommonmethods = new CommonMethods(PostArticles.this);
 
+        // Register the image crop launcher (feature: crop while uploading photos).
+        cropImage = registerForActivityResult(new CropImageContract(), new ActivityResultCallback<com.canhub.cropper.CropImageView.CropResult>() {
+            @Override
+            public void onActivityResult(com.canhub.cropper.CropImageView.CropResult result) {
+                if (result != null && result.isSuccessful()) {
+                    handleCroppedImage(result.getUriContent());
+                } else if (result != null && result.getError() != null) {
+                    Toast.makeText(PostArticles.this, "Crop failed: " + result.getError().getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
 
         String value = "" + getIntent().getStringExtra("POST_VIDEO");
 
+        // Feature: reporters can freely edit their news content (selection / copy / paste
+        // were previously disabled on both fields, preventing corrections before submit).
+        edt_news_headlines.setLongClickable(true);
+        edt_news_headlines.setTextIsSelectable(true);
+        edt_news_headlines.setCustomSelectionActionModeCallback(null);
+        edt_news_description.setLongClickable(true);
+        edt_news_description.setTextIsSelectable(true);
+        edt_news_description.setCustomSelectionActionModeCallback(null);
 
-        edt_news_headlines.setLongClickable(false);
-        edt_news_headlines.setTextIsSelectable(false);
-        edt_news_headlines.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
-            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            public void onDestroyActionMode(ActionMode mode) {
-            }
-
-            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-                return false;
-            }
-        });
-        edt_news_headlines.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
-
-            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            public void onDestroyActionMode(ActionMode mode) {
-            }
-
-            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-                return false;
-            }
-        });
-        edt_news_headlines.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
-            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            public void onDestroyActionMode(ActionMode mode) {
-            }
-
-            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-                return false;
-            }
-        });
-        edt_news_description.setLongClickable(false);
-        edt_news_description.setTextIsSelectable(false);
-        edt_news_description.setCustomSelectionActionModeCallback(new ActionMode.Callback() {
-
-            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            public void onDestroyActionMode(ActionMode mode) {
-            }
-
-            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-                return false;
-            }
-        });
+        setupLiveCounters();
 
 
         if (value.equals("1") || value.equals("null")) {
@@ -302,6 +272,7 @@ public class PostArticles extends AppCompatActivity {
 
         getLocation();
         setStaticdata();
+        prefillForEditMode();
     }
 
 
@@ -494,53 +465,133 @@ public class PostArticles extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            filePath = data.getData();
-            try {
-                bitmap = MediaStore.Images.Media.getBitmap(PostArticles.this.getContentResolver(), filePath);
-                img_upload_photo.setImageBitmap(bitmap);
-
-                showLog("NRAAAAAAA" + img_upload_photo.toString());
-
-                img_upload_photo.setVisibility(View.GONE);
-                image_upload_progress_bar.setVisibility(View.VISIBLE);
-                uploadImage();
-
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            // Send the picked image to the crop screen before uploading.
+            launchCrop(data.getData());
         } else if (requestCode == PICK_IMAGE_REQUEST_CAMARA && resultCode == RESULT_OK) {
-            File f = new File(Environment.getExternalStorageDirectory()
-                    .toString());
-            for (File temp : f.listFiles()) {
-                if (temp.getName().equals("temp.jpg")) {
-                    f = temp;
-
-
-                    break;
-                }
-            }
-            if (!f.exists()) {
-
-                Toast.makeText(PostArticles.this, "Error while capturing image", Toast.LENGTH_LONG)
-                        .show();
-                return;
-            }
             try {
-                bitmap = (Bitmap) data.getExtras().get("data");
-                img_upload_photo.setImageBitmap(bitmap);
-                img_upload_photo.setVisibility(View.GONE);
-
-                image_upload_progress_bar.setVisibility(View.VISIBLE);
-                uploadImage();
-                //storeImageTosdCard(bitmap);
+                Bitmap capturedBitmap = (Bitmap) data.getExtras().get("data");
+                Uri capturedUri = saveBitmapToCache(capturedBitmap);
+                if (capturedUri != null) {
+                    // Send the captured photo to the crop screen before uploading.
+                    launchCrop(capturedUri);
+                } else {
+                    Toast.makeText(PostArticles.this, "Error while capturing image", Toast.LENGTH_LONG).show();
+                }
             } catch (Exception e) {
-                // TODO Auto-generated catch block
                 e.printStackTrace();
             }
         } else if (requestCode == 200 && resultCode == RESULT_OK) {
 
 
         }
+    }
+
+    private void launchCrop(Uri sourceUri) {
+        try {
+            cropImage.launch(CropHelper.buildCropOptions(sourceUri));
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(PostArticles.this, "Unable to open crop screen", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void handleCroppedImage(Uri croppedUri) {
+        if (croppedUri == null) {
+            return;
+        }
+        try {
+            filePath = croppedUri;
+            bitmap = MediaStore.Images.Media.getBitmap(PostArticles.this.getContentResolver(), croppedUri);
+            img_upload_photo.setImageBitmap(bitmap);
+            img_upload_photo.setVisibility(View.GONE);
+            image_upload_progress_bar.setVisibility(View.VISIBLE);
+            imageChanged = true;
+            uploadImage();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private Uri saveBitmapToCache(Bitmap source) {
+        if (source == null) {
+            return null;
+        }
+        try {
+            File cachePath = new File(getCacheDir(), "images");
+            cachePath.mkdirs();
+            File file = new File(cachePath, "camera_" + System.currentTimeMillis() + ".jpg");
+            java.io.FileOutputStream stream = new java.io.FileOutputStream(file);
+            source.compress(Bitmap.CompressFormat.JPEG, 95, stream);
+            stream.close();
+            return Uri.fromFile(file);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private void setupLiveCounters() {
+        edt_news_headlines.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                txt_title_count.setText(s.length() + " / 80");
+            }
+        });
+        edt_news_description.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String text = s.toString().trim();
+                int wordCount = text.isEmpty() ? 0 : text.split("\\s+").length;
+                txt_desc_count.setText(wordCount + " words \u00b7 " + s.length() + " / 400");
+            }
+        });
+    }
+
+    private void prefillForEditMode() {
+        Intent intent = getIntent();
+        editMode = intent.getBooleanExtra("EDIT_MODE", false);
+        if (!editMode) {
+            return;
+        }
+        editUserPostId = intent.getIntExtra("USER_POST_ID", 0);
+        String title = intent.getStringExtra("EDIT_TITLE");
+        String description = intent.getStringExtra("EDIT_DESCRIPTION");
+        String imageUrl = intent.getStringExtra("EDIT_IMAGE_URL");
+
+        if (title != null) {
+            edt_news_headlines.setText(title);
+        }
+        if (description != null) {
+            edt_news_description.setText(description);
+        }
+        if (imageUrl != null && !imageUrl.isEmpty()) {
+            ImageId = imageUrl;
+            imageChanged = false;
+            try {
+                Picasso.get().load(imageUrl).into(img_upload_photo);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        // The reporter is resubmitting a rejected article, so pre-agree to terms.
+        checked_terms_conditions.setChecked(true);
+        post_button.setText("Resubmit");
     }
 
     private void uploadImage() {
@@ -752,7 +803,81 @@ public class PostArticles extends AppCompatActivity {
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
     }
 
+    private JsonObject set_edit_post_data() {
+        SingleArticleRequest requestModel = new SingleArticleRequest();
+        requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
+        requestModel.setUserPostId(editUserPostId);
+        requestModel.setTitle(edt_news_headlines.getText().toString());
+        requestModel.setDescription(edt_news_description.getText().toString());
+        requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
+        requestModel.setCategoryId(SharedPrefsData.getInt(getApplicationContext(), Constants.StateID, Constants.PREF_NAME));
+        requestModel.setPostType("normal_image");
+        requestModel.setMediaType("1");
+        requestModel.setImages("" + ImageId);
+        requestModel.setImageChanged(imageChanged);
+        requestModel.setLatitude("" + latitude);
+        requestModel.setLongitude("" + longitude);
+
+        String jsonString = new com.google.gson.Gson().toJson(requestModel);
+        showLog("EDIT API REQUEST E" + jsonString);
+        String encrpt_data = encrypt(jsonString);
+        EncritonRequestData Encriton_Request = new EncritonRequestData();
+        Encriton_Request.setData(encrpt_data);
+        return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
+    }
+
+    public void updatePostData() {
+        btn_upload.setVisibility(View.VISIBLE);
+        post_button.setVisibility(View.GONE);
+        progressBarLarge.setVisibility(View.VISIBLE);
+
+        JsonObject otp = set_edit_post_data();
+
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        Call<EncreptionRequest> apiResponse = apiService.Edit_User_Post("v3", otp);
+
+        apiResponse.enqueue(new Callback<EncreptionRequest>() {
+            @Override
+            public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                try {
+                    EncreptionRequest encreptionRequest = response.body();
+                    String encrpt_data = decrypt(encreptionRequest.getData());
+                    showLog(" Edit Playload " + encrpt_data);
+                    Gson gsonObj = new Gson();
+                    SingleArticleResponse languageModel = gsonObj.fromJson(encrpt_data, SingleArticleResponse.class);
+
+                    if (languageModel.getSuccess()) {
+                        Toast.makeText(PostArticles.this, "Your Article has been updated and resubmitted.", Toast.LENGTH_SHORT).show();
+                        Intent intent = new Intent(PostArticles.this, HomePage.class);
+                        startActivity(intent);
+                    } else {
+                        Toast.makeText(PostArticles.this, "Something went wrong...", Toast.LENGTH_SHORT).show();
+                        progressBarLarge.setVisibility(View.GONE);
+                        post_button.setVisibility(View.VISIBLE);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Toast.makeText(PostArticles.this, "Something went wrong...", Toast.LENGTH_SHORT).show();
+                    progressBarLarge.setVisibility(View.GONE);
+                    post_button.setVisibility(View.VISIBLE);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                Toast.makeText(PostArticles.this, "" + t.getMessage(), Toast.LENGTH_SHORT).show();
+                progressBarLarge.setVisibility(View.GONE);
+                post_button.setVisibility(View.VISIBLE);
+            }
+        });
+    }
+
     public void sendpostdata() {
+
+        if (editMode) {
+            updatePostData();
+            return;
+        }
 
         btn_upload.setVisibility(View.VISIBLE);
         post_button.setVisibility(View.GONE);

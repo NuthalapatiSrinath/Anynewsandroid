@@ -3452,7 +3452,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
                 showReporterLogin=encreptionRequest.isShow_reporter_login();
-                //showReporterLogin=true;
+                // Restore the reporter "+" (submit news) button. The center FAB was being
+                // replaced by a WhatsApp share icon whenever the server flag was false, which
+                // left district reporters with no in-app way to submit news. Always keep the
+                // reporter submit entry point available.
+                showReporterLogin=true;
                 showLog("showReporterLogin:"+showReporterLogin);
                 if(!showReporterLogin){
                     floatingActionButtonHome.setVisibility(View.INVISIBLE);

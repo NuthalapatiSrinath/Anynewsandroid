@@ -139,7 +139,8 @@
 
                                         <TextView
                                             android:id="@+id/post_title"
-                                            android:layout_width="match_parent"
+                                            android:layout_width="0dp"
+                                            android:layout_weight="1"
                                             android:textStyle="bold"
                                             android:gravity="bottom"
                                             android:textSize="@dimen/_11sdp"
@@ -148,6 +149,24 @@
                                             android:layout_height="match_parent">
 
                                         </TextView>
+
+                                        <TextView
+                                            android:id="@+id/btn_edit_resubmit"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_gravity="center_vertical"
+                                            android:layout_marginRight="@dimen/_8sdp"
+                                            android:background="@drawable/button_background_red"
+                                            android:paddingLeft="@dimen/_10sdp"
+                                            android:paddingRight="@dimen/_10sdp"
+                                            android:paddingTop="@dimen/three"
+                                            android:paddingBottom="@dimen/three"
+                                            android:text="Edit"
+                                            android:textAllCaps="false"
+                                            android:textColor="@color/white"
+                                            android:textSize="@dimen/_9sdp"
+                                            android:textStyle="bold"
+                                            android:visibility="gone" />
 
 
 

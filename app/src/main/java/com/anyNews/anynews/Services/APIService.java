@@ -276,6 +276,11 @@ public interface APIService {
     Call<EncreptionRequest>Add_Article_News(@Path("version") String version, @Body JsonObject langgg);
 
 
+    // Edit + resubmit a reporter's (rejected) user post
+    @POST("app/{version}/Edit_User_Post")
+    Call<EncreptionRequest>Edit_User_Post(@Path("version") String version, @Body JsonObject langgg);
+
+
     @POST("app/{version}/get_article_transactions")   // get_districts
     Call<EncreptionRequest>get_article_transactions(@Path("version") String version, @Body JsonObject langgg);
 

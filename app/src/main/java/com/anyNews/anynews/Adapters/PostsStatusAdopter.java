@@ -2,6 +2,7 @@ package com.anyNews.anynews.Adapters;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,6 +13,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.anyNews.anynews.Activities.PostArticles;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.models.PostsModel;
@@ -31,8 +33,6 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<PostsStatusAdopter.
         this.postsModels = postsModels;
         this.VALUE=VALUE;
         commonMethods = new CommonMethods(activity);
-
-        Toast.makeText(context, " VVVV  "+postsModels.size(), Toast.LENGTH_SHORT).show();
     }
 
     @NonNull
@@ -49,20 +49,20 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<PostsStatusAdopter.
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
 
-        PostsModel.Datum datum=postsModels.get(position);
-
-        Toast.makeText(context, "  FFF  "+postsModels.size(), Toast.LENGTH_SHORT).show();
+        final PostsModel.Datum datum=postsModels.get(position);
 
         holder.post_discrepton.setText(datum.getDescription());
         holder.post_title.setText(datum.getTitle());
         holder.post_time.setText(""+commonMethods.getHrsFormatfromDate(datum.getCreatedAt()));
         holder.post_reject.setText( ""+datum.getReason());
 
-        if(datum.getPost_status()==1){
+        long status = datum.getPost_status() == null ? -1 : datum.getPost_status();
+
+        if(status==1){
 
             holder.reject.setBackgroundResource(R.drawable.post_green_detailes);
 
-        }else if(datum.getPost_status()==2){
+        }else if(status==2){
 
             holder.reject.setBackgroundResource(R.drawable.post_red_detailes);
 
@@ -70,6 +70,30 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<PostsStatusAdopter.
 
             holder.reject.setBackgroundResource(R.drawable.post_yellow_detailes);
 
+        }
+
+        // Allow the reporter to edit and resubmit a rejected article (status 2).
+        // Only image posts can be edited through the in-app submission form.
+        boolean canEdit = status == 2 && "1".equals(datum.getMediaType());
+        if (canEdit) {
+            holder.btn_edit_resubmit.setVisibility(View.VISIBLE);
+            holder.btn_edit_resubmit.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent intent = new Intent(context, PostArticles.class);
+                    intent.putExtra("EDIT_MODE", true);
+                    intent.putExtra("USER_POST_ID", datum.getUserPostId() == null ? 0 : datum.getUserPostId());
+                    intent.putExtra("EDIT_TITLE", datum.getTitle());
+                    intent.putExtra("EDIT_DESCRIPTION", datum.getDescription());
+                    intent.putExtra("EDIT_IMAGE_URL", datum.getImageUrl());
+                    intent.putExtra("POST_VIDEO", "0");
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                }
+            });
+        } else {
+            holder.btn_edit_resubmit.setVisibility(View.GONE);
+            holder.btn_edit_resubmit.setOnClickListener(null);
         }
 
     }
@@ -82,7 +106,7 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<PostsStatusAdopter.
     public class ViewHolder extends RecyclerView.ViewHolder {
 
         LinearLayout reject;
-        TextView post_title,post_discrepton,post_time,post_reject;
+        TextView post_title,post_discrepton,post_time,post_reject,btn_edit_resubmit;
         public ViewHolder(@NonNull View itemView) {
             super(itemView);
 
@@ -91,6 +115,7 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<PostsStatusAdopter.
             post_discrepton=itemView.findViewById(R.id.post_discrepton);
             post_time=itemView.findViewById(R.id.post_time);
             post_reject=itemView.findViewById(R.id.post_reject);
+            btn_edit_resubmit=itemView.findViewById(R.id.btn_edit_resubmit);
         }
     }
 }

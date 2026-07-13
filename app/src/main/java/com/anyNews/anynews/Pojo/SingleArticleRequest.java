@@ -11,6 +11,12 @@ public class SingleArticleRequest implements Serializable {
     @SerializedName("draft_id")
     @Expose
     private Integer draftId;
+    @SerializedName("user_post_id")
+    @Expose
+    private Integer userPostId;
+    @SerializedName("image_changed")
+    @Expose
+    private Boolean imageChanged;
     @SerializedName("title")
     @Expose
     private String title;
@@ -50,6 +56,22 @@ public class SingleArticleRequest implements Serializable {
 
     public void setDraftId(Integer draftId) {
         this.draftId = draftId;
+    }
+
+    public Integer getUserPostId() {
+        return userPostId;
+    }
+
+    public void setUserPostId(Integer userPostId) {
+        this.userPostId = userPostId;
+    }
+
+    public Boolean getImageChanged() {
+        return imageChanged;
+    }
+
+    public void setImageChanged(Boolean imageChanged) {
+        this.imageChanged = imageChanged;
     }
 
     public String getTitle() {

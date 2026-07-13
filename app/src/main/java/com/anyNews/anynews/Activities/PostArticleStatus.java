@@ -122,7 +122,6 @@ public class PostArticleStatus extends AppCompatActivity {
         });
 
 
-        Toast.makeText(this, "AKKISETTY NARASIMHA", Toast.LENGTH_SHORT).show();
         neomorphFrameLayout_approved_selected.setVisibility(View.VISIBLE);
         neomorphFrameLayout_approved_un_selected.setVisibility(View.GONE);
         neomorphFrameLayout_rejected_selected.setVisibility(View.GONE);
@@ -146,7 +145,6 @@ public class PostArticleStatus extends AppCompatActivity {
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
-        Toast.makeText(this, "AKKISETTY", Toast.LENGTH_SHORT).show();
         encrpt_data = encrypt(jsonString);
         showLog("API REQUEST E" + jsonString.toString());
         EncritonRequestData Encriton_Request=new EncritonRequestData();
