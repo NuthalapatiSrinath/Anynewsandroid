@@ -30,6 +30,12 @@ public class ListOfCommentsResponse implements Serializable {
         @SerializedName("draft_id")
         @Expose
         private Long draftId;
+        @SerializedName("parent_comment_id")
+        @Expose
+        private Long parentCommentId;
+        @SerializedName("reply_count")
+        @Expose
+        private Integer replyCount;
         @SerializedName("createdAt")
         @Expose
         private String createdAt;
@@ -105,6 +111,22 @@ public class ListOfCommentsResponse implements Serializable {
 
         public void setDraftId(Long draftId) {
             this.draftId = draftId;
+        }
+
+        public Long getParentCommentId() {
+            return parentCommentId;
+        }
+
+        public void setParentCommentId(Long parentCommentId) {
+            this.parentCommentId = parentCommentId;
+        }
+
+        public Integer getReplyCount() {
+            return replyCount;
+        }
+
+        public void setReplyCount(Integer replyCount) {
+            this.replyCount = replyCount;
         }
 
         public String getCreatedAt() {

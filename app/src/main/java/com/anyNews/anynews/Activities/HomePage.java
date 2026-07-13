@@ -263,6 +263,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     TextView reply_context_text;
     ImageView reply_context_cancel;
     Long replyParentCommentId = null;
+    Long pendingExpandParentId = null;
     public  boolean adImpress=false;
     public  String adError="";
 
@@ -2532,6 +2533,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         WriteComments();
     }
 
+    private ListOfCommentsResponse.Datum mapCommentDatum(ListOfCommentsResponse.Datum source) {
+        ListOfCommentsResponse.Datum datum = new ListOfCommentsResponse.Datum();
+        datum.setId(source.getId());
+        datum.setPostId(source.getPostId());
+        datum.setDraftId(source.getDraftId());
+        datum.setUserName(source.getUserName());
+        datum.setComment(source.getComment());
+        datum.setCreatedAt(source.getCreatedAt());
+        datum.setCommentTime(source.getCommentTime());
+        datum.setUser_profile_pic(source.getUser_profile_pic());
+        datum.setEmail(source.getEmail());
+        datum.setParentCommentId(source.getParentCommentId());
+        datum.setReplyCount(source.getReplyCount());
+        return datum;
+    }
+
     private void bindCommentsAdapter() {
         comment_linearlayoutmanager = new LinearLayoutManager(getContext());
         comment_recycler_view.setLayoutManager(comment_linearlayoutmanager);
@@ -2543,6 +2560,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 comment_chooseLanguage_models,
                 position -> openReportPage(position),
                 position -> startReplyToComment(position));
+        if (pendingExpandParentId != null) {
+            mMailAdapter.expandParent(pendingExpandParentId);
+            pendingExpandParentId = null;
+        }
         comment_recycler_view.setAdapter(mMailAdapter);
         comment_totoal_count.setText(" Comments ( " + comment_chooseLanguage_models.size() + " )");
     }
@@ -2618,17 +2639,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                         } else {
                             for (int i = 0; i < validateUserOtp.getData().size(); i++) {
-                                ListOfCommentsResponse.Datum datum = new ListOfCommentsResponse.Datum();
-                                datum.setId(validateUserOtp.getData().get(i).getId());
-                                datum.setPostId(validateUserOtp.getData().get(i).getPostId());
-                                datum.setDraftId(validateUserOtp.getData().get(i).getDraftId());
-                                datum.setUserName(validateUserOtp.getData().get(i).getUserName());
-                                datum.setComment(validateUserOtp.getData().get(i).getComment());
-                                datum.setCreatedAt(validateUserOtp.getData().get(i).getCreatedAt());
-                                datum.setCommentTime(validateUserOtp.getData().get(i).getCommentTime());
-                                datum.setUser_profile_pic(validateUserOtp.getData().get(i).getUser_profile_pic());
-                                datum.setEmail(validateUserOtp.getData().get(i).getEmail());
-                                comment_chooseLanguage_models.add(datum);
+                                comment_chooseLanguage_models.add(
+                                        mapCommentDatum(validateUserOtp.getData().get(i)));
                             }
 
 
@@ -2963,6 +2975,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                     if (validateUserOtp.getSuccess()) {
 
+                        if (replyParentCommentId != null && replyParentCommentId > 0) {
+                            pendingExpandParentId = replyParentCommentId;
+                        }
                         leave_comment_white.setText("");
                         clearReplyContext();
                         if (adapter != null) {
@@ -3059,17 +3074,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             linear_no_comment_page.setVisibility(View.VISIBLE);
                         } else {
                             for (int i = 0; i < validateUserOtp.getData().size(); i++) {
-                                ListOfCommentsResponse.Datum datum = new ListOfCommentsResponse.Datum();
-                                datum.setId(validateUserOtp.getData().get(i).getId());
-                                datum.setPostId(validateUserOtp.getData().get(i).getPostId());
-                                datum.setDraftId(validateUserOtp.getData().get(i).getDraftId());
-                                datum.setUserName(validateUserOtp.getData().get(i).getUserName());
-                                datum.setComment(validateUserOtp.getData().get(i).getComment());
-                                datum.setCreatedAt(validateUserOtp.getData().get(i).getCreatedAt());
-                                datum.setCommentTime(validateUserOtp.getData().get(i).getCommentTime());
-                                datum.setUser_profile_pic(validateUserOtp.getData().get(i).getUser_profile_pic());
-                                datum.setEmail(validateUserOtp.getData().get(i).getEmail());
-                                comment_chooseLanguage_models.add(datum);
+                                comment_chooseLanguage_models.add(
+                                        mapCommentDatum(validateUserOtp.getData().get(i)));
                             }
 
 

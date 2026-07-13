@@ -79,6 +79,19 @@
                 android:textStyle="normal" />
 
             <TextView
+                android:id="@+id/view_replies_link"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="left"
+                android:paddingTop="@dimen/two"
+                android:paddingBottom="@dimen/two"
+                android:text="View 2 replies"
+                android:textColor="@color/warm_grey_two"
+                android:textSize="@dimen/_9sdp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/comment_reply_btn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
