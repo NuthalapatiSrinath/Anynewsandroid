@@ -72,6 +72,18 @@
                             android:gravity="center"
                             android:layout_height="match_parent">
 
+                            <ImageView
+                                android:id="@+id/state_landmark"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="3"
+                                android:layout_marginTop="@dimen/ten"
+                                android:adjustViewBounds="true"
+                                android:scaleType="fitCenter"
+                                android:tint="@color/brand_orange"
+                                android:contentDescription="@string/app_name"
+                                android:src="@drawable/ic_landmark_monument" />
+
                             <LinearLayout
                                 android:orientation="horizontal"
                                 android:layout_width="match_parent"
@@ -121,7 +133,7 @@
         android:layout_marginTop="@dimen/five"
         app:neomorph_shadow_type="outer"
         app:neomorph_layer_type="hardware"
-        app:neomorph_background_color="#ff2401"
+        app:neomorph_background_color="@color/brand_orange"
         app:neomorph_corner_radius="20dp"
         app:neomorph_elevation="5dp"
         app:neomorph_view_type="rectangular"
@@ -144,11 +156,11 @@
                 android:layout_margin="2dp"
                 app:neomorph_shadow_type="outer"
                 app:neomorph_layer_type="hardware"
-                app:neomorph_background_color="#C4FF4027"
+                app:neomorph_background_color="@color/brand_orange"
                 app:neomorph_corner_radius="20dp"
                 app:neomorph_elevation="0dp"
                 app:neomorph_view_type="rectangular"
-                app:neomorph_shadow_color="#C4FF4027"
+                app:neomorph_shadow_color="@color/brand_orange"
                 app:neomorph_highlight_color="#ffffff"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintLeft_toLeftOf="parent"
@@ -178,6 +190,18 @@
                             android:layout_width="match_parent"
                             android:gravity="center"
                             android:layout_height="match_parent">
+
+                            <ImageView
+                                android:id="@+id/second_state_landmark"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="3"
+                                android:layout_marginTop="@dimen/ten"
+                                android:adjustViewBounds="true"
+                                android:scaleType="fitCenter"
+                                android:tint="@color/white"
+                                android:contentDescription="@string/app_name"
+                                android:src="@drawable/ic_landmark_monument" />
 
                             <LinearLayout
                                 android:orientation="horizontal"

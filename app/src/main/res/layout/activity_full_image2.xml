@@ -495,7 +495,7 @@
                             app:neumorph_shadowColorDark="#F2DFDFDF"
                             android:scaleType="centerInside"
                             app:neumorph_strokeWidth="2dp"
-                            app:neumorph_strokeColor="#FF2401"
+                            app:neumorph_strokeColor="@color/brand_orange"
                             app:layout_constraintEnd_toEndOf="parent"
                             app:neumorph_shapeType="flat" >
 
@@ -516,7 +516,7 @@
                                     android:textStyle="bold"
                                     android:textColor="@color/white"
                                     android:textSize="@dimen/_15sdp"
-                                    android:background="#FF4027"
+                                    android:background="@color/brand_orange"
                                     android:layout_width="match_parent"
                                     android:layout_height="match_parent">
 

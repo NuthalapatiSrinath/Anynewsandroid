@@ -44,11 +44,11 @@
         android:visibility="gone"
         app:neomorph_shadow_type="outer"
         app:neomorph_layer_type="hardware"
-        app:neomorph_background_color="#FF2401"
+        app:neomorph_background_color="@color/brand_orange"
         app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
         app:neomorph_elevation="@dimen/neomorph_view_elevation"
         app:neomorph_view_type="rectangular"
-        app:neomorph_shadow_color="#16FF2401"
+        app:neomorph_shadow_color="#16EF4923"
         app:neomorph_highlight_color="#ffffff"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
@@ -60,7 +60,7 @@
             android:layout_margin="3dp"
             android:gravity="center"
             android:textColor="@color/white"
-            android:background="@drawable/red_color"
+            android:background="@color/brand_orange"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
         </TextView>

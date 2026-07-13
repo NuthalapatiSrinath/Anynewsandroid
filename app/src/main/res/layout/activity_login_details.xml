@@ -191,7 +191,7 @@
                     app:neumorph_shadowColorLight="#FFFFFF"
                     app:neumorph_shadowElevation="0dp"
                     app:neumorph_shapeType="flat"
-                    app:neumorph_strokeColor="#FF2401"
+                    app:neumorph_strokeColor="@color/brand_orange"
                     app:neumorph_strokeWidth="2dp">
 
 
@@ -199,7 +199,7 @@
                         android:id="@+id/otpnew"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="#FF4027"
+                        android:background="@color/brand_orange"
                         android:gravity="center"
                         android:paddingLeft="@dimen/_40sdp"
                         android:paddingRight="@dimen/_40sdp"
@@ -425,7 +425,7 @@
                 app:neumorph_shadowColorLight="#FFFFFF"
                 app:neumorph_shadowElevation="0dp"
                 app:neumorph_shapeType="flat"
-                app:neumorph_strokeColor="#FF2401"
+                app:neumorph_strokeColor="@color/brand_orange"
                 app:neumorph_strokeWidth="2dp">
 
 
@@ -441,7 +441,7 @@
                     android:id="@+id/otp_submit"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="#FF4027"
+                    android:background="@color/brand_orange"
                     android:gravity="center"
                     android:paddingLeft="@dimen/_40sdp"
                     android:paddingRight="@dimen/_40sdp"
@@ -481,7 +481,7 @@
                 app:neumorph_shadowColorLight="#FFFFFF"
                 app:neumorph_shadowElevation="0dp"
                 app:neumorph_shapeType="flat"
-                app:neumorph_strokeColor="#FF2401"
+                app:neumorph_strokeColor="@color/brand_orange"
                 app:neumorph_strokeWidth="2dp">
 
 
@@ -489,7 +489,7 @@
                     android:id="@+id/txt_resend_otp"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="#FF4027"
+                    android:background="@color/brand_orange"
                     android:gravity="center"
                     android:paddingLeft="@dimen/_40sdp"
                     android:paddingRight="@dimen/_40sdp"

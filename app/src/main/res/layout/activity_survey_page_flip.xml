@@ -174,11 +174,11 @@
                         android:layout_weight="0.5"
                         app:neomorph_shadow_type="outer"
                         app:neomorph_layer_type="hardware"
-                        app:neomorph_background_color="#FF2401"
+                        app:neomorph_background_color="@color/brand_orange"
                         app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                         app:neomorph_elevation="@dimen/neomorph_view_elevation"
                         app:neomorph_view_type="rectangular"
-                        app:neomorph_shadow_color="#16FF2401"
+                        app:neomorph_shadow_color="#16EF4923"
                         app:neomorph_highlight_color="#ffffff">
                         <TextView
                             android:id="@+id/tv_answer_yes_selected"
@@ -226,11 +226,11 @@
                         android:layout_weight="0.5"
                         app:neomorph_shadow_type="outer"
                         app:neomorph_layer_type="hardware"
-                        app:neomorph_background_color="#FF2401"
+                        app:neomorph_background_color="@color/brand_orange"
                         app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                         app:neomorph_elevation="@dimen/neomorph_view_elevation"
                         app:neomorph_view_type="rectangular"
-                        app:neomorph_shadow_color="#16FF2401"
+                        app:neomorph_shadow_color="#16EF4923"
                         app:neomorph_highlight_color="#ffffff">
                     <TextView
                         android:id="@+id/tv_answer_no_selected"
@@ -265,11 +265,11 @@
                         android:layout_weight="0.5"
                         app:neomorph_shadow_type="outer"
                         app:neomorph_layer_type="hardware"
-                        app:neomorph_background_color="#FF2401"
+                        app:neomorph_background_color="@color/brand_orange"
                         app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                         app:neomorph_elevation="@dimen/neomorph_view_elevation"
                         app:neomorph_view_type="rectangular"
-                        app:neomorph_shadow_color="#16FF2401"
+                        app:neomorph_shadow_color="#16EF4923"
                         app:neomorph_highlight_color="#ffffff">
                         <TextView
                             android:layout_width="match_parent"
@@ -289,11 +289,11 @@
                         android:layout_weight="0.5"
                         app:neomorph_shadow_type="outer"
                         app:neomorph_layer_type="hardware"
-                        app:neomorph_background_color="#FF2401"
+                        app:neomorph_background_color="@color/brand_orange"
                         app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                         app:neomorph_elevation="@dimen/neomorph_view_elevation"
                         app:neomorph_view_type="rectangular"
-                        app:neomorph_shadow_color="#16FF2401"
+                        app:neomorph_shadow_color="#16EF4923"
                         app:neomorph_highlight_color="#ffffff">
 
                         <TextView

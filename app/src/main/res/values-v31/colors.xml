@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="colorPrimaryDark">#00574B</color>
-    <color name="colorPrimary">#FF4027</color>
+    <color name="brand_orange">#EF4923</color>
+    <color name="colorPrimary">#EF4923</color>
     <color name="colorAccent">#D15353</color>
 
     <!-- color page -->
@@ -100,8 +101,8 @@
 
     <!--  post detailes-->
     <color name="post_yellow">#FCF202</color>
-    <color name="post_profile_red_border">#FF2401</color>
-    <color name="post_profile_red">#FF4027</color>
+    <color name="post_profile_red_border">#EF4923</color>
+    <color name="post_profile_red">#EF4923</color>
 
     <!--    Profile Border Color-->
     <color name="profile_border">#60BDD3E0</color>   //60BDD3E0

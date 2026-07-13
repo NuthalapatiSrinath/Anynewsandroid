@@ -6,6 +6,7 @@ import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -66,6 +67,10 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
     public void onBindViewHolder(@NonNull StatesAdopter.ViewHolder holder, int position) {
         holder.new_states_name.setText(arrayList.get(position).getName());
         holder.second_new_states_name.setText(arrayList.get(position).getName());
+
+        int landmark = getLandmarkDrawable(arrayList.get(position).getName(), arrayList.get(position).getId());
+        holder.state_landmark.setImageResource(landmark);
+        holder.second_state_landmark.setImageResource(landmark);
 
         holder.new_states_name.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -135,6 +140,7 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
     public class ViewHolder  extends RecyclerView.ViewHolder{
         NeomorphFrameLayout states_neomorphFrameLayout,second_states_neomorphFrameLayout;
         TextView new_states_name,second_new_states_name;
+        ImageView state_landmark,second_state_landmark;
 
         public ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -143,10 +149,39 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
             second_states_neomorphFrameLayout=itemView.findViewById(R.id.second_states_neomorphFrameLayout);
             new_states_name=itemView.findViewById(R.id.new_states_name);
             second_new_states_name=itemView.findViewById(R.id.second_new_states_name);
+            state_landmark=itemView.findViewById(R.id.state_landmark);
+            second_state_landmark=itemView.findViewById(R.id.second_state_landmark);
             AppLanguagesFonts.setTypeFace(new_states_name);
             AppLanguagesFonts.setTypeFace(second_new_states_name);
 
         }
+    }
+
+    /**
+     * Maps a state to an official landmark/symbol icon shown on the selection screen.
+     * Matching is name-based (locale independent where possible) so it also works for
+     * localized state names returned by the API. Update this mapping to add more states
+     * or to swap the placeholder line-art icons for real landmark artwork later.
+     */
+    private int getLandmarkDrawable(String name, Integer id) {
+        // The "All states" entry uses id -1 in the API.
+        if (id != null && id == -1) {
+            return R.drawable.ic_landmark_all;
+        }
+        if (name == null) {
+            return R.drawable.ic_landmark_monument;
+        }
+        String n = name.toLowerCase();
+        if (n.contains("telangana") || n.contains("తెలంగాణ") || n.contains("तेलंगाना")) {
+            return R.drawable.ic_landmark_charminar; // Charminar, Hyderabad
+        }
+        if (n.contains("andhra") || n.contains("ఆంధ్ర") || n.contains("आंध्र")) {
+            return R.drawable.ic_landmark_buddha; // Amaravati Buddha
+        }
+        if (n.contains("all") || n.contains("అన్ని") || n.contains("सभी")) {
+            return R.drawable.ic_landmark_all;
+        }
+        return R.drawable.ic_landmark_monument;
     }
 
     private JsonObject set_update_states() {

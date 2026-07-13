@@ -16,7 +16,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="300dp"
-        android:background="#FF4027"
+        android:background="@color/brand_orange"
         android:orientation="vertical">
 
         <RelativeLayout
@@ -911,7 +911,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="300dp"
-            android:background="#FF4027"
+            android:background="@color/brand_orange"
             android:orientation="vertical">
 
             <RelativeLayout
