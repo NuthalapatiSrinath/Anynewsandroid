@@ -1784,7 +1784,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (intent == null) {
                 return;
             }
-            isReporterUser = intent.getBooleanExtra(Constants.is_reporter, false);
+            // Reporter approval no longer drives the center FAB; show_reporter_login does.
             updateCenterFab();
         }
     };
@@ -2624,23 +2624,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Decides the center FAB appearance using the approval-gated precedence:
-     *  1. Not logged in            -> show "+" (tap opens Login/OTP)
-     *  2. Logged in + approved     -> show "+" (tap opens the post menu)
-     *  3. Logged in + not approved -> show WhatsApp share icon
+     * Center FAB follows show_reporter_login from the articles API (per language),
+     * matching production: + when reporter login is enabled, WhatsApp otherwise.
      */
     private void updateCenterFab() {
-        boolean isLogin = SharedPrefsData.getBool(getApplicationContext(), Constants.is_login, Constants.PREF_NAME);
-        boolean showPlus = !isLogin || isReporterUser;
         if (floatingActionButtonHome != null) {
             floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
-            floatingActionButtonHome.setVisibility(showPlus ? View.VISIBLE : View.INVISIBLE);
+            floatingActionButtonHome.setVisibility(showReporterLogin ? View.VISIBLE : View.INVISIBLE);
         }
         if (imageVIewShareWhatsapp != null) {
             imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
-            imageVIewShareWhatsapp.setVisibility(showPlus ? View.GONE : View.VISIBLE);
+            imageVIewShareWhatsapp.setVisibility(showReporterLogin ? View.GONE : View.VISIBLE);
         }
-        showLog("updateCenterFab isLogin:" + isLogin + " isReporterUser:" + isReporterUser + " showPlus:" + showPlus);
+        showLog("updateCenterFab showReporterLogin:" + showReporterLogin);
     }
 
     private void shareCurrentPostViaWhatsAppFooter() {
@@ -3493,14 +3489,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
                 showReporterLogin=encreptionRequest.isShow_reporter_login();
-                isReporterUser=encreptionRequest.isIs_reporter();
-                showLog("showReporterLogin:"+showReporterLogin+" isReporterUser:"+isReporterUser);
-                // Persist the approved-reporter flag (and assigned language) so other
-                // screens and a cold start can reuse the latest value.
-                SharedPrefsData.putBool(getApplicationContext(), Constants.is_reporter, isReporterUser, Constants.PREF_NAME);
-                if(encreptionRequest.getReporter_language_id()!=null){
-                    SharedPrefsData.putInt(getApplicationContext(), Constants.reporter_language_id, encreptionRequest.getReporter_language_id(), Constants.PREF_NAME);
-                }
+                showLog("showReporterLogin:"+showReporterLogin);
                 updateCenterFab();
                 Boolean pushPermAlert = encreptionRequest.getShow_push_perm_alert();
                 showNotificationAlert(pushPermAlert != null && pushPermAlert);
@@ -3902,10 +3891,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onResume() {
         super.onResume();
         updateSpecialTabBlinkIndicator();
-        // Re-evaluate the center FAB when returning from Login/Profile so a freshly
-        // logged-in or freshly-approved reporter sees the correct button without reinstall.
         try {
-            isReporterUser = SharedPrefsData.getBool(getApplicationContext(), Constants.is_reporter, Constants.PREF_NAME);
             updateCenterFab();
         } catch (Exception fabEx) {
             fabEx.printStackTrace();
@@ -4231,12 +4217,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog("isUnreadPostsSelected set to false #1");
                     //SharedPrefsData.putBool(HomePage.this, Constants.isUnreadPostsSelected, false, Constants.PREF_NAME);
                     writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_post);
-                    boolean isLoginNow = SharedPrefsData.getBool(HomePage.this, Constants.is_login, Constants.PREF_NAME);
-                    // WhatsApp share only for logged-in users who are NOT approved reporters.
-                    // Guests and approved reporters get the "+" behaviour (login / post menu).
-                    boolean shareWhatsApp = isLoginNow && !isReporterUser;
-                    showLog("center fab click isLoginNow:"+isLoginNow+" isReporterUser:"+isReporterUser+" shareWhatsApp:"+shareWhatsApp);
-                    if (shareWhatsApp) {
+                    showLog("showReporterLogin:"+showReporterLogin);
+                    if (!showReporterLogin) {
                         showLog("onClick of whatsapp");
                         try {
                             CallShareListener listener = new CallShareListener();
