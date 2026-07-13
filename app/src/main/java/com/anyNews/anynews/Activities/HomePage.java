@@ -448,6 +448,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public List<Integer> adsReqPosList =new ArrayList<>();
     static  int adIndex=0;
     private boolean showReporterLogin=false;
+    // True when the logged-in user is an approved reporter (from articles/profile API).
+    private boolean isReporterUser=false;
     public boolean initialCall=false;
     public String no_article_message="Please wait while loading ...";
 
@@ -2607,6 +2609,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return mFlipView.getChildAt(ppi);
     }
 
+    /**
+     * Decides the center FAB appearance using the approval-gated precedence:
+     *  1. Not logged in            -> show "+" (tap opens Login/OTP)
+     *  2. Logged in + approved     -> show "+" (tap opens the post menu)
+     *  3. Logged in + not approved -> show WhatsApp share icon
+     */
+    private void updateCenterFab() {
+        boolean isLogin = SharedPrefsData.getBool(getApplicationContext(), Constants.is_login, Constants.PREF_NAME);
+        boolean showPlus = !isLogin || isReporterUser;
+        if (floatingActionButtonHome != null) {
+            floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
+            floatingActionButtonHome.setVisibility(showPlus ? View.VISIBLE : View.INVISIBLE);
+        }
+        if (imageVIewShareWhatsapp != null) {
+            imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
+            imageVIewShareWhatsapp.setVisibility(showPlus ? View.GONE : View.VISIBLE);
+        }
+        showLog("updateCenterFab isLogin:" + isLogin + " isReporterUser:" + isReporterUser + " showPlus:" + showPlus);
+    }
+
     private void shareCurrentPostViaWhatsAppFooter() {
         if (adapter == null) {
             return;
@@ -3457,19 +3479,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
                 showReporterLogin=encreptionRequest.isShow_reporter_login();
-                showLog("showReporterLogin:"+showReporterLogin);
-                if(!showReporterLogin){
-                    floatingActionButtonHome.setVisibility(View.INVISIBLE);
-                    floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
-                    imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
-                    imageVIewShareWhatsapp.setVisibility(View.VISIBLE);
-
-                }else{
-                    floatingActionButtonHome.setVisibility(View.VISIBLE);
-                    floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
-                    imageVIewShareWhatsapp.setVisibility(View.GONE);
-                    imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
+                isReporterUser=encreptionRequest.isIs_reporter();
+                showLog("showReporterLogin:"+showReporterLogin+" isReporterUser:"+isReporterUser);
+                // Persist the approved-reporter flag (and assigned language) so other
+                // screens and a cold start can reuse the latest value.
+                SharedPrefsData.putBool(getApplicationContext(), Constants.is_reporter, isReporterUser, Constants.PREF_NAME);
+                if(encreptionRequest.getReporter_language_id()!=null){
+                    SharedPrefsData.putInt(getApplicationContext(), Constants.reporter_language_id, encreptionRequest.getReporter_language_id(), Constants.PREF_NAME);
                 }
+                updateCenterFab();
                 Boolean pushPermAlert = encreptionRequest.getShow_push_perm_alert();
                 showNotificationAlert(pushPermAlert != null && pushPermAlert);
             }else{
@@ -3869,6 +3887,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onResume() {
         super.onResume();
         updateSpecialTabBlinkIndicator();
+        // Re-evaluate the center FAB when returning from Login/Profile so a freshly
+        // logged-in or freshly-approved reporter sees the correct button without reinstall.
+        try {
+            isReporterUser = SharedPrefsData.getBool(getApplicationContext(), Constants.is_reporter, Constants.PREF_NAME);
+            updateCenterFab();
+        } catch (Exception fabEx) {
+            fabEx.printStackTrace();
+        }
         try {
 
             if (player != null) {
@@ -4190,8 +4216,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog("isUnreadPostsSelected set to false #1");
                     //SharedPrefsData.putBool(HomePage.this, Constants.isUnreadPostsSelected, false, Constants.PREF_NAME);
                     writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_post);
-                    showLog("showReporterLogin:"+showReporterLogin);
-                    if (!showReporterLogin) {
+                    boolean isLoginNow = SharedPrefsData.getBool(HomePage.this, Constants.is_login, Constants.PREF_NAME);
+                    // WhatsApp share only for logged-in users who are NOT approved reporters.
+                    // Guests and approved reporters get the "+" behaviour (login / post menu).
+                    boolean shareWhatsApp = isLoginNow && !isReporterUser;
+                    showLog("center fab click isLoginNow:"+isLoginNow+" isReporterUser:"+isReporterUser+" shareWhatsApp:"+shareWhatsApp);
+                    if (shareWhatsApp) {
                         showLog("onClick of whatsapp");
                         try {
                             CallShareListener listener = new CallShareListener();

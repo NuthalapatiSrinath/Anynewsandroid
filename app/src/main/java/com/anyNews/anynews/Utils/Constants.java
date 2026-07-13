@@ -98,6 +98,8 @@ public class Constants {
     public static String StaticDataApi="staticDataApi";
 
     public static String is_login="is_login";
+    public static String is_reporter="is_reporter";
+    public static String reporter_language_id="reporter_language_id";
     public static String dist_name="dist_name";
 
 

@@ -86,6 +86,30 @@ public class EncreptionRequest {
     @Expose
     private boolean show_reporter_login;
 
+    public boolean isIs_reporter() {
+        return is_reporter;
+    }
+
+    public void setIs_reporter(boolean is_reporter) {
+        this.is_reporter = is_reporter;
+    }
+
+    @SerializedName("is_reporter")
+    @Expose
+    private boolean is_reporter;
+
+    public Integer getReporter_language_id() {
+        return reporter_language_id;
+    }
+
+    public void setReporter_language_id(Integer reporter_language_id) {
+        this.reporter_language_id = reporter_language_id;
+    }
+
+    @SerializedName("reporter_language_id")
+    @Expose
+    private Integer reporter_language_id;
+
     public List<AdsPojo> getAd_positions() {
         return ad_positions;
     }

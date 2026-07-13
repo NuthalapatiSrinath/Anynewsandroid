@@ -1178,6 +1178,10 @@ public class newProfileDetails extends AppCompatActivity {
 
                     img_upload_photo.setVisibility(View.VISIBLE);
                     showLog("Reporter Login::"+newUserProfileResponse.getData().getIsReporter());
+                    // Cache the approved-reporter flag so HomePage's center FAB can reflect
+                    // an approval change on resume without requiring a reinstall.
+                    SharedPrefsData.putBool(getApplicationContext(), Constants.is_reporter,
+                            Boolean.TRUE.equals(newUserProfileResponse.getData().getIsReporter()), Constants.PREF_NAME);
                     boolean b=newUserProfileResponse.getData().getIsReporter() && !newUserProfileResponse.getData().getMobileNumber().equals("") && !newUserProfileResponse.getData().getMobileNumber().equals("null");
                     if (b) {
                         showLog("Reporter is logged in");
