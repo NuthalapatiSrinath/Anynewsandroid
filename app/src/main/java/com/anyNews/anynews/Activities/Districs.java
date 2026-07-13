@@ -30,6 +30,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.DistricsModel;
 import com.anyNews.anynews.models.LanguageModel;
@@ -126,6 +127,8 @@ public class Districs extends AppCompatActivity {
 
         select_distic.setText(" "+languageModelResponse.getData().getSelectDistrict());
         AppLanguagesFonts.setTypeFace(select_distic);
+        int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        FontSettingsHelper.applySelectionHeader(getApplicationContext(), languageId > 0 ? languageId : 1, select_distic);
 
 
     }

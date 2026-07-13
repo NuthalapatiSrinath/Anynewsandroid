@@ -47,6 +47,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Pojo.LanguageFontConfig;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.Logone;
@@ -732,6 +733,13 @@ public class StartingActivity extends AppCompatActivity {
                             EngagementCountHelper.saveColor(
                                     getApplicationContext(),
                                     startActivityReqModel.getData().getEngagementBadgeColor()
+                            );
+                        }
+                        if (startActivityReqModel.getData().getThemeColor() != null
+                                && !startActivityReqModel.getData().getThemeColor().isEmpty()) {
+                            ThemeColorHelper.saveColor(
+                                    getApplicationContext(),
+                                    startActivityReqModel.getData().getThemeColor()
                             );
                         }
 

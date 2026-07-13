@@ -30,7 +30,9 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.models.DistricsModel;
 import com.anyNews.anynews.models.LanguageModel;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
@@ -68,6 +70,16 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+        int languageId = SharedPrefsData.getInt(context, Constants.LanguageID, Constants.PREF_NAME);
+        FontSettingsHelper.applyDistrictSelectionTypography(
+                context,
+                languageId,
+                holder.distric_name,
+                holder.second_distics_name
+        );
+        ThemeColorHelper.applySelectedNeomorphTree(context, holder.second_districs_neomorphFrameLayout);
+        ThemeColorHelper.applySelectedChip(context, holder.second_districs_neomorphFrameLayout, holder.second_distics_name);
+
         holder.second_distics_name.setText(arrayList.get(position).getName());
         holder.distric_name.setText(arrayList.get(position).getName());
 

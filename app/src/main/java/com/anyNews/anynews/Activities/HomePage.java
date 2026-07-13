@@ -136,6 +136,7 @@ import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
 import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.Logone;
@@ -3309,6 +3310,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (encreptionRequest.getEngagement_badge_color() != null
                             && !encreptionRequest.getEngagement_badge_color().isEmpty()) {
                         EngagementCountHelper.saveColor(HomePage.this, encreptionRequest.getEngagement_badge_color());
+                    }
+                    if (encreptionRequest.getTheme_color() != null
+                            && !encreptionRequest.getTheme_color().isEmpty()) {
+                        ThemeColorHelper.saveColor(HomePage.this, encreptionRequest.getTheme_color());
                     }
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
                         int listSizeBeforeAppend = list.size();

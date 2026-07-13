@@ -70,6 +70,53 @@ public final class FontSettingsHelper {
         return size;
     }
 
+    public static float getPostSubmitSize(Context context, int languageId) {
+        return getForLanguage(context, languageId).getPostSubmitFontSize();
+    }
+
+    public static void applyTextSize(Context context, TextView view, float sizeSdp) {
+        setTextSizeSdp(context, view, sizeSdp);
+    }
+
+    public static void applySelectionHeader(Context context, int languageId, TextView headerView) {
+        if (context == null || headerView == null) {
+            return;
+        }
+        LanguageFontConfig cfg = getForLanguage(context, languageId);
+        setTextSizeSdp(context, headerView, cfg.getSelectionHeaderFontSize());
+        applyTypeface(context, headerView, cfg.getTitleFontFamily());
+    }
+
+    public static void applyStateSelectionTypography(Context context, int languageId, TextView... labels) {
+        applySelectionTypography(context, languageId, getForLanguage(context, languageId).getStateSelectionFontSize(), labels);
+    }
+
+    public static void applyDistrictSelectionTypography(Context context, int languageId, TextView... labels) {
+        applySelectionTypography(context, languageId, getForLanguage(context, languageId).getDistrictSelectionFontSize(), labels);
+    }
+
+    public static void applyAreaSelectionTypography(Context context, int languageId, TextView... labels) {
+        applySelectionTypography(context, languageId, getForLanguage(context, languageId).getAreaSelectionFontSize(), labels);
+    }
+
+    public static void applyLanguageSelectionTypography(Context context, int languageId, TextView... labels) {
+        applySelectionTypography(context, languageId, getForLanguage(context, languageId).getLanguageSelectionFontSize(), labels);
+    }
+
+    private static void applySelectionTypography(Context context, int languageId, float sizeSdp, TextView... labels) {
+        if (context == null || labels == null) {
+            return;
+        }
+        LanguageFontConfig cfg = getForLanguage(context, languageId);
+        for (TextView label : labels) {
+            if (label == null) {
+                continue;
+            }
+            setTextSizeSdp(context, label, sizeSdp);
+            applyTypeface(context, label, cfg.getBodyFontFamily());
+        }
+    }
+
     public static void applyArticleTypography(Context context, int languageId, TextView titleView, TextView bodyView) {
         applyArticleTypography(context, languageId, titleView, bodyView, "card");
     }
@@ -151,15 +198,7 @@ public final class FontSettingsHelper {
     }
 
     private static LanguageFontConfig sanitizeConfig(LanguageFontConfig raw, int languageId) {
-        LanguageFontConfig fallback = productionDefault(languageId);
-        return LanguageFontConfig.of(
-                raw.getTitleFontSize() > 0 ? raw.getTitleFontSize() : fallback.getTitleFontSize(),
-                raw.getBodyFontSize() > 0 ? raw.getBodyFontSize() : fallback.getBodyFontSize(),
-                TextUtils.isEmpty(raw.getTitleFontFamily()) ? fallback.getTitleFontFamily() : raw.getTitleFontFamily(),
-                TextUtils.isEmpty(raw.getBodyFontFamily()) ? fallback.getBodyFontFamily() : raw.getBodyFontFamily(),
-                raw.getStripFontSize() > 0 ? raw.getStripFontSize() : fallback.getStripFontSize(),
-                raw.hasProgrammaticBodySize() ? raw.getProgrammaticBodySize() : null
-        );
+        return raw != null ? raw : productionDefault(languageId);
     }
 
     private static void setTextSizeSdp(Context context, TextView view, float sizeSdp) {
@@ -259,20 +298,6 @@ public final class FontSettingsHelper {
     }
 
     private static LanguageFontConfig productionDefault(int languageId) {
-        switch (languageId) {
-            case 1:
-                return LanguageFontConfig.of(14, 14, "sans-serif-medium", "mallannaregular", 14, 13f);
-            case 2:
-                return LanguageFontConfig.of(16, 13, "robotolighttelugu", "robotolighttelugu", 13, 14f);
-            case 3:
-                return LanguageFontConfig.of(18, 16, "sreekrushnadevaraya_regular", "sreekrushnadevaraya_regular", 13, null);
-            case 4:
-                return LanguageFontConfig.of(13, 13, "mallannaregular", "mallannaregular", 12, 12f);
-            case 5:
-            case 6:
-                return LanguageFontConfig.of(16, 13, "robotolighttelugu", "robotolighttelugu", 13, null);
-            default:
-                return LanguageFontConfig.of(14, 14, "robotolighttelugu", "robotolighttelugu", 13, null);
-        }
+        return LanguageFontConfig.productionFor(languageId);
     }
 }

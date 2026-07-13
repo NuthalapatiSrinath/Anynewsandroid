@@ -30,6 +30,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.LanguageModel;
 import com.anyNews.anynews.models.RegionModel;
@@ -184,6 +185,11 @@ public class AreaSelection extends AppCompatActivity {
         Gson gson = new Gson();
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
+        if (languageModelResponse != null && languageModelResponse.getData() != null) {
+            select_language.setText(" " + languageModelResponse.getData().getSelectLanguage());
+        }
+        int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        FontSettingsHelper.applySelectionHeader(getApplicationContext(), languageId > 0 ? languageId : 1, select_language);
 
     }
 

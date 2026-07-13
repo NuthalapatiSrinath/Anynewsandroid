@@ -114,12 +114,24 @@ public class EncreptionRequest {
     @Expose
     private String engagement_badge_color;
 
+    @SerializedName("theme_color")
+    @Expose
+    private String theme_color;
+
     public String getEngagement_badge_color() {
         return engagement_badge_color;
     }
 
     public void setEngagement_badge_color(String engagement_badge_color) {
         this.engagement_badge_color = engagement_badge_color;
+    }
+
+    public String getTheme_color() {
+        return theme_color;
+    }
+
+    public void setTheme_color(String theme_color) {
+        this.theme_color = theme_color;
     }
 
     public Integer getUpdateMenuStatus() {

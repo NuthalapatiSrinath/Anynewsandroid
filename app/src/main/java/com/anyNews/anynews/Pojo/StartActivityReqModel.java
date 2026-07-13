@@ -67,6 +67,10 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String engagementBadgeColor;
 
+        @SerializedName("theme_color")
+        @Expose
+        private String themeColor;
+
         @SerializedName("font_config")
         @Expose
         private LanguageFontConfig fontConfig;
@@ -85,6 +89,10 @@ public class StartActivityReqModel implements Serializable {
 
         public String getEngagementBadgeColor() {
             return engagementBadgeColor;
+        }
+
+        public String getThemeColor() {
+            return themeColor;
         }
 
         public void setEngagementBadgeColor(String engagementBadgeColor) {

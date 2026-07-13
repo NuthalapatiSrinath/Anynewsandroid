@@ -25,7 +25,9 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.models.DistricsModel;
 import com.anyNews.anynews.models.StatesModel;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
@@ -65,6 +67,17 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
 
     @Override
     public void onBindViewHolder(@NonNull StatesAdopter.ViewHolder holder, int position) {
+        int languageId = SharedPrefsData.getInt(context, Constants.LanguageID, Constants.PREF_NAME);
+        FontSettingsHelper.applyStateSelectionTypography(
+                context,
+                languageId,
+                holder.new_states_name,
+                holder.second_new_states_name
+        );
+        ThemeColorHelper.applyAccentTint(context, holder.state_landmark);
+        ThemeColorHelper.applySelectedNeomorphTree(context, holder.second_states_neomorphFrameLayout);
+        ThemeColorHelper.applySelectedChip(context, holder.second_states_neomorphFrameLayout, holder.second_new_states_name);
+
         holder.new_states_name.setText(arrayList.get(position).getName());
         holder.second_new_states_name.setText(arrayList.get(position).getName());
 

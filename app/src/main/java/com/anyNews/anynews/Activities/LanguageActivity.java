@@ -20,6 +20,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.LanguageModel;
 import com.google.firebase.database.DatabaseReference;
@@ -69,6 +70,7 @@ public class LanguageActivity extends AppCompatActivity {
 
 
         setStaticData();
+        FontSettingsHelper.applySelectionHeader(getApplicationContext(), 1, select_language);
 
         getLangageDetails();
 

@@ -242,4 +242,16 @@ public class NeomorphFrameLayout extends FrameLayout {
         resetPath(getWidth(), getHeight());
         invalidate();
     }
+
+    public void setNeomorphBackgroundColor(int color) {
+        BACKGROUND_COLOR = color;
+        initPaints();
+        invalidate();
+    }
+
+    public void setNeomorphShadowColor(int color) {
+        SHADOW_COLOR = color;
+        initPaints();
+        invalidate();
+    }
 }

@@ -28,6 +28,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.LanguageModel;
 import com.anyNews.anynews.models.StatesModel;
@@ -115,6 +116,8 @@ public class States extends AppCompatActivity {
 
         select_state.setText(" "+languageModelResponse.getData().getSelectState());
         AppLanguagesFonts.setTypeFace(select_state);
+        int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        FontSettingsHelper.applySelectionHeader(getApplicationContext(), languageId > 0 ? languageId : 1, select_state);
     }
 
     private JsonObject set_states_request() {

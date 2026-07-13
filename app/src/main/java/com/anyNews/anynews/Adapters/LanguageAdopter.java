@@ -30,7 +30,9 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.models.LanguageModel;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.google.gson.Gson;
@@ -71,6 +73,16 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
 
     @Override
     public void onBindViewHolder(@NonNull LanguageAdopter.ViewHolder holder, int position) {
+
+        int languageId = arrayList.get(position).getId();
+        FontSettingsHelper.applyLanguageSelectionTypography(
+                context,
+                languageId > 0 ? languageId : SharedPrefsData.getInt(context, Constants.LanguageID, Constants.PREF_NAME),
+                holder.language_name,
+                holder.second_language_name
+        );
+        ThemeColorHelper.applySelectedNeomorphTree(context, holder.second_neomorphFrameLayout);
+        ThemeColorHelper.applySelectedChip(context, holder.second_neomorphFrameLayout, holder.second_language_name);
 
         holder.language_name.setText(arrayList.get(position).getName());
         holder.second_language_name.setText(arrayList.get(position).getName());

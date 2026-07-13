@@ -31,6 +31,42 @@ public class LanguageFontConfig implements Serializable {
     @Expose
     private Float programmaticBodySize;
 
+    @SerializedName("state_selection_font_size")
+    @Expose
+    private Float stateSelectionFontSize;
+
+    @SerializedName("district_selection_font_size")
+    @Expose
+    private Float districtSelectionFontSize;
+
+    @SerializedName("area_selection_font_size")
+    @Expose
+    private Float areaSelectionFontSize;
+
+    @SerializedName("language_selection_font_size")
+    @Expose
+    private Float languageSelectionFontSize;
+
+    @SerializedName("selection_header_font_size")
+    @Expose
+    private Float selectionHeaderFontSize;
+
+    @SerializedName("comments_font_size")
+    @Expose
+    private Float commentsFontSize;
+
+    @SerializedName("profile_font_size")
+    @Expose
+    private Float profileFontSize;
+
+    @SerializedName("login_font_size")
+    @Expose
+    private Float loginFontSize;
+
+    @SerializedName("post_submit_font_size")
+    @Expose
+    private Float postSubmitFontSize;
+
     public static LanguageFontConfig of(
             float titleSize,
             float bodySize,
@@ -75,5 +111,83 @@ public class LanguageFontConfig implements Serializable {
 
     public boolean hasProgrammaticBodySize() {
         return programmaticBodySize != null && programmaticBodySize > 0;
+    }
+
+    public float getStateSelectionFontSize() {
+        return stateSelectionFontSize != null ? stateSelectionFontSize : 21f;
+    }
+
+    public float getDistrictSelectionFontSize() {
+        return districtSelectionFontSize != null ? districtSelectionFontSize : 16f;
+    }
+
+    public float getAreaSelectionFontSize() {
+        return areaSelectionFontSize != null ? areaSelectionFontSize : 16f;
+    }
+
+    public float getLanguageSelectionFontSize() {
+        return languageSelectionFontSize != null ? languageSelectionFontSize : 16f;
+    }
+
+    public float getSelectionHeaderFontSize() {
+        return selectionHeaderFontSize != null ? selectionHeaderFontSize : 20f;
+    }
+
+    public float getCommentsFontSize() {
+        return commentsFontSize != null ? commentsFontSize : 14f;
+    }
+
+    public float getProfileFontSize() {
+        return profileFontSize != null ? profileFontSize : 14f;
+    }
+
+    public float getLoginFontSize() {
+        return loginFontSize != null ? loginFontSize : 16f;
+    }
+
+    public float getPostSubmitFontSize() {
+        return postSubmitFontSize != null ? postSubmitFontSize : 14f;
+    }
+
+    /** Production defaults including onboarding/screen-specific sizes. */
+    public static LanguageFontConfig productionFor(int languageId) {
+        LanguageFontConfig cfg;
+        switch (languageId) {
+            case 1:
+                cfg = of(14, 14, "sans-serif-medium", "mallannaregular", 14, 13f);
+                break;
+            case 2:
+                cfg = of(16, 13, "robotolighttelugu", "robotolighttelugu", 13, 14f);
+                break;
+            case 3:
+                cfg = of(18, 16, "sreekrushnadevaraya_regular", "sreekrushnadevaraya_regular", 13, null);
+                cfg.stateSelectionFontSize = 22f;
+                cfg.districtSelectionFontSize = 18f;
+                break;
+            case 4:
+                cfg = of(13, 13, "mallannaregular", "mallannaregular", 12, 12f);
+                break;
+            case 5:
+            case 6:
+                cfg = of(16, 13, "robotolighttelugu", "robotolighttelugu", 13, null);
+                break;
+            default:
+                cfg = of(14, 14, "robotolighttelugu", "robotolighttelugu", 13, null);
+                break;
+        }
+        if (cfg.stateSelectionFontSize == null) {
+            cfg.stateSelectionFontSize = 21f;
+        }
+        if (cfg.districtSelectionFontSize == null) {
+            cfg.districtSelectionFontSize = 16f;
+        }
+        cfg.areaSelectionFontSize = 16f;
+        cfg.languageSelectionFontSize = 16f;
+        cfg.selectionHeaderFontSize = 20f;
+        cfg.commentsFontSize = 14f;
+        cfg.profileFontSize = 14f;
+        cfg.loginFontSize = 16f;
+        cfg.postSubmitFontSize = 14f;
+        return cfg;
     }
 }

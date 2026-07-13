@@ -28,7 +28,9 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.models.LanguageModel;
 import com.anyNews.anynews.models.RegionModel;
 import com.anyNews.anynews.models.StatesModel;
@@ -65,6 +67,16 @@ public class AreaSelectionAdopter extends RecyclerView.Adapter<AreaSelectionAdop
 
     @Override
     public void onBindViewHolder(@NonNull AreaSelectionAdopter.ViewHolder holder, int position) {
+        int languageId = SharedPrefsData.getInt(context, Constants.LanguageID, Constants.PREF_NAME);
+        FontSettingsHelper.applyAreaSelectionTypography(
+                context,
+                languageId,
+                holder.language_name,
+                holder.second_language_name
+        );
+        ThemeColorHelper.applySelectedNeomorphTree(context, holder.second_neomorphFrameLayout);
+        ThemeColorHelper.applySelectedChip(context, holder.second_neomorphFrameLayout, holder.second_language_name);
+
         holder.language_name.setText(arrayList.get(position).getName());
         holder.second_language_name.setText(arrayList.get(position).getName());
 
