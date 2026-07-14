@@ -187,7 +187,12 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                                 languageSelectionResponse.getNextScreen(), Constants.PREF_NAME);
                         SharedPrefsData.putString(context, Constants.State_Name, languageSelectionResponse.getNextScreen(), Constants.PREF_NAME);
 
-                        if(languageSelectionResponse.getNextScreen().equals("main")){
+                        String nextScreen = languageSelectionResponse.getNextScreen();
+                        if (nextScreen == null) {
+                            nextScreen = "";
+                        }
+
+                        if ("main".equalsIgnoreCase(nextScreen)) {
 
                             SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
                             SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
@@ -201,7 +206,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                 context.startActivity(intent);
                             }
-                        }else if(languageSelectionResponse.getNextScreen().equals("state")){
+                        } else if ("state".equalsIgnoreCase(nextScreen)) {
                             Intent intent = new Intent(context, States.class);
                             SharedPrefsData.putInt(context, Constants.Back_Button_Move, 2, Constants.PREF_NAME);
                             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -211,7 +216,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                 context.startActivity(intent);
                             }
-                        }else {
+                        } else if ("district".equalsIgnoreCase(nextScreen)) {
                             Intent intent = new Intent(context, Districs.class);
                             SharedPrefsData.putInt(context, Constants.StateID,0,Constants.PREF_NAME);
                             SharedPrefsData.putInt(context, Constants.Back_Button_Move, 3, Constants.PREF_NAME);
@@ -222,7 +227,15 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                 context.startActivity(intent);
                             }
-
+                        } else {
+                            // next_screen language (or unknown) — stay on picker
+                            SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
+                            SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+                            Toast.makeText(context,
+                                    "This language is not ready yet. Please select another language.",
+                                    Toast.LENGTH_LONG).show();
+                            index = -1;
+                            notifyDataSetChanged();
                         }
 
 
@@ -234,7 +247,11 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             }
                         } catch (Exception ignored) {
                         }
+                        SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
+                        SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();
+                        index = -1;
+                        notifyDataSetChanged();
                     }
 
                 }

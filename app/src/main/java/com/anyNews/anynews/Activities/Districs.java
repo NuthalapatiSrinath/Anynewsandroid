@@ -11,6 +11,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -174,6 +175,7 @@ public class Districs extends AppCompatActivity {
 
 
                 if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                    recoverToLanguagePicker("Unable to load districts. Please select another language.");
                     return;
                 }
                 EncreptionRequest encreptionRequest=response.body();
@@ -186,32 +188,52 @@ public class Districs extends AppCompatActivity {
 
                 arrayList.clear();
 
+                boolean success = languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess());
+                boolean hasData = languageModel != null
+                        && languageModel.getData() != null
+                        && languageModel.getData().size() > 0;
 
-                if (languageModel != null && languageModel.getSuccess() && languageModel.getData() != null) {
+                if (success && hasData) {
+                    arrayList.addAll(languageModel.getData());
+                    districsAdopter = new DistricsAdopter(Districs.this, arrayList);
+                    recycleLayoutManager.setAdapter(districsAdopter);
+                    layout_with_out_data.setVisibility(View.GONE);
+                    layout_with_data.setVisibility(View.VISIBLE);
+                    return;
+                }
 
-                        if(languageModel.getData().size()>0){
-
-                            arrayList.addAll(languageModel.getData());
-                            districsAdopter = new DistricsAdopter(Districs.this,arrayList);
-                            recycleLayoutManager.setAdapter(districsAdopter);
-
-
-                        }else {
-
-                        }
-
-                    }
-
-                layout_with_out_data.setVisibility(View.GONE);
-                layout_with_data.setVisibility(View.VISIBLE);
-
+                String msg = languageModel != null ? languageModel.getMsg() : null;
+                if (TextUtils.isEmpty(msg)) {
+                    msg = "No districts available for this language. Please select another language.";
+                }
+                recoverToLanguagePicker(msg);
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
+                recoverToLanguagePicker(
+                        t != null && t.getMessage() != null
+                                ? t.getMessage()
+                                : "Network error. Please select another language."
+                );
             }
         });
+    }
+
+    private void recoverToLanguagePicker(String message) {
+        layout_with_out_data.setVisibility(View.GONE);
+        layout_with_data.setVisibility(View.GONE);
+        SharedPrefsData.putInt(Districs.this, Constants.LanguageID, 0, Constants.PREF_NAME);
+        SharedPrefsData.putInt(Districs.this, Constants.StateID, 0, Constants.PREF_NAME);
+        SharedPrefsData.putBool(Districs.this, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+        SharedPrefsData.putString(Districs.this, Constants.MOVE_NEXT_SCREEN, "language", Constants.PREF_NAME);
+        if (!TextUtils.isEmpty(message)) {
+            Toast.makeText(Districs.this, message, Toast.LENGTH_LONG).show();
+        }
+        Intent intent = new Intent(Districs.this, LanguageActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        finish();
     }
 
     public void writeDistrictSelection(String userId,String type_firebase ,int draft_id ,String device_id ,long current_time) {

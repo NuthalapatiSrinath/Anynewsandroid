@@ -40,6 +40,12 @@ public class DistricsModel {
     @SerializedName("data")
     @Expose
     private List<Datum> data = null;
+    @SerializedName("next_screen")
+    @Expose
+    private String nextScreen;
+    @SerializedName("msg")
+    @Expose
+    private String msg;
 
     public Boolean getSuccess() {
         return success;
@@ -55,6 +61,22 @@ public class DistricsModel {
 
     public void setData(List<Datum> data) {
         this.data = data;
+    }
+
+    public String getNextScreen() {
+        return nextScreen;
+    }
+
+    public void setNextScreen(String nextScreen) {
+        this.nextScreen = nextScreen;
+    }
+
+    public String getMsg() {
+        return msg;
+    }
+
+    public void setMsg(String msg) {
+        this.msg = msg;
     }
 
 }

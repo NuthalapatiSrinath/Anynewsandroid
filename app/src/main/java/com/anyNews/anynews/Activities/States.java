@@ -11,10 +11,12 @@ import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.anyNews.anynews.Adapters.StatesAdopter;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
@@ -157,6 +159,7 @@ public class States extends AppCompatActivity {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
                     if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                        recoverToLanguagePicker("Unable to load states. Please select another language.");
                         return;
                     }
 
@@ -169,37 +172,55 @@ public class States extends AppCompatActivity {
 
                     arrayList.clear();
 
+                    boolean success = languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess());
+                    boolean hasData = languageModel != null
+                            && languageModel.getData() != null
+                            && languageModel.getData().size() > 0;
+                    String nextScreen = languageModel != null ? languageModel.getNextScreen() : null;
 
-
-
-                    if (languageModel != null && languageModel.getSuccess() && languageModel.getData() != null) {
-
-                        SharedPrefsData.putString(States.this, Constants.Distric_Name, languageModel.getNextScreen(), Constants.PREF_NAME);
-
-                        if(languageModel.getData().size()>0){
-                            arrayList.addAll(languageModel.getData());
-
-                            statesAdopter = new StatesAdopter(States.this,arrayList);
-                            recycleLayoutManager.setAdapter(statesAdopter);
-                            layout_with_data.setVisibility(View.VISIBLE);
-                            layout_with_out_data.setVisibility(View.GONE);
-
-                        }else {
-
-                        }
-
-
+                    if (success && hasData) {
+                        SharedPrefsData.putString(States.this, Constants.Distric_Name, nextScreen, Constants.PREF_NAME);
+                        arrayList.addAll(languageModel.getData());
+                        statesAdopter = new StatesAdopter(States.this,arrayList);
+                        recycleLayoutManager.setAdapter(statesAdopter);
+                        layout_with_data.setVisibility(View.VISIBLE);
+                        layout_with_out_data.setVisibility(View.GONE);
+                        return;
                     }
 
+                    String msg = languageModel != null ? languageModel.getMsg() : null;
+                    if (TextUtils.isEmpty(msg)) {
+                        msg = "No states available for this language. Please select another language.";
+                    }
+                    recoverToLanguagePicker(msg);
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
+                recoverToLanguagePicker(
+                        t != null && t.getMessage() != null
+                                ? t.getMessage()
+                                : "Network error. Please select another language."
+                );
             }
         });
 
+    }
+
+    private void recoverToLanguagePicker(String message) {
+        layout_with_out_data.setVisibility(View.GONE);
+        layout_with_data.setVisibility(View.GONE);
+        SharedPrefsData.putInt(States.this, Constants.LanguageID, 0, Constants.PREF_NAME);
+        SharedPrefsData.putInt(States.this, Constants.StateID, 0, Constants.PREF_NAME);
+        SharedPrefsData.putBool(States.this, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+        SharedPrefsData.putString(States.this, Constants.MOVE_NEXT_SCREEN, "language", Constants.PREF_NAME);
+        if (!TextUtils.isEmpty(message)) {
+            Toast.makeText(States.this, message, Toast.LENGTH_LONG).show();
+        }
+        Intent intent = new Intent(States.this, LanguageActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        finish();
     }
 
     @Override
