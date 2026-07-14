@@ -125,7 +125,17 @@ public class Districs extends AppCompatActivity {
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
 
-        select_distic.setText(" "+languageModelResponse.getData().getSelectDistrict());
+        String title = null;
+        if (languageModelResponse != null && languageModelResponse.getData() != null) {
+            title = languageModelResponse.getData().getSelectDistrict();
+        }
+        if (title == null || title.isEmpty()) {
+            title = getIntent().getStringExtra("LANGUAGE_NAME");
+        }
+        if (title == null || title.isEmpty()) {
+            title = "Select District";
+        }
+        select_distic.setText(" " + title);
         AppLanguagesFonts.setTypeFace(select_distic);
         int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
         FontSettingsHelper.applySelectionHeader(getApplicationContext(), languageId > 0 ? languageId : 1, select_distic);

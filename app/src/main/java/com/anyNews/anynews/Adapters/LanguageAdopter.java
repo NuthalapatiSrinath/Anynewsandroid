@@ -100,7 +100,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                 holder.second_neomorphFrameLayout.setVisibility(View.VISIBLE);
 
                 SharedPrefsData.putInt(context,Constants.LanguageID,arrayList.get(position).getId(),Constants.PREF_NAME);
-                LanguageSelection(arrayList.get(position).getId());
+                LanguageSelection(arrayList.get(position).getId(), arrayList.get(position).getName());
 
             }
         });
@@ -148,7 +148,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
     }
 
 
-    private void LanguageSelection(int language_id) {
+    private void LanguageSelection(int language_id, String language_name) {
 
         JsonObject otp = SetUpdateLanguage(language_id);
 
@@ -200,6 +200,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
 
                             intent.putExtra("LANGUAGE_ID",language_id );
+                            intent.putExtra("LANGUAGE_NAME", language_name);
                             if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                 context.startActivity(intent);
                             }
@@ -210,6 +211,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
 
                             intent.putExtra("LANGUAGE_ID",language_id );
+                            intent.putExtra("LANGUAGE_NAME", language_name);
                             if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                 context.startActivity(intent);
                             }

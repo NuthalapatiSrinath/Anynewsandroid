@@ -92,6 +92,7 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
 
                 index = position;
                 notifyDataSetChanged();
+                getDistrics(arrayList.get(position).getId(), arrayList.get(position).getName());
             }
         });
 
@@ -104,8 +105,7 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
 
                 index = position;
                 notifyDataSetChanged();
-
-
+                getDistrics(arrayList.get(position).getId(), arrayList.get(position).getName());
             }
         });
 
@@ -118,15 +118,14 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
             holder.second_districs_neomorphFrameLayout.setClickable(false);
             holder.districs_neomorphFrameLayout.setEnabled(false);
             holder.second_districs_neomorphFrameLayout.setEnabled(false);
-            getDistrics(arrayList.get(position).getId(),arrayList.get(position).getName());
             holder.districs_neomorphFrameLayout.setVisibility(View.GONE);
             holder.second_districs_neomorphFrameLayout.setVisibility(View.VISIBLE);
 
         }else{
-            holder.districs_neomorphFrameLayout.setClickable(false);
-            holder.second_districs_neomorphFrameLayout.setClickable(false);
-            holder.districs_neomorphFrameLayout.setEnabled(false);
-            holder.second_districs_neomorphFrameLayout.setEnabled(false);
+            holder.districs_neomorphFrameLayout.setClickable(true);
+            holder.second_districs_neomorphFrameLayout.setClickable(true);
+            holder.districs_neomorphFrameLayout.setEnabled(true);
+            holder.second_districs_neomorphFrameLayout.setEnabled(true);
             holder.districs_neomorphFrameLayout.setVisibility(View.VISIBLE);
             holder.second_districs_neomorphFrameLayout.setVisibility(View.GONE);
         }

@@ -114,7 +114,17 @@ public class States extends AppCompatActivity {
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
 
-        select_state.setText(" "+languageModelResponse.getData().getSelectState());
+        String title = null;
+        if (languageModelResponse != null && languageModelResponse.getData() != null) {
+            title = languageModelResponse.getData().getSelectState();
+        }
+        if (title == null || title.isEmpty()) {
+            title = getIntent().getStringExtra("LANGUAGE_NAME");
+        }
+        if (title == null || title.isEmpty()) {
+            title = "Select State";
+        }
+        select_state.setText(" " + title);
         AppLanguagesFonts.setTypeFace(select_state);
         int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
         FontSettingsHelper.applySelectionHeader(getApplicationContext(), languageId > 0 ? languageId : 1, select_state);
