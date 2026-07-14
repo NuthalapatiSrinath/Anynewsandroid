@@ -151,4 +151,13 @@
     <color name="engagement_badge_text">#FFFFFF</color>
     <color name="engagement_badge_stroke">#E6FFFFFF</color>
 
+    <!-- Always-white text on brand orange buttons (never remapped in night). -->
+    <color name="on_brand_text">#FFFFFF</color>
+    <!-- Form surfaces: light in day, dark in night (see values-night). -->
+    <color name="form_surface">#F5F7FB</color>
+    <color name="form_surface_elevated">#FFFFFF</color>
+    <color name="form_upload_text">#5A5858</color>
+    <color name="login_button_disabled_bg">#F5F7FB</color>
+    <color name="login_button_disabled_text">#8D8D8E</color>
+
 </resources>

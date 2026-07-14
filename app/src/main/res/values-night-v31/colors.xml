@@ -24,15 +24,21 @@
     <color name="content_desc_color">#F0F0F0</color>
     <color name="full_gallery_text_color">#F0F0F0</color>
 
-    <color name="post_new_title_text_color">#8D8D8E</color>
-    <color name="whitesren">#E4E4E4</color>
+    <!-- Half-post engagement count overlays (dark mode: neutral pill) -->
+    <color name="engagement_badge_bg">#CC3D3D3D</color>
+    <color name="engagement_badge_text">#FFFFFF</color>
+    <color name="engagement_badge_stroke">#66FFFFFF</color>
+
+    <color name="post_new_title_text_color">#E8E8E8</color>
+    <color name="whitesren">#B0B0B0</color>
     <color name="black">#FFFFFF</color>
-    <color name="profilepagecolor">#424549</color>
+    <color name="profilepagecolor">#E0E0E0</color>
+    <color name="profile_card_text">#FFFFFF</color>
     <color name="pale_grey">#f9fbfc</color>
-    <color name="warm_grey">#707070</color>
-    <color name="warm_grey_two">#a2a2a2</color>
-    <color name="warm_grey_three">#9a9a9a</color>
-    <color name="greyish">#afafaf</color>
+    <color name="warm_grey">#E0E0E0</color>
+    <color name="warm_grey_two">#C0C0C0</color>
+    <color name="warm_grey_three">#B0B0B0</color>
+    <color name="greyish">#C8C8C8</color>
     <color name="warm_grey_16">#299f9f9f</color>
 
     <color name="color42">#5A5A60</color>
@@ -47,57 +53,16 @@
     <color name="splash_logo_bg">#353535</color>
 
 
-    <!-- COLOR Card News -->
-
-
-    <!-- COLOR Grid News -->
-
-    <!-- COLOR Top News -->
-
-    <!-- Color Video News -->
-
-
-    <!-- Color Related News -->
-
-    <!-- Color News Detail -->
-
-    <!-- Color Search-->
-
     <!-- Bookmarks -->
     <color name="colorBookmarksInfo">#555555</color>
 
 
-    <!-- Color Profile-->
-
-    <!-- Color Profile User Comments -->
-
-    <!-- POST comments  -->
-
-    <!-- Color Pagination -->
-
-    <!-- Color State Layout -->
-
-    <!-- Comments -->
-
-
-    <!-- Color Drawer -->
-
-
-    <!-- Edittext -->
-
-
-    <!-- TAB -->
-
-
-    <!-- Toolbar Style -->
-
-
-    <!--  payment history colour-->
-    <color name="payment_history_border">#0ABDD3E0</color>
-    <color name="payment_history_background">#F5F7FB</color>
-    <color name="payment_history_border_title">#5A5858</color>
-    <color name="payment_history_border_discreption">#8D8D8E</color>    // 009444
-    <color name="payment_history_border_green">#009444</color>   //009444
+    <!--  payment history colour — dark surfaces for API 31+ night -->
+    <color name="payment_history_border">#60BDD3E0</color>
+    <color name="payment_history_background">#2C2C2C</color>
+    <color name="payment_history_border_title">#E0E0E0</color>
+    <color name="payment_history_border_discreption">#B0B0B0</color>
+    <color name="payment_history_border_green">#009444</color>
 
 
     <!--  post detailes-->
@@ -106,8 +71,8 @@
     <color name="post_profile_red">#EF4923</color>
 
     <!--    Profile Border Color-->
-    <color name="profile_border">#60BDD3E0</color>   //60BDD3E0
-    <color name="profile_background">#EBF5F7FB</color>
+    <color name="profile_border">#60BDD3E0</color>
+    <color name="profile_background">#2C2C2C</color>
 <!-- bottom navigation color -->
     <color name="bottom_navigation_view_color">#F5F7FB</color>
     <color name="bottom_nav_inactive">#666666</color>
@@ -119,5 +84,13 @@
     <color name="neomorph_background_color">#2C2C2C</color>
     <color name="neomorph_shadow_color">#1A1A1A</color>
     <color name="neomorph_highlight_color">#3A3A3A</color>
-    <color name="text_color_primary">#E0E0E0</color>
+    <color name="share_download_icon_disabled">#A8A8A8</color>
+    <color name="text_color_primary">#FFFFFF</color>
+
+    <color name="on_brand_text">#FFFFFF</color>
+    <color name="form_surface">#2C2C2C</color>
+    <color name="form_surface_elevated">#353535</color>
+    <color name="form_upload_text">#E0E0E0</color>
+    <color name="login_button_disabled_bg">#2C2C2C</color>
+    <color name="login_button_disabled_text">#B0B0B0</color>
 </resources>

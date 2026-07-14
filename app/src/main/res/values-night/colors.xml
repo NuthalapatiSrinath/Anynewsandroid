@@ -29,15 +29,15 @@
     <color name="engagement_badge_text">#FFFFFF</color>
     <color name="engagement_badge_stroke">#66FFFFFF</color>
 
-    <color name="post_new_title_text_color">#8D8D8E</color>
-    <color name="whitesren">#E4E4E4</color>
+    <color name="post_new_title_text_color">#E8E8E8</color>
+    <color name="whitesren">#B0B0B0</color>
     <color name="black">#FFFFFF</color>
     <color name="profilepagecolor">#E0E0E0</color>
     <color name="profile_card_text">#FFFFFF</color>
     <color name="pale_grey">#f9fbfc</color>
-    <color name="warm_grey">#707070</color>
-    <color name="warm_grey_two">#a2a2a2</color>
-    <color name="warm_grey_three">#9a9a9a</color>
+    <color name="warm_grey">#E0E0E0</color>
+    <color name="warm_grey_two">#C0C0C0</color>
+    <color name="warm_grey_three">#B0B0B0</color>
     <color name="greyish">#C8C8C8</color>
     <color name="warm_grey_16">#299f9f9f</color>
 
@@ -127,4 +127,13 @@
     <color name="neomorph_highlight_color">#3A3A3A</color>
     <color name="share_download_icon_disabled">#A8A8A8</color>
     <color name="text_color_primary">#FFFFFF</color>
+
+    <!-- Always-white text on brand orange buttons (never remapped). -->
+    <color name="on_brand_text">#FFFFFF</color>
+    <!-- Form surfaces for reporter/login/post flows -->
+    <color name="form_surface">#2C2C2C</color>
+    <color name="form_surface_elevated">#353535</color>
+    <color name="form_upload_text">#E0E0E0</color>
+    <color name="login_button_disabled_bg">#2C2C2C</color>
+    <color name="login_button_disabled_text">#B0B0B0</color>
 </resources>
