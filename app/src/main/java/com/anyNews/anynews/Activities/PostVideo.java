@@ -11,6 +11,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -63,6 +64,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
+import com.bumptech.glide.Glide;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.permissionx.guolindev.PermissionX;
@@ -114,6 +116,7 @@ public class PostVideo extends AppCompatActivity {
     LinearLayout img_upload_photo_total;
     ProgressBar progressBarLarge, image_upload_progress_bar;
     TextView tv_agree_view;
+    TextView tv_upload_percent;
     private Uri mVideoURI;
 
     @Override
@@ -134,6 +137,7 @@ public class PostVideo extends AppCompatActivity {
         post_button = findViewById(R.id.post_button);
         progressBarLarge = findViewById(R.id.progressBarLarge);
         image_upload_progress_bar = findViewById(R.id.image_upload_progress_bar);
+        tv_upload_percent = findViewById(R.id.tv_upload_percent);
         tv_agree_view = findViewById(R.id.tv_agree_view);
         mCommonmethods = new CommonMethods(PostVideo.this);
 
@@ -507,11 +511,17 @@ public class PostVideo extends AppCompatActivity {
         if (resultCode != RESULT_OK) return;
         if (requestCode == PICK_IMAGE_REQUEST) {
             try {
-                Uri aa = data.getData();
-                mVideoURI = Uri.parse(String.valueOf(aa));
+                if (data == null || data.getData() == null) {
+                    Toast.makeText(PostVideo.this, "No video selected", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                mVideoURI = data.getData();
+                showVideoPreview(mVideoURI);
+                setUploadProgressVisible(true, 0);
                 uploadImage();
-            } catch (Exception e){
+            } catch (Exception e) {
                 e.printStackTrace();
+                Toast.makeText(PostVideo.this, "Unable to use selected video", Toast.LENGTH_SHORT).show();
             }
 
         }
@@ -553,9 +563,9 @@ public class PostVideo extends AppCompatActivity {
             try {
                 bitmap = (Bitmap) data.getExtras().get("data");
                 img_upload_photo.setImageBitmap(bitmap);
-                img_upload_photo.setVisibility(View.GONE);
+                img_upload_photo.setVisibility(View.VISIBLE);
 
-                image_upload_progress_bar.setVisibility(View.VISIBLE);
+                setUploadProgressVisible(true, 0);
                 uploadImage();
                 //storeImageTosdCard(bitmap);
             } catch (Exception e) {
@@ -568,8 +578,59 @@ public class PostVideo extends AppCompatActivity {
         }
     }
 
+    private void showVideoPreview(Uri videoUri) {
+        if (videoUri == null || img_upload_photo == null) {
+            return;
+        }
+        img_upload_photo.setVisibility(View.VISIBLE);
+        // Prefer a local frame extract so ContentResolver video URIs preview reliably.
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(this, videoUri);
+            Bitmap frame = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+            if (frame != null) {
+                img_upload_photo.setImageBitmap(frame);
+                return;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                retriever.release();
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            Glide.with(this)
+                    .asBitmap()
+                    .load(videoUri)
+                    .apply(new com.bumptech.glide.request.RequestOptions()
+                            .frame(1_000_000L)
+                            .centerCrop()
+                            .placeholder(R.drawable.ic_video_icon)
+                            .error(R.drawable.ic_video_icon))
+                    .into(img_upload_photo);
+        } catch (Exception e) {
+            img_upload_photo.setImageResource(R.drawable.ic_video_icon);
+        }
+    }
+
+    private void setUploadProgressVisible(boolean visible, int progress) {
+        if (image_upload_progress_bar != null) {
+            image_upload_progress_bar.setVisibility(visible ? View.VISIBLE : View.GONE);
+            image_upload_progress_bar.setIndeterminate(false);
+            image_upload_progress_bar.setMax(100);
+            image_upload_progress_bar.setProgress(Math.max(0, Math.min(100, progress)));
+        }
+        if (tv_upload_percent != null) {
+            tv_upload_percent.setVisibility(visible ? View.VISIBLE : View.GONE);
+            tv_upload_percent.setText(Math.max(0, Math.min(100, progress)) + "%");
+        }
+    }
+
     private void uploadImage() {
         AppHelper.showLog("uploadImage");
+        setUploadProgressVisible(true, 0);
         VolleyMultipartRequest multipartRequest = new VolleyMultipartRequest(Request.Method.POST,
                 CommonUtilities.URL + "" + APIService.URL_Upload_Image, new com.android.volley.Response.Listener<NetworkResponse>() {
             @Override
@@ -590,7 +651,7 @@ public class PostVideo extends AppCompatActivity {
                             Toast.makeText(PostVideo.this, "Video upload successful", Toast.LENGTH_SHORT).show();
                         }
                         img_upload_photo.setVisibility(View.VISIBLE);
-                        image_upload_progress_bar.setVisibility(View.GONE);
+                        setUploadProgressVisible(false, 100);
                         //     ProfileUpdateImage();
 /*
 
@@ -600,11 +661,13 @@ public class PostVideo extends AppCompatActivity {
 
                     } else {
                         Toast.makeText(getContext(), "Video not Captured", Toast.LENGTH_SHORT).show();
+                        setUploadProgressVisible(false, 0);
 
                     }
                 } catch (JSONException e) {
 //                    mCropImageUri = null;
                     e.printStackTrace();
+                    setUploadProgressVisible(false, 0);
                 }
             }
         }, new com.android.volley.Response.ErrorListener() {
@@ -645,6 +708,7 @@ public class PostVideo extends AppCompatActivity {
                 }
                 mCommonmethods.showerror(errorMessage);
                 error.printStackTrace();
+                setUploadProgressVisible(false, 0);
             }
         }, new VolleyMultipartRequest.MultipartProgressListener() {
             @Override
@@ -652,12 +716,9 @@ public class PostVideo extends AppCompatActivity {
                 PostVideo.this.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        String progresscontent = String.valueOf(progress);
-//                        pDialog.setTitle("Uploading.." + progresscontent+" %");
-
+                        setUploadProgressVisible(true, progress);
                     }
                 });
-//
             }
         }) {
             /*@Override

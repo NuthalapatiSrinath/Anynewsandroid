@@ -10,10 +10,6 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
-import com.anyNews.anynews.Utils.CropHelper;
-import com.canhub.cropper.CropImageContract;
-import com.canhub.cropper.CropImageContractOptions;
-import com.canhub.cropper.CropImageView;
 import com.squareup.picasso.Picasso;
 
 import android.Manifest;
@@ -155,7 +151,6 @@ public class PostArticles extends AppCompatActivity {
     int editUserPostId = 0;
     boolean imageChanged = false;
 
-    private ActivityResultLauncher<CropImageContractOptions> cropImage;
     private ActivityResultLauncher<PickVisualMediaRequest> pickVisualMedia;
 
     @Override
@@ -204,33 +199,7 @@ public class PostArticles extends AppCompatActivity {
             restoreDraftFromPrefs();
         }
 
-        // Register the image crop launcher (feature: crop while uploading photos).
-        cropImage = registerForActivityResult(new CropImageContract(), new ActivityResultCallback<com.canhub.cropper.CropImageView.CropResult>() {
-            @Override
-            public void onActivityResult(com.canhub.cropper.CropImageView.CropResult result) {
-                // Always stay on PostArticles. Never finish() / navigate to HomePage here.
-                if (result != null && result.isSuccessful() && result.getUriContent() != null) {
-                    Log.e(TAG, "crop success uri=" + result.getUriContent());
-                    handleSelectedImage(result.getUriContent());
-                    return;
-                }
-                if (result != null && result.getError() != null) {
-                    Log.e(TAG, "crop error - fallback to local copy", result.getError());
-                    Toast.makeText(PostArticles.this,
-                            "Crop failed - using original photo",
-                            Toast.LENGTH_SHORT).show();
-                } else {
-                    Log.e(TAG, "crop cancelled - fallback pending=" + pendingLocalImageUri);
-                    Toast.makeText(PostArticles.this,
-                            "Crop cancelled - using selected photo",
-                            Toast.LENGTH_SHORT).show();
-                }
-                // Cancel / fail: keep the pre-crop local copy so the reporter can still post.
-                if (pendingLocalImageUri != null) {
-                    handleSelectedImage(pendingLocalImageUri);
-                }
-            }
-        });
+        // Production parity: no CanHub crop — pick goes straight to preview + upload.
 
         pickVisualMedia = registerForActivityResult(
                 new ActivityResultContracts.PickVisualMedia(),
@@ -723,9 +692,9 @@ public class PostArticles extends AppCompatActivity {
     }
 
     /**
-     * Copy any external/content URI into app cache, then open crop with an app-owned URI.
-     * This prevents CropImageActivity SecurityException (picker URI grants do not propagate
-     * via Bundle extras) and keeps PostArticles alive if crop cancels/fails.
+     * Production parity: gallery/camera go straight to preview + upload (no CropImageActivity).
+     * Still copy into app-owned cache/FileProvider so picker URI grants and process-death
+     * on low-RAM OEMs (Vivo) do not drop the selected image.
      */
     private void onExternalImagePicked(Uri sourceUri) {
         Log.e(TAG, "onExternalImagePicked source=" + sourceUri);
@@ -734,40 +703,13 @@ public class PostArticles extends AppCompatActivity {
         }
         Uri localUri = copyUriToAppCache(sourceUri);
         if (localUri == null) {
-            Log.e(TAG, "copyUriToAppCache failed for " + sourceUri);
-            Toast.makeText(this, "Unable to read selected image", Toast.LENGTH_SHORT).show();
-            return;
+            Log.e(TAG, "copyUriToAppCache failed for " + sourceUri + " — using source");
+            localUri = sourceUri;
         }
         pendingLocalImageUri = localUri;
         persistDraftImageState();
-        Log.e(TAG, "copied to app cache localUri=" + localUri);
-        // Show immediate preview so the form never looks "empty" if crop is slow/cancelled.
-        showImagePreview(localUri);
-        // Defer crop until after we are fully resumed — launching another ActivityResult
-        // contract from inside onActivityResult during recreate is flaky on OEM builds.
-        getWindow().getDecorView().post(new Runnable() {
-            @Override
-            public void run() {
-                if (isFinishing() || isDestroyed()) {
-                    return;
-                }
-                launchCrop(localUri);
-            }
-        });
-    }
-
-    private void launchCrop(Uri sourceUri) {
-        if (sourceUri == null) {
-            return;
-        }
-        Log.e(TAG, "launchCrop sourceUri=" + sourceUri);
-        try {
-            cropImage.launch(CropHelper.buildCropOptions(PostArticles.this, sourceUri));
-        } catch (Exception e) {
-            Log.e(TAG, "launchCrop failed - using original", e);
-            Toast.makeText(PostArticles.this, "Unable to open crop screen - using original photo", Toast.LENGTH_SHORT).show();
-            handleSelectedImage(sourceUri);
-        }
+        Log.e(TAG, "using image localUri=" + localUri);
+        handleSelectedImage(localUri);
     }
 
     private void handleSelectedImage(Uri selectedUri) {
