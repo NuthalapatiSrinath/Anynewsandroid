@@ -163,7 +163,7 @@
                                    android:layout_gravity="center"
                                    android:text="MY FEED "
                                    android:textStyle="bold"
-                                   android:textColor="@color/white" />
+                                   android:textColor="@color/on_brand_text" />
                            </soup.neumorphism.NeumorphCardView>-->
 
                     </LinearLayout>
@@ -682,9 +682,9 @@
                                 app:neomorph_background_color="@color/red"
                                 app:neomorph_corner_radius="1dp"
                                 app:neomorph_elevation="3dp"
-                                app:neomorph_highlight_color="#F5F8F5"
+                                app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                 app:neomorph_layer_type="hardware"
-                                app:neomorph_shadow_color="#919395"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_shadow_type="outer"
                                 app:neomorph_view_type="circular">
 
@@ -699,9 +699,9 @@
                                     app:neomorph_background_color="@color/red"
                                     app:neomorph_corner_radius="1dp"
                                     app:neomorph_elevation="0dp"
-                                    app:neomorph_highlight_color="#919395"
+                                    app:neomorph_highlight_color="@color/neomorph_shadow_color"
                                     app:neomorph_layer_type="hardware"
-                                    app:neomorph_shadow_color="#919395"
+                                    app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                     app:neomorph_shadow_type="inner"
                                     app:neomorph_view_type="circular">
 
@@ -715,7 +715,7 @@
                                         android:rotation="-35"
                                         android:scaleType="fitCenter"
                                         android:src="@drawable/ic_send"
-                                        android:tint="@color/white" />
+                                        android:tint="@color/on_brand_text" />
 
                                     <ProgressBar
                                         android:id="@+id/send_progress"

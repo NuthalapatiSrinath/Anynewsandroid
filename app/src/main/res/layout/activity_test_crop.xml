@@ -134,7 +134,7 @@
                             android:layout_width="20dp"
                             android:layout_height="20dp"
                             android:src="@drawable/ic_new_like_icon"
-                            app:tint="@color/white" />
+                            app:tint="@color/on_brand_text" />
                         <TextView
                             android:id="@+id/like"
                             android:layout_marginTop="@dimen/five"
@@ -144,7 +144,7 @@
                             android:shadowDx="1"
                             android:shadowDy="1"
                             android:shadowRadius="3"
-                            android:textColor="@color/white"
+                            android:textColor="@color/on_brand_text"
                             android:textSize="9dp"
                             android:textStyle="bold" />
 
@@ -163,7 +163,7 @@
                             android:layout_width="20dp"
                             android:layout_height="20dp"
                             android:scaleType="fitCenter"
-                            app:tint="@color/white"
+                            app:tint="@color/on_brand_text"
                             android:src="@drawable/ic_new_dislike_icon"/>
 
                         <TextView
@@ -174,7 +174,7 @@
                             android:shadowDx="1"
                             android:shadowDy="1"
                             android:shadowRadius="3"
-                            android:textColor="@color/white"
+                            android:textColor="@color/on_brand_text"
                             android:textSize="9dp"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -193,7 +193,7 @@
                             android:layout_width="20dp"
                             android:layout_height="20dp"
                             android:scaleType="fitCenter"
-                            app:tint="@color/white"
+                            app:tint="@color/on_brand_text"
                             android:src="@drawable/ic_new_share_icon" />
 
                         <TextView
@@ -205,7 +205,7 @@
                             android:shadowDx="1"
                             android:shadowDy="1"
                             android:shadowRadius="3"
-                            android:textColor="@color/white"
+                            android:textColor="@color/on_brand_text"
                             android:textSize="9dp"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -226,7 +226,7 @@
                             android:layout_height="25dp"
                             android:scaleType="fitCenter"
                             android:src="@drawable/full_icon_what"
-                            app:tint="@color/white" />
+                            app:tint="@color/on_brand_text" />
 
                         <TextView
                             android:id="@+id/mute_video_player_text"
@@ -237,7 +237,7 @@
                             android:shadowDx="1"
                             android:shadowDy="1"
                             android:shadowRadius="3"
-                            android:textColor="@color/white"
+                            android:textColor="@color/on_brand_text"
                             android:textSize="9dp"
                             android:textStyle="bold" />
                     </LinearLayout>
@@ -266,7 +266,7 @@
                             android:shadowDy="1"
                             android:shadowRadius="3"
                             android:text="Mute"
-                            android:textColor="@color/white"
+                            android:textColor="@color/on_brand_text"
                             android:textSize="9dp"
                             android:textStyle="bold" />
                     </LinearLayout>

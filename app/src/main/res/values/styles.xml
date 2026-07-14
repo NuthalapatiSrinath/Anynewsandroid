@@ -25,11 +25,11 @@
         <item name="android:background">@drawable/new_bg_sp</item>
         <item name="android:adjustViewBounds">true</item>
     </style>
-    <style name="AppThemeBG" parent="Theme.AppCompat.NoActionBar">
-        <!-- Customize your theme here. -->v
-       <!-- <item name="android:windowBackground">@drawable/splash_bg</item> </style>-->
-        <item name="android:background">@color/white</item>
-        <item name="android:backgroundTint">@color/white</item>
+    <style name="AppThemeBG" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:background">@color/whitewithblack</item>
+        <item name="android:backgroundTint">@color/whitewithblack</item>
+        <item name="android:windowBackground">@color/whitewithblack</item>
     </style>
 
     <style name="Theme.AppCompat.Light.NoActionBar.FullScreen" parent="@style/Theme.AppCompat.Light.NoActionBar">

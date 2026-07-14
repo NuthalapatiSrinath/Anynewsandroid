@@ -113,7 +113,7 @@
                                 android:background="@drawable/url_background"
                                 android:padding="5dp"
                                 android:text="anws.co/78787878"
-                                android:textColor="#FFFFFF"
+                                android:textColor="@color/on_brand_text"
                                 android:textSize="8dp" />
 
                         </RelativeLayout>
@@ -351,7 +351,7 @@
                                     android:layout_gravity="center"
                                     android:fontFamily="@font/roboto_medium"
                                     android:text="anws.in/934890"
-                                    android:textColor="#525252"
+                                    android:textColor="@color/content_title_color"
                                     android:textFontWeight="400"
                                     android:textSize="8dp" />
 

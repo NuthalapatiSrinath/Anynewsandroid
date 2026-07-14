@@ -177,7 +177,7 @@
                 android:paddingLeft="23dp"
                 android:paddingRight="23dp"
                 android:text="ప్రస్తుత లొకేషన్ ఎన్నుకోండి"
-                android:textColor="@color/white"
+                android:textColor="@color/on_brand_text"
                 android:textSize="@dimen/_12sdp" />
 
         </RelativeLayout>

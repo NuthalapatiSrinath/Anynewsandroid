@@ -8,7 +8,7 @@
     android:gravity="center"
     android:id="@+id/nested_scrollview_detailes"
     android:layout_height="match_parent"
-    android:background="#F5F7FB">
+    android:background="@color/form_surface">
 
     <LinearLayout
         android:orientation="vertical"
@@ -359,7 +359,7 @@
                                                 android:fontFamily="@font/robotolighttelugu"
                                                 android:gravity="center"
                                                 android:text="Article Transactions"
-                                                android:textColor="@color/white"
+                                                android:textColor="@color/on_brand_text"
                                                 android:textSize="@dimen/_12sdp"
                                                 android:textStyle="bold">
 
@@ -585,7 +585,7 @@
                                                 android:fontFamily="@font/robotolighttelugu"
                                                 android:gravity="center"
                                                 android:text="Redeem Transaction"
-                                                android:textColor="@color/white"
+                                                android:textColor="@color/on_brand_text"
                                                 android:textSize="@dimen/_12sdp"
                                                 android:textStyle="bold">
 
@@ -660,7 +660,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/ten"
                     android:text="No Data Found"
-                    android:textColor="#666666"
+                    android:textColor="@color/colorTextSecondary"
                     android:textSize="@dimen/_12sdp">
 
                 </TextView>

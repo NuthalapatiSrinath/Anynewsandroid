@@ -106,7 +106,7 @@
                             android:layout_width="50dp"
                             android:layout_height="50dp"
                             android:scaleType="centerCrop"
-                            app:civ_border_color="#FFFFFF"
+                            app:civ_border_color="@color/on_brand_text"
                             app:civ_border_overlay="false"
                             app:civ_border_width="2dp" />
 
@@ -303,7 +303,7 @@
                     android:shadowDy="1"
                     android:shadowRadius="3"
                     android:text=" "
-                    android:textColor="@color/white"
+                    android:textColor="@color/on_brand_text"
                     android:textSize="13dp"
                     android:textStyle="bold" />
 
@@ -317,7 +317,7 @@
                     android:shadowDy="1"
                     android:shadowRadius="3"
                     android:text="Description"
-                    android:textColor="@color/white"
+                    android:textColor="@color/on_brand_text"
                     android:textSize="13dp"
                     android:visibility="gone" />
 
@@ -348,7 +348,7 @@
                         android:shadowRadius="3"
                         android:singleLine="true"
                         android:text="Indian sound or Song Name"
-                        android:textColor="@color/white"
+                        android:textColor="@color/on_brand_text"
                         android:textSize="13dp"
                         android:textStyle="bold" />
 
@@ -387,7 +387,7 @@
                     android:shadowRadius="3"
                     android:singleLine="true"
                     android:text="Pause"
-                    android:textColor="@color/white"
+                    android:textColor="@color/on_brand_text"
                     android:textSize="13dp"
                     android:textStyle="bold" />
 

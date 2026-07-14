@@ -99,7 +99,7 @@
                 android:textSize="@dimen/_15sdp"
                 android:gravity="center"
                 android:textStyle="bold"
-                android:textColor="@color/white"
+                android:textColor="@color/on_brand_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
@@ -110,7 +110,7 @@
                 android:textSize="@dimen/_15sdp"
                 android:gravity="center"
                 android:textStyle="bold"
-                android:textColor="@color/white"
+                android:textColor="@color/on_brand_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
@@ -151,7 +151,7 @@
                                     android:paddingRight="@dimen/_20sdp"
                                     android:gravity="center"
                                     android:text="Refer More "
-                                    android:textColor="@color/white"
+                                    android:textColor="@color/on_brand_text"
                                     android:textSize="@dimen/_12sdp"
                                     android:textStyle="bold" />
 
@@ -173,7 +173,7 @@
                 android:layout_marginBottom="@dimen/_30sdp"
                 android:gravity="top|center"
                 android:textStyle="bold"
-                android:textColor="@color/white"
+                android:textColor="@color/on_brand_text"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 

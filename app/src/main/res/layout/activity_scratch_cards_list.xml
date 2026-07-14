@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F7FB"
+    android:background="@color/form_surface"
     android:gravity="center"
     android:id="@+id/nexted_scroll_view"
     android:orientation="vertical">

@@ -29,7 +29,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="16sp"
-                android:textColor="@color/white"
+                android:textColor="@color/on_brand_text"
                 android:lineSpacingExtra="2sp"
                 android:text=""
                 android:layout_centerHorizontal="true"
@@ -96,7 +96,7 @@
                     android:layout_marginTop="@dimen/ten"
                     android:text="No notification found"
                     android:layout_width="wrap_content"
-                    android:textColor="#666666"
+                    android:textColor="@color/colorTextSecondary"
                     android:textSize="@dimen/fiveteen"
                     android:layout_height="wrap_content">
 

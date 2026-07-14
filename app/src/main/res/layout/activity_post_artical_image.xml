@@ -40,7 +40,7 @@
                     android:layout_centerVertical="true"
                     android:lineSpacingExtra="2sp"
                     android:text=""
-                    android:textColor="@color/white"
+                    android:textColor="@color/on_brand_text"
                     android:textSize="16sp" />
 
 
@@ -88,7 +88,7 @@
                         android:scaleType="centerInside"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:neumorph_shadowColorDark="#DFDDDD"
-                        app:neumorph_shadowColorLight="#FFFFFF"
+                        app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                         app:neumorph_shadowElevation="6dp"
                         app:neumorph_shapeAppearance="@style/ShapeAppearance"
                         app:neumorph_shapeType="basin"
@@ -161,7 +161,7 @@
                         android:scaleType="centerInside"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:neumorph_shadowColorDark="#DFDDDD"
-                        app:neumorph_shadowColorLight="#FFFFFF"
+                        app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                         app:neumorph_shadowElevation="4dp"
                         app:neumorph_shapeAppearance="@style/ShapeAppearance"
                         app:neumorph_shapeType="basin"
@@ -435,7 +435,7 @@
                             android:textSize="@dimen/_15sdp"
                             app:layout_constraintEnd_toEndOf="parent"
                             app:neumorph_shadowColorDark="#F2DFDFDF"
-                            app:neumorph_shadowColorLight="#FFFFFF"
+                            app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                             app:neumorph_shadowElevation="4dp"
                             app:neumorph_shapeType="flat"
                             app:neumorph_strokeColor="@color/brand_orange"
@@ -558,7 +558,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:orientation="horizontal"
-                    android:background="#ffffff"
+                    android:background="@color/form_surface_elevated"
                     tools:context=".MainActivity">
 
                     <com.anyNews.anynews.Ui.NeomorphFrameLayout
@@ -665,7 +665,7 @@
                                 android:shadowDy="1"
                                 android:shadowRadius="3"
                                 android:text="Like"
-                                android:textColor="@color/white"
+                                android:textColor="@color/on_brand_text"
                                 android:textSize="9dp"
                                 android:textStyle="bold" />
 
@@ -698,7 +698,7 @@
                                 android:shadowDy="1"
                                 android:shadowRadius="3"
                                 android:text="Dislike"
-                                android:textColor="@color/white"
+                                android:textColor="@color/on_brand_text"
                                 android:textSize="9dp"
                                 android:textStyle="bold" />
                         </LinearLayout>
@@ -728,7 +728,7 @@
                                 android:shadowDy="1"
                                 android:shadowRadius="3"
                                 android:text="Share"
-                                android:textColor="@color/white"
+                                android:textColor="@color/on_brand_text"
                                 android:textSize="9dp"
                                 android:textStyle="bold" />
                         </LinearLayout>
@@ -761,7 +761,7 @@
                                 android:shadowDy="1"
                                 android:shadowRadius="3"
                                 android:text="Comment"
-                                android:textColor="@color/white"
+                                android:textColor="@color/on_brand_text"
                                 android:textSize="9dp"
                                 android:textStyle="bold" />
                         </LinearLayout>
@@ -791,7 +791,7 @@
                                 android:shadowDy="1"
                                 android:shadowRadius="3"
                                 android:text="Mute"
-                                android:textColor="@color/white"
+                                android:textColor="@color/on_brand_text"
                                 android:textSize="9dp"
                                 android:textStyle="bold" />
                         </LinearLayout>
@@ -820,7 +820,7 @@
                         android:shadowDx="1"
                         android:shadowDy="1"
                         android:shadowRadius="3"
-                        android:textColor="@color/white"/>
+                        android:textColor="@color/on_brand_text"/>
 
                     <TextView
                         android:layout_width="match_parent"
@@ -834,7 +834,7 @@
                         android:shadowDy="1"
                         android:ellipsize="end"
                         android:shadowRadius="3"
-                        android:textColor="@color/white"/>
+                        android:textColor="@color/on_brand_text"/>
 
                     <LinearLayout
                         android:layout_width="wrap_content"
@@ -847,7 +847,7 @@
                             android:layout_width="18dp"
                             android:layout_height="18dp"
                             android:src="@drawable/ic_music"
-                            app:tint="@color/white"
+                            app:tint="@color/on_brand_text"
                             android:scaleType="fitCenter"/>
 
                         <TextView
@@ -866,7 +866,7 @@
                             android:shadowDy="1"
                             android:shadowRadius="3"
                             android:layout_marginLeft="7dp"
-                            android:textColor="@color/white"/>
+                            android:textColor="@color/on_brand_text"/>
 
                     </LinearLayout>
 

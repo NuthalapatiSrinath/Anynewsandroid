@@ -326,7 +326,7 @@
                                             android:layout_width="match_parent"
                                             android:layout_height="match_parent"
                                             app:neumorph_shapeAppearance="@style/ShapeAppearance"
-                                            app:neumorph_shadowColorLight="#FFFFFF"
+                                            app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                                             app:neumorph_shadowColorDark="#DFDDDD"
                                             android:scaleType="centerInside"
                                             app:neumorph_strokeColor="@color/design_default_color_on_primary"
@@ -538,7 +538,7 @@
                                             android:layout_width="match_parent"
                                             android:layout_height="match_parent"
                                             app:neumorph_shapeAppearance="@style/ShapeAppearance"
-                                            app:neumorph_shadowColorLight="#FFFFFF"
+                                            app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                                             app:neumorph_shadowColorDark="#DFDDDD"
                                             android:scaleType="centerInside"
                                             app:neumorph_strokeColor="@color/design_default_color_on_primary"
@@ -561,7 +561,7 @@
                                                     android:textSize="@dimen/_10sdp"
                                                     android:layout_width="match_parent"
                                                     android:layout_height="0dp"
-                                                    android:textColor="@color/white"
+                                                    android:textColor="@color/on_brand_text"
                                                     android:layout_weight="1">
 
                                                 </TextView>
@@ -834,7 +834,7 @@
                                             android:layout_width="match_parent"
                                             android:layout_height="match_parent"
                                             app:neumorph_shapeAppearance="@style/ShapeAppearance"
-                                            app:neumorph_shadowColorLight="#FFFFFF"
+                                            app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                                             app:neumorph_shadowColorDark="#DFDDDD"
                                             android:scaleType="centerInside"
                                             app:neumorph_strokeColor="@color/design_default_color_on_primary"

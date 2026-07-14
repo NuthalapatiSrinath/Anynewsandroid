@@ -34,7 +34,7 @@
             android:shadowDy="1"
             android:shadowRadius="3"
             android:text="Unmute"
-            android:textColor="@color/white"
+            android:textColor="@color/on_brand_text"
             android:textSize="9dp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -94,7 +94,7 @@
                 android:layout_weight="7"
                 android:gravity="left|center"
                 android:text="News App"
-                android:textColor="@color/white"
+                android:textColor="@color/on_brand_text"
                 android:textSize="@dimen/_8sdp"
                 android:textStyle="bold"
                 android:visibility="visible">

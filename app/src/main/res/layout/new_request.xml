@@ -25,7 +25,7 @@
             android:textSize="@dimen/_12sdp"
             android:maxLines="3"
             android:gravity="center|left"
-            android:textColor="@color/white"
+            android:textColor="@color/on_brand_text"
             android:text="Hello" />
 
     </LinearLayout>

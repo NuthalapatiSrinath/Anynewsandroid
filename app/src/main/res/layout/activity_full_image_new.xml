@@ -62,7 +62,7 @@
                     android:layout_weight="7"
                     android:gravity="center"
                     android:text="The Best Regional News App"
-                    android:textColor="@color/white"
+                    android:textColor="@color/on_brand_text"
                     android:textSize="@dimen/_12sdp"
                     android:textStyle="bold"
                     android:visibility="visible">
@@ -125,7 +125,7 @@
                     android:layout_width="50dp"
                     android:layout_height="50dp"
                     android:scaleType="centerCrop"
-                    app:civ_border_color="#FFFFFF"
+                    app:civ_border_color="@color/on_brand_text"
                     app:civ_border_overlay="false"
                     app:civ_border_width="2dp" />
 

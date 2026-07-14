@@ -125,7 +125,7 @@
             android:layout_margin="10dp"
             android:background="@color/red"
             android:text="Submit"
-            android:textColor="#fff" />
+            android:textColor="@color/on_brand_text" />
 
 
     </LinearLayout>

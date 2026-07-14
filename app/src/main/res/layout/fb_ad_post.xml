@@ -2,7 +2,7 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFFFFF"
+    android:background="@color/form_surface_elevated"
     android:gravity="center_horizontal">
 
         <com.facebook.ads.NativeAdLayout

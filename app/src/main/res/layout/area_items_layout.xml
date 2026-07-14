@@ -45,7 +45,7 @@
         app:neomorph_elevation="@dimen/neomorph_view_elevation"
         app:neomorph_view_type="rectangular"
         app:neomorph_shadow_color="#16EF4923"
-        app:neomorph_highlight_color="#ffffff"
+        app:neomorph_highlight_color="@color/neomorph_highlight_color"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
@@ -55,7 +55,7 @@
             android:text="one"
             android:layout_margin="3dp"
             android:gravity="center"
-            android:textColor="@color/white"
+            android:textColor="@color/on_brand_text"
             android:background="@color/brand_orange"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
@@ -72,7 +72,7 @@
         android:layout_marginTop="-15dp"
 
         android:layout_height="wrap_content"
-        android:background="#F5F7FB">
+        android:background="@color/form_surface">
 
         <com.github.sshadkany.shapes.RoundRectView
             android:id="@+id/btn3"
@@ -86,7 +86,7 @@
             app:layout_constraintTop_toTopOf="parent"
             android:outlineAmbientShadowColor="@color/colorPrimaryDark"
             android:outlineSpotShadowColor="@color/colorPrimaryDark"
-            app:shape_roundRect_backgroundColor="#ffffff"
+            app:shape_roundRect_backgroundColor="@color/form_surface_elevated"
             app:shape_roundRect_bottomLeftRadius="12dp"
             app:shape_roundRect_bottomRightRadius="12dp"
             app:shape_roundRect_shadow_type="drop_shadow"

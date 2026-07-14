@@ -88,7 +88,7 @@
                         android:layout_marginBottom="10dp"
                         android:background="@drawable/url_background"
                         android:padding="5dp"
-                        android:textColor="#FFFFFF"
+                        android:textColor="@color/on_brand_text"
                         android:textSize="8dp" />
                 </RelativeLayout>
 
@@ -318,7 +318,7 @@
                                 android:textSize="8dp"
                                 android:textFontWeight="400"
                                 android:layout_gravity="center"
-                                android:textColor="#525252"
+                                android:textColor="@color/content_title_color"
                                 />
 
                         </LinearLayout>

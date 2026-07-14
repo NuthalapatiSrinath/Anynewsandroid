@@ -85,7 +85,7 @@
                         <!-- -->
 
 
-                        <!-- <com.chinodev.androidneomorphframelayout.NeomorphFrameLayoutandroid:layout_marginTop="8dp"android:layout_marginEnd="12dp"android:layout_width="@dimen/_35sdp"android:layout_height="wrap_content"android:layout_alignParentRight="true"app:layout_constraintEnd_toEndOf="parent"app:neomorph_background_color="@color/red"app:neomorph_corner_radius="1dp"app:neomorph_elevation="2dp"app:neomorph_highlight_color="@color/red_one"app:neomorph_layer_type="hardware"app:neomorph_shadow_color="@color/red"app:neomorph_shadow_type="outer"app:neomorph_view_type="circular"><com.chinodev.androidneomorphframelayout.NeomorphFrameLayoutandroid:layout_width="match_parent"android:layout_height="match_parent"android:layout_margin="0dp"app:layout_constraintBottom_toBottomOf="parent"app:layout_constraintLeft_toLeftOf="parent"app:layout_constraintRight_toRightOf="parent"app:layout_constraintTop_toTopOf="parent"app:neomorph_background_color="@color/red"app:neomorph_corner_radius="1dp"app:neomorph_elevation="0dp"app:neomorph_highlight_color="@color/red"app:neomorph_layer_type="hardware"app:neomorph_shadow_color="@color/red"app:neomorph_shadow_type="inner"app:neomorph_view_type="circular"><ImageButtonandroid:id="@+id/neo_settings"android:layout_width="wrap_content"android:layout_height="wrap_content"android:layout_gravity="center"android:padding="@dimen/two"android:background="@color/red"android:scaleType="fitCenter"android:src="@drawable/profile_setting_icon"android:tint="@color/white" /></com.anyNews.anynews.Ui.NeomorphFrameLayout></com.anyNews.anynews.Ui.NeomorphFrameLayout> -->
+                        <!-- <com.chinodev.androidneomorphframelayout.NeomorphFrameLayoutandroid:layout_marginTop="8dp"android:layout_marginEnd="12dp"android:layout_width="@dimen/_35sdp"android:layout_height="wrap_content"android:layout_alignParentRight="true"app:layout_constraintEnd_toEndOf="parent"app:neomorph_background_color="@color/red"app:neomorph_corner_radius="1dp"app:neomorph_elevation="2dp"app:neomorph_highlight_color="@color/red_one"app:neomorph_layer_type="hardware"app:neomorph_shadow_color="@color/red"app:neomorph_shadow_type="outer"app:neomorph_view_type="circular"><com.chinodev.androidneomorphframelayout.NeomorphFrameLayoutandroid:layout_width="match_parent"android:layout_height="match_parent"android:layout_margin="0dp"app:layout_constraintBottom_toBottomOf="parent"app:layout_constraintLeft_toLeftOf="parent"app:layout_constraintRight_toRightOf="parent"app:layout_constraintTop_toTopOf="parent"app:neomorph_background_color="@color/red"app:neomorph_corner_radius="1dp"app:neomorph_elevation="0dp"app:neomorph_highlight_color="@color/red"app:neomorph_layer_type="hardware"app:neomorph_shadow_color="@color/red"app:neomorph_shadow_type="inner"app:neomorph_view_type="circular"><ImageButtonandroid:id="@+id/neo_settings"android:layout_width="wrap_content"android:layout_height="wrap_content"android:layout_gravity="center"android:padding="@dimen/two"android:background="@color/red"android:scaleType="fitCenter"android:src="@drawable/profile_setting_icon"android:tint="@color/on_brand_text" /></com.anyNews.anynews.Ui.NeomorphFrameLayout></com.anyNews.anynews.Ui.NeomorphFrameLayout> -->
 
 
                     </RelativeLayout>
@@ -111,7 +111,7 @@
                                 android:layout_height="120dp"
                                 android:layout_centerHorizontal="true"
                                 android:src="@drawable/ic_user_profile"
-                                app:civ_border_color="#FFFFFF"
+                                app:civ_border_color="@color/on_brand_text"
                                 app:civ_border_overlay="true"
                                 app:civ_border_width="@dimen/four" />
 
@@ -120,7 +120,7 @@
                                 android:layout_width="120dp"
                                 android:layout_height="120dp"
                                 android:layout_centerHorizontal="true"
-                                app:civ_border_color="#FFFFFF"
+                                app:civ_border_color="@color/on_brand_text"
                                 app:civ_border_overlay="false"
                                 app:civ_border_width="2dp" />
 
@@ -163,7 +163,7 @@
                         android:layout_marginTop="@dimen/three"
                         android:layout_marginBottom="@dimen/three"
                         android:text=" "
-                        android:textColor="#FFFFFF"
+                        android:textColor="@color/on_brand_text"
                         android:textSize="20dp"
                         android:visibility="visible" />
 
@@ -175,7 +175,7 @@
                         android:layout_marginLeft="-5dp"
                         android:drawableLeft="@drawable/ic_location_icon"
                         android:text=" "
-                        android:textColor="@color/white"
+                        android:textColor="@color/on_brand_text"
                         android:textSize="14dp"
                         android:visibility="gone" />
 
@@ -201,7 +201,7 @@
                             app:layout_constraintLeft_toLeftOf="parent"
                             app:layout_constraintRight_toRightOf="parent"
                             app:layout_constraintTop_toTopOf="parent"
-                            app:neomorph_background_color="#F5F7FB"
+                            app:neomorph_background_color="@color/neomorph_background_color"
                             app:neomorph_corner_radius="30dp"
                             app:neomorph_elevation="0dp"
                             app:neomorph_highlight_color="@color/red_one"
@@ -289,7 +289,7 @@
                         app:layout_constraintLeft_toLeftOf="parent"
                         app:layout_constraintRight_toRightOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
-                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_background_color="@color/neomorph_background_color"
                         app:neomorph_corner_radius="30dp"
                         app:neomorph_elevation="5dp"
                         app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -402,7 +402,7 @@
                         app:layout_constraintLeft_toLeftOf="parent"
                         app:layout_constraintRight_toRightOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
-                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_background_color="@color/neomorph_background_color"
                         app:neomorph_corner_radius="30dp"
                         app:neomorph_elevation="5dp"
                         app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -692,7 +692,7 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintRight_toRightOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_background_color="@color/neomorph_background_color"
                 app:neomorph_corner_radius="30dp"
                 app:neomorph_elevation="5dp"
                 app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -710,7 +710,7 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintRight_toRightOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_background_color="@color/neomorph_background_color"
                 app:neomorph_corner_radius="30dp"
                 app:neomorph_elevation="0dp"
                 app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -751,7 +751,7 @@
                                     app:neomorph_background_color="@color/white"
                                     app:neomorph_corner_radius="1dp"
                                     app:neomorph_elevation="2dp"
-                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                     app:neomorph_layer_type="hardware"
                                     app:neomorph_shadow_color="@color/red"
                                     app:neomorph_shadow_type="outer"
@@ -770,7 +770,7 @@
                                         app:neomorph_background_color="@color/red"
                                         app:neomorph_corner_radius="1dp"
                                         app:neomorph_elevation="0dp"
-                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                         app:neomorph_layer_type="hardware"
                                         app:neomorph_shadow_color="@color/red"
                                         app:neomorph_shadow_type="inner"
@@ -785,7 +785,7 @@
                                             android:background="@color/red"
                                             android:scaleType="fitCenter"
                                             android:src="@drawable/ic_like_icon"
-                                            android:tint="@color/white" />
+                                            android:tint="@color/on_brand_text" />
 
                                     </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
@@ -857,7 +857,7 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintRight_toRightOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_background_color="@color/neomorph_background_color"
                 app:neomorph_corner_radius="30dp"
                 app:neomorph_elevation="5dp"
                 app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -875,7 +875,7 @@
                     app:layout_constraintLeft_toLeftOf="parent"
                     app:layout_constraintRight_toRightOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_background_color="@color/neomorph_background_color"
                     app:neomorph_corner_radius="30dp"
                     app:neomorph_elevation="0dp"
                     app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -891,7 +891,7 @@
                         app:layout_constraintLeft_toLeftOf="parent"
                         app:layout_constraintRight_toRightOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
-                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_background_color="@color/neomorph_background_color"
                         app:neomorph_corner_radius="30dp"
                         app:neomorph_elevation="0dp"
                         app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -936,7 +936,7 @@
                                     app:neomorph_background_color="@color/white"
                                     app:neomorph_corner_radius="1dp"
                                     app:neomorph_elevation="2dp"
-                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                     app:neomorph_layer_type="hardware"
                                     app:neomorph_shadow_color="@color/red"
                                     app:neomorph_shadow_type="outer"
@@ -956,7 +956,7 @@
                                         app:neomorph_background_color="@color/red"
                                         app:neomorph_corner_radius="1dp"
                                         app:neomorph_elevation="0dp"
-                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                         app:neomorph_layer_type="hardware"
                                         app:neomorph_shadow_color="@color/red"
                                         app:neomorph_shadow_type="inner"
@@ -971,7 +971,7 @@
                                             android:background="@color/red"
                                             android:scaleType="fitCenter"
                                             android:src="@drawable/ic_follow_icon"
-                                            android:tint="@color/white" />
+                                            android:tint="@color/on_brand_text" />
 
                                     </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
@@ -1053,7 +1053,7 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintRight_toRightOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_background_color="@color/neomorph_background_color"
                 app:neomorph_corner_radius="30dp"
                 app:neomorph_elevation="5dp"
                 app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1071,7 +1071,7 @@
                     app:layout_constraintLeft_toLeftOf="parent"
                     app:layout_constraintRight_toRightOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_background_color="@color/neomorph_background_color"
                     app:neomorph_corner_radius="30dp"
                     app:neomorph_elevation="0.1dp"
                     app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1112,7 +1112,7 @@
                                     app:neomorph_background_color="@color/white"
                                     app:neomorph_corner_radius="1dp"
                                     app:neomorph_elevation="2dp"
-                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                     app:neomorph_layer_type="hardware"
                                     app:neomorph_shadow_color="@color/red"
                                     app:neomorph_shadow_type="outer"
@@ -1131,7 +1131,7 @@
                                         app:neomorph_background_color="@color/red"
                                         app:neomorph_corner_radius="1dp"
                                         app:neomorph_elevation="0dp"
-                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                         app:neomorph_layer_type="hardware"
                                         app:neomorph_shadow_color="@color/red"
                                         app:neomorph_shadow_type="inner"
@@ -1146,7 +1146,7 @@
                                             android:background="@color/red"
                                             android:scaleType="fitCenter"
                                             android:src="@drawable/ic_like_icon"
-                                            android:tint="@color/white" />
+                                            android:tint="@color/on_brand_text" />
 
                                     </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
@@ -1218,7 +1218,7 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintRight_toRightOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_background_color="@color/neomorph_background_color"
                 app:neomorph_corner_radius="30dp"
                 app:neomorph_elevation="5dp"
                 app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1236,7 +1236,7 @@
                     app:layout_constraintLeft_toLeftOf="parent"
                     app:layout_constraintRight_toRightOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_background_color="@color/neomorph_background_color"
                     app:neomorph_corner_radius="30dp"
                     app:neomorph_elevation="0dp"
                     app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1252,7 +1252,7 @@
                         app:layout_constraintLeft_toLeftOf="parent"
                         app:layout_constraintRight_toRightOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
-                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_background_color="@color/neomorph_background_color"
                         app:neomorph_corner_radius="30dp"
                         app:neomorph_elevation="0.1dp"
                         app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1297,7 +1297,7 @@
                                         app:neomorph_background_color="@color/white"
                                         app:neomorph_corner_radius="1dp"
                                         app:neomorph_elevation="2dp"
-                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                         app:neomorph_layer_type="hardware"
                                         app:neomorph_shadow_color="@color/red"
                                         app:neomorph_shadow_type="outer"
@@ -1317,7 +1317,7 @@
                                             app:neomorph_background_color="@color/red"
                                             app:neomorph_corner_radius="1dp"
                                             app:neomorph_elevation="0dp"
-                                            app:neomorph_highlight_color="#FFFFFF"
+                                            app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                             app:neomorph_layer_type="hardware"
                                             app:neomorph_shadow_color="@color/red"
                                             app:neomorph_shadow_type="inner"
@@ -1332,7 +1332,7 @@
                                                 android:background="@color/red"
                                                 android:scaleType="fitCenter"
                                                 android:src="@drawable/ic_follow_icon"
-                                                android:tint="@color/white" />
+                                                android:tint="@color/on_brand_text" />
 
                                         </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
@@ -1414,7 +1414,7 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintRight_toRightOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_background_color="@color/neomorph_background_color"
                 app:neomorph_corner_radius="30dp"
                 app:neomorph_elevation="5dp"
                 app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1432,7 +1432,7 @@
                     app:layout_constraintLeft_toLeftOf="parent"
                     app:layout_constraintRight_toRightOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_background_color="@color/neomorph_background_color"
                     app:neomorph_corner_radius="30dp"
                     app:neomorph_elevation="0dp"
                     app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1448,7 +1448,7 @@
                         app:layout_constraintLeft_toLeftOf="parent"
                         app:layout_constraintRight_toRightOf="parent"
                         app:layout_constraintTop_toTopOf="parent"
-                        app:neomorph_background_color="#F5F7FB"
+                        app:neomorph_background_color="@color/neomorph_background_color"
                         app:neomorph_corner_radius="30dp"
                         app:neomorph_elevation="0.1dp"
                         app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1492,7 +1492,7 @@
                                     app:neomorph_background_color="@color/white"
                                     app:neomorph_corner_radius="1dp"
                                     app:neomorph_elevation="2dp"
-                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                     app:neomorph_layer_type="hardware"
                                     app:neomorph_shadow_color="@color/red"
                                     app:neomorph_shadow_type="outer"
@@ -1511,7 +1511,7 @@
                                         app:neomorph_background_color="@color/red"
                                         app:neomorph_corner_radius="1dp"
                                         app:neomorph_elevation="0dp"
-                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                         app:neomorph_layer_type="hardware"
                                         app:neomorph_shadow_color="@color/red"
                                         app:neomorph_shadow_type="inner"
@@ -1526,7 +1526,7 @@
                                             android:background="@color/red"
                                             android:scaleType="fitCenter"
                                             android:src="@drawable/ic_share_icon"
-                                            android:tint="@color/white" />
+                                            android:tint="@color/on_brand_text" />
 
                                     </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
@@ -1563,7 +1563,7 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintRight_toRightOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:neomorph_background_color="#F5F7FB"
+                app:neomorph_background_color="@color/neomorph_background_color"
                 app:neomorph_corner_radius="30dp"
                 app:neomorph_elevation="5dp"
                 app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1581,7 +1581,7 @@
                     app:layout_constraintLeft_toLeftOf="parent"
                     app:layout_constraintRight_toRightOf="parent"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:neomorph_background_color="#F5F7FB"
+                    app:neomorph_background_color="@color/neomorph_background_color"
                     app:neomorph_corner_radius="30dp"
                     app:neomorph_elevation="0dp"
                     app:neomorph_highlight_color="@color/neomorph_highlight_color"
@@ -1629,7 +1629,7 @@
                                     app:neomorph_background_color="@color/white"
                                     app:neomorph_corner_radius="1dp"
                                     app:neomorph_elevation="2dp"
-                                    app:neomorph_highlight_color="#FFFFFF"
+                                    app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                     app:neomorph_layer_type="hardware"
                                     app:neomorph_shadow_color="@color/red"
                                     app:neomorph_shadow_type="outer"
@@ -1649,7 +1649,7 @@
                                         app:neomorph_background_color="@color/red"
                                         app:neomorph_corner_radius="1dp"
                                         app:neomorph_elevation="0dp"
-                                        app:neomorph_highlight_color="#FFFFFF"
+                                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
                                         app:neomorph_layer_type="hardware"
                                         app:neomorph_shadow_color="@color/red"
                                         app:neomorph_shadow_type="inner"
@@ -1664,7 +1664,7 @@
                                             android:background="@color/red"
                                             android:scaleType="fitCenter"
                                             android:src="@drawable/ic_follow_icon"
-                                            android:tint="@color/white" />
+                                            android:tint="@color/on_brand_text" />
 
                                     </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 

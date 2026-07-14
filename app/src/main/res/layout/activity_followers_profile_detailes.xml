@@ -77,7 +77,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/ten"
                 android:text="No data"
-                android:textColor="#666666"
+                android:textColor="@color/colorTextSecondary"
                 android:textSize="@dimen/fiveteen" />
         </LinearLayout>
 
