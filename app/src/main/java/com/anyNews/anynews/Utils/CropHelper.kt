@@ -36,6 +36,15 @@ object CropHelper {
                 imageSourceIncludeGallery = false,
                 imageSourceIncludeCamera = false,
                 showIntentChooser = false,
+                // Fit the whole image inside the view and zoom to it so the crop
+                // frame starts ON the selected image, not spanning the full screen.
+                scaleType = CropImageView.ScaleType.FIT_CENTER,
+                autoZoomEnabled = true,
+                cropShape = CropImageView.CropShape.RECTANGLE,
+                // Free-form rectangular crop that initially hugs the image bounds.
+                fixAspectRatio = false,
+                // 0 padding => initial crop window matches the fitted image exactly.
+                initialCropWindowPaddingRatio = 0f,
             ),
         )
     }
@@ -52,6 +61,11 @@ object CropHelper {
                 imageSourceIncludeGallery = false,
                 imageSourceIncludeCamera = false,
                 showIntentChooser = false,
+                scaleType = CropImageView.ScaleType.FIT_CENTER,
+                autoZoomEnabled = true,
+                cropShape = CropImageView.CropShape.RECTANGLE,
+                fixAspectRatio = false,
+                initialCropWindowPaddingRatio = 0f,
             ),
         )
     }
