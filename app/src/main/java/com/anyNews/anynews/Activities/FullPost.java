@@ -1,20 +1,26 @@
 package com.anyNews.anynews.Activities;
 
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import android.Manifest;
 
+import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.ActionMode;
@@ -42,7 +48,6 @@ import com.android.volley.VolleyError;
 import com.android.volley.toolbox.Volley;
 import com.anyNews.anynews.Adapters.AlgorithmAdapter;
 import com.anyNews.anynews.Application.VolleyMultipartRequest;
-import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.CategoriesRequest;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
@@ -57,10 +62,14 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
 import com.anyNews.anynews.models.SearchModel;
+import com.canhub.cropper.CropImageContract;
+import com.canhub.cropper.CropImageContractOptions;
+import com.canhub.cropper.CropImageView;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.permissionx.guolindev.PermissionX;
@@ -92,6 +101,8 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSelectedListener  {
 
+    private static final String TAG = "REPORTER_IMAGE";
+
     ImageView img_back,img_upload_photo;
     Spinner spinnernews_catgory;
     ArrayAdapter<String> adapter_state;
@@ -104,6 +115,11 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
     private Uri filePath;
     private Bitmap bitmap;
     private String ImageId="";
+    /** FileProvider URI written by the camera app. */
+    private Uri cameraOutputUri;
+    /** App-owned local copy used for crop cancel fallback. */
+    private Uri pendingLocalImageUri;
+    private boolean needsCropAfterResume;
     private GpsTracker gpsTracker;
     static double latitude;
     static double longitude;
@@ -119,10 +135,50 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
     int Caegire_Id;
     ProgressBar progressBarLarge,full_image_upload_progress_bar;
     TextView tv_agree_view;
+    private ActivityResultLauncher<CropImageContractOptions> cropImage;
+    private ActivityResultLauncher<PickVisualMediaRequest> pickVisualMedia;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_full_image2);
+
+        cropImage = registerForActivityResult(new CropImageContract(),
+                new ActivityResultCallback<CropImageView.CropResult>() {
+                    @Override
+                    public void onActivityResult(CropImageView.CropResult result) {
+                        if (result != null && result.isSuccessful() && result.getUriContent() != null) {
+                            Log.e(TAG, "FullPost crop success uri=" + result.getUriContent());
+                            handleSelectedImage(result.getUriContent());
+                            return;
+                        }
+                        if (result != null && result.getError() != null) {
+                            Log.e(TAG, "FullPost crop error - fallback", result.getError());
+                            Toast.makeText(FullPost.this,
+                                    "Crop failed - using original photo",
+                                    Toast.LENGTH_SHORT).show();
+                        } else {
+                            Log.e(TAG, "FullPost crop cancelled - fallback pending=" + pendingLocalImageUri);
+                            Toast.makeText(FullPost.this,
+                                    "Crop cancelled - using selected photo",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                        if (pendingLocalImageUri != null) {
+                            handleSelectedImage(pendingLocalImageUri);
+                        }
+                    }
+                });
+
+        pickVisualMedia = registerForActivityResult(
+                new ActivityResultContracts.PickVisualMedia(),
+                new ActivityResultCallback<Uri>() {
+                    @Override
+                    public void onActivityResult(Uri uri) {
+                        if (uri != null) {
+                            onExternalImagePicked(uri);
+                        }
+                    }
+                });
         img_back=findViewById(R.id.img_back);
         spinnernews_catgory=findViewById(R.id.spinnernews_catgory);
         img_upload_photo=findViewById(R.id.img_upload_photo);
@@ -509,18 +565,11 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
             public void onClick(DialogInterface dialog, int item) {
                 if (options[item].equals(""+languageModelResponse.getData().getTakePhoto()))
                 {
-                    Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                        startActivityForResult(intent, PICK_IMAGE_REQUEST_CAMARA);
-                    }
+                    openCameraForPhoto();
                 }
                 else if (options[item].equals(""+languageModelResponse.getData().getChooseFromGallery()))
                 {
-                    Intent intent = new   Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                        startActivityForResult(intent, PICK_IMAGE_REQUEST);
-                    }
-
+                    openGalleryForPhoto();
                 }
                 else if (options[item].equals(""+languageModelResponse.getData().getCancel())) {
 
@@ -529,6 +578,87 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
             }
         });
         builder.show();
+    }
+
+    private void openCameraForPhoto() {
+        Log.e(TAG, "FullPost openCameraForPhoto");
+        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        File photoFile;
+        try {
+            photoFile = createCameraImageFile();
+        } catch (IOException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Unable to create photo file", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        cameraOutputUri = FileProvider.getUriForFile(
+                this,
+                getPackageName() + ".provider",
+                photoFile);
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, cameraOutputUri);
+        intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        List<ResolveInfo> resInfoList = getPackageManager()
+                .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+        for (ResolveInfo resolveInfo : resInfoList) {
+            grantUriPermission(
+                    resolveInfo.activityInfo.packageName,
+                    cameraOutputUri,
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        try {
+            startActivityForResult(intent, PICK_IMAGE_REQUEST_CAMARA);
+        } catch (ActivityNotFoundException e) {
+            cameraOutputUri = null;
+            Toast.makeText(this, "No camera app available", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openGalleryForPhoto() {
+        Log.e(TAG, "FullPost openGalleryForPhoto");
+        Intent getContent = new Intent(Intent.ACTION_GET_CONTENT);
+        getContent.setType("image/*");
+        getContent.addCategory(Intent.CATEGORY_OPENABLE);
+        getContent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        Intent pick = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        pick.setType("image/*");
+
+        Intent openDocument = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        openDocument.addCategory(Intent.CATEGORY_OPENABLE);
+        openDocument.setType("image/*");
+        openDocument.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+
+        Intent chooser = Intent.createChooser(getContent, "Select Image");
+        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{pick, openDocument});
+        try {
+            startActivityForResult(chooser, PICK_IMAGE_REQUEST);
+            return;
+        } catch (ActivityNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        if (ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(this)) {
+            try {
+                pickVisualMedia.launch(
+                        new PickVisualMediaRequest.Builder()
+                                .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
+                                .build());
+                return;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        Toast.makeText(this, "No gallery app available on this device", Toast.LENGTH_LONG).show();
+    }
+
+    private File createCameraImageFile() throws IOException {
+        File cachePath = new File(getCacheDir(), "images");
+        if (!cachePath.exists() && !cachePath.mkdirs()) {
+            throw new IOException("Unable to create images cache directory");
+        }
+        return File.createTempFile("camera_" + System.currentTimeMillis() + "_", ".jpg", cachePath);
     }
 
     private void getLocation() {
@@ -549,59 +679,208 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (needsCropAfterResume && pendingLocalImageUri != null && cropImage != null) {
+            needsCropAfterResume = false;
+            final Uri cropUri = pendingLocalImageUri;
+            Log.e(TAG, "FullPost onResume launching crop for " + cropUri);
+            getWindow().getDecorView().post(new Runnable() {
+                @Override
+                public void run() {
+                    if (isFinishing() || isDestroyed()) {
+                        needsCropAfterResume = true;
+                        return;
+                    }
+                    launchCrop(cropUri);
+                }
+            });
+        }
+    }
+
+    @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            filePath = data.getData();
             try {
-                bitmap = MediaStore.Images.Media.getBitmap(FullPost.this.getContentResolver(), filePath);
-                img_upload_photo.setImageBitmap(bitmap);
-
-                showLog("NRAAAAAAA"+img_upload_photo.toString());
-
-                img_upload_photo.setVisibility(View.GONE);
-                full_image_upload_progress_bar.setVisibility(View.VISIBLE);
-
-                uploadImage();
-
-            } catch (IOException e) {
-                e.printStackTrace();
+                final int takeFlags = data.getFlags()
+                        & (Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                if (takeFlags != 0) {
+                    getContentResolver().takePersistableUriPermission(data.getData(), takeFlags);
+                }
+            } catch (Exception ignored) {
             }
+            onExternalImagePicked(data.getData());
+        } else if (requestCode == PICK_IMAGE_REQUEST_CAMARA && resultCode == RESULT_OK) {
+            try {
+                Uri capturedUri = null;
+                if (cameraOutputUri != null) {
+                    capturedUri = cameraOutputUri;
+                } else if (data != null && data.getData() != null) {
+                    capturedUri = data.getData();
+                } else if (data != null && data.getExtras() != null
+                        && data.getExtras().get("data") instanceof Bitmap) {
+                    capturedUri = saveBitmapToCache((Bitmap) data.getExtras().get("data"));
+                }
+                if (capturedUri != null) {
+                    onExternalImagePicked(capturedUri);
+                } else {
+                    Toast.makeText(FullPost.this, "Error while capturing image", Toast.LENGTH_LONG).show();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                Toast.makeText(FullPost.this, "Error while capturing image", Toast.LENGTH_LONG).show();
+            }
+        } else if (requestCode == 200 && resultCode == RESULT_OK) {
+
+
         }
-        else if(requestCode == PICK_IMAGE_REQUEST_CAMARA && resultCode == RESULT_OK ){
-            File f = new File(Environment.getExternalStorageDirectory()
-                    .toString());
-            for (File temp : f.listFiles()) {
-                if (temp.getName().equals("temp.jpg")) {
-                    f = temp;
+    }
 
+    private void onExternalImagePicked(Uri sourceUri) {
+        Log.e(TAG, "FullPost onExternalImagePicked source=" + sourceUri);
+        if (sourceUri == null) {
+            return;
+        }
+        Uri localUri = copyUriToAppCache(sourceUri);
+        if (localUri == null) {
+            Log.e(TAG, "FullPost copyUriToAppCache failed for " + sourceUri);
+            Toast.makeText(this, "Unable to read selected image", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        pendingLocalImageUri = localUri;
+        needsCropAfterResume = true;
+        Log.e(TAG, "FullPost copied localUri=" + localUri + " — will crop on resume");
+        if (getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            needsCropAfterResume = false;
+            final Uri cropUri = localUri;
+            getWindow().getDecorView().post(new Runnable() {
+                @Override
+                public void run() {
+                    if (isFinishing() || isDestroyed()) {
+                        needsCropAfterResume = true;
+                        return;
+                    }
+                    launchCrop(cropUri);
+                }
+            });
+        }
+    }
 
-                    break;
+    private void launchCrop(Uri sourceUri) {
+        if (sourceUri == null) {
+            return;
+        }
+        Log.e(TAG, "FullPost launchCrop sourceUri=" + sourceUri);
+        try {
+            cropImage.launch(CropHelper.buildCropOptions(FullPost.this, sourceUri));
+        } catch (Exception e) {
+            Log.e(TAG, "FullPost launchCrop failed - using original", e);
+            Toast.makeText(FullPost.this,
+                    "Unable to open crop screen - using original photo",
+                    Toast.LENGTH_SHORT).show();
+            handleSelectedImage(sourceUri);
+        }
+    }
+
+    private void handleSelectedImage(Uri selectedUri) {
+        Log.e(TAG, "FullPost handleSelectedImage uri=" + selectedUri);
+        if (selectedUri == null) {
+            return;
+        }
+        try {
+            Uri durable = selectedUri;
+            if (!isAppOwnedUri(selectedUri)) {
+                Uri copied = copyUriToAppCache(selectedUri);
+                if (copied != null) {
+                    durable = copied;
                 }
             }
-            if (!f.exists()) {
-                showLog("NRAAAAAAA"+img_upload_photo.toString());
+            filePath = durable;
+            pendingLocalImageUri = durable;
+            bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), durable);
+            img_upload_photo.setImageBitmap(bitmap);
+            img_upload_photo.setVisibility(View.GONE);
+            full_image_upload_progress_bar.setVisibility(View.VISIBLE);
+            uploadImage();
+        } catch (Exception e) {
+            Log.e(TAG, "FullPost handleSelectedImage failed", e);
+            Toast.makeText(this, "Unable to use selected image", Toast.LENGTH_SHORT).show();
+            full_image_upload_progress_bar.setVisibility(View.GONE);
+            img_upload_photo.setVisibility(View.VISIBLE);
+        }
+    }
 
-                Toast.makeText(FullPost.this,
-                        "Error while capturing image", Toast.LENGTH_LONG)
-                        .show();
-                return;
+    private Uri copyUriToAppCache(Uri sourceUri) {
+        if (sourceUri == null) {
+            return null;
+        }
+        if (isAppOwnedUri(sourceUri)) {
+            return sourceUri;
+        }
+        java.io.InputStream input = null;
+        java.io.OutputStream output = null;
+        try {
+            input = getContentResolver().openInputStream(sourceUri);
+            if (input == null) {
+                return null;
+            }
+            File outFile = createCameraImageFile();
+            output = new java.io.FileOutputStream(outFile);
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            output.flush();
+            return FileProvider.getUriForFile(this, getPackageName() + ".provider", outFile);
+        } catch (Exception e) {
+            Log.e(TAG, "FullPost copyUriToAppCache exception", e);
+            return null;
+        } finally {
+            try {
+                if (input != null) {
+                    input.close();
+                }
+            } catch (Exception ignored) {
             }
             try {
-                bitmap = (Bitmap) data.getExtras().get("data");
-                img_upload_photo.setImageBitmap(bitmap);
-                img_upload_photo.setVisibility(View.GONE);
-                full_image_upload_progress_bar.setVisibility(View.VISIBLE);
-                uploadImage();
-                //storeImageTosdCard(bitmap);
-            } catch (Exception e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
+                if (output != null) {
+                    output.close();
+                }
+            } catch (Exception ignored) {
             }
-        }   else if (requestCode==200&&resultCode==RESULT_OK){
+        }
+    }
 
+    private boolean isAppOwnedUri(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String auth = uri.getAuthority();
+        return auth != null && (auth.equals(getPackageName() + ".provider")
+                || auth.equals(getPackageName() + ".cropper.fileprovider"));
+    }
 
+    private Uri saveBitmapToCache(Bitmap source) {
+        if (source == null) {
+            return null;
+        }
+        try {
+            File cachePath = new File(getCacheDir(), "images");
+            if (!cachePath.exists() && !cachePath.mkdirs()) {
+                return null;
+            }
+            File file = new File(cachePath, "camera_" + System.currentTimeMillis() + ".jpg");
+            java.io.FileOutputStream stream = new java.io.FileOutputStream(file);
+            source.compress(Bitmap.CompressFormat.JPEG, 95, stream);
+            stream.close();
+            return FileProvider.getUriForFile(this, getPackageName() + ".provider", file);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 

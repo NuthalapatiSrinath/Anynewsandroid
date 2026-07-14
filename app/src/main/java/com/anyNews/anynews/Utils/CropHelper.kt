@@ -11,7 +11,7 @@ import com.canhub.cropper.CropImageView
 import java.io.File
 
 /**
- * CanHub crop options for reporter PostArticles.
+ * CanHub crop options for reporter image posts (PostArticles / FullPost).
  * Caller must pass an app-owned FileProvider URI (copy-before-crop) so CropImageActivity
  * does not depend on temporary Photo Picker grants.
  */
@@ -30,19 +30,21 @@ object CropHelper {
                 outputCompressFormat = Bitmap.CompressFormat.JPEG,
                 outputCompressQuality = 90,
                 customOutputUri = outputUri,
-                // Source was already picked in PostArticles — never re-open picker/camera.
+                // Source was already picked — never re-open picker/camera.
                 imageSourceIncludeGallery = false,
                 imageSourceIncludeCamera = false,
                 showIntentChooser = false,
-                // Fit the whole image inside the view and zoom to it so the crop
-                // frame starts ON the selected image, not spanning the full screen.
+                // Fit the whole image; crop frame starts on the image, not full screen.
                 scaleType = CropImageView.ScaleType.FIT_CENTER,
                 autoZoomEnabled = true,
+                multiTouchEnabled = true,
                 cropShape = CropImageView.CropShape.RECTANGLE,
-                // Free-form rectangular crop that initially hugs the image bounds.
                 fixAspectRatio = false,
-                // 0 padding => initial crop window matches the fitted image exactly.
-                initialCropWindowPaddingRatio = 0f,
+                // Small padding so the crop chrome is visible on the image edges.
+                initialCropWindowPaddingRatio = 0.05f,
+                activityTitle = "Crop",
+                allowRotation = true,
+                allowFlipping = true,
             ),
         )
     }
@@ -61,9 +63,13 @@ object CropHelper {
                 showIntentChooser = false,
                 scaleType = CropImageView.ScaleType.FIT_CENTER,
                 autoZoomEnabled = true,
+                multiTouchEnabled = true,
                 cropShape = CropImageView.CropShape.RECTANGLE,
                 fixAspectRatio = false,
-                initialCropWindowPaddingRatio = 0f,
+                initialCropWindowPaddingRatio = 0.05f,
+                activityTitle = "Crop",
+                allowRotation = true,
+                allowFlipping = true,
             ),
         )
     }

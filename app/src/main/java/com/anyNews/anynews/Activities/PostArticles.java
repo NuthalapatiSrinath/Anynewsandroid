@@ -119,14 +119,18 @@ public class PostArticles extends AppCompatActivity {
      * and process death; used so CropImageActivity never depends on a temporary Photo Picker URI.
      */
     private Uri pendingLocalImageUri;
+    /** When true, launch CanHub crop once the activity is fully resumed. */
+    private boolean needsCropAfterResume;
     private static final String STATE_CAMERA_OUTPUT_URI = "camera_output_uri";
     private static final String STATE_FILE_PATH = "file_path";
     private static final String STATE_IMAGE_ID = "image_id";
     private static final String STATE_PENDING_LOCAL_URI = "pending_local_uri";
+    private static final String STATE_NEEDS_CROP = "needs_crop_after_resume";
     private static final String PREFS_REPORTER_DRAFT = "reporter_post_image_draft";
     private static final String PREF_PENDING_LOCAL_URI = "pending_local_uri";
     private static final String PREF_FILE_PATH = "file_path";
     private static final String PREF_IMAGE_ID = "image_id";
+    private static final String PREF_NEEDS_CROP = "needs_crop_after_resume";
 
 
     ImageView img_back;
@@ -198,8 +202,10 @@ public class PostArticles extends AppCompatActivity {
             if (pendingUri != null) {
                 pendingLocalImageUri = Uri.parse(pendingUri);
             }
+            needsCropAfterResume = savedInstanceState.getBoolean(STATE_NEEDS_CROP, false);
             Log.e(TAG, "restore from savedInstanceState filePath=" + filePath
-                    + " pending=" + pendingLocalImageUri + " imageId=" + ImageId);
+                    + " pending=" + pendingLocalImageUri + " needsCrop=" + needsCropAfterResume
+                    + " imageId=" + ImageId);
         } else {
             restoreDraftFromPrefs();
         }
@@ -619,9 +625,34 @@ public class PostArticles extends AppCompatActivity {
         if (pendingLocalImageUri != null) {
             outState.putString(STATE_PENDING_LOCAL_URI, pendingLocalImageUri.toString());
         }
+        outState.putBoolean(STATE_NEEDS_CROP, needsCropAfterResume);
         persistDraftImageState();
         Log.e(TAG, "onSaveInstanceState camera=" + cameraOutputUri
-                + " pending=" + pendingLocalImageUri + " filePath=" + filePath);
+                + " pending=" + pendingLocalImageUri + " needsCrop=" + needsCropAfterResume
+                + " filePath=" + filePath);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Launch crop only after RESUMED — Activity Result from inside onActivityResult is
+        // flaky on OEM devices and can cancel immediately (looks like "no crop").
+        if (needsCropAfterResume && pendingLocalImageUri != null && cropImage != null) {
+            needsCropAfterResume = false;
+            persistDraftImageState();
+            final Uri cropUri = pendingLocalImageUri;
+            Log.e(TAG, "onResume launching crop for " + cropUri);
+            getWindow().getDecorView().post(new Runnable() {
+                @Override
+                public void run() {
+                    if (isFinishing() || isDestroyed()) {
+                        needsCropAfterResume = true;
+                        return;
+                    }
+                    launchCrop(cropUri);
+                }
+            });
+        }
     }
 
     private void restoreDraftFromPrefs() {
@@ -638,8 +669,10 @@ public class PostArticles extends AppCompatActivity {
         if (savedImageId != null && !savedImageId.isEmpty()) {
             ImageId = savedImageId;
         }
+        needsCropAfterResume = sp.getBoolean(PREF_NEEDS_CROP, false);
         Log.e(TAG, "restoreDraftFromPrefs filePath=" + filePath
-                + " pending=" + pendingLocalImageUri + " imageId=" + ImageId);
+                + " pending=" + pendingLocalImageUri + " needsCrop=" + needsCropAfterResume
+                + " imageId=" + ImageId);
     }
 
     private void persistDraftImageState() {
@@ -659,6 +692,7 @@ public class PostArticles extends AppCompatActivity {
         } else {
             ed.remove(PREF_IMAGE_ID);
         }
+        ed.putBoolean(PREF_NEEDS_CROP, needsCropAfterResume);
         ed.apply();
     }
 
@@ -723,9 +757,10 @@ public class PostArticles extends AppCompatActivity {
     }
 
     /**
-     * Copy any external/content URI into app cache, then open crop with an app-owned URI.
-     * Prevents CropImageActivity SecurityException (picker URI grants do not propagate)
-     * and keeps PostArticles alive if crop cancels/fails.
+     * Copy any external/content URI into app cache, then always open CanHub crop
+     * with an app-owned FileProvider URI (gallery and camera). Never skip crop.
+     * Crop launches from onResume so OEM Activity Result does not cancel instantly.
+     * On crop cancel/fail: keep the uncropped local copy on the form.
      */
     private void onExternalImagePicked(Uri sourceUri) {
         Log.e(TAG, "onExternalImagePicked source=" + sourceUri);
@@ -739,20 +774,26 @@ public class PostArticles extends AppCompatActivity {
             return;
         }
         pendingLocalImageUri = localUri;
+        needsCropAfterResume = true;
         persistDraftImageState();
-        Log.e(TAG, "copied to app cache localUri=" + localUri);
-        // Immediate preview so the form never looks empty if crop is slow/cancelled.
-        showImagePreview(localUri);
-        // Defer crop until after we are fully resumed (OEM ActivityResult flakiness).
-        getWindow().getDecorView().post(new Runnable() {
-            @Override
-            public void run() {
-                if (isFinishing() || isDestroyed()) {
-                    return;
+        Log.e(TAG, "copied to app cache localUri=" + localUri + " — will crop on resume");
+        // If already resumed (e.g. Photo Picker callback), kick crop from here via onResume path.
+        if (getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            needsCropAfterResume = false;
+            persistDraftImageState();
+            final Uri cropUri = localUri;
+            getWindow().getDecorView().post(new Runnable() {
+                @Override
+                public void run() {
+                    if (isFinishing() || isDestroyed()) {
+                        needsCropAfterResume = true;
+                        persistDraftImageState();
+                        return;
+                    }
+                    launchCrop(cropUri);
                 }
-                launchCrop(localUri);
-            }
-        });
+            });
+        }
     }
 
     private void launchCrop(Uri sourceUri) {

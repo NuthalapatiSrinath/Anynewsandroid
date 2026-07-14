@@ -62,3 +62,7 @@
 
 # YouTube player (pierfrancescosoffritti)
 -keep class com.pierfrancescosoffritti.androidyoutubeplayer.** { *; }
+
+# CanHub / vanniktech image cropper (CropImageActivity is used via Activity Result + Parcelables)
+-keep class com.canhub.cropper.** { *; }
+-dontwarn com.canhub.cropper.**
