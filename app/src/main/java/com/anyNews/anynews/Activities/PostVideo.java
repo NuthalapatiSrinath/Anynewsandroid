@@ -616,15 +616,40 @@ public class PostVideo extends AppCompatActivity {
     }
 
     private void setUploadProgressVisible(boolean visible, int progress) {
+        int clamped = Math.max(0, Math.min(100, progress));
         if (image_upload_progress_bar != null) {
             image_upload_progress_bar.setVisibility(visible ? View.VISIBLE : View.GONE);
             image_upload_progress_bar.setIndeterminate(false);
             image_upload_progress_bar.setMax(100);
-            image_upload_progress_bar.setProgress(Math.max(0, Math.min(100, progress)));
+            image_upload_progress_bar.setProgress(clamped);
         }
         if (tv_upload_percent != null) {
             tv_upload_percent.setVisibility(visible ? View.VISIBLE : View.GONE);
-            tv_upload_percent.setText(Math.max(0, Math.min(100, progress)) + "%");
+            if (clamped >= 100) {
+                tv_upload_percent.setText("Uploaded 100%");
+            } else {
+                tv_upload_percent.setText("Uploading " + clamped + "%");
+            }
+        }
+    }
+
+    private void setSubmitProcessing(boolean processing) {
+        if (progressBarLarge != null) {
+            progressBarLarge.setVisibility(processing ? View.VISIBLE : View.GONE);
+        }
+        if (tv_upload_percent != null) {
+            if (processing) {
+                tv_upload_percent.setVisibility(View.VISIBLE);
+                tv_upload_percent.setText("Processing...");
+            } else if (ImageId != null && !ImageId.trim().isEmpty()) {
+                setUploadProgressVisible(true, 100);
+            }
+        }
+        if (btn_upload != null) {
+            btn_upload.setVisibility(View.VISIBLE);
+        }
+        if (post_button != null) {
+            post_button.setVisibility(processing ? View.GONE : View.VISIBLE);
         }
     }
 
@@ -651,7 +676,8 @@ public class PostVideo extends AppCompatActivity {
                             Toast.makeText(PostVideo.this, "Video upload successful", Toast.LENGTH_SHORT).show();
                         }
                         img_upload_photo.setVisibility(View.VISIBLE);
-                        setUploadProgressVisible(false, 100);
+                        // Keep 100% visible so the reporter sees upload completed.
+                        setUploadProgressVisible(true, 100);
                         //     ProfileUpdateImage();
 /*
 
@@ -857,10 +883,12 @@ public class PostVideo extends AppCompatActivity {
     }
 
     public void sendpostdata() {
+        if (ImageId == null || ImageId.trim().isEmpty()) {
+            Toast.makeText(this, "Please wait for video upload to finish", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
-        btn_upload.setVisibility(View.VISIBLE);
-        post_button.setVisibility(View.GONE);
-        progressBarLarge.setVisibility(View.VISIBLE);
+        setSubmitProcessing(true);
 
         JsonObject otp = set_normal_post_data();
 
@@ -870,33 +898,46 @@ public class PostVideo extends AppCompatActivity {
         apiResponse.enqueue(new Callback<EncreptionRequest>() {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                try {
+                    if (response == null || response.body() == null) {
+                        setSubmitProcessing(false);
+                        Toast.makeText(PostVideo.this, "Server returned an empty response. Please try again.", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    EncreptionRequest encreptionRequest = response.body();
+                    String encrpt_data = decrypt(encreptionRequest.getData());
+                    Gson gsonObj = new Gson();
+                    SingleArticleResponse languageModel = gsonObj.fromJson(encrpt_data, SingleArticleResponse.class);
 
-
-                EncreptionRequest encreptionRequest = response.body();
-                String encrpt_data = null;
-                /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    encrpt_data = decrypt(encreptionRequest.getData());
-                }*/
-                encrpt_data = decrypt(encreptionRequest.getData());
-                Gson gsonObj = new Gson();
-                SingleArticleResponse languageModel = gsonObj.fromJson(encrpt_data, SingleArticleResponse.class);
-
-                if (languageModel.getSuccess()) {
-
-                    Toast.makeText(PostVideo.this, "Your Article Posted Successfully.", Toast.LENGTH_SHORT).show();
-                    Intent intent = new Intent(PostVideo.this, HomePage.class);
-                    startActivity(intent);
-                } else {
-                    Toast.makeText(PostVideo.this, "Something went wrong...", Toast.LENGTH_SHORT).show();
+                    if (languageModel != null && languageModel.getSuccess()) {
+                        Toast.makeText(PostVideo.this, "Your Article Posted Successfully.", Toast.LENGTH_SHORT).show();
+                        Intent intent = new Intent(PostVideo.this, HomePage.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                        startActivity(intent);
+                        finish();
+                    } else {
+                        setSubmitProcessing(false);
+                        String msg = languageModel != null && languageModel.getMsg() != null
+                                ? languageModel.getMsg()
+                                : "Something went wrong...";
+                        Toast.makeText(PostVideo.this, msg, Toast.LENGTH_SHORT).show();
+                    }
+                } catch (Exception e) {
+                    setSubmitProcessing(false);
+                    Toast.makeText(PostVideo.this, "Unable to process server response", Toast.LENGTH_SHORT).show();
+                    Logone.e("VideoUpload1", "" + e.getMessage());
                 }
-
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-                Toast.makeText(PostVideo.this, "" + t.getMessage(), Toast.LENGTH_SHORT).show();
-                Logone.e("VideoUpload1",""+t.getMessage());
-
+                setSubmitProcessing(false);
+                String message = t != null && t.getMessage() != null ? t.getMessage() : "Request failed";
+                if (message.toLowerCase().contains("timeout") || message.toLowerCase().contains("timed out")) {
+                    message = "Request timed out. Video may still be processing — check My Articles, or try again.";
+                }
+                Toast.makeText(PostVideo.this, message, Toast.LENGTH_LONG).show();
+                Logone.e("VideoUpload1", "" + message);
             }
         });
     }

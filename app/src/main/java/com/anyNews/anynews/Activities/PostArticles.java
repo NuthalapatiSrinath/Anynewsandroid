@@ -64,9 +64,13 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
+import com.canhub.cropper.CropImageContract;
+import com.canhub.cropper.CropImageContractOptions;
+import com.canhub.cropper.CropImageView;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.permissionx.guolindev.PermissionX;
@@ -151,6 +155,7 @@ public class PostArticles extends AppCompatActivity {
     int editUserPostId = 0;
     boolean imageChanged = false;
 
+    private ActivityResultLauncher<CropImageContractOptions> cropImage;
     private ActivityResultLauncher<PickVisualMediaRequest> pickVisualMedia;
 
     @Override
@@ -199,7 +204,33 @@ public class PostArticles extends AppCompatActivity {
             restoreDraftFromPrefs();
         }
 
-        // Production parity: no CanHub crop — pick goes straight to preview + upload.
+        // CanHub crop after FileProvider copy (avoids Photo Picker grant bounce to Home).
+        cropImage = registerForActivityResult(new CropImageContract(),
+                new ActivityResultCallback<CropImageView.CropResult>() {
+                    @Override
+                    public void onActivityResult(CropImageView.CropResult result) {
+                        // Always stay on PostArticles. Never finish() / navigate Home here.
+                        if (result != null && result.isSuccessful() && result.getUriContent() != null) {
+                            Log.e(TAG, "crop success uri=" + result.getUriContent());
+                            handleSelectedImage(result.getUriContent());
+                            return;
+                        }
+                        if (result != null && result.getError() != null) {
+                            Log.e(TAG, "crop error - fallback to local copy", result.getError());
+                            Toast.makeText(PostArticles.this,
+                                    "Crop failed - using original photo",
+                                    Toast.LENGTH_SHORT).show();
+                        } else {
+                            Log.e(TAG, "crop cancelled - fallback pending=" + pendingLocalImageUri);
+                            Toast.makeText(PostArticles.this,
+                                    "Crop cancelled - using selected photo",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                        if (pendingLocalImageUri != null) {
+                            handleSelectedImage(pendingLocalImageUri);
+                        }
+                    }
+                });
 
         pickVisualMedia = registerForActivityResult(
                 new ActivityResultContracts.PickVisualMedia(),
@@ -692,9 +723,9 @@ public class PostArticles extends AppCompatActivity {
     }
 
     /**
-     * Production parity: gallery/camera go straight to preview + upload (no CropImageActivity).
-     * Still copy into app-owned cache/FileProvider so picker URI grants and process-death
-     * on low-RAM OEMs (Vivo) do not drop the selected image.
+     * Copy any external/content URI into app cache, then open crop with an app-owned URI.
+     * Prevents CropImageActivity SecurityException (picker URI grants do not propagate)
+     * and keeps PostArticles alive if crop cancels/fails.
      */
     private void onExternalImagePicked(Uri sourceUri) {
         Log.e(TAG, "onExternalImagePicked source=" + sourceUri);
@@ -703,13 +734,41 @@ public class PostArticles extends AppCompatActivity {
         }
         Uri localUri = copyUriToAppCache(sourceUri);
         if (localUri == null) {
-            Log.e(TAG, "copyUriToAppCache failed for " + sourceUri + " — using source");
-            localUri = sourceUri;
+            Log.e(TAG, "copyUriToAppCache failed for " + sourceUri);
+            Toast.makeText(this, "Unable to read selected image", Toast.LENGTH_SHORT).show();
+            return;
         }
         pendingLocalImageUri = localUri;
         persistDraftImageState();
-        Log.e(TAG, "using image localUri=" + localUri);
-        handleSelectedImage(localUri);
+        Log.e(TAG, "copied to app cache localUri=" + localUri);
+        // Immediate preview so the form never looks empty if crop is slow/cancelled.
+        showImagePreview(localUri);
+        // Defer crop until after we are fully resumed (OEM ActivityResult flakiness).
+        getWindow().getDecorView().post(new Runnable() {
+            @Override
+            public void run() {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                launchCrop(localUri);
+            }
+        });
+    }
+
+    private void launchCrop(Uri sourceUri) {
+        if (sourceUri == null) {
+            return;
+        }
+        Log.e(TAG, "launchCrop sourceUri=" + sourceUri);
+        try {
+            cropImage.launch(CropHelper.buildCropOptions(PostArticles.this, sourceUri));
+        } catch (Exception e) {
+            Log.e(TAG, "launchCrop failed - using original", e);
+            Toast.makeText(PostArticles.this,
+                    "Unable to open crop screen - using original photo",
+                    Toast.LENGTH_SHORT).show();
+            handleSelectedImage(sourceUri);
+        }
     }
 
     private void handleSelectedImage(Uri selectedUri) {
@@ -1286,14 +1345,9 @@ public class PostArticles extends AppCompatActivity {
                     Toast.makeText(PostArticles.this, "Your Article Posted Succesfully.", Toast.LENGTH_SHORT).show();
                     clearDraftImageState();
                     Intent intent = new Intent(PostArticles.this, HomePage.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     startActivity(intent);
-                    new Handler().postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            progressBarLarge.setVisibility(View.GONE);
-                            post_button.setVisibility(View.VISIBLE);
-                        }
-                    },2000);
+                    finish();
                 } else {
                     Toast.makeText(PostArticles.this, "Something went wrong...", Toast.LENGTH_SHORT).show();
                     progressBarLarge.setVisibility(View.GONE);
@@ -1304,7 +1358,11 @@ public class PostArticles extends AppCompatActivity {
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-                Toast.makeText(PostArticles.this, "" + t.getMessage(), Toast.LENGTH_SHORT).show();
+                String message = t != null && t.getMessage() != null ? t.getMessage() : "Request failed";
+                if (message.toLowerCase().contains("timeout") || message.toLowerCase().contains("timed out")) {
+                    message = "Request timed out. Please try again.";
+                }
+                Toast.makeText(PostArticles.this, message, Toast.LENGTH_LONG).show();
                 progressBarLarge.setVisibility(View.GONE);
                 post_button.setVisibility(View.VISIBLE);
 
