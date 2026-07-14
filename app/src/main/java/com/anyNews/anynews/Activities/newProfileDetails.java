@@ -22,9 +22,12 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.provider.MediaStore;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -70,7 +73,6 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.SharedPrefsData;
-import com.anyNews.anynews.holder.FullViewPager;
 import com.anyNews.anynews.testing.MainActivity;
 import com.google.android.gms.common.AccountPicker;
 import com.google.android.gms.tasks.OnCompleteListener;
@@ -401,10 +403,9 @@ public class newProfileDetails extends AppCompatActivity {
         layout_articles_list.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
-                Intent intent = new Intent(newProfileDetails.this, FullViewPager.class);
+                // Articles tile → submitted article status list (not wallet/history).
+                Intent intent = new Intent(newProfileDetails.this, PostArticleStatus.class);
                 startActivity(intent);
-
             }
         });
         layout_following_list.setOnClickListener(new View.OnClickListener() {
@@ -534,37 +535,32 @@ public class newProfileDetails extends AppCompatActivity {
         });
 
 
-//        username_text.setOnClickListener(new View.OnClickListener() {
-//            @Override
-//            public void onClick(View view) {
-//
-//                AlertDialog.Builder builder = new AlertDialog.Builder(newProfileDetails.this);
-//                ViewGroup viewGroup = view.findViewById(android.R.id.content);
-//                View dialogView = LayoutInflater.from(view.getContext()).inflate(R.layout.customview, viewGroup, false);
-//                TextView button = dialogView.findViewById(R.id.sudmit_user_name);
-//                EditText enter_user_name = dialogView.findViewById(R.id.username_et);
-//                enter_user_name.setText(username_text.getText().toString());
-//                builder.setView(dialogView);
-//                alertDialog = builder.create();
-//                alertDialog.show();
-//
-//                button.setOnClickListener(new View.OnClickListener() {
-//                    @Override
-//                    public void onClick(View view) {
-//                        if (enter_user_name.getText().toString().length() >= 1) {
-//
-//                            SharedPrefsData.putString(newProfileDetails.this, Constants.USER_NAME, enter_user_name.getText().toString(), Constants.PREF_NAME);
-//
-//                            ProfileUpdate(enter_user_name.getText().toString());
-//
-//
-//                        } else {
-//
-//                        }
-//                    }
-//                });
-//            }
-//        });
+        username_text.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                AlertDialog.Builder builder = new AlertDialog.Builder(newProfileDetails.this);
+                ViewGroup viewGroup = view.findViewById(android.R.id.content);
+                View dialogView = LayoutInflater.from(view.getContext()).inflate(R.layout.customview, viewGroup, false);
+                TextView button = dialogView.findViewById(R.id.sudmit_user_name);
+                EditText enter_user_name = dialogView.findViewById(R.id.username_et);
+                enter_user_name.setText(username_text.getText().toString());
+                builder.setView(dialogView);
+                alertDialog = builder.create();
+                alertDialog.show();
+
+                button.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        if (enter_user_name.getText().toString().trim().length() >= 1) {
+                            String newName = enter_user_name.getText().toString().trim();
+                            SharedPrefsData.putString(newProfileDetails.this, Constants.USER_NAME, newName, Constants.PREF_NAME);
+                            ProfileUpdate(newName);
+                        }
+                    }
+                });
+            }
+        });
 
         img_upload_photo.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -1042,7 +1038,7 @@ public class newProfileDetails extends AppCompatActivity {
 
         UserProfileRequest requestModel = new UserProfileRequest();
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
-        requestModel.setUserName(" " + User_Name);
+        requestModel.setUserName(User_Name != null ? User_Name.trim() : "");
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
         showLog("API REQUEST E" + jsonString.toString());
