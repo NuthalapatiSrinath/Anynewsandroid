@@ -40,6 +40,8 @@ import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 
+import android.widget.Toast;
+
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -160,6 +162,11 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
             @Override
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
 
+                if (response == null || !response.isSuccessful() || response.body() == null) {
+                    Toast.makeText(context, "Unable to update language. Please try again.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
                 if (response.isSuccessful()) {
 
                     JsonObject jsonObject = response.body().getAsJsonObject();
@@ -169,7 +176,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                     LanguageModelResponse languageSelectionResponse = gson.fromJson(jsonObject, LanguageModelResponse.class);
 
                     showLog("API REQUEST R "+languageSelectionResponse.toString());
-                    if (languageSelectionResponse.getSuccess()) {
+                    if (languageSelectionResponse != null && languageSelectionResponse.getSuccess()) {
 
                         prefManager.setShared_Booleen(Allsharedpreference.Language, true);
 
@@ -220,9 +227,14 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
 
 
                     } else {
-
-                        //     Toast.makeText(context, languageSelectionResponse.getExtras().getMsg(), Toast.LENGTH_SHORT).show();
-
+                        String msg = "Unable to update language. Please try again.";
+                        try {
+                            if (jsonObject != null && jsonObject.has("msg") && !jsonObject.get("msg").isJsonNull()) {
+                                msg = jsonObject.get("msg").getAsString();
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();
                     }
 
                 }
@@ -232,7 +244,9 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
             @Override
             public void onFailure(Call<JsonObject> call, Throwable t) {
 
-                //    Toast.makeText(context, t.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(context,
+                        t != null && t.getMessage() != null ? t.getMessage() : "Network error. Please try again.",
+                        Toast.LENGTH_LONG).show();
 
 
             }

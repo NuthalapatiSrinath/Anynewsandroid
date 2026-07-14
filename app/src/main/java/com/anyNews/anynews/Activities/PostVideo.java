@@ -17,6 +17,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.text.TextUtils;
 import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -271,7 +272,7 @@ public class PostVideo extends AppCompatActivity {
 
                     } else {
                         //ImageId = String.valueOf(mVideoURI);
-                        if (ImageId == "") {
+                        if (TextUtils.isEmpty(ImageId)) {
                             Logone.e("VideoUpload",""+languageModelResponse.getData().getUploadVideo());
 
                             Toast.makeText(PostVideo.this, "" + languageModelResponse.getData().getUploadVideo(), Toast.LENGTH_SHORT).show();

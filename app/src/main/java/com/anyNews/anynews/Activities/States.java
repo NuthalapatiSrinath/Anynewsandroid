@@ -156,9 +156,12 @@ public class States extends AppCompatActivity {
             //@RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                    if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                        return;
+                    }
 
                     EncreptionRequest encreptionRequest=response.body();
-                showLog("API RES   "+response.body().getData());
+                showLog("API RES   "+encreptionRequest.getData());
                     String encrpt_data =  decrypt(encreptionRequest.getData());
 
                     Gson gsonObj = new Gson();
@@ -169,7 +172,7 @@ public class States extends AppCompatActivity {
 
 
 
-                    if (languageModel.getSuccess()) {
+                    if (languageModel != null && languageModel.getSuccess() && languageModel.getData() != null) {
 
                         SharedPrefsData.putString(States.this, Constants.Distric_Name, languageModel.getNextScreen(), Constants.PREF_NAME);
 

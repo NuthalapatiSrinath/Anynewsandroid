@@ -168,12 +168,20 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
 
-                EncreptionRequest encreptionRequest=response.body();
-                showLog("API RES   "+response.body().getData());
-                String encrpt_data =  decrypt(encreptionRequest.getData());
+                if (response == null || !response.isSuccessful() || response.body() == null) {
+                    Toast.makeText(context, "Unable to update district. Please try again.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                EncreptionRequest encreptionRequest = response.body();
+                if (encreptionRequest.getData() == null) {
+                    Toast.makeText(context, "Unable to update district. Please try again.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                showLog("API RES   " + encreptionRequest.getData());
+                String encrpt_data = decrypt(encreptionRequest.getData());
                 Gson gsonObj = new Gson();
-                UpdateStateResponse languageModel  = gsonObj.fromJson(encrpt_data, UpdateStateResponse.class);
-                if (languageModel.getSuccess()) {
+                UpdateStateResponse languageModel = gsonObj.fromJson(encrpt_data, UpdateStateResponse.class);
+                if (languageModel != null && languageModel.getSuccess()) {
 
                     SharedPrefsData.putString(context, Constants.Selected_Distric_Name, distric_name, Constants.PREF_NAME);
                     SharedPrefsData.putString(context, Constants.Selected_Distric_Name1, distric_name, Constants.PREF_NAME);
@@ -189,13 +197,17 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
                             ((Districs) context).finish();
                         }
                     }
+                } else {
+                    Toast.makeText(context, "Unable to update district. Please try again.", Toast.LENGTH_SHORT).show();
                 }
 
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
+                Toast.makeText(context,
+                        t != null && t.getMessage() != null ? t.getMessage() : "Network error. Please try again.",
+                        Toast.LENGTH_SHORT).show();
             }
         });
 

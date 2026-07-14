@@ -1,5 +1,22 @@
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
+
+def loadSigningProps = {
+    def props = new Properties()
+    def candidates = [
+            rootProject.file("keystore.properties"),
+            rootProject.file("local.properties"),
+            file("${projectDir}/keystore.properties")
+    ]
+    candidates.each { f ->
+        if (f.exists()) {
+            f.withInputStream { props.load(it) }
+        }
+    }
+    return props
+}
+def signingProps = loadSigningProps()
+
 android {
     signingConfigs {
         release {
@@ -9,9 +26,10 @@ android {
             }
             if (releaseKeystore.exists()) {
                 storeFile releaseKeystore
-                storePassword 'sagiam123'
-                keyAlias 'anyNews'
-                keyPassword '123sagiam'
+                // Prefer keystore.properties / local.properties; fallback keeps local assembleRelease working.
+                storePassword signingProps['storePassword'] ?: signingProps['KEYSTORE_STORE_PASSWORD'] ?: 'sagiam123'
+                keyAlias signingProps['keyAlias'] ?: signingProps['KEYSTORE_KEY_ALIAS'] ?: 'anyNews'
+                keyPassword signingProps['keyPassword'] ?: signingProps['KEYSTORE_KEY_PASSWORD'] ?: '123sagiam'
             } else {
                 storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
                 storePassword 'android'
@@ -39,8 +57,8 @@ android {
         minSdkVersion 24
         targetSdk 35
         multiDexEnabled true
-        versionCode 163
-        versionName "3.40.63"
+        versionCode 164
+        versionName "3.40.64"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
@@ -217,4 +235,3 @@ dependencies {
 
 }
 apply plugin: 'com.google.gms.google-services'
-// git key:: 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

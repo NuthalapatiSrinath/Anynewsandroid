@@ -1222,6 +1222,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         Random rand = new Random();
         int uniqID = rand.nextInt(1000);
         try {
+            if (list == null || positionx < 0 || positionx >= list.size()) {
+                return;
+            }
             if(page==0){
                 adapter.shareFullMagazine(positionx);
             }else{
@@ -1933,6 +1936,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public BroadcastReceiver DIS_LIKE_PAGE = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (list == null || positionx < 0 || positionx >= list.size()) {
+                return;
+            }
             showLog("DIS LIKE " + list.get(positionx).getLikeStatus());
 
             try {

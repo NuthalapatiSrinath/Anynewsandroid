@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.widget.ImageViewCompat;
@@ -253,17 +254,25 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
+                if (response == null || !response.isSuccessful() || response.body() == null) {
+                    Toast.makeText(context, "Unable to update state. Please try again.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 arrayList.clear();
-                EncreptionRequest encreptionRequest=response.body();
-                showLog("API RES   "+response.body().getData());
-                String encrpt_data =  decrypt(encreptionRequest.getData());
+                EncreptionRequest encreptionRequest = response.body();
+                if (encreptionRequest.getData() == null) {
+                    Toast.makeText(context, "Unable to update state. Please try again.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                showLog("API RES   " + encreptionRequest.getData());
+                String encrpt_data = decrypt(encreptionRequest.getData());
 
 
 
                 Gson gsonObj = new Gson();
-                UpdateStateResponse languageModel  = gsonObj.fromJson(encrpt_data, UpdateStateResponse.class);
+                UpdateStateResponse languageModel = gsonObj.fromJson(encrpt_data, UpdateStateResponse.class);
 
-                if (languageModel.getSuccess()) {
+                if (languageModel != null && languageModel.getSuccess()) {
 
                     SharedPrefsData.putString(context, Constants.Selected_Distric_Name, languageModel.getDist_name(), Constants.PREF_NAME);
                     SharedPrefsData.putString(context, Constants.Selected_Distric_Name1, languageModel.getDist_name(), Constants.PREF_NAME);
@@ -277,13 +286,16 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
                     }
 
 
+                } else {
+                    Toast.makeText(context, "Unable to update state. Please try again.", Toast.LENGTH_SHORT).show();
                 }
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
+                Toast.makeText(context,
+                        t != null && t.getMessage() != null ? t.getMessage() : "Network error. Please try again.",
+                        Toast.LENGTH_SHORT).show();
             }
         });
     }

@@ -22,6 +22,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.ActionMode;
 import android.view.Menu;
@@ -233,11 +234,13 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
                 } else {
 
 
-                    if(spinnernews_catgory.getSelectedItem().toString() == ""||spinnernews_catgory.getSelectedItem().equals("null")){
+                    if(spinnernews_catgory.getSelectedItem() == null
+                            || TextUtils.isEmpty(String.valueOf(spinnernews_catgory.getSelectedItem()))
+                            || "null".equals(String.valueOf(spinnernews_catgory.getSelectedItem()))){
                         Toast.makeText(FullPost.this, ""+languageModelResponse.getData().getChooseThreeOrMoreCategories(), Toast.LENGTH_SHORT).show();
                     }
                     else{
-                        if (ImageId==""){
+                        if (TextUtils.isEmpty(ImageId)){
                             Toast.makeText(FullPost.this, ""+languageModelResponse.getData().getUploadImage(), Toast.LENGTH_SHORT).show();
                         } else {
 
@@ -289,12 +292,35 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
         Gson gson = new Gson();
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
-        txt_select_language.setText(" "+languageModelResponse.getData().getNewsHeadline());
-        full_image_edt_news_headlines.setHint(" "+languageModelResponse.getData().getWriteYourNewsTitleHere());
-        news_category.setText(" "+languageModelResponse.getData().getNewsCategory());
-        upload_image.setText(" "+languageModelResponse.getData().getUploadImage());
-        checked_terms_conditions.setText(" "+languageModelResponse.getData().getIAgreeToTermsAndConditions());
-        postnews.setText(" "+languageModelResponse.getData().getPost());
+        String headline = null;
+        String writeTitle = null;
+        String category = null;
+        String upload = null;
+        String agree = null;
+        String post = null;
+        if (languageModelResponse != null && languageModelResponse.getData() != null) {
+            headline = languageModelResponse.getData().getNewsHeadline();
+            writeTitle = languageModelResponse.getData().getWriteYourNewsTitleHere();
+            category = languageModelResponse.getData().getNewsCategory();
+            upload = languageModelResponse.getData().getUploadImage();
+            agree = languageModelResponse.getData().getIAgreeToTermsAndConditions();
+            post = languageModelResponse.getData().getPost();
+        }
+        String languageName = getIntent().getStringExtra("LANGUAGE_NAME");
+        if (TextUtils.isEmpty(headline)) {
+            headline = !TextUtils.isEmpty(languageName) ? languageName : "News Headline";
+        }
+        if (TextUtils.isEmpty(writeTitle)) writeTitle = "Write your news title here";
+        if (TextUtils.isEmpty(category)) category = "News Category";
+        if (TextUtils.isEmpty(upload)) upload = "Upload Image";
+        if (TextUtils.isEmpty(agree)) agree = "I agree to Terms and Conditions";
+        if (TextUtils.isEmpty(post)) post = "Post";
+        txt_select_language.setText(" " + headline);
+        full_image_edt_news_headlines.setHint(" " + writeTitle);
+        news_category.setText(" " + category);
+        upload_image.setText(" " + upload);
+        checked_terms_conditions.setText(" " + agree);
+        postnews.setText(" " + post);
     }
 
     private void requestStoragePermission() {
@@ -410,9 +436,12 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
+                if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                    return;
+                }
                 EncreptionRequest encreptionRequest=response.body();
-                showLog("RES"+response.body().getData());
-                showLog("API REQUEST R"+decrypt(response.body().getData()));
+                showLog("RES"+encreptionRequest.getData());
+                showLog("API REQUEST R"+decrypt(encreptionRequest.getData()));
                 String encrpt_data = null;
                 encrpt_data = decrypt(encreptionRequest.getData());
                 Gson gsonObj = new Gson();
@@ -509,36 +538,40 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
-                Toast.makeText(FullPost.this, "Your Full Image Posted Successfully.", Toast.LENGTH_SHORT).show();
+                postnews.setVisibility(View.VISIBLE);
+                progressBarLarge.setVisibility(View.GONE);
 
+                if (response == null || !response.isSuccessful() || response.body() == null) {
+                    Toast.makeText(FullPost.this, "Something went wrong. Please try again.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
-                EncreptionRequest encreptionRequest=response.body();
-                showLog("RES"+response.body().getData());
-                showLog("API REQUEST R"+decrypt(response.body().getData()));
-                String encrpt_data = null;
-                /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    encrpt_data = decrypt(encreptionRequest.getData());
-                }*/
-                encrpt_data = decrypt(encreptionRequest.getData());
+                EncreptionRequest encreptionRequest = response.body();
+                if (encreptionRequest.getData() == null) {
+                    Toast.makeText(FullPost.this, "Something went wrong. Please try again.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                showLog("RES" + encreptionRequest.getData());
+                String encrpt_data = decrypt(encreptionRequest.getData());
+                showLog("API REQUEST R" + encrpt_data);
                 Gson gsonObj = new Gson();
                 SingleArticleResponse languageModel = gsonObj.fromJson(encrpt_data, SingleArticleResponse.class);
 
-
-
-                showLog(" VVVVVVVVV VVV "+encrpt_data);
-                if (languageModel.getSuccess()) {
-
-                    Intent intent=new Intent(FullPost.this,HomePage.class);
+                showLog(" VVVVVVVVV VVV " + encrpt_data);
+                if (languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess())) {
+                    Toast.makeText(FullPost.this, "Your Full Image Posted Successfully.", Toast.LENGTH_SHORT).show();
+                    Intent intent = new Intent(FullPost.this, HomePage.class);
                     startActivity(intent);
-
-                }else {
-                    Toast.makeText(FullPost.this, "Something went wrong..." + call, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(FullPost.this, "Something went wrong. Please try again.", Toast.LENGTH_SHORT).show();
                 }
             }
 
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                postnews.setVisibility(View.VISIBLE);
+                progressBarLarge.setVisibility(View.GONE);
                 Toast.makeText(FullPost.this, "" + t.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });

@@ -184,7 +184,7 @@
         <activity
             android:name=".Activities.TestingClass"
             android:theme="@style/AppTheme"
-            android:exported="true">
+            android:exported="false">
 
             <!--
             <intent-filter android:autoVerify="true">
@@ -237,7 +237,7 @@
         <activity
             android:name=".Activities.SearchActivity"
             android:theme="@style/AppTheme"
-            android:exported="true"
+            android:exported="false"
             android:screenOrientation="portrait" />
         <activity
             android:name=".Activities.LoginActivityDetails"

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
 <!--    <external-path name="OctopusDriver" path="OctopusDriver/"/>-->
-    <external-path name="AnyNews" path="Android/data/com.anyNews.anynews/files/cache/"/>
-    <external-path name="external_files" path="."/>
+    <!-- App-scoped external files only (crop / share). Do not expose entire external storage. -->
+    <external-path name="AnyNews" path="Android/data/com.anyNews.anynews/"/>
     <files-path path="Images/" name="Pictures" />
     <files-path path="Video/" name="Documents" />
     <files-path path="Videos/" name="Documents" />

@@ -121,9 +121,12 @@ public class AreaSelection extends AppCompatActivity {
             //@RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-                showLog("RES"+response.body().getData());
-                showLog("API REQUEST R"+decrypt(response.body().getData()));
+                if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                    return;
+                }
                 EncreptionRequest encreptionRequest=response.body();
+                showLog("RES"+encreptionRequest.getData());
+                showLog("API REQUEST R"+decrypt(encreptionRequest.getData()));
                 String encrpt_data =  decrypt(encreptionRequest.getData());
 
                 showLog(" AREAS LIST "+encrpt_data);
@@ -132,7 +135,7 @@ public class AreaSelection extends AppCompatActivity {
 
                 arrayList.clear();
 
-                if (languageModel.getSuccess()) {
+                if (languageModel != null && languageModel.getSuccess() && languageModel.getData() != null) {
 
                 //    SharedPrefsData.putString(AreaSelection.this, Constants.Distric_Name, languageModel.getNextScreen(), Constants.PREF_NAME);
 

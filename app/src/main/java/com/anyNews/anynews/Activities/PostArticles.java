@@ -27,6 +27,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.provider.MediaStore;
 import android.text.Editable;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
@@ -326,7 +327,7 @@ public class PostArticles extends AppCompatActivity {
 
                     } else {
 
-                        if (ImageId == "") {
+                        if (TextUtils.isEmpty(ImageId)) {
 
                             Toast.makeText(PostArticles.this, "" + languageModelResponse.getData().getUploadImage(), Toast.LENGTH_SHORT).show();
 
@@ -367,13 +368,39 @@ public class PostArticles extends AppCompatActivity {
         Gson gson = new Gson();
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
-        checked_terms_conditions.setText(" " + languageModelResponse.getData().getIAgreeToTermsAndConditions());
-        txt_select_language.setText(" " + languageModelResponse.getData().getNewsHeadline());
-        edt_news_headlines.setHint(" " + languageModelResponse.getData().getWriteYourNewsTitleHere());
-        news_descrip.setText(" " + languageModelResponse.getData().getNewsDescription());
-        edt_news_description.setHint(" " + languageModelResponse.getData().getDescriptionOverHere());
-        upload_image.setText(" " + languageModelResponse.getData().getUploadImage());
-        post_button.setText(" " + languageModelResponse.getData().getPost());
+        String agree = null;
+        String headline = null;
+        String writeTitle = null;
+        String descriptionLabel = null;
+        String descriptionHint = null;
+        String upload = null;
+        String post = null;
+        if (languageModelResponse != null && languageModelResponse.getData() != null) {
+            agree = languageModelResponse.getData().getIAgreeToTermsAndConditions();
+            headline = languageModelResponse.getData().getNewsHeadline();
+            writeTitle = languageModelResponse.getData().getWriteYourNewsTitleHere();
+            descriptionLabel = languageModelResponse.getData().getNewsDescription();
+            descriptionHint = languageModelResponse.getData().getDescriptionOverHere();
+            upload = languageModelResponse.getData().getUploadImage();
+            post = languageModelResponse.getData().getPost();
+        }
+        String languageName = getIntent().getStringExtra("LANGUAGE_NAME");
+        if (TextUtils.isEmpty(headline)) {
+            headline = !TextUtils.isEmpty(languageName) ? languageName : "News Headline";
+        }
+        if (TextUtils.isEmpty(agree)) agree = "I agree to Terms and Conditions";
+        if (TextUtils.isEmpty(writeTitle)) writeTitle = "Write your news title here";
+        if (TextUtils.isEmpty(descriptionLabel)) descriptionLabel = "News Description";
+        if (TextUtils.isEmpty(descriptionHint)) descriptionHint = "Description over here";
+        if (TextUtils.isEmpty(upload)) upload = "Upload Image";
+        if (TextUtils.isEmpty(post)) post = "Post";
+        checked_terms_conditions.setText(" " + agree);
+        txt_select_language.setText(" " + headline);
+        edt_news_headlines.setHint(" " + writeTitle);
+        news_descrip.setText(" " + descriptionLabel);
+        edt_news_description.setHint(" " + descriptionHint);
+        upload_image.setText(" " + upload);
+        post_button.setText(" " + post);
     }
 
     private void requestStoragePermission() {
@@ -1374,6 +1401,12 @@ public class PostArticles extends AppCompatActivity {
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
 
+                if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                    Toast.makeText(PostArticles.this, "Something went wrong...", Toast.LENGTH_SHORT).show();
+                    progressBarLarge.setVisibility(View.GONE);
+                    post_button.setVisibility(View.VISIBLE);
+                    return;
+                }
                 EncreptionRequest encreptionRequest = response.body();
                 String encrpt_data = null;
                 encrpt_data = decrypt(encreptionRequest.getData());
@@ -1382,7 +1415,7 @@ public class PostArticles extends AppCompatActivity {
 
                 SingleArticleResponse languageModel = gsonObj.fromJson(encrpt_data, SingleArticleResponse.class);
 
-                if (languageModel.getSuccess()) {
+                if (languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess())) {
                     Toast.makeText(PostArticles.this, "Your Article Posted Succesfully.", Toast.LENGTH_SHORT).show();
                     clearDraftImageState();
                     Intent intent = new Intent(PostArticles.this, HomePage.class);

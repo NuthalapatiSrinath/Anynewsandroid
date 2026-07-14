@@ -173,8 +173,11 @@ public class Districs extends AppCompatActivity {
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
 
+                if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                    return;
+                }
                 EncreptionRequest encreptionRequest=response.body();
-                showLog("API RES   "+response.body().getData());
+                showLog("API RES   "+encreptionRequest.getData());
                 String encrpt_data =  decrypt(encreptionRequest.getData());
 
 
@@ -184,7 +187,7 @@ public class Districs extends AppCompatActivity {
                 arrayList.clear();
 
 
-                if (languageModel.getSuccess()) {
+                if (languageModel != null && languageModel.getSuccess() && languageModel.getData() != null) {
 
                         if(languageModel.getData().size()>0){
 

@@ -115,13 +115,19 @@ public class CommentsBottomSheetDialog extends BottomSheetDialogFragment impleme
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
+                if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                    Toast.makeText(getActivity(), "Unable to process the request please try again later", Toast.LENGTH_SHORT).show();
+                    if (mListener != null) mListener.reportBottomSheetDismiss();
+                    dismiss();
+                    return;
+                }
                 EncreptionRequest encreptionRequest = response.body();
                 String encrpt_data = null;
                 encrpt_data = decrypt(encreptionRequest.getData());
                 showLog("REPORT FLAG REQUEST:" + encrpt_data);
                 Gson gsonObj = new Gson();
                 BaseResponse listOfCommentsResponse = gsonObj.fromJson(encrpt_data, BaseResponse.class);
-                showLog("REPORT FLAG STATUS CODE:" + listOfCommentsResponse.getStatusCode());
+                showLog("REPORT FLAG STATUS CODE:" + (listOfCommentsResponse != null ? listOfCommentsResponse.getStatusCode() : -1));
                 try {
                     if (listOfCommentsResponse != null && listOfCommentsResponse.getStatusCode() == 200) {
                         Toast.makeText(getActivity(), "Request Submitted Successfully", Toast.LENGTH_SHORT).show();
@@ -132,7 +138,7 @@ public class CommentsBottomSheetDialog extends BottomSheetDialogFragment impleme
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-                mListener.reportBottomSheetDismiss();
+                if (mListener != null) mListener.reportBottomSheetDismiss();
                 dismiss();
             }
 
