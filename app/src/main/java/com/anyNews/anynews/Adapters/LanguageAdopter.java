@@ -163,7 +163,11 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
 
                 if (response == null || !response.isSuccessful() || response.body() == null) {
+                    SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
+                    SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
                     Toast.makeText(context, "Unable to update language. Please try again.", Toast.LENGTH_SHORT).show();
+                    index = -1;
+                    notifyDataSetChanged();
                     return;
                 }
 
@@ -260,12 +264,13 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
 
             @Override
             public void onFailure(Call<JsonObject> call, Throwable t) {
-
+                SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
+                SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
                 Toast.makeText(context,
                         t != null && t.getMessage() != null ? t.getMessage() : "Network error. Please try again.",
                         Toast.LENGTH_LONG).show();
-
-
+                index = -1;
+                notifyDataSetChanged();
             }
         });
 

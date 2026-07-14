@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -122,6 +123,7 @@ public class AreaSelection extends AppCompatActivity {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
                 if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
+                    recoverToLanguagePicker("Unable to load regions. Please select another language.");
                     return;
                 }
                 EncreptionRequest encreptionRequest=response.body();
@@ -135,33 +137,50 @@ public class AreaSelection extends AppCompatActivity {
 
                 arrayList.clear();
 
-                if (languageModel != null && languageModel.getSuccess() && languageModel.getData() != null) {
+                boolean success = languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess());
+                boolean hasData = languageModel != null
+                        && languageModel.getData() != null
+                        && languageModel.getData().size() > 0;
 
-                //    SharedPrefsData.putString(AreaSelection.this, Constants.Distric_Name, languageModel.getNextScreen(), Constants.PREF_NAME);
-
-                    if(languageModel.getData().size()>0){
-                        arrayList.addAll(languageModel.getData());
-                        chooseAreaAdopter = new AreaSelectionAdopter(AreaSelection.this,arrayList);
-                        recycleLayoutManager.setAdapter(chooseAreaAdopter);
-                        layout_with_data.setVisibility(View.VISIBLE);
-                        layout_with_out_data.setVisibility(View.GONE);
-
-                    }else {
-
-                    }
-
-
+                if (success && hasData) {
+                    arrayList.addAll(languageModel.getData());
+                    chooseAreaAdopter = new AreaSelectionAdopter(AreaSelection.this,arrayList);
+                    recycleLayoutManager.setAdapter(chooseAreaAdopter);
+                    layout_with_data.setVisibility(View.VISIBLE);
+                    layout_with_out_data.setVisibility(View.GONE);
+                    return;
                 }
 
+                recoverToLanguagePicker(
+                        "No regions available for this language. Please select another language."
+                );
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
+                recoverToLanguagePicker(
+                        t != null && t.getMessage() != null
+                                ? t.getMessage()
+                                : "Network error. Please select another language."
+                );
             }
         });
 
+    }
+
+    private void recoverToLanguagePicker(String message) {
+        layout_with_out_data.setVisibility(View.GONE);
+        layout_with_data.setVisibility(View.GONE);
+        SharedPrefsData.putInt(AreaSelection.this, Constants.LanguageID, 0, Constants.PREF_NAME);
+        SharedPrefsData.putBool(AreaSelection.this, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+        SharedPrefsData.putString(AreaSelection.this, Constants.MOVE_NEXT_SCREEN, "language", Constants.PREF_NAME);
+        if (!TextUtils.isEmpty(message)) {
+            Toast.makeText(AreaSelection.this, message, Toast.LENGTH_LONG).show();
+        }
+        Intent intent = new Intent(AreaSelection.this, LanguageActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        finish();
     }
 
     private JsonObject set_states_request() {
