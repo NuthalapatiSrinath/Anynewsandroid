@@ -20,9 +20,11 @@ import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -30,9 +32,7 @@ import android.os.Handler;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.view.ActionMode;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -84,7 +84,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,12 +97,13 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-import static com.anyNews.anynews.App.getContext;
 import static com.anyNews.anynews.Utils.AppHelper.showLog;
 import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 public class PostArticles extends AppCompatActivity {
+
+    private static final String TAG = "REPORTER_IMAGE";
 
     ImageView img_upload_photo;
     private int PICK_IMAGE_REQUEST = 1;
@@ -110,9 +114,19 @@ public class PostArticles extends AppCompatActivity {
     private String ImageId = "";
     /** FileProvider URI written by the camera app (survives process death via savedInstanceState). */
     private Uri cameraOutputUri;
+    /**
+     * App-owned local copy of the selected image (FileProvider). Survives crop cancel/fail
+     * and process death; used so CropImageActivity never depends on a temporary Photo Picker URI.
+     */
+    private Uri pendingLocalImageUri;
     private static final String STATE_CAMERA_OUTPUT_URI = "camera_output_uri";
     private static final String STATE_FILE_PATH = "file_path";
     private static final String STATE_IMAGE_ID = "image_id";
+    private static final String STATE_PENDING_LOCAL_URI = "pending_local_uri";
+    private static final String PREFS_REPORTER_DRAFT = "reporter_post_image_draft";
+    private static final String PREF_PENDING_LOCAL_URI = "pending_local_uri";
+    private static final String PREF_FILE_PATH = "file_path";
+    private static final String PREF_IMAGE_ID = "image_id";
 
 
     ImageView img_back;
@@ -180,16 +194,40 @@ public class PostArticles extends AppCompatActivity {
             if (savedImageId != null) {
                 ImageId = savedImageId;
             }
+            String pendingUri = savedInstanceState.getString(STATE_PENDING_LOCAL_URI);
+            if (pendingUri != null) {
+                pendingLocalImageUri = Uri.parse(pendingUri);
+            }
+            Log.e(TAG, "restore from savedInstanceState filePath=" + filePath
+                    + " pending=" + pendingLocalImageUri + " imageId=" + ImageId);
+        } else {
+            restoreDraftFromPrefs();
         }
 
         // Register the image crop launcher (feature: crop while uploading photos).
         cropImage = registerForActivityResult(new CropImageContract(), new ActivityResultCallback<com.canhub.cropper.CropImageView.CropResult>() {
             @Override
             public void onActivityResult(com.canhub.cropper.CropImageView.CropResult result) {
-                if (result != null && result.isSuccessful()) {
-                    handleCroppedImage(result.getUriContent());
-                } else if (result != null && result.getError() != null) {
-                    Toast.makeText(PostArticles.this, "Crop failed: " + result.getError().getMessage(), Toast.LENGTH_SHORT).show();
+                // Always stay on PostArticles. Never finish() / navigate to HomePage here.
+                if (result != null && result.isSuccessful() && result.getUriContent() != null) {
+                    Log.e(TAG, "crop success uri=" + result.getUriContent());
+                    handleSelectedImage(result.getUriContent());
+                    return;
+                }
+                if (result != null && result.getError() != null) {
+                    Log.e(TAG, "crop error - fallback to local copy", result.getError());
+                    Toast.makeText(PostArticles.this,
+                            "Crop failed - using original photo",
+                            Toast.LENGTH_SHORT).show();
+                } else {
+                    Log.e(TAG, "crop cancelled - fallback pending=" + pendingLocalImageUri);
+                    Toast.makeText(PostArticles.this,
+                            "Crop cancelled - using selected photo",
+                            Toast.LENGTH_SHORT).show();
+                }
+                // Cancel / fail: keep the pre-crop local copy so the reporter can still post.
+                if (pendingLocalImageUri != null) {
+                    handleSelectedImage(pendingLocalImageUri);
                 }
             }
         });
@@ -200,10 +238,17 @@ public class PostArticles extends AppCompatActivity {
                     @Override
                     public void onActivityResult(Uri uri) {
                         if (uri != null) {
-                            launchCrop(uri);
+                            onExternalImagePicked(uri);
                         }
                     }
                 });
+
+        // Restore preview after process death / recreate (do not finish / reset form).
+        if (filePath != null) {
+            showImagePreview(filePath);
+        } else if (pendingLocalImageUri != null) {
+            showImagePreview(pendingLocalImageUri);
+        }
 
         String value = "" + getIntent().getStringExtra("POST_VIDEO");
 
@@ -472,6 +517,7 @@ public class PostArticles extends AppCompatActivity {
     }
 
     private void openCameraForPhoto() {
+        Log.e(TAG, "openCameraForPhoto");
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         File photoFile;
         try {
@@ -506,7 +552,35 @@ public class PostArticles extends AppCompatActivity {
     }
 
     private void openGalleryForPhoto() {
-        // Prefer system Photo Picker when available (no storage permission on modern Android).
+        Log.e(TAG, "openGalleryForPhoto");
+        // Prefer ACTION_GET_CONTENT / chooser over Photo Picker when possible:
+        // Photo Picker frequently destroys PostArticles on low-RAM OEMs (Vivo), and the
+        // returned content URI only has a temporary grant that CropImageActivity cannot read
+        // (URI is passed in extras, not Intent data — no FLAG_GRANT_READ_URI_PERMISSION).
+        Intent getContent = new Intent(Intent.ACTION_GET_CONTENT);
+        getContent.setType("image/*");
+        getContent.addCategory(Intent.CATEGORY_OPENABLE);
+        getContent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        Intent pick = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        pick.setType("image/*");
+
+        Intent openDocument = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        openDocument.addCategory(Intent.CATEGORY_OPENABLE);
+        openDocument.setType("image/*");
+        openDocument.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+
+        Intent chooser = Intent.createChooser(getContent, "Select Image");
+        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{pick, openDocument});
+        try {
+            startActivityForResult(chooser, PICK_IMAGE_REQUEST);
+            return;
+        } catch (ActivityNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        // Last resort: system Photo Picker (still OK because we copy to cache before crop).
         if (ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(this)) {
             try {
                 pickVisualMedia.launch(
@@ -519,30 +593,7 @@ public class PostArticles extends AppCompatActivity {
             }
         }
 
-        Intent getContent = new Intent(Intent.ACTION_GET_CONTENT);
-        getContent.setType("image/*");
-        getContent.addCategory(Intent.CATEGORY_OPENABLE);
-        getContent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-        Intent pick = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-        pick.setType("image/*");
-
-        Intent openDocument = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        openDocument.addCategory(Intent.CATEGORY_OPENABLE);
-        openDocument.setType("image/*");
-        openDocument.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-        Intent chooser = Intent.createChooser(getContent, "Select Image");
-        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{pick, openDocument});
-        try {
-            startActivityForResult(chooser, PICK_IMAGE_REQUEST);
-        } catch (ActivityNotFoundException e) {
-            try {
-                startActivityForResult(getContent, PICK_IMAGE_REQUEST);
-            } catch (ActivityNotFoundException e2) {
-                Toast.makeText(this, "No gallery app available on this device", Toast.LENGTH_LONG).show();
-            }
-        }
+        Toast.makeText(this, "No gallery app available on this device", Toast.LENGTH_LONG).show();
     }
 
     private File createCameraImageFile() throws IOException {
@@ -565,6 +616,55 @@ public class PostArticles extends AppCompatActivity {
         if (ImageId != null && !ImageId.isEmpty()) {
             outState.putString(STATE_IMAGE_ID, ImageId);
         }
+        if (pendingLocalImageUri != null) {
+            outState.putString(STATE_PENDING_LOCAL_URI, pendingLocalImageUri.toString());
+        }
+        persistDraftImageState();
+        Log.e(TAG, "onSaveInstanceState camera=" + cameraOutputUri
+                + " pending=" + pendingLocalImageUri + " filePath=" + filePath);
+    }
+
+    private void restoreDraftFromPrefs() {
+        SharedPreferences sp = getSharedPreferences(PREFS_REPORTER_DRAFT, MODE_PRIVATE);
+        String pending = sp.getString(PREF_PENDING_LOCAL_URI, null);
+        String savedFile = sp.getString(PREF_FILE_PATH, null);
+        String savedImageId = sp.getString(PREF_IMAGE_ID, null);
+        if (pending != null) {
+            pendingLocalImageUri = Uri.parse(pending);
+        }
+        if (savedFile != null) {
+            filePath = Uri.parse(savedFile);
+        }
+        if (savedImageId != null && !savedImageId.isEmpty()) {
+            ImageId = savedImageId;
+        }
+        Log.e(TAG, "restoreDraftFromPrefs filePath=" + filePath
+                + " pending=" + pendingLocalImageUri + " imageId=" + ImageId);
+    }
+
+    private void persistDraftImageState() {
+        SharedPreferences.Editor ed = getSharedPreferences(PREFS_REPORTER_DRAFT, MODE_PRIVATE).edit();
+        if (pendingLocalImageUri != null) {
+            ed.putString(PREF_PENDING_LOCAL_URI, pendingLocalImageUri.toString());
+        } else {
+            ed.remove(PREF_PENDING_LOCAL_URI);
+        }
+        if (filePath != null) {
+            ed.putString(PREF_FILE_PATH, filePath.toString());
+        } else {
+            ed.remove(PREF_FILE_PATH);
+        }
+        if (ImageId != null && !ImageId.isEmpty()) {
+            ed.putString(PREF_IMAGE_ID, ImageId);
+        } else {
+            ed.remove(PREF_IMAGE_ID);
+        }
+        ed.apply();
+    }
+
+    private void clearDraftImageState() {
+        getSharedPreferences(PREFS_REPORTER_DRAFT, MODE_PRIVATE).edit().clear().apply();
+        Log.e(TAG, "clearDraftImageState");
     }
 
     private void getLocation() {
@@ -585,8 +685,17 @@ public class PostArticles extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            // Send the picked image to the crop screen before uploading.
-            launchCrop(data.getData());
+            try {
+                final int takeFlags = data.getFlags()
+                        & (Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                if (takeFlags != 0) {
+                    getContentResolver().takePersistableUriPermission(data.getData(), takeFlags);
+                }
+            } catch (Exception ignored) {
+                // Not all providers support persistable grants (Photo Picker / some OEMs).
+            }
+            onExternalImagePicked(data.getData());
         } else if (requestCode == PICK_IMAGE_REQUEST_CAMARA && resultCode == RESULT_OK) {
             try {
                 Uri capturedUri = null;
@@ -599,7 +708,7 @@ public class PostArticles extends AppCompatActivity {
                     capturedUri = saveBitmapToCache((Bitmap) data.getExtras().get("data"));
                 }
                 if (capturedUri != null) {
-                    launchCrop(capturedUri);
+                    onExternalImagePicked(capturedUri);
                 } else {
                     Toast.makeText(PostArticles.this, "Error while capturing image", Toast.LENGTH_LONG).show();
                 }
@@ -613,30 +722,200 @@ public class PostArticles extends AppCompatActivity {
         }
     }
 
+    /**
+     * Copy any external/content URI into app cache, then open crop with an app-owned URI.
+     * This prevents CropImageActivity SecurityException (picker URI grants do not propagate
+     * via Bundle extras) and keeps PostArticles alive if crop cancels/fails.
+     */
+    private void onExternalImagePicked(Uri sourceUri) {
+        Log.e(TAG, "onExternalImagePicked source=" + sourceUri);
+        if (sourceUri == null) {
+            return;
+        }
+        Uri localUri = copyUriToAppCache(sourceUri);
+        if (localUri == null) {
+            Log.e(TAG, "copyUriToAppCache failed for " + sourceUri);
+            Toast.makeText(this, "Unable to read selected image", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        pendingLocalImageUri = localUri;
+        persistDraftImageState();
+        Log.e(TAG, "copied to app cache localUri=" + localUri);
+        // Show immediate preview so the form never looks "empty" if crop is slow/cancelled.
+        showImagePreview(localUri);
+        // Defer crop until after we are fully resumed — launching another ActivityResult
+        // contract from inside onActivityResult during recreate is flaky on OEM builds.
+        getWindow().getDecorView().post(new Runnable() {
+            @Override
+            public void run() {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                launchCrop(localUri);
+            }
+        });
+    }
+
     private void launchCrop(Uri sourceUri) {
+        if (sourceUri == null) {
+            return;
+        }
+        Log.e(TAG, "launchCrop sourceUri=" + sourceUri);
         try {
-            cropImage.launch(CropHelper.buildCropOptions(sourceUri));
+            cropImage.launch(CropHelper.buildCropOptions(PostArticles.this, sourceUri));
         } catch (Exception e) {
-            e.printStackTrace();
-            Toast.makeText(PostArticles.this, "Unable to open crop screen", Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "launchCrop failed - using original", e);
+            Toast.makeText(PostArticles.this, "Unable to open crop screen - using original photo", Toast.LENGTH_SHORT).show();
+            handleSelectedImage(sourceUri);
         }
     }
 
-    private void handleCroppedImage(Uri croppedUri) {
-        if (croppedUri == null) {
+    private void handleSelectedImage(Uri selectedUri) {
+        Log.e(TAG, "handleSelectedImage uri=" + selectedUri);
+        if (selectedUri == null) {
             return;
         }
         try {
-            filePath = croppedUri;
-            bitmap = MediaStore.Images.Media.getBitmap(PostArticles.this.getContentResolver(), croppedUri);
-            img_upload_photo.setImageBitmap(bitmap);
-            img_upload_photo.setVisibility(View.GONE);
-            image_upload_progress_bar.setVisibility(View.VISIBLE);
+            // Prefer a durable app-owned copy for upload.
+            Uri durable = selectedUri;
+            if (!isAppOwnedUri(selectedUri)) {
+                Uri copied = copyUriToAppCache(selectedUri);
+                if (copied != null) {
+                    durable = copied;
+                }
+            }
+            filePath = durable;
+            pendingLocalImageUri = durable;
             imageChanged = true;
+            persistDraftImageState();
+            showImagePreview(durable);
+            img_upload_photo.setVisibility(View.VISIBLE);
+            image_upload_progress_bar.setVisibility(View.VISIBLE);
             uploadImage();
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            Log.e(TAG, "handleSelectedImage failed", e);
+            Toast.makeText(this, "Unable to use selected image", Toast.LENGTH_SHORT).show();
+            image_upload_progress_bar.setVisibility(View.GONE);
+            img_upload_photo.setVisibility(View.VISIBLE);
         }
+    }
+
+    private void showImagePreview(Uri uri) {
+        if (uri == null || img_upload_photo == null) {
+            return;
+        }
+        try {
+            bitmap = decodeSampledBitmap(uri, 1024, 1024);
+            if (bitmap != null) {
+                img_upload_photo.setImageBitmap(bitmap);
+            } else {
+                img_upload_photo.setImageURI(uri);
+            }
+            img_upload_photo.setVisibility(View.VISIBLE);
+        } catch (Exception e) {
+            e.printStackTrace();
+            try {
+                img_upload_photo.setImageURI(uri);
+                img_upload_photo.setVisibility(View.VISIBLE);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private Bitmap decodeSampledBitmap(Uri uri, int reqWidth, int reqHeight) {
+        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) {
+                return null;
+            }
+            android.graphics.BitmapFactory.decodeStream(in, null, bounds);
+        } catch (Exception e) {
+            return null;
+        }
+        android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
+        opts.inSampleSize = calculateInSampleSize(bounds, reqWidth, reqHeight);
+        try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) {
+                return null;
+            }
+            return android.graphics.BitmapFactory.decodeStream(in, null, opts);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static int calculateInSampleSize(android.graphics.BitmapFactory.Options options,
+                                             int reqWidth, int reqHeight) {
+        final int height = options.outHeight;
+        final int width = options.outWidth;
+        int inSampleSize = 1;
+        if (height > reqHeight || width > reqWidth) {
+            final int halfHeight = height / 2;
+            final int halfWidth = width / 2;
+            while ((halfHeight / inSampleSize) >= reqHeight
+                    && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2;
+            }
+        }
+        return Math.max(1, inSampleSize);
+    }
+
+    /**
+     * Stream any content/file URI into cache/images and return a FileProvider URI.
+     * Same-app FileProvider URIs are readable by CropImageActivity without extra grants.
+     */
+    private Uri copyUriToAppCache(Uri sourceUri) {
+        if (sourceUri == null) {
+            return null;
+        }
+        if (isAppOwnedUri(sourceUri)) {
+            return sourceUri;
+        }
+        java.io.InputStream input = null;
+        java.io.OutputStream output = null;
+        try {
+            input = getContentResolver().openInputStream(sourceUri);
+            if (input == null) {
+                return null;
+            }
+            File outFile = createCameraImageFile();
+            output = new java.io.FileOutputStream(outFile);
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            output.flush();
+            Uri outUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", outFile);
+            Log.e(TAG, "copyUriToAppCache ok outUri=" + outUri + " size=" + outFile.length());
+            return outUri;
+        } catch (Exception e) {
+            Log.e(TAG, "copyUriToAppCache exception", e);
+            return null;
+        } finally {
+            try {
+                if (input != null) {
+                    input.close();
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                if (output != null) {
+                    output.close();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private boolean isAppOwnedUri(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String auth = uri.getAuthority();
+        return auth != null && (auth.equals(getPackageName() + ".provider")
+                || auth.equals(getPackageName() + ".cropper.fileprovider"));
     }
 
     private Uri saveBitmapToCache(Bitmap source) {
@@ -725,12 +1004,14 @@ public class PostArticles extends AppCompatActivity {
     }
 
     private void uploadImage() {
+        Log.e(TAG, "uploadImage start filePath=" + filePath + " url=" + CommonUtilities.URL + APIService.URL_Upload_Image);
 
         VolleyMultipartRequest multipartRequest = new VolleyMultipartRequest(Request.Method.POST,
                 CommonUtilities.URL + "" + APIService.URL_Upload_Image, new com.android.volley.Response.Listener<NetworkResponse>() {
             @Override
             public void onResponse(NetworkResponse response) {
                 Logone.v("picresponse", response.toString());
+                Log.e(TAG, "uploadImage response bytes=" + (response.data != null ? response.data.length : 0));
 
                 String resultResponse = new String(response.data);
                 try {
@@ -740,6 +1021,8 @@ public class PostArticles extends AppCompatActivity {
                     if (error) {
                         JSONObject extraMsgOBJ = jObj.getJSONObject("extras");
                         ImageId = extraMsgOBJ.getString("url");
+                        persistDraftImageState();
+                        Log.e(TAG, "uploadImage success ImageId=" + ImageId);
                         Toast.makeText(PostArticles.this, languageModelResponse.getData().getImageUploadSuccessfully(), Toast.LENGTH_SHORT).show();
 
                         img_upload_photo.setVisibility(View.VISIBLE);
@@ -747,13 +1030,14 @@ public class PostArticles extends AppCompatActivity {
                         //     ProfileUpdateImage();
 /*
 
-                        Picasso.with(getContext()).load(ImageId).into(img_upload_photo);
+                        // Picasso.with(PostArticles.this).load(ImageId).into(img_upload_photo);
                         showLog(" NARASIMHARAO "+ImageId);*/
 
 
                     } else {
-                        Toast.makeText(getContext(), "Image not Captured", Toast.LENGTH_SHORT).show();
-
+                        Toast.makeText(PostArticles.this, "Image not Captured", Toast.LENGTH_SHORT).show();
+                        img_upload_photo.setVisibility(View.VISIBLE);
+                        image_upload_progress_bar.setVisibility(View.GONE);
                     }
                 } catch (JSONException e) {
 //                    mCropImageUri = null;
@@ -798,6 +1082,8 @@ public class PostArticles extends AppCompatActivity {
                 }
                 mCommonmethods.showerror(errorMessage);
                 error.printStackTrace();
+                img_upload_photo.setVisibility(View.VISIBLE);
+                image_upload_progress_bar.setVisibility(View.GONE);
             }
         }, new VolleyMultipartRequest.MultipartProgressListener() {
             @Override
@@ -816,10 +1102,30 @@ public class PostArticles extends AppCompatActivity {
             @Override
             protected Map<String, DataPart> getByteData() {
                 Map<String, DataPart> params = new HashMap<>();
-
-                params.put("file", new DataPart(UUID.randomUUID().toString() + ".jpeg", AppHelper.getFileDataFromDrawable(getContext(), img_upload_photo.getDrawable()), "image/jpeg"));
-
-
+                byte[] imageBytes = null;
+                // Prefer durable URI bytes — App.getContext() is null (AppController is the Application)
+                // and drawable cast fails for vectors / after GONE visibility tricks.
+                if (filePath != null) {
+                    imageBytes = AppHelper.getFileDataFromDrawables(PostArticles.this, filePath);
+                }
+                if (imageBytes == null || imageBytes.length == 0) {
+                    Drawable drawable = img_upload_photo.getDrawable();
+                    if (drawable instanceof android.graphics.drawable.BitmapDrawable) {
+                        imageBytes = AppHelper.getFileDataFromDrawable(PostArticles.this, drawable);
+                    }
+                }
+                if (imageBytes == null || imageBytes.length == 0) {
+                    PostArticles.this.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            image_upload_progress_bar.setVisibility(View.GONE);
+                            img_upload_photo.setVisibility(View.VISIBLE);
+                            Toast.makeText(PostArticles.this, "Unable to read image for upload", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                    return params;
+                }
+                params.put("file", new DataPart(UUID.randomUUID().toString() + ".jpeg", imageBytes, "image/jpeg"));
                 return params;
             }
         };
@@ -978,6 +1284,7 @@ public class PostArticles extends AppCompatActivity {
 
                     if (languageModel.getSuccess()) {
                         Toast.makeText(PostArticles.this, "Your Article has been updated and resubmitted.", Toast.LENGTH_SHORT).show();
+                        clearDraftImageState();
                         Intent intent = new Intent(PostArticles.this, HomePage.class);
                         startActivity(intent);
                     } else {
@@ -1035,6 +1342,7 @@ public class PostArticles extends AppCompatActivity {
 
                 if (languageModel.getSuccess()) {
                     Toast.makeText(PostArticles.this, "Your Article Posted Succesfully.", Toast.LENGTH_SHORT).show();
+                    clearDraftImageState();
                     Intent intent = new Intent(PostArticles.this, HomePage.class);
                     startActivity(intent);
                     new Handler().postDelayed(new Runnable() {

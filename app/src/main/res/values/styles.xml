@@ -19,6 +19,16 @@
 
     </style>
 
+    <!-- CanHub CropImageActivity needs an ActionBar for Crop / rotate menu items.
+         Do NOT use AppTheme (NoActionBar) here — that breaks the crop toolbar. -->
+    <style name="CropImageTheme" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="colorPrimary">@color/brand_orange</item>
+        <item name="colorPrimaryDark">@color/brand_orange</item>
+        <item name="colorAccent">@color/brand_orange</item>
+        <item name="android:windowBackground">@color/whitewithblack</item>
+    </style>
+
     <style name="AppThemeSplash" parent="Theme.AppCompat.NoActionBar">
         <!-- Customize your theme here. -->v
        <!-- <item name="android:windowBackground">@drawable/splash_bg</item> </style>-->

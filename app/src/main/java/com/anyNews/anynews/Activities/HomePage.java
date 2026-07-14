@@ -704,9 +704,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             public void onClick(View view) {
                 Intent intent = new Intent(HomePage.this, PostArticles.class);
                 intent.putExtra("POST_VIDEO", "0");
-                if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    startActivity(intent);
-                }
+                // Do not use CLEAR_TOP / CLEAR_TASK / NEW_TASK — those replace the feed
+                // underneath the reporter form and make gallery/camera return land on Home.
+                startActivity(intent);
             }
         });
 

@@ -209,7 +209,18 @@
             android:name=".Activities.PostArticles"
             android:theme="@style/AppTheme"
             android:screenOrientation="portrait"
+            android:exported="false"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
+        <!-- ActionBar theme required (library uses support ActionBar crop menu).
+             AppTheme is NoActionBar and previously left crop UI / OEM stacks broken. -->
+        <activity
+            android:name="com.canhub.cropper.CropImageActivity"
+            android:theme="@style/CropImageTheme"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            tools:replace="android:exported,android:theme" />
         <activity
             android:name=".Activities.SearchActivity"
             android:theme="@style/AppTheme"
