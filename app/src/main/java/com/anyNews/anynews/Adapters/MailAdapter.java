@@ -41,6 +41,7 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
     private List<ListOfCommentsResponse.Datum> allComments;
     private final List<DisplayItem> displayItems = new ArrayList<>();
     private final Map<Long, List<ListOfCommentsResponse.Datum>> repliesByParent = new HashMap<>();
+    private final Map<Long, ListOfCommentsResponse.Datum> commentById = new HashMap<>();
     private final Set<Long> expandedParents = new HashSet<>();
     CommonMethods commonMethods;
     ShowReportLayout showReportLayout;
@@ -65,10 +66,14 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
 
     private void rebuildThreadData() {
         repliesByParent.clear();
+        commentById.clear();
         displayItems.clear();
 
         List<ListOfCommentsResponse.Datum> parents = new ArrayList<>();
         for (ListOfCommentsResponse.Datum datum : allComments) {
+            if (datum.getId() != null) {
+                commentById.put(datum.getId(), datum);
+            }
             Long parentId = datum.getParentCommentId();
             if (parentId != null && parentId > 0) {
                 List<ListOfCommentsResponse.Datum> replies = repliesByParent.get(parentId);
@@ -102,35 +107,99 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
             });
         }
 
+        // Resolve expand targets that point at nested replies back to the
+        // top-level root so "View N replies" opens after posting a reply-to-reply.
+        Set<Long> rootsToExpand = new HashSet<>();
+        for (Long expandedId : expandedParents) {
+            Long rootId = resolveRootCommentId(expandedId);
+            if (rootId != null) {
+                rootsToExpand.add(rootId);
+            }
+        }
+        expandedParents.clear();
+        expandedParents.addAll(rootsToExpand);
+
         for (ListOfCommentsResponse.Datum parent : parents) {
-            int replyCount = getReplyCount(parent);
+            int replyCount = getDescendantReplyCount(parent.getId());
+            // Prefer server reply_count when it already includes all descendants.
+            if (parent.getReplyCount() != null && parent.getReplyCount() > replyCount) {
+                replyCount = parent.getReplyCount();
+            }
             displayItems.add(new DisplayItem(TYPE_PARENT, parent, replyCount));
-            if (expandedParents.contains(parent.getId())) {
-                appendReplies(parent.getId());
+            if (parent.getId() != null && expandedParents.contains(parent.getId())) {
+                appendFlattenedReplies(parent.getId());
             }
         }
     }
 
-    private int getReplyCount(ListOfCommentsResponse.Datum parent) {
-        if (parent.getReplyCount() != null && parent.getReplyCount() > 0) {
-            return parent.getReplyCount();
+    /**
+     * Walk up parent_comment_id until a top-level comment (no parent) is found.
+     */
+    private Long resolveRootCommentId(Long commentId) {
+        if (commentId == null || commentId <= 0) {
+            return null;
         }
-        List<ListOfCommentsResponse.Datum> replies = repliesByParent.get(parent.getId());
-        return replies != null ? replies.size() : 0;
+        Long current = commentId;
+        Set<Long> seen = new HashSet<>();
+        while (current != null && current > 0 && !seen.contains(current)) {
+            seen.add(current);
+            ListOfCommentsResponse.Datum node = commentById.get(current);
+            if (node == null) {
+                return current;
+            }
+            Long parentId = node.getParentCommentId();
+            if (parentId == null || parentId <= 0) {
+                return current;
+            }
+            current = parentId;
+        }
+        return commentId;
     }
 
-    private void appendReplies(Long parentId) {
-        List<ListOfCommentsResponse.Datum> replies = repliesByParent.get(parentId);
-        if (replies == null) {
+    /** Count all nested replies under a top-level comment (any depth). */
+    private int getDescendantReplyCount(Long rootId) {
+        if (rootId == null) {
+            return 0;
+        }
+        int total = 0;
+        List<Long> stack = new ArrayList<>();
+        stack.add(rootId);
+        while (!stack.isEmpty()) {
+            Long id = stack.remove(stack.size() - 1);
+            List<ListOfCommentsResponse.Datum> kids = repliesByParent.get(id);
+            if (kids == null) {
+                continue;
+            }
+            for (ListOfCommentsResponse.Datum kid : kids) {
+                total += 1;
+                if (kid.getId() != null) {
+                    stack.add(kid.getId());
+                }
+            }
+        }
+        return total;
+    }
+
+    /**
+     * Instagram-style flatten: depth-first list all descendant replies under
+     * the top-level root so reply-to-reply is visible in "View N replies".
+     */
+    private void appendFlattenedReplies(Long rootId) {
+        List<ListOfCommentsResponse.Datum> direct = repliesByParent.get(rootId);
+        if (direct == null) {
             return;
         }
-        for (ListOfCommentsResponse.Datum reply : replies) {
+        for (ListOfCommentsResponse.Datum reply : direct) {
             displayItems.add(new DisplayItem(TYPE_REPLY, reply, 0));
+            if (reply.getId() != null) {
+                appendFlattenedReplies(reply.getId());
+            }
         }
     }
 
     public void expandParent(Long parentId) {
         if (parentId != null && parentId > 0) {
+            // May be a nested reply id; rebuildThreadData resolves to root.
             expandedParents.add(parentId);
             rebuildThreadData();
             notifyDataSetChanged();
