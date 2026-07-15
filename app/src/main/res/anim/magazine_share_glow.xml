@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Magazine-only center Share button: slow, rich "breathing" glow.
+  Combines a gentle slow blink (alpha dip) with a soft pulse (scale) so the
+  golden icon appears to glow and pulse to draw attention. No ring, no circle.
+-->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:anim/accelerate_decelerate_interpolator"
+    android:shareInterpolator="false">
+
+    <alpha
+        android:duration="1200"
+        android:fromAlpha="1.0"
+        android:toAlpha="0.45"
+        android:repeatCount="infinite"
+        android:repeatMode="reverse" />
+
+    <scale
+        android:duration="1200"
+        android:fromXScale="1.0"
+        android:fromYScale="1.0"
+        android:toXScale="1.14"
+        android:toYScale="1.14"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:repeatCount="infinite"
+        android:repeatMode="reverse" />
+</set>

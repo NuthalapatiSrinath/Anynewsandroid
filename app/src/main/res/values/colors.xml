@@ -12,6 +12,7 @@
     <color name="full_gallery_text_color">#FFFFFF</color>
     <color name="background_color">#F5F7FB</color>
     <color name="chip_background">#F5F7FB</color>
+    <color name="state_card_background">#FFFFFF</color>
     <color name="chip_text_color">#5A5858</color>
     <color name="default_color">#02a6d8</color>
     <color name="default_color_dark">#52a6b8</color>

@@ -30,6 +30,7 @@ import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
@@ -231,6 +232,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     // FloatingActionButton fab1,fab2,fab4;
     ImageView fab1, fab2, fab4;
     Animation fab_open, fab_close, fab_forword, fab_reverse;
+    /** Slow blink + glow for the magazine-only center Share button. */
+    Animation magazineGlowAnim;
     boolean isOpen = false;
 
     /* flipView Detailes*/
@@ -2695,7 +2698,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * matching production: + when reporter login is enabled, WhatsApp otherwise.
      */
     private void updateCenterFab() {
+        // Magazine posts get a rich glowing Share icon in place of the + / WhatsApp button.
+        if (isCurrentPostMagazine()) {
+            applyMagazineCenterShare();
+            showLog("updateCenterFab magazine share glow");
+            return;
+        }
         if (floatingActionButtonHome != null) {
+            // Restore the normal circular FAB chrome after leaving a magazine post.
+            floatingActionButtonHome.clearAnimation();
+            floatingActionButtonHome.setScaleX(1f);
+            floatingActionButtonHome.setScaleY(1f);
+            floatingActionButtonHome.setAlpha(1f);
+            floatingActionButtonHome.setBackgroundTintList(
+                    ContextCompat.getColorStateList(this, R.color.bottom_navigation_view_color));
             floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
             floatingActionButtonHome.setVisibility(showReporterLogin ? View.VISIBLE : View.INVISIBLE);
         }
@@ -2704,6 +2720,44 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             imageVIewShareWhatsapp.setVisibility(showReporterLogin ? View.GONE : View.VISIBLE);
         }
         showLog("updateCenterFab showReporterLogin:" + showReporterLogin);
+    }
+
+    /** True when the currently visible post is a magazine. */
+    private boolean isCurrentPostMagazine() {
+        try {
+            if (list == null || positionx < 0 || positionx >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum item = list.get(positionx);
+            return item != null && item.getPostType() != null
+                    && item.getPostType().equalsIgnoreCase("magazine");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Magazine-only: replace the center + button with a themed, glowing Share glyph.
+     * The FAB circle/background is made transparent so only the glowing icon shows,
+     * and it slowly blinks + glows to draw attention.
+     */
+    private void applyMagazineCenterShare() {
+        if (imageVIewShareWhatsapp != null) {
+            imageVIewShareWhatsapp.clearAnimation();
+            imageVIewShareWhatsapp.setVisibility(View.GONE);
+        }
+        if (floatingActionButtonHome == null) {
+            return;
+        }
+        floatingActionButtonHome.setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
+        floatingActionButtonHome.setImageResource(R.drawable.ic_magazine_share_glow);
+        floatingActionButtonHome.setVisibility(View.VISIBLE);
+        if (magazineGlowAnim == null) {
+            magazineGlowAnim = AnimationUtils.loadAnimation(getApplicationContext(),
+                    R.anim.magazine_share_glow);
+        }
+        floatingActionButtonHome.clearAnimation();
+        floatingActionButtonHome.startAnimation(magazineGlowAnim);
     }
 
     private void shareCurrentPostViaWhatsAppFooter() {
@@ -3802,6 +3856,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             post_type = "";
         }
 
+        try {
+            updateCenterFab();
+        } catch (Exception fabEx) {
+            fabEx.printStackTrace();
+        }
+
         if (post_type.equalsIgnoreCase("ad") || post_type.equalsIgnoreCase("share_app") || post_type.equalsIgnoreCase("ratings")) {
             home_page_navigation.setVisibility(View.INVISIBLE);
         }else{
@@ -4276,6 +4336,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     //SharedPrefsData.putBool(HomePage.this, Constants.isUnreadPostsSelected, false, Constants.PREF_NAME);
                     writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_post);
                     showLog("showReporterLogin:"+showReporterLogin);
+                    // Magazine posts: center button is the glowing Share icon -> always share.
+                    if (isCurrentPostMagazine()) {
+                        try {
+                            CallShareListener magListener = new CallShareListener();
+                            magListener.setShareInterfaceListener(adapter);
+                            magListener.triggerEvent();
+                            shareCurrentPostViaWhatsAppFooter();
+                        } catch (Exception magEx) {
+                            magEx.printStackTrace();
+                        }
+                        return false;
+                    }
                     if (!showReporterLogin) {
                         showLog("onClick of whatsapp");
                         try {
