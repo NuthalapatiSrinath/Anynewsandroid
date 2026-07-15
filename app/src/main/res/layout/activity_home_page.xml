@@ -424,7 +424,7 @@
 
                     <!--For tab remove max dp
                     app:maxImageSize="@dimen/_40sdp"-->
-                    <!-- Must share the same anchor as fab so magazine glow sits exactly on the + slot -->
+                    <!-- Must share the same anchor as fab so magazine Share sits exactly on the + slot -->
                     <ImageView
                         android:id="@+id/imageVIewShareWhatsapp"
                         android:layout_width="48dp"
@@ -434,6 +434,44 @@
                         android:visibility="gone"
                         app:layout_anchor="@+id/nav_view"
                         app:layout_anchorGravity="center" />
+
+                    <!-- Magazine Share: same vertical icon+label structure as other footer tabs -->
+                    <LinearLayout
+                        android:id="@+id/layoutMagazineShareFooter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:elevation="12dp"
+                        android:focusable="true"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="4dp"
+                        android:visibility="gone"
+                        app:layout_anchor="@+id/nav_view"
+                        app:layout_anchorGravity="center">
+
+                        <ImageView
+                            android:id="@+id/ivMagazineShareFooter"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:contentDescription="@string/share"
+                            android:src="@drawable/ic_footer_share"
+                            app:tint="@color/selector_item_primary_color" />
+
+                        <TextView
+                            android:id="@+id/tvMagazineShareFooter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="@string/share"
+                            android:textAppearance="@style/BottomNavLabelInactive"
+                            android:textColor="@color/selector_item_primary_color" />
+                    </LinearLayout>
 
                     <com.google.android.material.floatingactionbutton.FloatingActionButton
                         android:id="@+id/fab"

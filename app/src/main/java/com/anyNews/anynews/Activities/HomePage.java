@@ -233,8 +233,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     // FloatingActionButton fab1,fab2,fab4;
     ImageView fab1, fab2, fab4;
     Animation fab_open, fab_close, fab_forword, fab_reverse;
-    /** Slow blink + glow for the magazine-only center Share button. */
-    Animation magazineGlowAnim;
+    /** Continuous alpha blink for magazine footer Share (same pattern as Special bulb). */
+    private Animator magazineShareBlinkAnimator;
+    private View layoutMagazineShareFooter;
+    private ImageView ivMagazineShareFooter;
+    private TextView tvMagazineShareFooter;
     boolean isOpen = false;
 
     /* flipView Detailes*/
@@ -516,6 +519,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         home_page_navigation = findViewById(R.id.home_page_navigation);
         home_page_navigation.setVisibility(View.GONE);
         imageVIewShareWhatsapp = findViewById(R.id.imageVIewShareWhatsapp);
+        layoutMagazineShareFooter = findViewById(R.id.layoutMagazineShareFooter);
+        ivMagazineShareFooter = findViewById(R.id.ivMagazineShareFooter);
+        tvMagazineShareFooter = findViewById(R.id.tvMagazineShareFooter);
 
 
 
@@ -1492,6 +1498,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 fab_article.setText("" + languageModelResponse.getData().getArticle());
                 nodatascreen.setText("" + languageModelResponse.getData().getNoData());
                 leave_comment_white.setHint("" + languageModelResponse.getData().getWriteComments());
+                applyMagazineShareFooterLabel();
             }
 
         } catch (NullPointerException e) {
@@ -2715,7 +2722,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Center FAB follows show_reporter_login from the articles API (per language),
      * matching production: + when reporter login is enabled, WhatsApp otherwise.
-     * Magazine posts replace the center "+" with a glowing Share glyph.
+     * Magazine posts replace the center "+" with a footer-style Share (icon + label).
      */
     private void updateCenterFab() {
         boolean isMagazine = isCurrentPostMagazine();
@@ -2739,12 +2746,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         if (isMagazine) {
             applyMagazineCenterShare();
-            Log.i(MAGAZINE_GLOW_TAG, "MODE=GLOW_FAB postType=[" + type + "] fabIcon=glow title="
+            Log.i(MAGAZINE_GLOW_TAG, "MODE=SHARE_FOOTER postType=[" + type + "] title="
                     + (title.length() > 40 ? title.substring(0, 40) : title));
-            showLog("updateCenterFab magazine share glow");
+            showLog("updateCenterFab magazine share footer");
             return;
         }
         // Not a magazine -> restore the normal center button (+ or WhatsApp).
+        hideMagazineShareFooter();
         if (floatingActionButtonHome != null) {
             floatingActionButtonHome.clearAnimation();
             floatingActionButtonHome.setScaleX(1f);
@@ -2889,35 +2897,38 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Magazines / image_gallery: replace the center "+" icon with the glow Share glyph on the
-     * same FAB slot (transparent circle) so it cannot stay stuck as a visible plus.
+     * Magazines / image_gallery: replace the center "+" FAB with a footer-style Share
+     * control (24dp tinted icon + translated label) that blinks like the Special bulb.
      */
     private void applyMagazineCenterShare() {
-        // Keep WhatsApp ImageView out of the way — glow lives on the FAB itself.
         if (imageVIewShareWhatsapp != null) {
             imageVIewShareWhatsapp.clearAnimation();
             imageVIewShareWhatsapp.setOnClickListener(null);
             imageVIewShareWhatsapp.setClickable(false);
             imageVIewShareWhatsapp.setVisibility(View.GONE);
         }
-        if (floatingActionButtonHome == null) {
-            Log.e(MAGAZINE_GLOW_TAG, "applyMagazineCenterShare FAILED: floatingActionButtonHome null");
+        // Hide the + FAB plate so Share reads like a normal footer tab.
+        if (floatingActionButtonHome != null) {
+            floatingActionButtonHome.clearAnimation();
+            floatingActionButtonHome.setOnClickListener(null);
+            floatingActionButtonHome.setClickable(false);
+            floatingActionButtonHome.setFocusable(false);
+            floatingActionButtonHome.setVisibility(View.INVISIBLE);
+            try {
+                floatingActionButtonHome.hide();
+            } catch (Exception ignored) {
+            }
+        }
+        if (layoutMagazineShareFooter == null) {
+            Log.e(MAGAZINE_GLOW_TAG, "applyMagazineCenterShare FAILED: layoutMagazineShareFooter null");
             return;
         }
-        floatingActionButtonHome.clearAnimation();
-        try {
-            floatingActionButtonHome.show();
-        } catch (Exception ignored) {
-        }
-        floatingActionButtonHome.setVisibility(View.VISIBLE);
-        floatingActionButtonHome.setEnabled(true);
-        floatingActionButtonHome.setClickable(true);
-        // The glow FAB sits on top of the center, so give it a direct Share handler
-        // (the tap won't reach navigation_stricker underneath). This shares the current
-        // magazine / image_gallery post exactly like the footer share did before.
-        floatingActionButtonHome.setOnClickListener(v -> {
+        applyMagazineShareFooterLabel();
+        layoutMagazineShareFooter.setVisibility(View.VISIBLE);
+        layoutMagazineShareFooter.setEnabled(true);
+        layoutMagazineShareFooter.setClickable(true);
+        layoutMagazineShareFooter.setOnClickListener(v -> {
             try {
-                // Share the currently visible post (FlipView page is the source of truth).
                 int visibleIdx = getVisiblePostIndex();
                 if (visibleIdx >= 0) {
                     positionx = visibleIdx;
@@ -2930,32 +2941,83 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 magEx.printStackTrace();
             }
         });
-        floatingActionButtonHome.setAlpha(1f);
-        floatingActionButtonHome.setScaleX(1f);
-        floatingActionButtonHome.setScaleY(1f);
-        // Transparent FAB plate so only the glow glyph reads (no white/grey plus circle).
-        floatingActionButtonHome.setBackgroundTintList(
-                ColorStateList.valueOf(Color.TRANSPARENT));
-        floatingActionButtonHome.setRippleColor(ColorStateList.valueOf(Color.TRANSPARENT));
-        floatingActionButtonHome.setImageResource(R.drawable.ic_magazine_share_glow);
-        floatingActionButtonHome.setContentDescription("Share magazine");
-        floatingActionButtonHome.bringToFront();
+        layoutMagazineShareFooter.bringToFront();
         if (home_page_navigation != null) {
-            home_page_navigation.bringChildToFront(floatingActionButtonHome);
+            home_page_navigation.bringChildToFront(layoutMagazineShareFooter);
         }
-        if (magazineGlowAnim == null) {
-            magazineGlowAnim = AnimationUtils.loadAnimation(getApplicationContext(),
-                    R.anim.magazine_share_glow);
+        startMagazineShareBlink();
+        Log.i(MAGAZINE_GLOW_TAG, "applyMagazineCenterShare OK mode=FOOTER_SHARE"
+                + " vis=" + layoutMagazineShareFooter.getVisibility());
+    }
+
+    /** Localized "Share" from language pack (same source as reload/profile footer labels). */
+    private void applyMagazineShareFooterLabel() {
+        if (tvMagazineShareFooter == null) {
+            return;
         }
-        floatingActionButtonHome.startAnimation(magazineGlowAnim);
-        Log.i(MAGAZINE_GLOW_TAG, "applyMagazineCenterShare OK mode=FAB_GLOW"
-                + " fabVis=" + floatingActionButtonHome.getVisibility()
-                + " drawable=ic_magazine_share_glow");
+        String label = null;
+        try {
+            if (languageModelResponse != null
+                    && languageModelResponse.getData() != null
+                    && languageModelResponse.getData().getShare() != null) {
+                label = languageModelResponse.getData().getShare().trim();
+            }
+        } catch (Exception ignored) {
+        }
+        if (label == null || label.isEmpty()) {
+            label = getString(R.string.share);
+        }
+        tvMagazineShareFooter.setText(label);
+        if (layoutMagazineShareFooter != null) {
+            layoutMagazineShareFooter.setContentDescription(label);
+        }
+        if (ivMagazineShareFooter != null) {
+            ivMagazineShareFooter.setContentDescription(label);
+        }
+    }
+
+    private void hideMagazineShareFooter() {
+        stopMagazineShareBlink();
+        if (layoutMagazineShareFooter != null) {
+            layoutMagazineShareFooter.setOnClickListener(null);
+            layoutMagazineShareFooter.setClickable(false);
+            layoutMagazineShareFooter.setVisibility(View.GONE);
+        }
+    }
+
+    private void startMagazineShareBlink() {
+        if (ivMagazineShareFooter == null) {
+            return;
+        }
+        stopMagazineShareBlink();
+        ivMagazineShareFooter.setAlpha(1f);
+        ObjectAnimator animator = ObjectAnimator.ofFloat(ivMagazineShareFooter, View.ALPHA, 1f, 0.35f);
+        animator.setDuration(700);
+        animator.setRepeatCount(ValueAnimator.INFINITE);
+        animator.setRepeatMode(ValueAnimator.REVERSE);
+        animator.setInterpolator(new AccelerateDecelerateInterpolator());
+        magazineShareBlinkAnimator = animator;
+        animator.start();
+    }
+
+    private void stopMagazineShareBlink() {
+        if (magazineShareBlinkAnimator != null) {
+            magazineShareBlinkAnimator.cancel();
+            magazineShareBlinkAnimator = null;
+        }
+        if (ivMagazineShareFooter != null) {
+            ivMagazineShareFooter.clearAnimation();
+            ivMagazineShareFooter.setAlpha(1f);
+        }
+        if (layoutMagazineShareFooter != null) {
+            layoutMagazineShareFooter.clearAnimation();
+            layoutMagazineShareFooter.setAlpha(1f);
+        }
     }
 
     /**
      * Called from FlipperAdapter when a magazine page view is bound so the footer
-     * center button can swap to the glow Share icon even if flip callbacks lag.
+     * center button can swap to Share even if flip callbacks lag.
      */
     public void onMagazinePageBound(int boundPosition) {
         Log.i(MAGAZINE_GLOW_TAG, "onMagazinePageBound boundPosition=" + boundPosition
@@ -3431,6 +3493,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 fab_article.setText("" + languageModelResponse.getData().getArticle());
                 nodatascreen.setText("" + languageModelResponse.getData().getNoData());
                 leave_comment_white.setHint("" + languageModelResponse.getData().getWriteComments());
+                applyMagazineShareFooterLabel();
 
                 if (category_id == 0) {
                     type = "" + String.valueOf(SharedPrefsData.getString(HomePage.this, Constants.Selected_Distric_Name1, Constants.PREF_NAME));
@@ -4204,6 +4267,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void onDestroy() {
         adapter = null;
+        stopMagazineShareBlink();
         super.onDestroy();
         isFromLocalArticles=false;
 
@@ -4564,7 +4628,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     //SharedPrefsData.putBool(HomePage.this, Constants.isUnreadPostsSelected, false, Constants.PREF_NAME);
                     writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_post);
                     showLog("showReporterLogin:"+showReporterLogin);
-                    // Magazine posts: center button is the glowing Share icon -> always share.
+                    // Magazine posts: center footer Share -> always share.
                     if (isCurrentPostMagazine()) {
                         try {
                             CallShareListener magListener = new CallShareListener();
