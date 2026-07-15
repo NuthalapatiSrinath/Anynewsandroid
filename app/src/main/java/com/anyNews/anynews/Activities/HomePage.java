@@ -2752,10 +2752,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             floatingActionButtonHome.setAlpha(1f);
             floatingActionButtonHome.setBackgroundTintList(
                     ContextCompat.getColorStateList(this, R.color.bottom_navigation_view_color));
+            floatingActionButtonHome.setRippleColor(
+                    ContextCompat.getColorStateList(this, R.color.bottom_navigation_view_color));
             floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
             floatingActionButtonHome.setContentDescription(getString(R.string.post_selection));
             floatingActionButtonHome.setEnabled(true);
-            floatingActionButtonHome.setClickable(true);
+            // Non-magazine: the "+" must NOT consume the tap. The center action (reporter
+            // menu / WhatsApp) is driven by BottomNavigationView (navigation_stricker)
+            // underneath, so keep the FAB non-clickable to let the tap flow through.
+            floatingActionButtonHome.setOnClickListener(null);
+            floatingActionButtonHome.setClickable(false);
+            floatingActionButtonHome.setFocusable(false);
             if (showReporterLogin) {
                 floatingActionButtonHome.setVisibility(View.VISIBLE);
                 try {
@@ -2798,9 +2805,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * True when the currently visible post should use the glow Share FAB instead of "+".
-     * Live "రామాయణం స్పెషల్" (post 1771174) is post_type {@code image_gallery} in Magazines —
-     * not {@code magazine}. Only true magazines + Magazines image galleries get glow;
-     * normal_image / full_image / video keep "+".
+     * Live "రామాయణం స్పెషల్" is post_type {@code image_gallery} in Magazines (category 15) —
+     * not {@code magazine}. Only true magazines + Magazines-category galleries get glow.
+     * Normal image_gallery posts keep "+" / WhatsApp and use on-image corner share.
      */
     private boolean isCurrentPostMagazine() {
         try {
@@ -2810,7 +2817,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         + " listSize=" + (list == null ? -1 : list.size()));
                 return false;
             }
-            ModelClass.Datum item = list.get(idx);
+            return usesMagazineGlowShare(list.get(idx), idx);
+        } catch (Exception e) {
+            Log.e(MAGAZINE_GLOW_TAG, "isMagazine exception: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Footer glow Share applies only to card magazines and Magazines-category specials
+     * (e.g. Ramayana). Ordinary {@code image_gallery} news posts must NOT match — they need
+     * the reporter "+" FAB and on-image {@code image_gallary_share}.
+     */
+    public static boolean usesMagazineGlowShare(ModelClass.Datum item) {
+        return usesMagazineGlowShare(item, -1);
+    }
+
+    private static boolean usesMagazineGlowShare(ModelClass.Datum item, int idx) {
+        try {
             if (item == null) {
                 Log.i(MAGAZINE_GLOW_TAG, "isMagazine=false reason=null_item idx=" + idx);
                 return false;
@@ -2821,12 +2845,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 return false;
             }
             type = type.trim();
-            // True card magazines (rare) + Magazines-category galleries (Ramayana Special etc.).
             boolean glow = type.equalsIgnoreCase("magazine")
-                    || type.equalsIgnoreCase("magazines")
-                    || type.equalsIgnoreCase("image_gallery");
-            // Magazines card posts: media_type "2" with strip JSON.
-            if (!glow && "2".equals(String.valueOf(item.getMediaType()))) {
+                    || type.equalsIgnoreCase("magazines");
+            // Magazines-category image_gallery specials only (NOT all galleries).
+            Integer catId = item.getCategoryId();
+            if (!glow && type.equalsIgnoreCase("image_gallery")
+                    && catId != null && catId.intValue() == 15) {
+                glow = true;
+                Log.i(MAGAZINE_GLOW_TAG, "isMagazine=true via Magazines image_gallery cat=15"
+                        + " idx=" + idx);
+            }
+            // Magazines card posts: media_type "2" with strip JSON (non-gallery).
+            if (!glow && !"image_gallery".equalsIgnoreCase(type)
+                    && "2".equals(String.valueOf(item.getMediaType()))) {
                 String strip = item.getStrip_content();
                 if (strip != null && strip.trim().length() > 2
                         && (strip.trim().startsWith("[") || strip.contains("http"))) {
@@ -2835,10 +2866,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             + " postType=[" + type + "] idx=" + idx);
                 }
             }
-            // Magazines category_id 15 — safety net if post_type is mistyped.
-            Integer catId = item.getCategoryId();
+            // Magazines category_id 15 + media_type 2 — safety net if post_type mistyped.
             if (!glow && catId != null && catId.intValue() == 15
-                    && "2".equals(String.valueOf(item.getMediaType()))) {
+                    && "2".equals(String.valueOf(item.getMediaType()))
+                    && !"image_gallery".equalsIgnoreCase(type)) {
                 glow = true;
                 Log.i(MAGAZINE_GLOW_TAG, "isMagazine=true via Magazines category_id=15"
                         + " postType=[" + type + "] idx=" + idx);
@@ -2852,7 +2883,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             return glow;
         } catch (Exception e) {
-            Log.e(MAGAZINE_GLOW_TAG, "isMagazine exception: " + e.getMessage());
+            Log.e(MAGAZINE_GLOW_TAG, "usesMagazineGlowShare exception: " + e.getMessage());
             return false;
         }
     }
@@ -2881,6 +2912,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         floatingActionButtonHome.setVisibility(View.VISIBLE);
         floatingActionButtonHome.setEnabled(true);
         floatingActionButtonHome.setClickable(true);
+        // The glow FAB sits on top of the center, so give it a direct Share handler
+        // (the tap won't reach navigation_stricker underneath). This shares the current
+        // magazine / image_gallery post exactly like the footer share did before.
+        floatingActionButtonHome.setOnClickListener(v -> {
+            try {
+                // Share the currently visible post (FlipView page is the source of truth).
+                int visibleIdx = getVisiblePostIndex();
+                if (visibleIdx >= 0) {
+                    positionx = visibleIdx;
+                }
+                CallShareListener magListener = new CallShareListener();
+                magListener.setShareInterfaceListener(adapter);
+                magListener.triggerEvent();
+                shareCurrentPostViaWhatsAppFooter();
+            } catch (Exception magEx) {
+                magEx.printStackTrace();
+            }
+        });
         floatingActionButtonHome.setAlpha(1f);
         floatingActionButtonHome.setScaleX(1f);
         floatingActionButtonHome.setScaleY(1f);
