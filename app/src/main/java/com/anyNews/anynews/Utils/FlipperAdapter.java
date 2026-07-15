@@ -929,25 +929,36 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         image_magazineHolder.magzine_ll_dots = convertView.findViewById(R.id.magzine_ll_dots);
                         final RelativeLayout magzine_relative_slider = convertView.findViewById(R.id.magzine_relative_slider);
                         ImageView imageViewShareMag = convertView.findViewById(R.id.imageViewShare);
-                        // Magazine-only attention blink (true flash + slight bounce).
-                        startMagazineShareBlink(imageViewShareMag);
+                        // Poster-corner share removed: footer glow Share replaces it for magazines.
+                        if (imageViewShareMag != null) {
+                            imageViewShareMag.clearAnimation();
+                            imageViewShareMag.setOnClickListener(null);
+                            imageViewShareMag.setVisibility(GONE);
+                        }
+                        // Ensure footer center "+" morphs to glow Share (HomePage sync).
+                        try {
+                            if (context instanceof HomePage) {
+                                ((HomePage) context).onMagazinePageBound(position);
+                            } else if (activity instanceof HomePage) {
+                                ((HomePage) activity).onMagazinePageBound(position);
+                            }
+                        } catch (Exception magBindEx) {
+                            android.util.Log.e("MagazineGlow", "onMagazinePageBound failed: "
+                                    + magBindEx.getMessage());
+                        }
                         final RelativeLayout relativeLayoutShareOpt = convertView.findViewById(R.id.relativeLayoutShareOpt);
                         final TextView textViewAllPage = convertView.findViewById(R.id.textViewAllPage);
                         final TextView textViewSinglePage = convertView.findViewById(R.id.textViewSinglePage);
                         final ImageView imageViewShareClose = convertView.findViewById(R.id.imageViewShareClose);
                         //imageGallaryHolder.galleryLayout.setLayerType(View.LAYER_TYPE_NONE,null);
-                        imageViewShareMag.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                relativeLayoutShareOpt.setVisibility(VISIBLE);
-                            }
-                        });
                         relativeLayoutShareOpt.setVisibility(GONE);
                         imageViewShareClose.setOnClickListener(new View.OnClickListener() {
                             @Override
                             public void onClick(View view) {
                                 relativeLayoutShareOpt.setVisibility(GONE);
-                                imageViewShareMag.setVisibility(VISIBLE);
+                                if (imageViewShareMag != null) {
+                                    imageViewShareMag.setVisibility(GONE);
+                                }
                                 fromWhatsapp = false;
                                 image_magazineHolder.magzine_ll_dots.setVisibility(VISIBLE);
                             }
@@ -1294,6 +1305,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         pauseVideo();
                         ArrayList<String> image_gallary = new ArrayList<>();
                         showLog("image_gallery:::");
+                        // Magazines image_gallery (e.g. రామాయణం స్పెషల్) → glow footer Share.
+                        try {
+                            if (context instanceof HomePage) {
+                                ((HomePage) context).onMagazinePageBound(position);
+                            } else if (activity instanceof HomePage) {
+                                ((HomePage) activity).onMagazinePageBound(position);
+                            }
+                        } catch (Exception galBindEx) {
+                            android.util.Log.e("MagazineGlow", "image_gallery onMagazinePageBound failed: "
+                                    + galBindEx.getMessage());
+                        }
                         imageGallaryHolder = new ImageGallaryHolder();
                         convertView = inflater.inflate(R.layout.activity_circular_indicatior, parent, false);
                         imageGallaryHolder.galleryLayout = convertView.findViewById(R.id.gallery_layout);
@@ -1311,8 +1333,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         imageGallaryHolder.imageViewShareClose = convertView.findViewById(R.id.imageViewShareClose);
                         //imageGallaryHolder.galleryLayout.setLayerType(View.LAYER_TYPE_NONE,null);
                         imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
-                        imageGallaryHolder.image_gallary_share.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                        imageGallaryHolder.image_gallary_share.setBackground(null);
+                        // Poster-corner share removed: footer glow Share replaces it for galleries.
+                        if (imageGallaryHolder.image_gallary_share != null) {
+                            imageGallaryHolder.image_gallary_share.clearAnimation();
+                            imageGallaryHolder.image_gallary_share.setOnClickListener(null);
+                            imageGallaryHolder.image_gallary_share.setVisibility(GONE);
+                        }
                         //imageGallaryHolder.indicator.initialize(config);
                         List<String> galleryImages = list.get(position).getImages();
                         if (galleryImages != null && !galleryImages.isEmpty()) {
@@ -1348,7 +1374,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.image_gallary_share = finalConvertView.findViewById(R.id.image_gallary_share);
                                 imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
                                 imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
-                                imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
+                                if (imageGallaryHolder.image_gallary_share != null) {
+                                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
+                                }
                                 imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);
 
                             }
@@ -1361,7 +1389,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.image_gallary_share = finalConvertView.findViewById(R.id.image_gallary_share);
                                 imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
                                 imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
-                                imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
+                                if (imageGallaryHolder.image_gallary_share != null) {
+                                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
+                                }
                                 imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);                               // downloadPDFWithProgressBar(list.get(position).getDownloadUrl(),"anyNews+"+list.get(position).getPostId()+".pdf",position);
                             }
                         });
@@ -1373,76 +1403,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.relativeLayoutShareOpt = finalConvertView.findViewById(R.id.relativeLayoutShareOpt);
                                 imageGallaryHolder.image_gallary_share = finalConvertView.findViewById(R.id.image_gallary_share);
                                 imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
-                                imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
+                                if (imageGallaryHolder.image_gallary_share != null) {
+                                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
+                                }
                                 imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);
                             }
                         });
-                        imageGallaryHolder.image_gallary_share.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                fromWhatsapp = false;
-                                imageGallaryHolder.relativeLayoutShareOpt = finalConvertView.findViewById(R.id.relativeLayoutShareOpt);
-                                imageGallaryHolder.image_gallary_share = finalConvertView.findViewById(R.id.image_gallary_share);
-                                imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
-                                imageGallaryHolder.relativeLayoutShareOpt.setVisibility(VISIBLE);
-                                imageGallaryHolder.image_gallary_share.setVisibility(GONE);
-                                imageGallaryHolder.dotIndicatior.setVisibility(GONE);
-//
-//                                imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
-//
-//
-//                                String appLink = "https://com.anyNews.anynews/";
-//
-//                                String mInvitationUrl = list.get(position).getShareLink();
-//                                String msg = list.get(position).getTitle() + " "
-//                                        + mInvitationUrl;
-//
-//
-//                                countDownTimer = new CountDownTimer(2, 2) {
-//
-//                                    public void onTick(long millisUntilFinished) {
-//
-//                                    }
-//
-//                                    public void onFinish() {
-//
-//                                        Intent intent = new Intent(Intent.ACTION_SEND);
-//                                        intent.setType("text/plain");
-//                                        intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
-//                                        intent.putExtra(Intent.EXTRA_TEXT, msg);
-//                                        Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(imageGallaryHolder.scrren_icon);
-//
-//                                        //  layout_strip_iconnew.setVisibility(View.GONE);
-//                                        try {
-//                                            File file = new File(context.getExternalCacheDir(), "sample.png");
-//                                            FileOutputStream fOut = new FileOutputStream(file);
-//                                            b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-//                                            fOut.flush();
-//                                            fOut.close();
-//                                            file.setReadable(true, true);
-//                                            Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-//                                            intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-//                                            List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-//                                            for (ResolveInfo resolveInfo : resInfoList) {
-//                                                String packageName = resolveInfo.activityInfo.packageName;
-//                                                context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-//                                            }
-//                                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-//                                        } catch (Exception e) {
-//                                            e.printStackTrace();
-//                                        }
-//                                        imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
-//                                        intent.setType("image/*");
-//                                        if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-//                                            context.startActivity(Intent.createChooser(intent, "Share Link"));
-//                                        }
-//
-//
-//                                        Share_Count_Value("share", list.get(position).getPostId());
-//                                    }
-//                                }.start();
-                            }
-                        });
+                        // Corner share stays GONE — share via footer glow FAB only.
                         checking = true;
                         break;
                     case "image_slider":
@@ -2428,7 +2395,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
         }
         if (imageGallaryHolder.image_gallary_share != null) {
-            imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
+            // Keep poster-corner share hidden; footer glow FAB owns share for galleries.
+            imageGallaryHolder.image_gallary_share.setVisibility(GONE);
         }
         if (imageGallaryHolder.dotIndicatior != null) {
             imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);
@@ -2527,7 +2495,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
                 }
                 if (imageGallaryHolder.image_gallary_share != null) {
-                    imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
+                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
                 }
                 intent.setType("image/*");
                 if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
@@ -2593,7 +2561,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             //    imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
               //  imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
                 image_magazineHolder.magzine_ll_dots.setVisibility(VISIBLE);
-                imageViewShare.setVisibility(VISIBLE);
+                if (imageViewShare != null) {
+                    imageViewShare.setVisibility(GONE);
+                }
                 intent.setType("image/*");
                 if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                     context.startActivity(Intent.createChooser(intent, "Share Link"));

@@ -57,6 +57,7 @@ import android.text.style.StyleSpan;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.MotionEvent;
@@ -2693,19 +2694,58 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return mFlipView.getChildAt(ppi);
     }
 
+    private static final String MAGAZINE_GLOW_TAG = "MagazineGlow";
+
+    /**
+     * Prefer FlipView's current page index (source of truth) over stale positionx.
+     */
+    private int getVisiblePostIndex() {
+        try {
+            if (mFlipView != null && list != null) {
+                int cur = mFlipView.getCurrentPage();
+                if (cur >= 0 && cur < list.size()) {
+                    return cur;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return positionx;
+    }
+
     /**
      * Center FAB follows show_reporter_login from the articles API (per language),
      * matching production: + when reporter login is enabled, WhatsApp otherwise.
+     * Magazine posts replace the center "+" with a glowing Share glyph.
      */
     private void updateCenterFab() {
-        // Magazine posts get a rich glowing Share icon in place of the + / WhatsApp button.
-        if (isCurrentPostMagazine()) {
+        boolean isMagazine = isCurrentPostMagazine();
+        int idx = getVisiblePostIndex();
+        String type = "";
+        String title = "";
+        try {
+            if (list != null && idx >= 0 && idx < list.size() && list.get(idx) != null) {
+                type = list.get(idx).getPostType() != null ? list.get(idx).getPostType() : "";
+                title = list.get(idx).getTitle() != null ? String.valueOf(list.get(idx).getTitle()) : "";
+            }
+        } catch (Exception ignored) {
+        }
+        Log.i(MAGAZINE_GLOW_TAG, "updateCenterFab idx=" + idx
+                + " positionx=" + positionx
+                + " flipPage=" + (mFlipView != null ? mFlipView.getCurrentPage() : -1)
+                + " postType=[" + type + "]"
+                + " isMagazine=" + isMagazine
+                + " showReporterLogin=" + showReporterLogin
+                + " title=" + (title.length() > 40 ? title.substring(0, 40) : title));
+
+        if (isMagazine) {
             applyMagazineCenterShare();
+            Log.i(MAGAZINE_GLOW_TAG, "MODE=GLOW_FAB postType=[" + type + "] fabIcon=glow title="
+                    + (title.length() > 40 ? title.substring(0, 40) : title));
             showLog("updateCenterFab magazine share glow");
             return;
         }
+        // Not a magazine -> restore the normal center button (+ or WhatsApp).
         if (floatingActionButtonHome != null) {
-            // Restore the normal circular FAB chrome after leaving a magazine post.
             floatingActionButtonHome.clearAnimation();
             floatingActionButtonHome.setScaleX(1f);
             floatingActionButtonHome.setScaleY(1f);
@@ -2713,51 +2753,181 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             floatingActionButtonHome.setBackgroundTintList(
                     ContextCompat.getColorStateList(this, R.color.bottom_navigation_view_color));
             floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
-            floatingActionButtonHome.setVisibility(showReporterLogin ? View.VISIBLE : View.INVISIBLE);
+            floatingActionButtonHome.setContentDescription(getString(R.string.post_selection));
+            floatingActionButtonHome.setEnabled(true);
+            floatingActionButtonHome.setClickable(true);
+            if (showReporterLogin) {
+                floatingActionButtonHome.setVisibility(View.VISIBLE);
+                try {
+                    floatingActionButtonHome.show();
+                } catch (Exception ignored) {
+                }
+            } else {
+                floatingActionButtonHome.setVisibility(View.INVISIBLE);
+            }
         }
         if (imageVIewShareWhatsapp != null) {
+            imageVIewShareWhatsapp.clearAnimation();
+            imageVIewShareWhatsapp.setScaleX(1f);
+            imageVIewShareWhatsapp.setScaleY(1f);
+            imageVIewShareWhatsapp.setAlpha(1f);
+            imageVIewShareWhatsapp.setOnClickListener(null);
+            imageVIewShareWhatsapp.setClickable(false);
+            int normalSize = Math.round(48 * getResources().getDisplayMetrics().density);
+            ViewGroup.LayoutParams normalLp = imageVIewShareWhatsapp.getLayoutParams();
+            if (normalLp instanceof CoordinatorLayout.LayoutParams) {
+                CoordinatorLayout.LayoutParams clp = (CoordinatorLayout.LayoutParams) normalLp;
+                clp.width = normalSize;
+                clp.height = normalSize;
+                clp.setAnchorId(R.id.nav_view);
+                clp.anchorGravity = Gravity.CENTER;
+                clp.gravity = Gravity.CENTER;
+                imageVIewShareWhatsapp.setLayoutParams(clp);
+            } else if (normalLp != null) {
+                normalLp.width = normalSize;
+                normalLp.height = normalSize;
+                imageVIewShareWhatsapp.setLayoutParams(normalLp);
+            }
             imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
             imageVIewShareWhatsapp.setVisibility(showReporterLogin ? View.GONE : View.VISIBLE);
         }
+        Log.i(MAGAZINE_GLOW_TAG, "MODE=PLUS_OR_WA showReporterLogin=" + showReporterLogin
+                + " fabVisible=" + (showReporterLogin ? "VISIBLE" : "INVISIBLE"));
         showLog("updateCenterFab showReporterLogin:" + showReporterLogin);
     }
 
-    /** True when the currently visible post is a magazine. */
+    /**
+     * True when the currently visible post should use the glow Share FAB instead of "+".
+     * Live "రామాయణం స్పెషల్" (post 1771174) is post_type {@code image_gallery} in Magazines —
+     * not {@code magazine}. Only true magazines + Magazines image galleries get glow;
+     * normal_image / full_image / video keep "+".
+     */
     private boolean isCurrentPostMagazine() {
         try {
-            if (list == null || positionx < 0 || positionx >= list.size()) {
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size()) {
+                Log.i(MAGAZINE_GLOW_TAG, "isMagazine=false reason=bad_index idx=" + idx
+                        + " listSize=" + (list == null ? -1 : list.size()));
                 return false;
             }
-            ModelClass.Datum item = list.get(positionx);
-            return item != null && item.getPostType() != null
-                    && item.getPostType().equalsIgnoreCase("magazine");
+            ModelClass.Datum item = list.get(idx);
+            if (item == null) {
+                Log.i(MAGAZINE_GLOW_TAG, "isMagazine=false reason=null_item idx=" + idx);
+                return false;
+            }
+            String type = item.getPostType();
+            if (type == null) {
+                Log.i(MAGAZINE_GLOW_TAG, "isMagazine=false reason=null_postType idx=" + idx);
+                return false;
+            }
+            type = type.trim();
+            // True card magazines (rare) + Magazines-category galleries (Ramayana Special etc.).
+            boolean glow = type.equalsIgnoreCase("magazine")
+                    || type.equalsIgnoreCase("magazines")
+                    || type.equalsIgnoreCase("image_gallery");
+            // Magazines card posts: media_type "2" with strip JSON.
+            if (!glow && "2".equals(String.valueOf(item.getMediaType()))) {
+                String strip = item.getStrip_content();
+                if (strip != null && strip.trim().length() > 2
+                        && (strip.trim().startsWith("[") || strip.contains("http"))) {
+                    glow = true;
+                    Log.i(MAGAZINE_GLOW_TAG, "isMagazine=true via media_type=2+strip"
+                            + " postType=[" + type + "] idx=" + idx);
+                }
+            }
+            // Magazines category_id 15 — safety net if post_type is mistyped.
+            Integer catId = item.getCategoryId();
+            if (!glow && catId != null && catId.intValue() == 15
+                    && "2".equals(String.valueOf(item.getMediaType()))) {
+                glow = true;
+                Log.i(MAGAZINE_GLOW_TAG, "isMagazine=true via Magazines category_id=15"
+                        + " postType=[" + type + "] idx=" + idx);
+            }
+            if (!glow) {
+                Log.i(MAGAZINE_GLOW_TAG, "isMagazine=false postType=[" + type + "] mediaType="
+                        + item.getMediaType() + " cat=" + item.getCategoryId() + " idx=" + idx);
+            } else {
+                Log.i(MAGAZINE_GLOW_TAG, "isMagazine=true postType=[" + type + "] mediaType="
+                        + item.getMediaType() + " cat=" + item.getCategoryId() + " idx=" + idx);
+            }
+            return glow;
         } catch (Exception e) {
+            Log.e(MAGAZINE_GLOW_TAG, "isMagazine exception: " + e.getMessage());
             return false;
         }
     }
 
     /**
-     * Magazine-only: replace the center + button with a themed, glowing Share glyph.
-     * The FAB circle/background is made transparent so only the glowing icon shows,
-     * and it slowly blinks + glows to draw attention.
+     * Magazines / image_gallery: replace the center "+" icon with the glow Share glyph on the
+     * same FAB slot (transparent circle) so it cannot stay stuck as a visible plus.
      */
     private void applyMagazineCenterShare() {
+        // Keep WhatsApp ImageView out of the way — glow lives on the FAB itself.
         if (imageVIewShareWhatsapp != null) {
             imageVIewShareWhatsapp.clearAnimation();
+            imageVIewShareWhatsapp.setOnClickListener(null);
+            imageVIewShareWhatsapp.setClickable(false);
             imageVIewShareWhatsapp.setVisibility(View.GONE);
         }
         if (floatingActionButtonHome == null) {
+            Log.e(MAGAZINE_GLOW_TAG, "applyMagazineCenterShare FAILED: floatingActionButtonHome null");
             return;
         }
-        floatingActionButtonHome.setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
-        floatingActionButtonHome.setImageResource(R.drawable.ic_magazine_share_glow);
+        floatingActionButtonHome.clearAnimation();
+        try {
+            floatingActionButtonHome.show();
+        } catch (Exception ignored) {
+        }
         floatingActionButtonHome.setVisibility(View.VISIBLE);
+        floatingActionButtonHome.setEnabled(true);
+        floatingActionButtonHome.setClickable(true);
+        floatingActionButtonHome.setAlpha(1f);
+        floatingActionButtonHome.setScaleX(1f);
+        floatingActionButtonHome.setScaleY(1f);
+        // Transparent FAB plate so only the glow glyph reads (no white/grey plus circle).
+        floatingActionButtonHome.setBackgroundTintList(
+                ColorStateList.valueOf(Color.TRANSPARENT));
+        floatingActionButtonHome.setRippleColor(ColorStateList.valueOf(Color.TRANSPARENT));
+        floatingActionButtonHome.setImageResource(R.drawable.ic_magazine_share_glow);
+        floatingActionButtonHome.setContentDescription("Share magazine");
+        floatingActionButtonHome.bringToFront();
+        if (home_page_navigation != null) {
+            home_page_navigation.bringChildToFront(floatingActionButtonHome);
+        }
         if (magazineGlowAnim == null) {
             magazineGlowAnim = AnimationUtils.loadAnimation(getApplicationContext(),
                     R.anim.magazine_share_glow);
         }
-        floatingActionButtonHome.clearAnimation();
         floatingActionButtonHome.startAnimation(magazineGlowAnim);
+        Log.i(MAGAZINE_GLOW_TAG, "applyMagazineCenterShare OK mode=FAB_GLOW"
+                + " fabVis=" + floatingActionButtonHome.getVisibility()
+                + " drawable=ic_magazine_share_glow");
+    }
+
+    /**
+     * Called from FlipperAdapter when a magazine page view is bound so the footer
+     * center button can swap to the glow Share icon even if flip callbacks lag.
+     */
+    public void onMagazinePageBound(int boundPosition) {
+        Log.i(MAGAZINE_GLOW_TAG, "onMagazinePageBound boundPosition=" + boundPosition
+                + " positionx=" + positionx
+                + " flipPage=" + (mFlipView != null ? mFlipView.getCurrentPage() : -1));
+        try {
+            // Only morph footer when this bound page is (or is becoming) the visible one.
+            int visible = getVisiblePostIndex();
+            if (boundPosition == visible || boundPosition == positionx
+                    || (mFlipView != null && boundPosition == mFlipView.getCurrentPage())) {
+                if (boundPosition >= 0) {
+                    positionx = boundPosition;
+                }
+                updateCenterFab();
+            } else {
+                Log.i(MAGAZINE_GLOW_TAG, "onMagazinePageBound skipped (preloading) bound="
+                        + boundPosition + " visible=" + visible);
+            }
+        } catch (Exception e) {
+            Log.e(MAGAZINE_GLOW_TAG, "onMagazinePageBound error: " + e.getMessage());
+        }
     }
 
     private void shareCurrentPostViaWhatsAppFooter() {
@@ -2867,6 +3037,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onFlippedToAppear(FlipView v) {
         Logone.v(LOG_TAG, ""+v.getAdapter());
         showLog("onFlippedToAppear");
+        // Redundant, reliable refresh: once a page has fully appeared, make sure the center
+        // button reflects the current post (glow Share for magazine, + / WhatsApp otherwise).
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                updateCenterFab();
+            } catch (Exception fabEx) {
+                fabEx.printStackTrace();
+            }
+        }, 80);
     }
     public  void pauseVideo(){
         try{

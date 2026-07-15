@@ -424,14 +424,16 @@
 
                     <!--For tab remove max dp
                     app:maxImageSize="@dimen/_40sdp"-->
+                    <!-- Must share the same anchor as fab so magazine glow sits exactly on the + slot -->
                     <ImageView
                         android:id="@+id/imageVIewShareWhatsapp"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
                         android:layout_gravity="center"
-                        android:maxHeight="50dp"
-                        android:maxWidth="50dp"
-                        android:visibility="gone"/>
+                        android:elevation="10dp"
+                        android:visibility="gone"
+                        app:layout_anchor="@+id/nav_view"
+                        app:layout_anchorGravity="center" />
 
                     <com.google.android.material.floatingactionbutton.FloatingActionButton
                         android:id="@+id/fab"

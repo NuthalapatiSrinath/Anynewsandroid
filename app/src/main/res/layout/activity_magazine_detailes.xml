@@ -25,6 +25,7 @@
             android:paddingEnd="30dp"
             android:paddingRight="30dp"
             android:paddingBottom="80dp" />
+        <!-- Hidden: footer glow Share replaces poster-corner share for magazines. -->
         <ImageView
             android:id="@+id/imageViewShare"
             android:src="@drawable/ic_share_black_24dp"
@@ -33,6 +34,7 @@
             android:padding="12dp"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:visibility="gone"
             android:contentDescription="@string/share_more_options"
             android:scaleType="centerInside"
             android:layout_marginStart="@dimen/eight"
