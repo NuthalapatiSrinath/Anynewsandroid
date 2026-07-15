@@ -44,6 +44,11 @@ allprojects {
         }
     }
 
+    // The project lives inside a OneDrive-synced folder; its background scanner
+    // randomly locks freshly-written build intermediates and breaks release
+    // packaging. Redirect all build output to a local, non-synced path.
+    buildDir = new File("C:/gradle_build/anynews/${project.name}")
+
 }
 
 task clean(type: Delete) {

@@ -625,6 +625,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         shareIcon.startAnimation(pulse);
     }
 
+    // Approved Share highlight: soft orange glow halo + enlarged icon + continuous
+    // scale/alpha pulse. Orange tint kept during the pulse. NO red ring / stroke.
+    private static final int SHARE_GLOW_TINT = Color.parseColor("#FF6A00");
+    /** Enlarged Share touch/visual size (dp) — noticeably bigger than sibling actions. */
+    private static final int SHARE_HIGHLIGHT_SIZE_DP = 64;
+    /** Inner padding (dp) so the icon stays legible while the glow aura shows around it. */
+    private static final int SHARE_HIGHLIGHT_PADDING_DP = 16;
+
     /** Apply continuous Share blink on every known Share control in this post view. */
     private void applyContinuousShareBlink(View root) {
         if (root == null) {
@@ -641,15 +649,41 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         for (int id : shareIds) {
             View v = root.findViewById(id);
             if (v != null && v.getVisibility() != View.GONE) {
-                // Never keep the legacy red pulse ring behind Share.
-                if (id == R.id.full_image_share_bg
-                        || id == R.id.image_gallary_share
-                        || id == R.id.imageViewShare
-                        || id == R.id.iv_share_for_video) {
-                    v.setBackground(null);
-                }
+                enhanceShareHighlight(v);
                 startShareIconBlink(v);
             }
+        }
+    }
+
+    /**
+     * Turn a plain Share icon into the approved highlight: enlarge it beyond its
+     * sibling actions and place a soft, blurred orange glow aura behind it.
+     * Idempotent (uses absolute sizes) so it is safe to re-apply on every getView.
+     */
+    private void enhanceShareHighlight(View v) {
+        if (v == null) {
+            return;
+        }
+        float density = context.getResources().getDisplayMetrics().density;
+        int size = Math.round(SHARE_HIGHLIGHT_SIZE_DP * density);
+        int pad = Math.round(SHARE_HIGHLIGHT_PADDING_DP * density);
+
+        ViewGroup.LayoutParams lp = v.getLayoutParams();
+        if (lp != null && (lp.width != size || lp.height != size)) {
+            lp.width = size;
+            lp.height = size;
+            v.setLayoutParams(lp);
+        }
+
+        // Soft radial orange aura behind the icon (fades to transparent — not a ring).
+        v.setBackgroundResource(R.drawable.share_glow_halo);
+        v.setPadding(pad, pad, pad, pad);
+
+        if (v instanceof ImageView) {
+            ImageView iv = (ImageView) v;
+            iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            // Keep the icon tinted orange while it pulses.
+            iv.setColorFilter(SHARE_GLOW_TINT);
         }
     }
 
