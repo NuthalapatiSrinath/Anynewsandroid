@@ -32,7 +32,7 @@
                 android:layout_marginLeft="@dimen/_5sdp"
                 android:layout_toEndOf="@+id/imageViewBack"
                 android:text="మీ లొకేషన్ ఎంచుకోండి"
-                android:textColor="#363636"
+                android:textColor="@color/text_color_primary"
                 android:textSize="@dimen/_14sdp" />
 
         </RelativeLayout>
@@ -40,7 +40,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="0.6dp"
-            android:background="#E2E2E2" />
+            android:background="@color/anynews_outline" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -87,9 +87,10 @@
                         android:layout_height="wrap_content"
                         android:layout_marginLeft="@dimen/_10sdp"
                         android:layout_marginRight="@dimen/_5sdp"
-                        android:background="@color/white"
+                        android:background="@color/form_surface_elevated"
                         android:hint="మీ ఊరి పేరు లేదా పిన్ కోడ్తో వెతకొచ్చు"
-                        android:textColor="#B5B5B5" />
+                        android:textColor="@color/text_color_primary"
+                        android:textColorHint="@color/whitesren" />
 
                 </LinearLayout>
 
@@ -119,7 +120,7 @@
                 android:layout_width="0dp"
                 android:layout_height="0.6dp"
                 android:layout_weight="1"
-                android:background="#EDEFF3" />
+                android:background="@color/anynews_outline" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -139,7 +140,7 @@
                 android:layout_width="0dp"
                 android:layout_height="0.6dp"
                 android:layout_weight="1"
-                android:background="#EDEFF3" />
+                android:background="@color/anynews_outline" />
 
         </LinearLayout>
 

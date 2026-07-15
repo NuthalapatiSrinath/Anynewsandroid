@@ -34,7 +34,7 @@
     <color name="black">#FFFFFF</color>
     <color name="profilepagecolor">#E0E0E0</color>
     <color name="profile_card_text">#FFFFFF</color>
-    <color name="pale_grey">#f9fbfc</color>
+    <color name="pale_grey">#B0B0B0</color>
     <color name="warm_grey">#E0E0E0</color>
     <color name="warm_grey_two">#C0C0C0</color>
     <color name="warm_grey_three">#B0B0B0</color>
@@ -44,8 +44,8 @@
     <color name="color42">#5A5A60</color>
 
 
-    <color name="colorBg">#FFFFFF</color>
-    <color name="colorBlack">#000000</color>
+    <color name="colorBg">#1E1E1E</color>
+    <color name="colorBlack">#FFFFFF</color>
 
     <color name="colorTextSecondary">#CCCCCC</color>
     <color name="title_color">#FFFFFF</color>

@@ -33,7 +33,6 @@
             android:padding="12dp"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:background="@drawable/magazine_share_pulse_bg"
             android:contentDescription="@string/share_more_options"
             android:scaleType="centerInside"
             android:layout_marginStart="@dimen/eight"

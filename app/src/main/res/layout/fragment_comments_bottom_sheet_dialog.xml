@@ -16,7 +16,7 @@
         app:layout_constraintTop_toTopOf="parent"
         android:paddingBottom="@dimen/_20sdp"
         android:layout_alignParentBottom="true"
-        android:background="@color/white">
+        android:background="@color/form_surface_elevated">
 
         <TextView
             android:id="@+id/textViewReport"

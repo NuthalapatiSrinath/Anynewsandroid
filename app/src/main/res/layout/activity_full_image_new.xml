@@ -234,7 +234,6 @@
                     android:id="@+id/full_image_share_bg"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
-                    android:background="@drawable/magazine_share_pulse_bg"
                     android:contentDescription="@string/share_more_options"
                     android:padding="12dp"
                     android:scaleType="centerInside" />

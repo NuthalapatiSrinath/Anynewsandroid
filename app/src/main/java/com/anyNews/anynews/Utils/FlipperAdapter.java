@@ -610,6 +610,49 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         bindFullPostLikeCount(shareView, list.get(position).getShares(), getShareLabel());
     }
 
+    /**
+     * Continuous Share attention: infinite alpha+scale blink on the icon itself.
+     * No rings / colored outlines — stakeholders rejected those.
+     */
+    private void startShareIconBlink(View shareIcon) {
+        if (shareIcon == null) {
+            return;
+        }
+        shareIcon.clearAnimation();
+        Animation pulse = AnimationUtils.loadAnimation(context, R.anim.pulse_share);
+        pulse.setRepeatCount(Animation.INFINITE);
+        pulse.setRepeatMode(Animation.REVERSE);
+        shareIcon.startAnimation(pulse);
+    }
+
+    /** Apply continuous Share blink on every known Share control in this post view. */
+    private void applyContinuousShareBlink(View root) {
+        if (root == null) {
+            return;
+        }
+        int[] shareIds = new int[]{
+                R.id.half_share_icon,
+                R.id.share,
+                R.id.full_image_share_bg,
+                R.id.image_gallary_share,
+                R.id.imageViewShare,
+                R.id.iv_share_for_video
+        };
+        for (int id : shareIds) {
+            View v = root.findViewById(id);
+            if (v != null && v.getVisibility() != View.GONE) {
+                // Never keep the legacy red pulse ring behind Share.
+                if (id == R.id.full_image_share_bg
+                        || id == R.id.image_gallary_share
+                        || id == R.id.imageViewShare
+                        || id == R.id.iv_share_for_video) {
+                    v.setBackground(null);
+                }
+                startShareIconBlink(v);
+            }
+        }
+    }
+
     private int getVideoLayoutTopHeight() {
         if (Build.VERSION.SDK_INT >= 35) {
             return layoutHeight - 85;
@@ -910,9 +953,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         final RelativeLayout magzine_relative_slider = convertView.findViewById(R.id.magzine_relative_slider);
                         ImageView imageViewShareMag = convertView.findViewById(R.id.imageViewShare);
                         imageViewShareMag.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                        imageViewShareMag.setBackgroundResource(R.drawable.magazine_share_pulse_bg);
-                        Animation pulseAnim = AnimationUtils.loadAnimation(context, R.anim.pulse_share);
-                        imageViewShareMag.startAnimation(pulseAnim);
+                        imageViewShareMag.setBackground(null);
                         final RelativeLayout relativeLayoutShareOpt = convertView.findViewById(R.id.relativeLayoutShareOpt);
                         final TextView textViewAllPage = convertView.findViewById(R.id.textViewAllPage);
                         final TextView textViewSinglePage = convertView.findViewById(R.id.textViewSinglePage);
@@ -1293,12 +1334,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         imageGallaryHolder.imageViewShareClose = convertView.findViewById(R.id.imageViewShareClose);
                         //imageGallaryHolder.galleryLayout.setLayerType(View.LAYER_TYPE_NONE,null);
                         imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
-                        // Make the gallery share button clearly noticeable: same treatment as the
-                        // magazine / full-image share buttons (bold circular highlight + pulsing).
                         imageGallaryHolder.image_gallary_share.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                        imageGallaryHolder.image_gallary_share.setBackgroundResource(R.drawable.magazine_share_pulse_bg);
-                        Animation gallerySharePulse = AnimationUtils.loadAnimation(context, R.anim.pulse_share);
-                        imageGallaryHolder.image_gallary_share.startAnimation(gallerySharePulse);
+                        imageGallaryHolder.image_gallary_share.setBackground(null);
                         //imageGallaryHolder.indicator.initialize(config);
                         List<String> galleryImages = list.get(position).getImages();
                         if (galleryImages != null && !galleryImages.isEmpty()) {
@@ -1832,7 +1869,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             e.printStackTrace();
         }
 
-
+        applyContinuousShareBlink(convertView);
         return convertView;
 
     }
@@ -3217,9 +3254,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         fullImageActivity.full_image_whatsapp_bg.setImageResource(R.drawable.ic_whatsapp_original1);
         fullImageActivity.full_image_share_bg.setImageResource(R.drawable.ic_share_full);
         fullImageActivity.full_image_share_bg.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        fullImageActivity.full_image_share_bg.setBackgroundResource(R.drawable.magazine_share_pulse_bg);
-        Animation fullImageSharePulse = AnimationUtils.loadAnimation(context, R.anim.pulse_share);
-        fullImageActivity.full_image_share_bg.startAnimation(fullImageSharePulse);
+        fullImageActivity.full_image_share_bg.setBackground(null);
         fullImageActivity.share_download_app_logo.setImageResource(R.drawable.ic_download_now_icon);
         fullImageActivity.strip_logo.setImageResource(R.drawable.ic_logo_strip_icon);
         fullImageActivity.full_image_view_details = convertView.findViewById(R.id.full_image_view_details);
