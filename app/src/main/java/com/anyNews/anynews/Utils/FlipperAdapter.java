@@ -611,80 +611,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Continuous Share attention: infinite alpha+scale blink on the icon itself.
-     * No rings / colored outlines — stakeholders rejected those.
+     * MAGAZINE-ONLY share highlight. A true attention BLINK (icon clearly flashes
+     * on/off) plus a slight scale bounce, on a subtle dark translucent rounded chip
+     * so a clean white share icon reads well over colorful magazine artwork.
+     * No red ring, no solid circle. All other post types keep their original look.
      */
-    private void startShareIconBlink(View shareIcon) {
+    private void startMagazineShareBlink(ImageView shareIcon) {
         if (shareIcon == null) {
             return;
         }
+        // Clean white icon on a subtle dark chip for contrast against busy posters.
+        shareIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        shareIcon.setColorFilter(Color.WHITE);
+        shareIcon.setBackgroundResource(R.drawable.bg_share_blink_chip);
+
         shareIcon.clearAnimation();
-        Animation pulse = AnimationUtils.loadAnimation(context, R.anim.pulse_share);
-        pulse.setRepeatCount(Animation.INFINITE);
-        pulse.setRepeatMode(Animation.REVERSE);
-        shareIcon.startAnimation(pulse);
-    }
-
-    // Approved Share highlight: soft orange glow halo + enlarged icon + continuous
-    // scale/alpha pulse. Orange tint kept during the pulse. NO red ring / stroke.
-    private static final int SHARE_GLOW_TINT = Color.parseColor("#FF6A00");
-    /** Enlarged Share touch/visual size (dp) — noticeably bigger than sibling actions. */
-    private static final int SHARE_HIGHLIGHT_SIZE_DP = 64;
-    /** Inner padding (dp) so the icon stays legible while the glow aura shows around it. */
-    private static final int SHARE_HIGHLIGHT_PADDING_DP = 16;
-
-    /** Apply continuous Share blink on every known Share control in this post view. */
-    private void applyContinuousShareBlink(View root) {
-        if (root == null) {
-            return;
-        }
-        int[] shareIds = new int[]{
-                R.id.half_share_icon,
-                R.id.share,
-                R.id.full_image_share_bg,
-                R.id.image_gallary_share,
-                R.id.imageViewShare,
-                R.id.iv_share_for_video
-        };
-        for (int id : shareIds) {
-            View v = root.findViewById(id);
-            if (v != null && v.getVisibility() != View.GONE) {
-                enhanceShareHighlight(v);
-                startShareIconBlink(v);
-            }
-        }
-    }
-
-    /**
-     * Turn a plain Share icon into the approved highlight: enlarge it beyond its
-     * sibling actions and place a soft, blurred orange glow aura behind it.
-     * Idempotent (uses absolute sizes) so it is safe to re-apply on every getView.
-     */
-    private void enhanceShareHighlight(View v) {
-        if (v == null) {
-            return;
-        }
-        float density = context.getResources().getDisplayMetrics().density;
-        int size = Math.round(SHARE_HIGHLIGHT_SIZE_DP * density);
-        int pad = Math.round(SHARE_HIGHLIGHT_PADDING_DP * density);
-
-        ViewGroup.LayoutParams lp = v.getLayoutParams();
-        if (lp != null && (lp.width != size || lp.height != size)) {
-            lp.width = size;
-            lp.height = size;
-            v.setLayoutParams(lp);
-        }
-
-        // Soft radial orange aura behind the icon (fades to transparent — not a ring).
-        v.setBackgroundResource(R.drawable.share_glow_halo);
-        v.setPadding(pad, pad, pad, pad);
-
-        if (v instanceof ImageView) {
-            ImageView iv = (ImageView) v;
-            iv.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-            // Keep the icon tinted orange while it pulses.
-            iv.setColorFilter(SHARE_GLOW_TINT);
-        }
+        Animation blink = AnimationUtils.loadAnimation(context, R.anim.blink_share);
+        shareIcon.startAnimation(blink);
     }
 
     private int getVideoLayoutTopHeight() {
@@ -986,8 +929,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         image_magazineHolder.magzine_ll_dots = convertView.findViewById(R.id.magzine_ll_dots);
                         final RelativeLayout magzine_relative_slider = convertView.findViewById(R.id.magzine_relative_slider);
                         ImageView imageViewShareMag = convertView.findViewById(R.id.imageViewShare);
-                        imageViewShareMag.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                        imageViewShareMag.setBackground(null);
+                        // Magazine-only attention blink (true flash + slight bounce).
+                        startMagazineShareBlink(imageViewShareMag);
                         final RelativeLayout relativeLayoutShareOpt = convertView.findViewById(R.id.relativeLayoutShareOpt);
                         final TextView textViewAllPage = convertView.findViewById(R.id.textViewAllPage);
                         final TextView textViewSinglePage = convertView.findViewById(R.id.textViewSinglePage);
@@ -1903,7 +1846,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             e.printStackTrace();
         }
 
-        applyContinuousShareBlink(convertView);
         return convertView;
 
     }
