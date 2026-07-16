@@ -66,3 +66,20 @@
 # CanHub / vanniktech image cropper (CropImageActivity is used via Activity Result + Parcelables)
 -keep class com.canhub.cropper.** { *; }
 -dontwarn com.canhub.cropper.**
+
+# Google Mobile Ads / AdMob (MobileAdsInitProvider is declared in the merged
+# manifest; without these keeps R8 strips the whole SDK -> ClassNotFound crash on launch)
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.android.gms.internal.ads.** { *; }
+-dontwarn com.google.android.gms.ads.**
+
+# Ad mediation (Facebook Audience Network) + UMP consent
+-keep class com.google.ads.mediation.** { *; }
+-keep class com.facebook.ads.** { *; }
+-dontwarn com.facebook.ads.**
+-keep class com.google.android.ump.** { *; }
+-dontwarn com.google.android.ump.**
+
+# IMA (interactive media ads)
+-keep class com.google.ads.interactivemedia.** { *; }
+-dontwarn com.google.ads.interactivemedia.**

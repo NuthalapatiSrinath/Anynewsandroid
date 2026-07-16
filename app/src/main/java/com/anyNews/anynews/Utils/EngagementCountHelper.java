@@ -46,7 +46,9 @@ public final class EngagementCountHelper {
         }
         GradientDrawable badge = new GradientDrawable();
         badge.setShape(GradientDrawable.OVAL);
-        badge.setColor(getCountColor(context));
+        // Neutral dark chip (was API-driven, which could render green). The brand
+        // accent now lives in the ring + count text of the Circular Action Bar.
+        badge.setColor(context.getColor(R.color.action_count_chip));
         badge.setStroke(
                 (int) (context.getResources().getDisplayMetrics().density + 0.5f),
                 context.getColor(R.color.engagement_badge_stroke)

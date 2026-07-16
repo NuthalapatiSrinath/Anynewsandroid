@@ -13,6 +13,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.core.widget.ImageViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -139,7 +140,7 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
 
         String iconUrl = state.getIconUrl();
         if (!TextUtils.isEmpty(iconUrl)) {
-            clearLandmarkTint(imageView);
+            applyLandmarkTint(imageView, selected);
             Picasso.get()
                     .load(MediaUrl.resolve(iconUrl))
                     .placeholder(getLandmarkDrawable(state.getName(), state.getId()))
@@ -149,7 +150,7 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
                     .into(imageView, new com.squareup.picasso.Callback() {
                         @Override
                         public void onSuccess() {
-                            clearLandmarkTint(imageView);
+                            applyLandmarkTint(imageView, selected);
                         }
 
                         @Override
@@ -166,6 +167,19 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
     /** Remote photos must not inherit vector line-art tint from layout or recycled views. */
     private void clearLandmarkTint(ImageView imageView) {
         imageView.clearColorFilter();
+        ImageViewCompat.setImageTintList(imageView, null);
+    }
+
+    /**
+     * Uploaded state icons are transparent monochrome silhouettes, so we recolor them
+     * per theme: white on the orange selected card, and a theme-flipping tint
+     * (dark on the light card, white on the dark-mode card) when unselected.
+     */
+    private void applyLandmarkTint(ImageView imageView, boolean selected) {
+        int color = selected
+                ? Color.WHITE
+                : ContextCompat.getColor(context, R.color.state_landmark_tint);
+        imageView.setColorFilter(color, PorterDuff.Mode.SRC_IN);
         ImageViewCompat.setImageTintList(imageView, null);
     }
 

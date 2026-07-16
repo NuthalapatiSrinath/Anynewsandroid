@@ -455,11 +455,11 @@
 
                         <ImageView
                             android:id="@+id/ivMagazineShareFooter"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
                             android:contentDescription="@string/share"
-                            android:src="@drawable/ic_footer_share"
-                            app:tint="@color/selector_item_primary_color" />
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_share_full" />
 
                         <TextView
                             android:id="@+id/tvMagazineShareFooter"

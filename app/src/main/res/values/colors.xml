@@ -13,6 +13,9 @@
     <color name="background_color">#F5F7FB</color>
     <color name="chip_background">#F5F7FB</color>
     <color name="state_card_background">#FFFFFF</color>
+    <!-- Tint applied to uploaded state landmark silhouettes on the unselected card.
+         Dark in light mode, white in night mode (see values-night). -->
+    <color name="state_landmark_tint">#1A1A1A</color>
     <color name="chip_text_color">#5A5858</color>
     <color name="default_color">#02a6d8</color>
     <color name="default_color_dark">#52a6b8</color>
@@ -151,6 +154,14 @@
     <color name="engagement_badge_bg">#FF6300</color>
     <color name="engagement_badge_text">#FFFFFF</color>
     <color name="engagement_badge_stroke">#E6FFFFFF</color>
+
+    <!-- Circular animated action bar (Brand Orange) -->
+    <color name="action_circle_fill">#B3141414</color>
+    <color name="action_circle_stroke">#FF6300</color>
+    <color name="action_glow">#FF7A00</color>
+    <color name="action_count_text">#FFFFFFFF</color>
+    <color name="action_count_like">#FF6300</color>
+    <color name="action_count_chip">#B3000000</color>
 
     <!-- Always-white text on brand orange buttons (never remapped in night). -->
     <color name="on_brand_text">#FFFFFF</color>

@@ -522,6 +522,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void bindHalfActionCount(TextView tv, Integer count) {
         if (tv == null) return;
         int c = count == null ? 0 : count;
+        // Circular Action Bar: counts tagged "plain" render as a bare number below the
+        // ring (color comes from XML), always visible, no chip. Other layouts keep the
+        // (now neutral) chip overlay.
+        if ("plain".equals(tv.getTag())) {
+            tv.setBackground(null);
+            tv.setText(formatCount(c));
+            tv.setVisibility(View.VISIBLE);
+            return;
+        }
         if (c <= 0) {
             tv.setVisibility(View.GONE);
             return;
@@ -529,6 +538,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         tv.setText(formatCount(c));
         EngagementCountHelper.applyHalfBadgeStyle(context, tv);
         tv.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * Circular Action Bar (image feed only): tint the Like glyph white when idle and
+     * brand-orange when liked, so state reads clearly against the dark ringed circle.
+     * Not applied to video/full posts, whose like icons keep their original look.
+     */
+    private void styleCircularLikeIcon(ImageView icon, int likeStatus) {
+        if (icon == null) return;
+        int color = likeStatus == 1
+                ? context.getColor(R.color.action_count_like)
+                : context.getColor(R.color.action_count_text);
+        icon.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
     }
 
     private void bindLikeCountForView(TextView countView, int likes) {
@@ -1337,21 +1359,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         //imageGallaryHolder.galleryLayout.setLayerType(View.LAYER_TYPE_NONE,null);
                         imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
                         if (imageGallaryHolder.image_gallary_share != null) {
-                            if (galleryUsesGlowShare) {
-                                // Duplicate of footer glow Share — hide corner icon.
-                                imageGallaryHolder.image_gallary_share.clearAnimation();
-                                imageGallaryHolder.image_gallary_share.setOnClickListener(null);
-                                imageGallaryHolder.image_gallary_share.setVisibility(GONE);
-                            } else {
-                                // Normal image_gallery: restore on-image share control.
-                                imageGallaryHolder.image_gallary_share.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-                                imageGallaryHolder.image_gallary_share.setBackground(null);
-                                imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
-                                final Animation myAnim = AnimationUtils.loadAnimation(context, R.anim.bounce);
-                                myAnim.setDuration(8 * 1000L);
-                                myAnim.setInterpolator(new MyBounceInterpolator(0.60, 20.00));
-                                imageGallaryHolder.image_gallary_share.startAnimation(myAnim);
-                            }
+                            // On-image corner Share removed for all galleries — the footer
+                            // Share button already covers sharing for image_gallery posts.
+                            imageGallaryHolder.image_gallary_share.clearAnimation();
+                            imageGallaryHolder.image_gallary_share.setOnClickListener(null);
+                            imageGallaryHolder.image_gallary_share.setVisibility(GONE);
                         }
                         //imageGallaryHolder.indicator.initialize(config);
                         List<String> galleryImages = list.get(position).getImages();
@@ -1389,8 +1401,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
                                 imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
                                 if (imageGallaryHolder.image_gallary_share != null) {
-                                    imageGallaryHolder.image_gallary_share.setVisibility(
-                                            galleryUsesGlowShare ? GONE : VISIBLE);
+                                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
                                 }
                                 imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);
 
@@ -1405,8 +1416,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
                                 imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
                                 if (imageGallaryHolder.image_gallary_share != null) {
-                                    imageGallaryHolder.image_gallary_share.setVisibility(
-                                            galleryUsesGlowShare ? GONE : VISIBLE);
+                                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
                                 }
                                 imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);                               // downloadPDFWithProgressBar(list.get(position).getDownloadUrl(),"anyNews+"+list.get(position).getPostId()+".pdf",position);
                             }
@@ -1420,26 +1430,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.image_gallary_share = finalConvertView.findViewById(R.id.image_gallary_share);
                                 imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
                                 if (imageGallaryHolder.image_gallary_share != null) {
-                                    imageGallaryHolder.image_gallary_share.setVisibility(
-                                            galleryUsesGlowShare ? GONE : VISIBLE);
+                                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
                                 }
                                 imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);
                             }
                         });
-                        if (!galleryUsesGlowShare && imageGallaryHolder.image_gallary_share != null) {
-                            imageGallaryHolder.image_gallary_share.setOnClickListener(new View.OnClickListener() {
-                                @Override
-                                public void onClick(View view) {
-                                    fromWhatsapp = false;
-                                    imageGallaryHolder.relativeLayoutShareOpt = finalConvertView.findViewById(R.id.relativeLayoutShareOpt);
-                                    imageGallaryHolder.image_gallary_share = finalConvertView.findViewById(R.id.image_gallary_share);
-                                    imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
-                                    imageGallaryHolder.relativeLayoutShareOpt.setVisibility(VISIBLE);
-                                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
-                                    imageGallaryHolder.dotIndicatior.setVisibility(GONE);
-                                }
-                            });
-                        }
                         checking = true;
                         break;
                     case "image_slider":
@@ -3861,7 +3856,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         showLog("Executed:"+ "FlipperAdapter");
 
+        final ImageView likeGlowRing = convertView.findViewById(R.id.like_glow_ring);
+        final View likeShockwave = convertView.findViewById(R.id.like_shockwave);
         bindThreeStateIcon(half_image_like, list.get(position).getLikeStatus());
+        styleCircularLikeIcon(half_image_like, list.get(position).getLikeStatus());
+        EngagementAnimationHelper.startLikeGlow(likeGlowRing);
         half_image_like.setTag(position);
         final TextView likeCountViewRef = (TextView) convertView.findViewById(R.id.half_like_count);
         final ImageView likeIconRef = half_image_like;
@@ -3869,8 +3868,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
             public void onClick(View view) {
                 int currPosition = (int) view.getTag();
+                int before = list.get(currPosition).getLikes() == null ? 0 : list.get(currPosition).getLikes();
                 int newStatus = applyLikeChange(currPosition, likeCountViewRef);
+                int after = list.get(currPosition).getLikes() == null ? 0 : list.get(currPosition).getLikes();
                 bindThreeStateIcon(likeIconRef, newStatus);
+                styleCircularLikeIcon(likeIconRef, newStatus);
+                EngagementAnimationHelper.playLikeBurst(likeIconRef, likeGlowRing, likeShockwave);
+                EngagementAnimationHelper.animateCount(likeCountViewRef, before, after);
             }
         });
         showLog("Check Point Adapter:: 6");
