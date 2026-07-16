@@ -522,15 +522,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void bindHalfActionCount(TextView tv, Integer count) {
         if (tv == null) return;
         int c = count == null ? 0 : count;
-        // Circular Action Bar: counts tagged "plain" render as a bare number below the
-        // ring (color comes from XML), always visible, no chip. Other layouts keep the
-        // (now neutral) chip overlay.
-        if ("plain".equals(tv.getTag())) {
-            tv.setBackground(null);
-            tv.setText(formatCount(c));
-            tv.setVisibility(View.VISIBLE);
-            return;
-        }
         if (c <= 0) {
             tv.setVisibility(View.GONE);
             return;
@@ -538,19 +529,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         tv.setText(formatCount(c));
         EngagementCountHelper.applyHalfBadgeStyle(context, tv);
         tv.setVisibility(View.VISIBLE);
-    }
-
-    /**
-     * Circular Action Bar (image feed only): tint the Like glyph white when idle and
-     * brand-orange when liked, so state reads clearly against the dark ringed circle.
-     * Not applied to video/full posts, whose like icons keep their original look.
-     */
-    private void styleCircularLikeIcon(ImageView icon, int likeStatus) {
-        if (icon == null) return;
-        int color = likeStatus == 1
-                ? context.getColor(R.color.action_count_like)
-                : context.getColor(R.color.action_glyph);
-        icon.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
     }
 
     private void bindLikeCountForView(TextView countView, int likes) {
@@ -3856,11 +3834,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         showLog("Executed:"+ "FlipperAdapter");
 
-        final ImageView likeGlowRing = convertView.findViewById(R.id.like_glow_ring);
-        final View likeShockwave = convertView.findViewById(R.id.like_shockwave);
         bindThreeStateIcon(half_image_like, list.get(position).getLikeStatus());
-        styleCircularLikeIcon(half_image_like, list.get(position).getLikeStatus());
-        EngagementAnimationHelper.startLikeGlow(likeGlowRing);
         half_image_like.setTag(position);
         final TextView likeCountViewRef = (TextView) convertView.findViewById(R.id.half_like_count);
         final ImageView likeIconRef = half_image_like;
@@ -3868,13 +3842,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
             public void onClick(View view) {
                 int currPosition = (int) view.getTag();
-                int before = list.get(currPosition).getLikes() == null ? 0 : list.get(currPosition).getLikes();
                 int newStatus = applyLikeChange(currPosition, likeCountViewRef);
-                int after = list.get(currPosition).getLikes() == null ? 0 : list.get(currPosition).getLikes();
                 bindThreeStateIcon(likeIconRef, newStatus);
-                styleCircularLikeIcon(likeIconRef, newStatus);
-                EngagementAnimationHelper.playLikeBurst(likeIconRef, likeGlowRing, likeShockwave);
-                EngagementAnimationHelper.animateCount(likeCountViewRef, before, after);
             }
         });
         showLog("Check Point Adapter:: 6");

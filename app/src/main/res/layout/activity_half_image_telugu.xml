@@ -122,180 +122,154 @@
 
                     <LinearLayout
                         android:id="@+id/half_image_like_icon"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="10dp"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:layout_marginEnd="8dp"
                         android:clipChildren="false"
                         android:clipToPadding="false"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
+                        android:gravity="center">
 
                         <FrameLayout
-                            android:layout_width="52dp"
-                            android:layout_height="52dp"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
                             android:clipChildren="false"
                             android:clipToPadding="false">
 
                             <ImageView
-                                android:id="@+id/like_shockwave"
-                                android:layout_width="52dp"
-                                android:layout_height="52dp"
-                                android:layout_gravity="center"
-                                android:src="@drawable/ic_action_shockwave"
-                                android:visibility="invisible" />
-
-                            <ImageView
-                                android:id="@+id/like_glow_ring"
-                                android:layout_width="50dp"
-                                android:layout_height="50dp"
-                                android:layout_gravity="center"
-                                android:src="@drawable/ic_like_glow_ring" />
-
-                            <View
-                                android:layout_width="42dp"
-                                android:layout_height="42dp"
-                                android:layout_gravity="center"
-                                android:background="@drawable/bg_action_circle_hero" />
-
-                            <ImageView
                                 android:id="@+id/half_image_like"
-                                android:layout_width="22dp"
-                                android:layout_height="22dp"
+                                android:layout_width="35dp"
+                                android:layout_height="35dp"
                                 android:layout_gravity="center"
-                                android:contentDescription="@string/like_image"
-                                android:tint="@color/action_glyph" />
+                                android:background="@drawable/white_oval"
+                                android:contentDescription="@string/like_image" />
+
+                            <TextView
+                                android:id="@+id/half_like_count"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="bottom|end"
+                                android:layout_marginEnd="-3dp"
+                                android:layout_marginBottom="-3dp"
+                                android:background="@drawable/bg_engagement_count_badge"
+                                android:elevation="4dp"
+                                android:fontFamily="@font/roboto_medium"
+                                android:gravity="center"
+                                android:minWidth="14dp"
+                                android:minHeight="14dp"
+                                android:paddingStart="2dp"
+                                android:paddingEnd="2dp"
+                                android:textColor="@color/engagement_badge_text"
+                                android:textSize="9sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
 
                         </FrameLayout>
-
-                        <TextView
-                            android:id="@+id/half_like_count"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="3dp"
-                            android:fontFamily="@font/roboto_medium"
-                            android:tag="plain"
-                            android:text="0"
-                            android:textColor="@color/action_count_like"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
                     </LinearLayout>
 
                     <LinearLayout
                         android:id="@+id/half_comment"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="10dp"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:layout_marginEnd="8dp"
                         android:clipChildren="false"
                         android:clipToPadding="false"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
+                        android:gravity="center">
 
                         <FrameLayout
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
                             android:clipChildren="false"
                             android:clipToPadding="false">
 
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:background="@drawable/bg_action_circle" />
-
                             <ImageView
                                 android:id="@+id/half_comment_icon"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
+                                android:layout_width="35dp"
+                                android:layout_height="35dp"
                                 android:layout_gravity="center"
-                                android:contentDescription="@string/comment_image"
-                                android:tint="@color/action_glyph" />
+                                android:background="@drawable/white_oval"
+                                android:contentDescription="@string/comment_image" />
+
+                            <TextView
+                                android:id="@+id/half_comment_count"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="bottom|end"
+                                android:layout_marginEnd="-3dp"
+                                android:layout_marginBottom="-3dp"
+                                android:background="@drawable/bg_engagement_count_badge"
+                                android:elevation="4dp"
+                                android:fontFamily="@font/roboto_medium"
+                                android:gravity="center"
+                                android:minWidth="14dp"
+                                android:minHeight="14dp"
+                                android:paddingStart="2dp"
+                                android:paddingEnd="2dp"
+                                android:textColor="@color/engagement_badge_text"
+                                android:textSize="9sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
 
                         </FrameLayout>
-
-                        <TextView
-                            android:id="@+id/half_comment_count"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="3dp"
-                            android:fontFamily="@font/roboto_medium"
-                            android:tag="plain"
-                            android:text="0"
-                            android:textColor="@color/action_count_text"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-
                     </LinearLayout>
 
                     <LinearLayout
                         android:id="@+id/half_share"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="10dp"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:layout_marginEnd="8dp"
                         android:clipChildren="false"
                         android:clipToPadding="false"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
+                        android:gravity="center">
 
                         <FrameLayout
-                            android:layout_width="42dp"
-                            android:layout_height="42dp"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
                             android:clipChildren="false"
                             android:clipToPadding="false">
 
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:background="@drawable/bg_action_circle" />
-
                             <ImageView
                                 android:id="@+id/half_share_icon"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
+                                android:layout_width="35dp"
+                                android:layout_height="35dp"
                                 android:layout_gravity="center"
-                                android:contentDescription="@string/share_image"
-                                android:tint="@color/action_glyph" />
+                                android:background="@drawable/white_oval"
+                                android:contentDescription="@string/share_image" />
+
+                            <TextView
+                                android:id="@+id/half_share_count"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="bottom|end"
+                                android:layout_marginEnd="-3dp"
+                                android:layout_marginBottom="-3dp"
+                                android:background="@drawable/bg_engagement_count_badge"
+                                android:elevation="4dp"
+                                android:fontFamily="@font/roboto_medium"
+                                android:gravity="center"
+                                android:minWidth="14dp"
+                                android:minHeight="14dp"
+                                android:paddingStart="2dp"
+                                android:paddingEnd="2dp"
+                                android:textColor="@color/engagement_badge_text"
+                                android:textSize="9sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
 
                         </FrameLayout>
-
-                        <TextView
-                            android:id="@+id/half_share_count"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="3dp"
-                            android:fontFamily="@font/roboto_medium"
-                            android:tag="plain"
-                            android:text="0"
-                            android:textColor="@color/action_count_text"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-
                     </LinearLayout>
 
                     <LinearLayout
                         android:id="@+id/report"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
                         android:layout_marginEnd="4dp"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
+                        android:gravity="center">
 
-                        <FrameLayout
-                            android:layout_width="42dp"
-                            android:layout_height="42dp">
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:background="@drawable/bg_action_circle" />
-
-                            <ImageView
-                                android:id="@+id/report_icon"
-                                android:layout_width="20dp"
-                                android:layout_height="20dp"
-                                android:layout_gravity="center"
-                                android:tint="@color/action_glyph" />
-
-                        </FrameLayout>
+                        <ImageView
+                            android:id="@+id/report_icon"
+                            android:layout_width="35dp"
+                            android:layout_height="35dp"
+                            android:background="@drawable/white_oval"/>
 
                     </LinearLayout>
 

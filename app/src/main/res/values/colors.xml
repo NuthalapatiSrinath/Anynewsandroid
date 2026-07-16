@@ -155,20 +155,6 @@
     <color name="engagement_badge_text">#FFFFFF</color>
     <color name="engagement_badge_stroke">#E6FFFFFF</color>
 
-    <!-- Circular animated action bar (Brand Orange) -->
-    <color name="action_circle_fill">#B3141414</color>
-    <color name="action_circle_stroke">#FF6300</color>
-    <color name="action_glow">#FF7A00</color>
-    <!-- Glyph (like/comment/share/report icon) sits on the intentionally dark circle
-         in BOTH themes, so it stays white in light and night. -->
-    <color name="action_glyph">#FFFFFF</color>
-    <!-- Count numbers sit BELOW the circle on the card, so they must flip with the
-         theme: dark on the white light-mode card, light on the dark night card
-         (see values-night). -->
-    <color name="action_count_text">#1A1A1A</color>
-    <color name="action_count_like">#FF6300</color>
-    <color name="action_count_chip">#B3000000</color>
-
     <!-- Always-white text on brand orange buttons (never remapped in night). -->
     <color name="on_brand_text">#FFFFFF</color>
     <!-- Form surfaces: light in day, dark in night (see values-night). -->

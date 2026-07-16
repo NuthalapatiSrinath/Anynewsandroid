@@ -131,11 +131,6 @@
     <color name="share_download_icon_disabled">#A8A8A8</color>
     <color name="text_color_primary">#FFFFFF</color>
 
-    <!-- Circular animated action bar (night): keep the dark ringed circle + white glyph
-         (falls back to values/colors.xml for fill/stroke/glow/glyph/like), but the count
-         numbers below sit on the dark card, so they read light here. -->
-    <color name="action_count_text">#F0F0F0</color>
-
     <!-- Always-white text on brand orange buttons (never remapped). -->
     <color name="on_brand_text">#FFFFFF</color>
     <!-- Form surfaces for reporter/login/post flows -->
