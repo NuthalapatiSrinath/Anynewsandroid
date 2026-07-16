@@ -129,6 +129,7 @@ public class Constants {
     public static String Event_Status = "event_status";
     public static String ENGAGEMENT_BADGE_COLOR = "engagement_badge_color";
     public static String THEME_COLOR = "theme_color";
+    public static String ALLOW_SCREEN_CAPTURE = "allow_screen_capture";
     public static String LANGUAGE_FONT_SETTINGS = "language_font_settings";
     public static String Selected_YES_PERCENT="Selected_YES_PERCENT";
     public static String Selected_NO_PERCENT="Selected_NO_PERCENT";

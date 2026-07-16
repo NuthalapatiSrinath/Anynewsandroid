@@ -47,6 +47,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Pojo.LanguageFontConfig;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
@@ -742,6 +743,11 @@ public class StartingActivity extends AppCompatActivity {
                                     startActivityReqModel.getData().getThemeColor()
                             );
                         }
+
+                        ScreenCaptureHelper.saveAllowed(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getAllowScreenCapture()
+                        );
 
                         LanguageFontConfig splashFontConfig = startActivityReqModel.getData().getFontConfig();
                         Map<String, LanguageFontConfig> splashFontSettings =

@@ -34,6 +34,7 @@ import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.ImageLoaderInit;
 import com.anyNews.anynews.Utils.Logone;
+import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.facebook.ads.AdSettings;
 import com.facebook.ads.AudienceNetworkAds;
 import com.google.android.gms.ads.MobileAds;
@@ -112,7 +113,7 @@ public class AppController extends MultiDexApplication {
                     }
                 }
 
-                if(activity instanceof HomePage){
+                if(activity instanceof HomePage && !ScreenCaptureHelper.isCaptureAllowed(activity)){
                     activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
                 }else{
                     activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);

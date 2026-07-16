@@ -71,6 +71,18 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String themeColor;
 
+        @SerializedName("allow_screen_capture")
+        @Expose
+        private boolean allowScreenCapture = false;
+
+        public boolean getAllowScreenCapture() {
+            return allowScreenCapture;
+        }
+
+        public void setAllowScreenCapture(boolean allowScreenCapture) {
+            this.allowScreenCapture = allowScreenCapture;
+        }
+
         @SerializedName("font_config")
         @Expose
         private LanguageFontConfig fontConfig;

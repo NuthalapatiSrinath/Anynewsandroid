@@ -142,6 +142,18 @@ public class EncreptionRequest {
     @Expose
     private String theme_color;
 
+    @SerializedName("allow_screen_capture")
+    @Expose
+    private boolean allow_screen_capture = false;
+
+    public boolean isAllow_screen_capture() {
+        return allow_screen_capture;
+    }
+
+    public void setAllow_screen_capture(boolean allow_screen_capture) {
+        this.allow_screen_capture = allow_screen_capture;
+    }
+
     public String getEngagement_badge_color() {
         return engagement_badge_color;
     }

@@ -138,6 +138,7 @@ import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
 import com.anyNews.anynews.Utils.FlipperAdapter;
@@ -470,7 +471,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+        // Secure by default (blocks screenshots/recording); cleared only when the
+        // remote allow_screen_capture flag is ON. Falls back to secure if unset.
+        ScreenCaptureHelper.applySecureFlag(this);
         this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         AdMobInitializer.initializeFromManifestIfNeeded(this);
@@ -3750,6 +3753,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             && !encreptionRequest.getTheme_color().isEmpty()) {
                         ThemeColorHelper.saveColor(HomePage.this, encreptionRequest.getTheme_color());
                     }
+                    ScreenCaptureHelper.saveAllowed(HomePage.this, encreptionRequest.isAllow_screen_capture());
+                    // Re-apply so a toggle change takes effect on this screen without restart.
+                    ScreenCaptureHelper.applySecureFlag(HomePage.this);
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
                         int listSizeBeforeAppend = list.size();
                         if (list.isEmpty()) {
@@ -4172,7 +4178,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } else {
             ppi = 1;
         }
-        if(post_type.equalsIgnoreCase("ad") || post_type.equalsIgnoreCase("web_ads") || post_type.equalsIgnoreCase("web") ){
+        if(ScreenCaptureHelper.isCaptureAllowed(this) || post_type.equalsIgnoreCase("ad") || post_type.equalsIgnoreCase("web_ads") || post_type.equalsIgnoreCase("web") ){
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
         }else{
             getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
