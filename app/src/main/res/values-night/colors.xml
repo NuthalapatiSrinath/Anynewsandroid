@@ -49,6 +49,15 @@
     <color name="colorBg">#1E1E1E</color>
     <color name="colorBlack">#FFFFFF</color>
 
+    <!-- Cricket Live Mini Player (night overrides) -->
+    <color name="cmp_surface">#22262B</color>
+    <color name="cmp_surface_alt">#2C3138</color>
+    <color name="cmp_text_primary">#F3F4F6</color>
+    <color name="cmp_text_secondary">#AEB4BE</color>
+    <color name="cmp_border">#3A414A</color>
+    <color name="cmp_live_red">#FF5A45</color>
+    <color name="cmp_scrim">#99000000</color>
+
     <color name="colorTextSecondary">#CCCCCC</color>
     <color name="title_color">#FFFFFF</color>
     <color name="splash_bg_code">#E4E4E4</color>

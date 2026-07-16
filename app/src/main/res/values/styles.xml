@@ -1,5 +1,19 @@
 <resources>
 
+    <!-- Cricket Match Center custom tab -->
+    <style name="CmpTab">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">14dp</item>
+        <item name="android:paddingBottom">14dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/cmp_text_secondary</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+
     <!-- Base application theme — DayNight so values-night colors apply cleanly without Force Dark. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
 

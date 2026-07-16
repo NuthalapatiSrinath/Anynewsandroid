@@ -47,6 +47,10 @@ public interface APIService {
     @POST("app/{version}/Splash_Screen")     // @POST("app/V1/Splash_Screen")         // ok
     Call<StartActivityReqModel> Splash(@Path("version") String version, @Body JsonObject splash);
 
+    // Cricket Live Mini Player — single active match (or null).
+    @GET("app/{version}/cricket_active_match")
+    Call<com.anyNews.anynews.Pojo.CricketActiveMatchResponse> cricketActiveMatch(@Path("version") String version);
+
     //Shops
     @POST("app/{version}/Update_Device_FCM_Token")                  //  ok
     Call<AddLikeResponse> tokens(@Path("version") String version, @Body JsonObject shop);

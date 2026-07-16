@@ -466,6 +466,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public boolean initialCall=false;
     public String no_article_message="Please wait while loading ...";
 
+    // Cricket Live Mini Player — draggable floating overlay over the news feed.
+    private com.anyNews.anynews.Utils.CricketMiniPlayerManager cricketMiniPlayerManager;
+
 
     @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
@@ -492,6 +495,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         Activity=this;
         activity=this;
         context=this;
+        cricketMiniPlayerManager = new com.anyNews.anynews.Utils.CricketMiniPlayerManager(HomePage.this);
         trackingEvents=new FCMTrackingEvents(this);
         fab_article = findViewById(R.id.fab_article);
         fab_video = findViewById(R.id.fab_video);
@@ -3756,6 +3760,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     ScreenCaptureHelper.saveAllowed(HomePage.this, encreptionRequest.isAllow_screen_capture());
                     // Re-apply so a toggle change takes effect on this screen without restart.
                     ScreenCaptureHelper.applySecureFlag(HomePage.this);
+                    // Cricket Live Mini Player: reflect the single active match (or none)
+                    // reported by the backend on this feed load.
+                    if (cricketMiniPlayerManager != null) {
+                        cricketMiniPlayerManager.update(encreptionRequest.getActive_match());
+                    }
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
                         int listSizeBeforeAppend = list.size();
                         if (list.isEmpty()) {
@@ -4272,6 +4281,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void onDestroy() {
+        if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onDestroy();
         adapter = null;
         stopMagazineShareBlink();
         super.onDestroy();
@@ -4306,6 +4316,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void onResume() {
         super.onResume();
+        if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onResume();
         updateSpecialTabBlinkIndicator();
         try {
             updateCenterFab();
@@ -4480,6 +4491,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void onPause() {
         //new flip
+        if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onPause();
         pauseVideo();
         super.onPause();
         try {

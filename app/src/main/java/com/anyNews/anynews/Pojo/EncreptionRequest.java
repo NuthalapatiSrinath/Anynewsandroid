@@ -186,4 +186,18 @@ public class EncreptionRequest {
         this.callAppEvents = callAppEvents;
     }
 
+    // Cricket Live Mini Player: the single active match (or null). Read on every
+    // feed load so admin toggles reflect quickly in the app.
+    @SerializedName("active_match")
+    @Expose
+    private ActiveMatch active_match;
+
+    public ActiveMatch getActive_match() {
+        return active_match;
+    }
+
+    public void setActive_match(ActiveMatch active_match) {
+        this.active_match = active_match;
+    }
+
 }

@@ -102,6 +102,11 @@
             android:exported="false"
             android:theme="@style/AppTheme"
             android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.MatchCenterActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
         <activity android:name=".Activities.JobsPageActivity" android:theme="@style/AppTheme" />
         <activity android:name=".Activities.QuizPageActivity"  android:theme="@style/AppTheme"/>
         <activity android:name=".Activities.HomeActivityN" android:theme="@style/AppTheme"/>

@@ -164,4 +164,16 @@
     <color name="login_button_disabled_bg">#F5F7FB</color>
     <color name="login_button_disabled_text">#8D8D8E</color>
 
+    <!-- Cricket Live Mini Player (light; night overrides in values-night) -->
+    <color name="cmp_surface">#FFFFFF</color>
+    <color name="cmp_surface_alt">#F5F7FB</color>
+    <color name="cmp_text_primary">#111827</color>
+    <color name="cmp_text_secondary">#6B7280</color>
+    <color name="cmp_border">#E5E7EB</color>
+    <color name="cmp_live_red">#E11900</color>
+    <color name="cmp_brand_orange">#EF4923</color>
+    <color name="cmp_brand_orange_2">#FF6300</color>
+    <color name="cmp_on_brand">#FFFFFF</color>
+    <color name="cmp_scrim">#66000000</color>
+
 </resources>
