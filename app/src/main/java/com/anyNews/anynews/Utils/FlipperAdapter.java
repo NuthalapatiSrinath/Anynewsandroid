@@ -31,6 +31,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.database.Cursor;
@@ -527,8 +528,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         tv.setText(formatCount(c));
-        EngagementCountHelper.applyHalfBadgeStyle(context, tv);
+        // Circular action bar: count sits directly below the ring as plain text.
+        // Theme-aware color keeps it readable on white (light) and dark cards.
+        tv.setBackground(null);
+        tv.setTextColor(context.getColor(R.color.text_color_primary));
+        tv.setTypeface(tv.getTypeface(), Typeface.BOLD);
         tv.setVisibility(View.VISIBLE);
+    }
+
+    // Circular action bar like icon: orange outline ring + orange thumb when not
+    // liked; solid orange disc + white thumb when liked. No glow/particles.
+    private void bindHalfLikeIcon(ImageView icon, Integer status) {
+        if (icon == null) return;
+        boolean liked = status != null && status == 1;
+        icon.setImageResource(R.drawable.ic_action_like);
+        if (liked) {
+            icon.setBackgroundResource(R.drawable.bg_action_filled);
+            icon.setImageTintList(ColorStateList.valueOf(context.getColor(R.color.on_brand_text)));
+        } else {
+            icon.setBackgroundResource(R.drawable.bg_action_ring);
+            icon.setImageTintList(ColorStateList.valueOf(context.getColor(R.color.brand_orange)));
+        }
     }
 
     private void bindLikeCountForView(TextView countView, int likes) {
@@ -3676,9 +3696,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfImageActivity.half_comment_icon = convertView.findViewById(R.id.half_comment_icon);
         halfImageActivity.half_share_icon = convertView.findViewById(R.id.half_share_icon);
         halfImageActivity.report_icon = convertView.findViewById(R.id.report_icon);
-        halfImageActivity.half_comment_icon.setImageResource(R.drawable.ic_comment_half1);
-        halfImageActivity.half_share_icon.setImageResource(R.drawable.ic_share_half1);
-        halfImageActivity.report_icon.setImageResource(R.drawable.ic_report_half1);
+        halfImageActivity.half_comment_icon.setImageResource(R.drawable.ic_action_comment);
+        halfImageActivity.half_share_icon.setImageResource(R.drawable.ic_action_share);
+        halfImageActivity.report_icon.setImageResource(R.drawable.ic_action_report);
         halfImageActivity.with_strip_layout.setBackgroundResource(R.drawable.ic_half_image_strike_icon);
         TextView textViewWebUrl=convertView.findViewById(R.id.textViewWebUrl);
         TextView textViewStripWebUrl=convertView.findViewById(R.id.textViewStripWebUrl);
@@ -3834,7 +3854,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         showLog("Executed:"+ "FlipperAdapter");
 
-        bindThreeStateIcon(half_image_like, list.get(position).getLikeStatus());
+        bindHalfLikeIcon(half_image_like, list.get(position).getLikeStatus());
         half_image_like.setTag(position);
         final TextView likeCountViewRef = (TextView) convertView.findViewById(R.id.half_like_count);
         final ImageView likeIconRef = half_image_like;
@@ -3843,7 +3863,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             public void onClick(View view) {
                 int currPosition = (int) view.getTag();
                 int newStatus = applyLikeChange(currPosition, likeCountViewRef);
-                bindThreeStateIcon(likeIconRef, newStatus);
+                bindHalfLikeIcon(likeIconRef, newStatus);
             }
         });
         showLog("Check Point Adapter:: 6");
@@ -4453,14 +4473,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfVideoExoPlayerHolder.half_image_like_icon = convertView.findViewById(R.id.half_image_like_icon);
         bindHalfPostEngagementCounts(convertView, position);
 
-        halfVideoExoPlayerHolder.half_image_like.setImageDrawable((ContextCompat.getDrawable(context, ic_like_half1)));
+        bindHalfLikeIcon(halfVideoExoPlayerHolder.half_image_like, list.get(position).getLikeStatus());
 
         halfVideoExoPlayerHolder.half_comment_icon = convertView.findViewById(R.id.half_comment_icon);
         halfVideoExoPlayerHolder.share = convertView.findViewById(R.id.share);
         halfVideoExoPlayerHolder.video_report = convertView.findViewById(R.id.video_report);
-        halfVideoExoPlayerHolder.half_comment_icon.setImageResource(R.drawable.ic_comment_half1);
-        halfVideoExoPlayerHolder.share.setImageResource(R.drawable.ic_share_half1);
-        halfVideoExoPlayerHolder.video_report.setImageResource(R.drawable.ic_report_half1);
+        halfVideoExoPlayerHolder.half_comment_icon.setImageResource(R.drawable.ic_action_comment);
+        halfVideoExoPlayerHolder.share.setImageResource(R.drawable.ic_action_share);
+        halfVideoExoPlayerHolder.video_report.setImageResource(R.drawable.ic_action_report);
 
 
         halfVideoExoPlayerHolder.writer_follow = convertView.findViewById(R.id.writer_follow);
@@ -4714,7 +4734,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             test_folloew.setText("Following");
         }
 
-        bindThreeStateIcon(halfVideoExoPlayerHolder.half_image_like, list.get(position).getLikeStatus());
+        bindHalfLikeIcon(halfVideoExoPlayerHolder.half_image_like, list.get(position).getLikeStatus());
 
         // check null
         if (halfVideoExoPlayerHolder.strip_text_name.getText().toString().matches("null")) {
@@ -4930,7 +4950,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 halfVideoExoPlayerHolder.half_image_like = finalConvertView3.findViewById(R.id.half_image_like);
                 int newStatus = applyLikeChange(position, null);
                 bindHalfActionCount(finalConvertView3.findViewById(R.id.half_like_count), list.get(position).getLikes());
-                bindThreeStateIcon(halfVideoExoPlayerHolder.half_image_like, newStatus);
+                bindHalfLikeIcon(halfVideoExoPlayerHolder.half_image_like, newStatus);
             }
         });
 
@@ -5337,7 +5357,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             test_folloew.setText("Following");
         }
 
-        bindThreeStateIcon(half_youTubePlayerHolder.half_image_like, list.get(position).getLikeStatus());
+        bindHalfLikeIcon(half_youTubePlayerHolder.half_image_like, list.get(position).getLikeStatus());
 
         // check null
         if (half_youTubePlayerHolder.strip_text_name.getText().toString().matches("null")) {
@@ -5571,7 +5591,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 half_youTubePlayerHolder.half_image_like = finalConvertView3.findViewById(R.id.half_image_like);
                 int newStatus = applyLikeChange(position, null);
                 bindHalfActionCount(finalConvertView3.findViewById(R.id.half_like_count), list.get(position).getLikes());
-                bindThreeStateIcon(half_youTubePlayerHolder.half_image_like, newStatus);
+                bindHalfLikeIcon(half_youTubePlayerHolder.half_image_like, newStatus);
             }
         });
 
