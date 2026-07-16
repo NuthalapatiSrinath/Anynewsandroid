@@ -312,6 +312,10 @@ public interface APIService {
     @POST("app/{version}/update_user_name")   // get_districts
     Call<EncreptionRequest> update_user_name(@Path("version") String version, @Body JsonObject langgg );
 
+    // Consolidated reporter/user profile edit (name + email)
+    @POST("app/{version}/update_reporter_profile")
+    Call<EncreptionRequest> update_reporter_profile(@Path("version") String version, @Body JsonObject profile );
+
 
 
 

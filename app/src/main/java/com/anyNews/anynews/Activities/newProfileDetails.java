@@ -106,6 +106,8 @@ public class newProfileDetails extends AppCompatActivity {
     TextView local_distic_name;
     ImageView img_back;
     ImageView neo_settings;
+    ImageView edit_profile_icon;
+    String currentUserEmail = "";
     LinearLayout login, share,loadingProfileView,loadingProgressbar;
     String mInvitationUrl;
 
@@ -186,6 +188,7 @@ public class newProfileDetails extends AppCompatActivity {
         back_ground_profile = findViewById(R.id.back_ground_profile);
         img_back = (ImageView) findViewById(R.id.img_back);
         neo_settings = (ImageView) findViewById(R.id.neo_settings);
+        edit_profile_icon = (ImageView) findViewById(R.id.edit_profile_icon);
         local_distic_name = (TextView) findViewById(R.id.local_distic_name);
         login = (LinearLayout) findViewById(R.id.login);
         loadingProfileView = (LinearLayout) findViewById(R.id.loadingProfileView);
@@ -518,6 +521,13 @@ public class newProfileDetails extends AppCompatActivity {
             public void onClick(View view) {
                 Intent intent = new Intent(newProfileDetails.this, Settings_Scrren.class);
                 startActivity(intent);
+            }
+        });
+
+        edit_profile_icon.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                showEditProfileDialog();
             }
         });
         layoutAppDelete.setOnClickListener(new View.OnClickListener() {
@@ -967,6 +977,127 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
 
+    private void showEditProfileDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(newProfileDetails.this);
+        View dialogView = LayoutInflater.from(newProfileDetails.this)
+                .inflate(R.layout.dialog_edit_profile, null, false);
+
+        final EditText nameField = dialogView.findViewById(R.id.edit_profile_name);
+        final EditText emailField = dialogView.findViewById(R.id.edit_profile_email);
+        final ProgressBar progress = dialogView.findViewById(R.id.edit_profile_progress);
+        final TextView saveBtn = dialogView.findViewById(R.id.edit_profile_save);
+        final TextView cancelBtn = dialogView.findViewById(R.id.edit_profile_cancel);
+
+        // Pre-fill with current values.
+        String prefillName = username_text.getText() != null ? username_text.getText().toString().trim() : "";
+        nameField.setText(prefillName);
+        nameField.setSelection(nameField.getText().length());
+        emailField.setText(currentUserEmail != null ? currentUserEmail.trim() : "");
+
+        builder.setView(dialogView);
+        final AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        dialog.show();
+
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+            }
+        });
+
+        saveBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String newName = nameField.getText().toString().trim();
+                String newEmail = emailField.getText().toString().trim();
+
+                if (newName.isEmpty()) {
+                    nameField.setError("Name cannot be empty");
+                    return;
+                }
+                if (!newEmail.isEmpty()
+                        && !android.util.Patterns.EMAIL_ADDRESS.matcher(newEmail).matches()) {
+                    emailField.setError("Enter a valid email");
+                    return;
+                }
+
+                progress.setVisibility(View.VISIBLE);
+                saveBtn.setEnabled(false);
+                cancelBtn.setEnabled(false);
+                updateReporterProfile(newName, newEmail, dialog, progress, saveBtn, cancelBtn);
+            }
+        });
+    }
+
+    private JsonObject getEditProfileData(String name, String email) {
+        UserProfileRequest requestModel = new UserProfileRequest();
+        requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
+        requestModel.setUserName(name != null ? name.trim() : "");
+        requestModel.setEmail(email != null ? email.trim() : "");
+        String jsonString = new com.google.gson.Gson().toJson(requestModel);
+        showLog("Edit Profile REQUEST " + jsonString);
+        String encrpt_data = encrypt(jsonString);
+
+        EncritonRequestData Encriton_Request = new EncritonRequestData();
+        Encriton_Request.setData(encrpt_data);
+        return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
+    }
+
+    private void updateReporterProfile(final String name, final String email,
+                                       final AlertDialog dialog, final ProgressBar progress,
+                                       final TextView saveBtn, final TextView cancelBtn) {
+        JsonObject body = getEditProfileData(name, email);
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        Call<EncreptionRequest> apiResponse = apiService.update_reporter_profile("v3", body);
+        apiResponse.enqueue(new Callback<EncreptionRequest>() {
+            @Override
+            public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                boolean success = false;
+                try {
+                    EncreptionRequest encreptionRequest = response.body();
+                    if (encreptionRequest != null && encreptionRequest.getData() != null) {
+                        String decrypted = decrypt(encreptionRequest.getData());
+                        AddProfileResponse profileResponse = new Gson().fromJson(decrypted, AddProfileResponse.class);
+                        success = profileResponse != null && Boolean.TRUE.equals(profileResponse.getSuccess());
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                progress.setVisibility(View.GONE);
+                saveBtn.setEnabled(true);
+                cancelBtn.setEnabled(true);
+
+                if (success) {
+                    // Update local cache + UI immediately.
+                    SharedPrefsData.putString(newProfileDetails.this, Constants.USER_NAME, name, Constants.PREF_NAME);
+                    username_text.setText(name);
+                    currentUserEmail = email;
+                    if (email != null && !email.isEmpty()) {
+                        user_login_number.setText(" " + email);
+                    }
+                    Toast.makeText(newProfileDetails.this, "Profile updated", Toast.LENGTH_SHORT).show();
+                    dialog.dismiss();
+                    // Refresh from backend so counts/name stay consistent.
+                    getWriterProfileData();
+                } else {
+                    Toast.makeText(newProfileDetails.this, "Could not update profile. Please try again.", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                progress.setVisibility(View.GONE);
+                saveBtn.setEnabled(true);
+                cancelBtn.setEnabled(true);
+                Toast.makeText(newProfileDetails.this, "Network error. Please try again.", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
     @Override
     public void onBackPressed() {
           super.onBackPressed();
@@ -1089,6 +1220,8 @@ public class newProfileDetails extends AppCompatActivity {
                     profile_total_amount.setText("\u20B9 " + newUserProfileResponse.getData().getTotalPoints());
                     earned_total_amount.setText("\u20B9 " + newUserProfileResponse.getData().getAvailablePoints());
                     user_login_number.setText(" " + newUserProfileResponse.getData().getEmail());
+                    currentUserEmail = newUserProfileResponse.getData().getEmail() != null
+                            ? newUserProfileResponse.getData().getEmail() : "";
                     String progress = newUserProfileResponse.getData().getApproval_rates();
                     Logone.e("ApprovalRates", "" + newUserProfileResponse.getData().getApproval_rates());
                     // set approval rates for freelancer profile
