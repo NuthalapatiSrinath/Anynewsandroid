@@ -549,7 +549,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (icon == null) return;
         int color = likeStatus == 1
                 ? context.getColor(R.color.action_count_like)
-                : context.getColor(R.color.action_count_text);
+                : context.getColor(R.color.action_glyph);
         icon.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
     }
 

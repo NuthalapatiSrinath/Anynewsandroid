@@ -163,7 +163,7 @@
                                 android:layout_height="22dp"
                                 android:layout_gravity="center"
                                 android:contentDescription="@string/like_image"
-                                android:tint="@color/action_count_text" />
+                                android:tint="@color/action_glyph" />
 
                         </FrameLayout>
 
@@ -208,7 +208,7 @@
                                 android:layout_height="20dp"
                                 android:layout_gravity="center"
                                 android:contentDescription="@string/comment_image"
-                                android:tint="@color/action_count_text" />
+                                android:tint="@color/action_glyph" />
 
                         </FrameLayout>
 
@@ -253,7 +253,7 @@
                                 android:layout_height="20dp"
                                 android:layout_gravity="center"
                                 android:contentDescription="@string/share_image"
-                                android:tint="@color/action_count_text" />
+                                android:tint="@color/action_glyph" />
 
                         </FrameLayout>
 
@@ -293,7 +293,7 @@
                                 android:layout_width="20dp"
                                 android:layout_height="20dp"
                                 android:layout_gravity="center"
-                                android:tint="@color/action_count_text" />
+                                android:tint="@color/action_glyph" />
 
                         </FrameLayout>
 
