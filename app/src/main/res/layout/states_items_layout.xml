@@ -83,8 +83,7 @@
                                 android:adjustViewBounds="true"
                                 android:background="@color/state_card_background"
                                 android:scaleType="fitCenter"
-                                android:contentDescription="@string/app_name"
-                                android:src="@drawable/ic_landmark_monument" />
+                                android:contentDescription="@string/app_name" />
 
                             <LinearLayout
                                 android:orientation="horizontal"
@@ -203,8 +202,7 @@
                                 android:layout_marginTop="@dimen/ten"
                                 android:adjustViewBounds="true"
                                 android:scaleType="fitCenter"
-                                android:contentDescription="@string/app_name"
-                                android:src="@drawable/ic_landmark_monument" />
+                                android:contentDescription="@string/app_name" />
 
                             <LinearLayout
                                 android:orientation="horizontal"

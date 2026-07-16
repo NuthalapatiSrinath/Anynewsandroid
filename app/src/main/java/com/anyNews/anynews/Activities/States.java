@@ -32,6 +32,7 @@ import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.StateLandmarkPrefetcher;
 import com.anyNews.anynews.models.LanguageModel;
 import com.anyNews.anynews.models.StatesModel;
 import com.google.firebase.database.DatabaseReference;
@@ -181,10 +182,17 @@ public class States extends AppCompatActivity {
                     if (success && hasData) {
                         SharedPrefsData.putString(States.this, Constants.Distric_Name, nextScreen, Constants.PREF_NAME);
                         arrayList.addAll(languageModel.getData());
-                        statesAdopter = new StatesAdopter(States.this,arrayList);
-                        recycleLayoutManager.setAdapter(statesAdopter);
-                        layout_with_data.setVisibility(View.VISIBLE);
-                        layout_with_out_data.setVisibility(View.GONE);
+                        // Prefetch landmark URLs into Picasso cache while the loading
+                        // layout stays visible, so the grid never flashes old local icons.
+                        StateLandmarkPrefetcher.prefetch(States.this, arrayList, () -> {
+                            if (isFinishing() || isDestroyed()) {
+                                return;
+                            }
+                            statesAdopter = new StatesAdopter(States.this, arrayList);
+                            recycleLayoutManager.setAdapter(statesAdopter);
+                            layout_with_data.setVisibility(View.VISIBLE);
+                            layout_with_out_data.setVisibility(View.GONE);
+                        });
                         return;
                     }
 

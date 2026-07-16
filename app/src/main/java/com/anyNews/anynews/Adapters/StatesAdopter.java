@@ -140,11 +140,12 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
 
         String iconUrl = state.getIconUrl();
         if (!TextUtils.isEmpty(iconUrl)) {
+            // Clear any recycled / XML default drawable so old local landmarks never flash.
+            imageView.setImageDrawable(null);
             applyLandmarkTint(imageView, selected);
             Picasso.get()
                     .load(MediaUrl.resolve(iconUrl))
-                    .placeholder(getLandmarkDrawable(state.getName(), state.getId()))
-                    .error(getLandmarkDrawable(state.getName(), state.getId()))
+                    .noFade()
                     .fit()
                     .centerInside()
                     .into(imageView, new com.squareup.picasso.Callback() {
