@@ -2418,8 +2418,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
         }
         if (imageGallaryHolder.image_gallary_share != null) {
-            // Restore corner share for normal galleries (glow specials keep it GONE in bind).
-            imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
+            // Keep on-image corner share hidden — footer Share owns gallery sharing.
+            imageGallaryHolder.image_gallary_share.clearAnimation();
+            imageGallaryHolder.image_gallary_share.setOnClickListener(null);
+            imageGallaryHolder.image_gallary_share.setVisibility(GONE);
         }
         if (imageGallaryHolder.dotIndicatior != null) {
             imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);
@@ -2518,7 +2520,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
                 }
                 if (imageGallaryHolder.image_gallary_share != null) {
-                    imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
+                    // Do not restore corner share after screenshot share — footer owns it.
+                    imageGallaryHolder.image_gallary_share.setVisibility(GONE);
                 }
                 intent.setType("image/*");
                 if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {

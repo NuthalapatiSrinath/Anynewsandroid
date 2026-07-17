@@ -186,7 +186,7 @@
         </LinearLayout>
 
     </LinearLayout>
-    <!-- Visible for normal galleries; code hides for Magazines specials (footer glow Share). -->
+    <!-- Hidden: footer Share replaces on-image corner share for all galleries. -->
     <ImageView
         android:id="@+id/image_gallary_share"
         android:layout_width="48dp"
@@ -194,7 +194,7 @@
         android:layout_gravity="end|bottom"
         android:layout_marginEnd="@dimen/_20sdp"
         android:layout_marginBottom="20dp"
-        android:visibility="visible"
+        android:visibility="gone"
         android:contentDescription="@string/share_more_options"
         android:padding="12dp"
         android:scaleType="centerInside"

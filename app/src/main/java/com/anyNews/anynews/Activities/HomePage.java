@@ -2822,7 +2822,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * True when the currently visible post should use the glow Share FAB instead of "+".
      * Live "రామాయణం స్పెషల్" is post_type {@code image_gallery} in Magazines (category 15) —
      * not {@code magazine}. Only true magazines + Magazines-category galleries get glow.
-     * Normal image_gallery posts keep "+" / WhatsApp and use on-image corner share.
+     * Normal image_gallery posts keep "+" / WhatsApp; on-image corner share stays hidden.
      */
     private boolean isCurrentPostMagazine() {
         try {
@@ -2841,8 +2841,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Footer glow Share applies only to card magazines and Magazines-category specials
-     * (e.g. Ramayana). Ordinary {@code image_gallery} news posts must NOT match — they need
-     * the reporter "+" FAB and on-image {@code image_gallary_share}.
+     * (e.g. Ramayana). Ordinary {@code image_gallery} news posts must NOT match — they keep
+     * the reporter "+" / WhatsApp FAB. On-image {@code image_gallary_share} stays hidden.
      */
     public static boolean usesMagazineGlowShare(ModelClass.Datum item) {
         return usesMagazineGlowShare(item, -1);
