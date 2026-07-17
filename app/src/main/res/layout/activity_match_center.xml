@@ -6,19 +6,36 @@
     android:orientation="vertical"
     android:background="@color/cmp_surface_alt">
 
-    <!-- Orange stadium hero header (the gradient background extends up behind the
-         status bar; the status-bar inset is added to paddingTop at runtime so the
-         title never draws under the system clock). -->
-    <LinearLayout
+    <!-- Stadium photo hero (shared by Live + Scorecard). Photo + orange overlay
+         sit behind the score content; status-bar inset is added to paddingTop. -->
+    <FrameLayout
         android:id="@+id/mc_header"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="@drawable/bg_cmp_hero"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="16dp">
+        android:layout_height="wrap_content">
+
+        <ImageView
+            android:id="@+id/mc_hero_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:src="@drawable/bg_cmp_stadium_photo" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_cmp_hero_overlay" />
+
+        <LinearLayout
+            android:id="@+id/mc_header_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="16dp">
 
         <!-- Top bar: back · (series + title, centred) · LIVE pill · overflow -->
         <LinearLayout
@@ -130,6 +147,8 @@
                     android:layout_width="34dp"
                     android:layout_height="34dp"
                     android:layout_marginEnd="8dp"
+                    android:scaleType="centerCrop"
+                    android:background="@drawable/bg_cmp_flag_circle"
                     android:contentDescription="Team 1 flag" />
 
                 <LinearLayout
@@ -325,6 +344,8 @@
                     android:layout_width="34dp"
                     android:layout_height="34dp"
                     android:layout_marginStart="8dp"
+                    android:scaleType="centerCrop"
+                    android:background="@drawable/bg_cmp_flag_circle"
                     android:contentDescription="Team 2 flag" />
             </LinearLayout>
         </LinearLayout>
@@ -348,7 +369,8 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:visibility="gone" />
-    </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
 
     <!-- Custom tab bar with an orange active underline. -->
     <LinearLayout

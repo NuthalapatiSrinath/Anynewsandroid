@@ -880,6 +880,24 @@ public class CricketMatchDetailResponse implements Serializable {
         @SerializedName("team")
         @Expose
         private String team;
+        @SerializedName("bowler")
+        @Expose
+        private String bowler;
+        @SerializedName("bowler_figures")
+        @Expose
+        private String bowler_figures;
+        @SerializedName("batsman1")
+        @Expose
+        private String batsman1;
+        @SerializedName("batsman2")
+        @Expose
+        private String batsman2;
+        @SerializedName("batsman1_score")
+        @Expose
+        private String batsman1_score;
+        @SerializedName("batsman2_score")
+        @Expose
+        private String batsman2_score;
         @SerializedName("is_wicket")
         @Expose
         private Boolean is_wicket;
@@ -920,6 +938,30 @@ public class CricketMatchDetailResponse implements Serializable {
 
         public String getTeam() {
             return safe(team);
+        }
+
+        public String getBowler() {
+            return safe(bowler);
+        }
+
+        public String getBowler_figures() {
+            return safe(bowler_figures);
+        }
+
+        public String getBatsman1() {
+            return safe(batsman1);
+        }
+
+        public String getBatsman2() {
+            return safe(batsman2);
+        }
+
+        public String getBatsman1_score() {
+            return safe(batsman1_score);
+        }
+
+        public String getBatsman2_score() {
+            return safe(batsman2_score);
         }
 
         public boolean isWicket() {

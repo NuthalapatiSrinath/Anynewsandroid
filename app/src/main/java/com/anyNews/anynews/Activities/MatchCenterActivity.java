@@ -1,7 +1,12 @@
 package com.anyNews.anynews.Activities;
 
 import android.animation.ObjectAnimator;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -26,10 +31,15 @@ import com.anyNews.anynews.Pojo.CricketActiveMatchResponse;
 import com.anyNews.anynews.Pojo.CricketMatchDetailResponse;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
+import com.anyNews.anynews.Services.CommonUtilities;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.LiveBadgeBlinkHelper;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -69,6 +79,10 @@ public class MatchCenterActivity extends AppCompatActivity {
     // that used to live on the removed Summary / Commentary / Stats tabs.
     private int currentTab = 1;
     private boolean initialTabChosen = false;
+
+    // Scorecard "Overs" list: show newest first, 3 at a time, then Load more.
+    private static final int OVERS_PAGE_SIZE = 3;
+    private int oversVisibleCount = OVERS_PAGE_SIZE;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable detailPoll = new Runnable() {
@@ -147,21 +161,22 @@ public class MatchCenterActivity extends AppCompatActivity {
 
     /**
      * targetSdk 35 forces edge-to-edge, so add the status-bar inset to the
-     * header's top padding (its orange background then fills behind the status
-     * bar) and the navigation-bar inset to the scroll content bottom. White
-     * status-bar icons read cleanly over the orange header.
+     * header CONTENT top padding (the stadium photo still fills behind the
+     * status bar) and the navigation-bar inset to the scroll content bottom.
+     * White status-bar icons read cleanly over the orange header.
      */
     private void applyWindowInsets() {
         final View header = findViewById(R.id.mc_header);
+        final View headerContent = findViewById(R.id.mc_header_content);
         final View scroll = findViewById(R.id.mc_scroll);
-        final int headerPadTop = header.getPaddingTop();
+        final int headerPadTop = headerContent.getPaddingTop();
         final int scrollPadBottom = scroll.getPaddingBottom();
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.mc_root), (v, insets) -> {
             int top = insets.getSystemWindowInsetTop();
             int bottom = insets.getSystemWindowInsetBottom();
-            header.setPadding(header.getPaddingLeft(), headerPadTop + top,
-                    header.getPaddingRight(), header.getPaddingBottom());
+            headerContent.setPadding(headerContent.getPaddingLeft(), headerPadTop + top,
+                    headerContent.getPaddingRight(), headerContent.getPaddingBottom());
             scroll.setPadding(scroll.getPaddingLeft(), scroll.getPaddingTop(),
                     scroll.getPaddingRight(), scrollPadBottom + bottom);
             return insets;
@@ -188,11 +203,13 @@ public class MatchCenterActivity extends AppCompatActivity {
         headerLiveBlink = LiveBadgeBlinkHelper.sync(liveBadge, live, headerLiveBlink);
 
         // Team score rows (flag + name + big score + overs + run rate).
-        bindTeam(match.getTeam1_flag(), fullTeam(match.getTeam1_code(), match.getTeam1_name()),
+        bindTeam(match.getTeam1_flag(), match.getTeam1_code(),
+                fullTeam(match.getTeam1_code(), match.getTeam1_name()),
                 match.getTeam1_score(), match.getTeam1_overs(),
                 R.id.mc_team1_flag, R.id.mc_team1_name, R.id.mc_team1_score,
                 R.id.mc_team1_overs, R.id.mc_team1_rr);
-        bindTeam(match.getTeam2_flag(), fullTeam(match.getTeam2_code(), match.getTeam2_name()),
+        bindTeam(match.getTeam2_flag(), match.getTeam2_code(),
+                fullTeam(match.getTeam2_code(), match.getTeam2_name()),
                 match.getTeam2_score(), match.getTeam2_overs(),
                 R.id.mc_team2_flag, R.id.mc_team2_name, R.id.mc_team2_score,
                 R.id.mc_team2_overs, R.id.mc_team2_rr);
@@ -229,7 +246,7 @@ public class MatchCenterActivity extends AppCompatActivity {
     }
 
     /** Fill one team's flag/name/score/overs/run-rate slot in the hero header. */
-    private void bindTeam(String flagUrl, String name, String score, String overs,
+    private void bindTeam(String flagUrl, String teamCode, String name, String score, String overs,
                           int flagId, int nameId, int scoreId, int oversId, int rrId) {
         ImageView flag = findViewById(flagId);
         TextView nameView = findViewById(nameId);
@@ -238,12 +255,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         TextView rrView = findViewById(rrId);
 
         nameView.setText(name);
-        if (!TextUtils.isEmpty(flagUrl)) {
-            try {
-                Glide.with(this).load(flagUrl).circleCrop().into(flag);
-            } catch (Exception ignored) {
-            }
-        }
+        loadTeamFlag(flag, flagUrl, teamCode, name);
 
         if (TextUtils.isEmpty(score)) {
             scoreView.setText("–");
@@ -265,6 +277,90 @@ public class MatchCenterActivity extends AppCompatActivity {
             rrView.setVisibility(View.VISIBLE);
             rrView.setText("RR: " + rr);
         }
+    }
+
+    /**
+     * CREX team flags live at cricketvectors.akamaized.net/Teams/{code}.png.
+     * Admin settings may supply a full URL, a protocol-relative URL, a relative
+     * path, or nothing — in which case we build the CDN URL from the team code.
+     */
+    private static final String CREX_FLAG_CDN = "https://cricketvectors.akamaized.net/Teams/";
+
+    private void loadTeamFlag(ImageView flag, String flagUrl, String teamCode, String teamName) {
+        if (flag == null) return;
+        flag.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        flag.setBackgroundResource(R.drawable.bg_cmp_flag_circle);
+        Drawable placeholder = initialsFlagDrawable(teamCode, teamName);
+        String url = resolveFlagUrl(flagUrl, teamCode);
+        if (TextUtils.isEmpty(url)) {
+            flag.setImageDrawable(placeholder);
+            return;
+        }
+        try {
+            Glide.with(this)
+                    .load(url)
+                    .circleCrop()
+                    .placeholder(placeholder)
+                    .error(placeholder)
+                    .into(flag);
+        } catch (Exception e) {
+            flag.setImageDrawable(placeholder);
+        }
+    }
+
+    private String resolveFlagUrl(String flagUrl, String teamCode) {
+        String url = flagUrl == null ? "" : flagUrl.trim();
+        if (!TextUtils.isEmpty(url)) {
+            if (url.startsWith("//")) return "https:" + url;
+            if (url.startsWith("/")) {
+                String base = CommonUtilities.URL;
+                if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+                return base + url;
+            }
+            if (url.startsWith("http://") || url.startsWith("https://")) return url;
+            // Bare filename or team-code-like token from the feed.
+            if (url.toLowerCase(Locale.US).endsWith(".png") || url.contains("/")) {
+                return "https://cricketvectors.akamaized.net/" + url.replaceFirst("^/+", "");
+            }
+            return CREX_FLAG_CDN + url.replaceFirst("^\\^", "") + ".png";
+        }
+        String code = teamCode == null ? "" : teamCode.trim().replaceFirst("^\\^", "");
+        if (!TextUtils.isEmpty(code)) return CREX_FLAG_CDN + code + ".png";
+        return "";
+    }
+
+    /** Circular initials plate used as Glide placeholder / error for team flags. */
+    private Drawable initialsFlagDrawable(String teamCode, String teamName) {
+        String initials = teamInitials(teamCode, teamName);
+        int size = dp(34);
+        Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bmp);
+        Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bg.setColor(0x55FFFFFF);
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, bg);
+        Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        text.setColor(0xFFFFFFFF);
+        text.setTypeface(Typeface.DEFAULT_BOLD);
+        text.setTextAlign(Paint.Align.CENTER);
+        text.setTextSize(size * (initials.length() > 2 ? 0.32f : 0.38f));
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float cy = size / 2f - (fm.ascent + fm.descent) / 2f;
+        canvas.drawText(initials, size / 2f, cy, text);
+        return new BitmapDrawable(getResources(), bmp);
+    }
+
+    private static String teamInitials(String teamCode, String teamName) {
+        String code = teamCode == null ? "" : teamCode.trim().replaceFirst("^\\^", "");
+        if (!TextUtils.isEmpty(code) && code.length() <= 4 && !code.contains(" ")) {
+            return code.toUpperCase(Locale.US);
+        }
+        String name = !TextUtils.isEmpty(teamName) ? teamName.trim() : code;
+        if (TextUtils.isEmpty(name)) return "?";
+        String[] parts = name.split("\\s+");
+        if (parts.length >= 2) {
+            return ("" + parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase(Locale.US);
+        }
+        return name.substring(0, Math.min(3, name.length())).toUpperCase(Locale.US);
     }
 
     /** Latest match status text, preferring the live detail over the header feed. */
@@ -419,12 +515,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         LinearLayout.LayoutParams flagLp = new LinearLayout.LayoutParams(dp(30), dp(30));
         flagLp.rightMargin = dp(10);
         flag.setLayoutParams(flagLp);
-        if (!TextUtils.isEmpty(t.getFlag())) {
-            try {
-                Glide.with(this).load(t.getFlag()).circleCrop().into(flag);
-            } catch (Exception ignored) {
-            }
-        }
+        loadTeamFlag(flag, t.getFlag(), t.getShort_name(), t.getTeam());
         row.addView(flag);
 
         TextView name = new TextView(this);
@@ -1199,9 +1290,10 @@ public class MatchCenterActivity extends AppCompatActivity {
      * fall-of-wickets — followed by a Match Details card (match / venue / date /
      * toss). Sections consolidated from the removed tabs that no longer fit this
      * clean layout (live stats, win probability, summary / player of the match /
-     * top performers and ball-by-ball commentary) are appended BELOW the Match
-     * Details card so no snapshot data is lost. Every value binds to the DB
-     * snapshot; sections with no data are omitted gracefully.
+     * top performers) are appended BELOW the Match Details card so no snapshot
+     * data is lost. Ball-by-ball commentary is NOT dumped here — instead a
+     * paginated over-wise summary list (last 3 + Load more) is shown. Every
+     * value binds to the DB snapshot; sections with no data are omitted.
      */
     private void renderScorecard() {
         contentScorecard.removeAllViews();
@@ -1224,10 +1316,11 @@ public class MatchCenterActivity extends AppCompatActivity {
         }
 
         // Sections that do not fit the clean scorecard layout are kept BELOW the
-        // Match Details card so no snapshot data is lost.
+        // Match Details card so no snapshot data is lost. Ball-by-ball commentary
+        // is replaced by a paginated over-wise list (last 3 + Load more).
         any |= appendStats(contentScorecard);
         any |= appendSummary(contentScorecard);
-        any |= appendCommentary(contentScorecard);
+        any |= appendOversList(contentScorecard);
 
         if (!any) {
             showEmptyFor("Scorecard", detail == null
@@ -1318,12 +1411,8 @@ public class MatchCenterActivity extends AppCompatActivity {
         flagLp.rightMargin = dp(10);
         flag.setLayoutParams(flagLp);
         String flagUrl = flagForTeam(inn.getTeam_name());
-        if (!TextUtils.isEmpty(flagUrl)) {
-            try {
-                Glide.with(this).load(flagUrl).circleCrop().into(flag);
-            } catch (Exception ignored) {
-            }
-        }
+        String code = codeForTeam(inn.getTeam_name());
+        loadTeamFlag(flag, flagUrl, code, inn.getTeam_name());
         row.addView(flag);
 
         TextView name = new TextView(this);
@@ -1558,6 +1647,22 @@ public class MatchCenterActivity extends AppCompatActivity {
         if (match == null || TextUtils.isEmpty(teamName)) return "";
         if (teamMatches(teamName, match.getTeam1_name(), match.getTeam1_code())) return match.getTeam1_flag();
         if (teamMatches(teamName, match.getTeam2_name(), match.getTeam2_code())) return match.getTeam2_flag();
+        // Summary snapshot often carries absolute CDN flag URLs even when the
+        // active_match settings left team*_flag blank.
+        if (detail != null && detail.getSummary() != null && detail.getSummary().getTeams() != null) {
+            for (CricketMatchDetailResponse.SummaryTeam t : detail.getSummary().getTeams()) {
+                if (teamMatches(teamName, t.getTeam(), t.getShort_name()) && !TextUtils.isEmpty(t.getFlag())) {
+                    return t.getFlag();
+                }
+            }
+        }
+        return "";
+    }
+
+    private String codeForTeam(String teamName) {
+        if (match == null || TextUtils.isEmpty(teamName)) return "";
+        if (teamMatches(teamName, match.getTeam1_name(), match.getTeam1_code())) return match.getTeam1_code();
+        if (teamMatches(teamName, match.getTeam2_name(), match.getTeam2_code())) return match.getTeam2_code();
         return "";
     }
 
@@ -1641,94 +1746,257 @@ public class MatchCenterActivity extends AppCompatActivity {
         return v;
     }
 
-    // ---- Commentary (consolidated into Scorecard) ---------------------------
+    // ---- Overs list (Scorecard — replaces ball-by-ball commentary dump) -----
 
-    private boolean appendCommentary(LinearLayout container) {
-        List<CricketMatchDetailResponse.Commentary> items = detail != null ? detail.getCommentary() : null;
-        if (items == null || items.isEmpty()) return false;
-        TextView heading = sectionTitle("Commentary");
-        heading.setPadding(dp(2), dp(4), 0, dp(8));
-        container.addView(heading);
-        for (CricketMatchDetailResponse.Commentary c : items) {
-            container.addView(buildCommentaryRow(c));
+    /**
+     * Admin Live Hub "Overs" style: OVER N + team score on the right, batsman /
+     * bowler summary underneath. Shows the newest {@link #OVERS_PAGE_SIZE}
+     * overs first; "Load more overs" reveals the next older page of 3.
+     */
+    private boolean appendOversList(LinearLayout container) {
+        List<OverSummaryRow> rows = buildOverSummaryRows();
+        if (rows.isEmpty()) return false;
+
+        if (oversVisibleCount < OVERS_PAGE_SIZE) oversVisibleCount = OVERS_PAGE_SIZE;
+        if (oversVisibleCount > rows.size()) oversVisibleCount = rows.size();
+
+        LinearLayout card = card();
+        card.addView(sectionTitle("Overs"));
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        card.addView(list);
+
+        int show = Math.min(oversVisibleCount, rows.size());
+        for (int i = 0; i < show; i++) {
+            if (i > 0) list.addView(thinDivider());
+            list.addView(buildOverSummaryView(rows.get(i)));
         }
+
+        if (show < rows.size()) {
+            TextView more = new TextView(this);
+            more.setText("Load more overs");
+            more.setTextColor(color(R.color.cmp_brand_orange));
+            more.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            more.setTypeface(Typeface.DEFAULT_BOLD);
+            more.setGravity(Gravity.CENTER);
+            more.setPadding(0, dp(14), 0, dp(4));
+            more.setOnClickListener(v -> {
+                oversVisibleCount = Math.min(rows.size(), oversVisibleCount + OVERS_PAGE_SIZE);
+                renderScorecard();
+            });
+            card.addView(more);
+        }
+
+        container.addView(card);
         return true;
     }
 
-    private View buildCommentaryRow(CricketMatchDetailResponse.Commentary c) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(dp(10), dp(10), dp(10), dp(10));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = dp(8);
-        row.setLayoutParams(lp);
-        row.setBackgroundResource(R.drawable.bg_cmp_card);
+    /** Lightweight over-summary row for the Scorecard list (newest first). */
+    private static final class OverSummaryRow {
+        final String overLabel;
+        final String teamScore;
+        final String summary;
 
-        if (c.isOver()) {
-            row.setOrientation(LinearLayout.VERTICAL);
-            TextView t = new TextView(this);
-            String head = TextUtils.isEmpty(c.getTitle()) ? ("OVER " + c.getOver()) : c.getTitle();
-            if (!TextUtils.isEmpty(c.getScore())) head = head + "   " + c.getTeam() + " " + c.getScore();
-            t.setText(head.trim());
-            t.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
-            t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            t.setTypeface(Typeface.DEFAULT_BOLD);
-            row.addView(t);
-            return row;
+        OverSummaryRow(String overLabel, String teamScore, String summary) {
+            this.overLabel = overLabel;
+            this.teamScore = teamScore;
+            this.summary = summary;
         }
+    }
 
-        TextView badge = new TextView(this);
-        badge.setWidth(dp(38));
-        badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(2), dp(4), dp(2), dp(4));
-        badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        badge.setTypeface(Typeface.DEFAULT_BOLD);
-        String ball = c.isWicket() ? "W" : (TextUtils.isEmpty(c.getRuns()) ? "•" : c.getRuns());
-        badge.setText(ball);
-        if (c.isWicket()) {
-            badge.setTextColor(0xFFFFFFFF);
-            badge.setBackgroundColor(ContextCompat.getColor(this, R.color.cmp_live_red));
-        } else if (c.isFour() || c.isSix()) {
-            badge.setTextColor(0xFFFFFFFF);
-            badge.setBackgroundColor(ContextCompat.getColor(this, R.color.cmp_brand_orange));
-        } else {
-            badge.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
-        }
-        LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(dp(38), ViewGroup.LayoutParams.WRAP_CONTENT);
-        badgeLp.rightMargin = dp(10);
-        badge.setLayoutParams(badgeLp);
-        row.addView(badge);
-
+    private View buildOverSummaryView(OverSummaryRow row) {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        col.setPadding(0, dp(10), 0, dp(10));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView over = new TextView(this);
-        over.setText(TextUtils.isEmpty(c.getOver()) ? "" : ("Over " + c.getOver()));
-        over.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
-        over.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        col.addView(over);
+        over.setText(row.overLabel);
+        over.setTextColor(color(R.color.cmp_text_primary));
+        over.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        over.setTypeface(Typeface.DEFAULT_BOLD);
+        over.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        head.addView(over);
 
-        TextView title = new TextView(this);
-        String head = !TextUtils.isEmpty(c.getTitle()) ? c.getTitle() : c.getText();
-        title.setText(head);
-        title.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        col.addView(title);
-
-        if (!TextUtils.isEmpty(c.getDescription()) && !c.getDescription().equals(head)) {
-            TextView desc = new TextView(this);
-            desc.setText(c.getDescription());
-            desc.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
-            desc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-            desc.setPadding(0, dp(2), 0, 0);
-            col.addView(desc);
+        if (!TextUtils.isEmpty(row.teamScore)) {
+            TextView score = new TextView(this);
+            score.setText(row.teamScore);
+            score.setTextColor(color(R.color.cmp_text_primary));
+            score.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            score.setTypeface(Typeface.DEFAULT_BOLD);
+            score.setGravity(Gravity.END);
+            head.addView(score);
         }
+        col.addView(head);
 
-        row.addView(col);
-        return row;
+        if (!TextUtils.isEmpty(row.summary)) {
+            TextView sum = new TextView(this);
+            sum.setText(row.summary);
+            sum.setTextColor(color(R.color.cmp_text_secondary));
+            sum.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+            sum.setPadding(0, dp(4), 0, 0);
+            col.addView(sum);
+        }
+        return col;
+    }
+
+    /**
+     * Prefer commentary {@code type=over} rows (batsman + bowler figures), else
+     * {@code all_overs}, else aggregate ball-by-ball commentary by over number.
+     * Result is newest-first.
+     */
+    private List<OverSummaryRow> buildOverSummaryRows() {
+        List<OverSummaryRow> fromCommentary = overSummariesFromCommentary();
+        if (!fromCommentary.isEmpty()) return fromCommentary;
+
+        List<OverSummaryRow> fromAllOvers = overSummariesFromAllOvers();
+        if (!fromAllOvers.isEmpty()) return fromAllOvers;
+
+        return overSummariesFromBalls();
+    }
+
+    private List<OverSummaryRow> overSummariesFromCommentary() {
+        List<OverSummaryRow> out = new ArrayList<>();
+        List<CricketMatchDetailResponse.Commentary> items =
+                detail != null ? detail.getCommentary() : null;
+        if (items == null) return out;
+        for (CricketMatchDetailResponse.Commentary c : items) {
+            if (c == null || !c.isOver()) continue;
+            String label = !TextUtils.isEmpty(c.getTitle())
+                    ? c.getTitle().toUpperCase(Locale.US)
+                    : ("OVER " + c.getOver());
+            if (!label.startsWith("OVER")) label = "OVER " + c.getOver();
+            String teamScore = "";
+            if (!TextUtils.isEmpty(c.getScore())) {
+                teamScore = (TextUtils.isEmpty(c.getTeam()) ? "" : c.getTeam() + " ") + c.getScore();
+                teamScore = teamScore.trim();
+            }
+            out.add(new OverSummaryRow(label, teamScore, overSummaryLine(c)));
+        }
+        return out;
+    }
+
+    private String overSummaryLine(CricketMatchDetailResponse.Commentary c) {
+        List<String> parts = new ArrayList<>();
+        String b1 = formatBatterLine(c.getBatsman1(), c.getBatsman1_score());
+        String b2 = formatBatterLine(c.getBatsman2(), c.getBatsman2_score());
+        if (!TextUtils.isEmpty(b1)) parts.add(b1);
+        if (!TextUtils.isEmpty(b2)) parts.add(b2);
+        String bowl = formatBowlerLine(c.getBowler(), c.getBowler_figures());
+        if (!TextUtils.isEmpty(bowl)) parts.add(bowl);
+        if (!parts.isEmpty()) return TextUtils.join(parts, " · ");
+        if (!TextUtils.isEmpty(c.getDescription())) return c.getDescription();
+        if (!TextUtils.isEmpty(c.getText())) return c.getText();
+        return "";
+    }
+
+    private static String formatBatterLine(String name, String score) {
+        if (TextUtils.isEmpty(name) || "—".equals(name)) return "";
+        if (TextUtils.isEmpty(score)) return name;
+        return name + " " + score;
+    }
+
+    private static String formatBowlerLine(String name, String figures) {
+        if (TextUtils.isEmpty(name) || "—".equals(name)) return "";
+        if (TextUtils.isEmpty(figures)) return name;
+        return name + " " + figures;
+    }
+
+    private List<OverSummaryRow> overSummariesFromAllOvers() {
+        List<OverSummaryRow> out = new ArrayList<>();
+        List<CricketMatchDetailResponse.Over> overs =
+                detail != null ? detail.getAll_overs() : null;
+        if (overs == null || overs.isEmpty()) return out;
+        // all_overs is oldest→newest; Scorecard wants newest first.
+        for (int i = overs.size() - 1; i >= 0; i--) {
+            CricketMatchDetailResponse.Over o = overs.get(i);
+            if (o == null || o.getOver() <= 0) continue;
+            String label = "OVER " + o.getOver();
+            String teamScore = "";
+            if (!TextUtils.isEmpty(o.getScore())) {
+                String team = !TextUtils.isEmpty(o.getTeam_code())
+                        ? o.getTeam_code()
+                        : teamNameForCode(o.getTeam_code());
+                teamScore = (TextUtils.isEmpty(team) ? "" : team + " ") + o.getScore();
+                teamScore = teamScore.trim();
+            }
+            StringBuilder sum = new StringBuilder();
+            if (!TextUtils.isEmpty(o.getBowler())) sum.append(o.getBowler());
+            if (!TextUtils.isEmpty(o.getRuns())) {
+                if (sum.length() > 0) sum.append(" · ");
+                sum.append(o.getRuns()).append(" runs");
+            }
+            String seq = overSequence(o);
+            if (!TextUtils.isEmpty(seq)) {
+                if (sum.length() > 0) sum.append(" · ");
+                sum.append(seq);
+            }
+            out.add(new OverSummaryRow(label, teamScore, sum.toString()));
+        }
+        return out;
+    }
+
+    private String teamNameForCode(String code) {
+        if (match == null || TextUtils.isEmpty(code)) return code;
+        if (code.equalsIgnoreCase(match.getTeam1_code())) {
+            return fullTeam(match.getTeam1_code(), match.getTeam1_name());
+        }
+        if (code.equalsIgnoreCase(match.getTeam2_code())) {
+            return fullTeam(match.getTeam2_code(), match.getTeam2_name());
+        }
+        return code;
+    }
+
+    /** Last-resort: group ball commentary by over integer, newest first. */
+    private List<OverSummaryRow> overSummariesFromBalls() {
+        List<OverSummaryRow> out = new ArrayList<>();
+        List<CricketMatchDetailResponse.Commentary> items =
+                detail != null ? detail.getCommentary() : null;
+        if (items == null || items.isEmpty()) return out;
+
+        Map<Integer, CricketMatchDetailResponse.Commentary> lastSeen = new LinkedHashMap<>();
+        Map<Integer, StringBuilder> ballBits = new LinkedHashMap<>();
+        for (CricketMatchDetailResponse.Commentary c : items) {
+            if (c == null || c.isOver()) continue;
+            int overNo = overNumberFrom(c.getOver());
+            if (overNo <= 0) continue;
+            if (!lastSeen.containsKey(overNo)) lastSeen.put(overNo, c);
+            StringBuilder sb = ballBits.get(overNo);
+            if (sb == null) {
+                sb = new StringBuilder();
+                ballBits.put(overNo, sb);
+            }
+            if (sb.length() > 0) sb.append('.');
+            sb.append(c.isWicket() ? "W" : (TextUtils.isEmpty(c.getRuns()) ? "0" : c.getRuns()));
+        }
+        for (Map.Entry<Integer, CricketMatchDetailResponse.Commentary> e : lastSeen.entrySet()) {
+            int overNo = e.getKey();
+            CricketMatchDetailResponse.Commentary c = e.getValue();
+            String teamScore = "";
+            if (!TextUtils.isEmpty(c.getScore())) {
+                teamScore = (TextUtils.isEmpty(c.getTeam()) ? "" : c.getTeam() + " ") + c.getScore();
+                teamScore = teamScore.trim();
+            }
+            StringBuilder sum = new StringBuilder();
+            String bits = ballBits.containsKey(overNo) ? ballBits.get(overNo).toString() : "";
+            if (!TextUtils.isEmpty(bits)) sum.append(overNo).append(':').append(bits);
+            out.add(new OverSummaryRow("OVER " + overNo, teamScore, sum.toString()));
+        }
+        return out;
+    }
+
+    private static int overNumberFrom(String over) {
+        if (TextUtils.isEmpty(over)) return 0;
+        try {
+            String head = over.contains(".") ? over.substring(0, over.indexOf('.')) : over;
+            return Integer.parseInt(head.replaceAll("[^0-9]", ""));
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     // ---- Stats (consolidated into Scorecard) --------------------------------
