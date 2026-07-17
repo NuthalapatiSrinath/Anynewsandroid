@@ -512,6 +512,15 @@ public class MatchCenterActivity extends AppCompatActivity {
                 .translationX(0f)
                 .setDuration(TAB_ANIM_MS)
                 .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    // Always land visible — a cancelled/interrupted fade must not
+                    // leave the active panel at alpha 0 (empty-looking content).
+                    if (currentTab == to) {
+                        show.setAlpha(1f);
+                        show.setTranslationX(0f);
+                        show.setVisibility(View.VISIBLE);
+                    }
+                })
                 .start();
     }
 

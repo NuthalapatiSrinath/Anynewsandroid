@@ -7,8 +7,9 @@
     android:background="@color/cmp_surface_alt">
 
     <!-- Stadium photo hero (shared by Live + Scorecard). Photo + orange overlay
-         sit behind the score content; status-bar inset is added to paddingTop. -->
-    <FrameLayout
+         are height-tied to mc_header_content only — never match_parent inside a
+         wrap_content FrameLayout (that expands the hero over tabs + scroll). -->
+    <RelativeLayout
         android:id="@+id/mc_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
@@ -16,7 +17,11 @@
         <ImageView
             android:id="@+id/mc_hero_bg"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
+            android:layout_alignTop="@id/mc_header_content"
+            android:layout_alignBottom="@id/mc_header_content"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentEnd="true"
             android:scaleType="centerCrop"
             android:contentDescription="@null"
             android:importantForAccessibility="no"
@@ -24,8 +29,13 @@
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/bg_cmp_hero_overlay" />
+            android:layout_height="0dp"
+            android:layout_alignTop="@id/mc_header_content"
+            android:layout_alignBottom="@id/mc_header_content"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentEnd="true"
+            android:background="@drawable/bg_cmp_hero_overlay"
+            android:importantForAccessibility="no" />
 
         <LinearLayout
             android:id="@+id/mc_header_content"
@@ -361,7 +371,7 @@
             android:textStyle="bold"
             android:visibility="gone" />
         </LinearLayout>
-    </FrameLayout>
+    </RelativeLayout>
 
     <!-- Custom tab bar: labels + one sliding orange underline. -->
     <FrameLayout
