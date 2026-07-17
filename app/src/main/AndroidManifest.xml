@@ -175,6 +175,7 @@
             android:screenOrientation="portrait"
             android:launchMode="singleTask"
             android:theme="@style/AppThemeSplash">
+            <!-- Legacy Firebase Dynamic Links (page.link) — still may open app if installed -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 
@@ -184,6 +185,35 @@
                 <data
                     android:host="anynews0.page.link"
                     android:scheme="https" />
+            </intent-filter>
+            <!-- App Links: share URLs on API host (replaces FDL) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="anynews.fusionvertexsolutions.com"
+                    android:pathPrefix="/p/" />
+            </intent-filter>
+            <!-- Brand short domain (when SSL / assetlinks are valid) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="anws.in"
+                    android:pathPattern="/.*" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="admin.anynews.co.in"
+                    android:pathPrefix="/post/" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

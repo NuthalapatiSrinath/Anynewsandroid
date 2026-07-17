@@ -83,6 +83,8 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 import static com.facebook.FacebookSdk.setAutoLogAppEventsEnabled;
 
 import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.net.URLDecoder;
 import java.util.HashMap;
 import java.util.Map;
@@ -178,12 +180,11 @@ public class StartingActivity extends AppCompatActivity {
             String action = intent.getAction();
                 showLog("action::"+action);
         }
-        //extractData(intent.getData());
-        if (intent.getData()!=null){
+        if (intent.getData() != null) {
             Uri data = intent.getData();
-            showLog("data%%::"+data.toString());
+            showLog("data%%::" + data.toString());
             extractData(data);
-
+            maybeResolveLegacyPageLink(data);
         }
 
 
@@ -193,6 +194,8 @@ public class StartingActivity extends AppCompatActivity {
 
         writeAppOpen("User",type_firebase ,current_time_firebase,draft_id_firebase,device_id_firebase);
                showLog("CHECK POINT 2");
+        // FDL shut down 2025-08-25 — keep as best-effort only; App Links + extractData are primary
+        try {
         FirebaseDynamicLinks.getInstance()
                 .getDynamicLink(getIntent())
                 .addOnSuccessListener(this, new OnSuccessListener<PendingDynamicLinkData>() {
@@ -203,15 +206,25 @@ public class StartingActivity extends AppCompatActivity {
                         Uri deepLink = null;
                         if (pendingDynamicLinkData != null) {
                             deepLink = pendingDynamicLinkData.getLink();
+                            if (deepLink == null) {
+                                return;
+                            }
                             referrerUid = deepLink.getQueryParameter("user_id");
                             showLog("CHECK POINT referrerUid:"+referrerUid);
                             Uri finalDeepLink = deepLink;
                             try {
-                                articleId1= finalDeepLink.getQueryParameter("articleId");
+                                String fromFdl = finalDeepLink.getQueryParameter("articleId");
+                                if (fromFdl == null || fromFdl.isEmpty()) {
+                                    fromFdl = finalDeepLink.getQueryParameter("post_id");
+                                }
+                                if (fromFdl != null && !fromFdl.isEmpty()) {
+                                    articleId1 = fromFdl;
+                                }
                                 showLog("CHECK POINT articleId1 %%%:"+articleId1);
                             }catch (Exception e){
                                 e.printStackTrace();
                             }
+                            applyDeepLinkParams(deepLink);
                             referlink = deepLink.toString();
 
                             SharedPrefsData.putString(getApplicationContext(), Constants.REFERAL_LINK, referlink, Constants.PREF_NAME);
@@ -269,11 +282,13 @@ public class StartingActivity extends AppCompatActivity {
                 .addOnFailureListener(this, new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-
-                        Toast.makeText(StartingActivity.this, "Failed to connect ", Toast.LENGTH_SHORT).show();
-                        Logone.w(TAG, "getDynamicLink:onFailure", e);
+                        // Expected after FDL shutdown — App Links path parsing handles shares
+                        Logone.w(TAG, "getDynamicLink:onFailure (ignored; using App Links)", e);
                     }
                 });
+        } catch (Exception e) {
+            Logone.w(TAG, "FirebaseDynamicLinks unavailable", e);
+        }
 
 
 
@@ -441,19 +456,148 @@ public class StartingActivity extends AppCompatActivity {
 //        isNetworkAvailable(this);
 //                getUIDs();
 //    }
-    public void extractData(Uri uri){
+    public void extractData(Uri uri) {
         try {
-            //String url1="https://play.google.com/store/apps/details?id=com.anyNews.anynews&articleId=1108939&type=share&medium=app&utm_content=1108939";
-            //Uri uri=Uri.parse(url1);
-            String articleId2= uri.getQueryParameter("articleId");
-            showLog("CHECK POINT ArticleId1 @@@:"+articleId2);
-            if(articleId2!=null){
-                TITLE=articleId1;
-            }else{
-                DATAFROM2G=uri.toString();
+            if (uri == null) {
+                return;
             }
-        }catch (Exception e){
+            applyDeepLinkParams(uri);
+
+            String articleId2 = uri.getQueryParameter("articleId");
+            if (articleId2 == null || articleId2.isEmpty()) {
+                articleId2 = uri.getQueryParameter("post_id");
+            }
+            if (articleId2 == null || articleId2.isEmpty()) {
+                articleId2 = articleIdFromPath(uri);
+            }
+            showLog("CHECK POINT ArticleId1 @@@:" + articleId2);
+            if (articleId2 != null && !articleId2.isEmpty()) {
+                articleId1 = articleId2;
+                TITLE = articleId2;
+            } else {
+                DATAFROM2G = uri.toString();
+            }
+        } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    /** Parse post id from /p/{id}, /post/{id}, or /{id} (anws.in). */
+    private String articleIdFromPath(Uri uri) {
+        if (uri == null) {
+            return null;
+        }
+        String path = uri.getPath();
+        if (path == null || path.isEmpty() || "/".equals(path)) {
+            return null;
+        }
+        String[] segments = path.split("/");
+        for (int i = 0; i < segments.length; i++) {
+            String seg = segments[i];
+            if (seg == null || seg.isEmpty()) {
+                continue;
+            }
+            if (("p".equals(seg) || "post".equals(seg)) && i + 1 < segments.length) {
+                String next = segments[i + 1];
+                if (next != null && next.matches("\\d+")) {
+                    return next;
+                }
+            }
+        }
+        // anws.in/{postId}
+        String host = uri.getHost();
+        if (host != null && host.contains("anws.in")) {
+            for (String seg : segments) {
+                if (seg != null && seg.matches("\\d+")) {
+                    return seg;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void applyDeepLinkParams(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        try {
+            String uid = uri.getQueryParameter("user_id");
+            if (uid != null && !uid.isEmpty()) {
+                referrerUid = uid;
+                try {
+                    SharedPrefsData.putLong(getApplicationContext(), Constants.CUSST_ID,
+                            Long.parseLong(uid.replaceAll("[^0-9]", "")), Constants.PREF_NAME);
+                } catch (Exception ignored) { /* non-numeric referrer */ }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Legacy anynews0.page.link short links still HTTP-302 to Play Store with articleId.
+     * Resolve without the deprecated FDL SDK when the short URL is opened in-app.
+     */
+    private void maybeResolveLegacyPageLink(Uri data) {
+        if (data == null) {
+            return;
+        }
+        String host = data.getHost();
+        if (host == null || !host.contains("page.link")) {
+            return;
+        }
+        if (articleId1 != null && !articleId1.isEmpty()) {
+            return;
+        }
+        final String shortUrl = data.toString();
+        backgroundExecutor.execute(() -> {
+            String resolvedId = null;
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(shortUrl);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setInstanceFollowRedirects(false);
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestMethod("HEAD");
+                int code = conn.getResponseCode();
+                String location = conn.getHeaderField("Location");
+                if ((code == 301 || code == 302 || code == 303 || code == 307 || code == 308)
+                        && location != null) {
+                    Uri loc = Uri.parse(location);
+                    resolvedId = loc.getQueryParameter("articleId");
+                    if (resolvedId == null || resolvedId.isEmpty()) {
+                        resolvedId = loc.getQueryParameter("post_id");
+                    }
+                    if (resolvedId == null || resolvedId.isEmpty()) {
+                        resolvedId = articleIdFromPath(loc);
+                    }
+                }
+            } catch (Exception e) {
+                Logone.w(TAG, "page.link resolve failed", e);
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
+            }
+            if (resolvedId != null && !resolvedId.isEmpty()) {
+                final String id = resolvedId;
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    articleId1 = id;
+                    TITLE = id;
+                    showLog("CHECK POINT page.link resolved articleId:" + id);
+                });
+            }
+        });
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.getData() != null) {
+            extractData(intent.getData());
+            maybeResolveLegacyPageLink(intent.getData());
         }
     }
 
