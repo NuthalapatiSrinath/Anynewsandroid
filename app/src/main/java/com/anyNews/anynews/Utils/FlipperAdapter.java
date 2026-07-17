@@ -2750,16 +2750,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                                         @Override
                                         public void showUIControls(boolean b) {
-                                            if(b){
-                                                fullVideoNewYoutubeViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
-                                                fullVideoNewYoutubeViewHolder.side_menu.setVisibility(VISIBLE);
-                                            }else{
-                                                fullVideoNewYoutubeViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
-                                                fullVideoNewYoutubeViewHolder.side_menu.setVisibility(View.INVISIBLE);
-                                                showLog("fullimageadapter"+ "click visible");
-
+                                            LinearLayout sideMenu = finalConvertViewFull.findViewById(R.id.video_side_menu);
+                                            fullVideoNewYoutubeViewHolder.side_menu = sideMenu;
+                                            if (sideMenu == null) {
+                                                return;
                                             }
-
+                                            if (b) {
+                                                sideMenu.setVisibility(VISIBLE);
+                                                sideMenu.bringToFront();
+                                                sideMenu.setClickable(true);
+                                            } else {
+                                                sideMenu.setVisibility(View.INVISIBLE);
+                                                showLog("fullimageadapter"+ "click visible");
+                                            }
                                         }
 
                                         @Override
@@ -3024,6 +3027,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         bindThreeStateIcon(full_videoViewHolder.like_for_video_image, list.get(position).getLikeStatus());
         hideDislikeView(full_videoViewHolder.dislike_for_video_ll);
         wireFullVideoExoPauseControl(simpleExoPlayerViewFull, convertView);
+        wireFullVideoExoSideMenuWithController(simpleExoPlayerViewFull, convertView);
 
         imageViewExoVideoPlayVideo.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -3051,50 +3055,63 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 exoPlayer.prepare();
                 exoPlayer.setPlayWhenReady(true);
                 wireFullVideoExoPauseControl(simpleExoPlayerViewFull, finalConvertViewFull);
+                wireFullVideoExoSideMenuWithController(simpleExoPlayerViewFull, finalConvertViewFull);
                 full_videoViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
-                full_videoViewHolder.side_menu.setVisibility(View.INVISIBLE);
+                // Hide engagement row while playing; tap player (Exo controller) to show again.
+                if (full_videoViewHolder.side_menu != null) {
+                    full_videoViewHolder.side_menu.setVisibility(View.INVISIBLE);
+                }
                 exoPlayer.addListener(new Player.Listener() {
                     @Override
                     public void onPlaybackStateChanged(int playbackState) {
                         boolean playWhenReady = exoPlayer.getPlayWhenReady();
                         showLog("onPlayerStateChanged::" + playWhenReady);
-                        full_videoViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
-                        full_videoViewHolder.side_menu.setVisibility(View.INVISIBLE);
+                        LinearLayout sideMenu = finalConvertViewFull.findViewById(R.id.video_side_menu);
                         if (playWhenReady) {
                             thaumbnail_for_video.setVisibility(View.GONE);
                             progress_bar_for_video.setVisibility(View.GONE);
-
+                            // Keep side menu hidden while actively playing unless Exo controller is showing
+                            // (controller visibility listener restores it on tap).
                         }
                         else if (playbackState == ExoPlayer.STATE_BUFFERING) {
                             showLog("onPlayerStateChanged::" + playWhenReady);
-//                            thaumbnail_for_video.setVisibility(View.VISIBLE);
                             progress_bar_for_video.setVisibility(View.VISIBLE);
 
                         } else if (playbackState == ExoPlayer.STATE_IDLE) {
                             showLog("onPlayerStateChanged::ExoPlayer.STATE_IDLE" );
                             thaumbnail_for_video.setVisibility(View.VISIBLE);
                             imageViewExoVideoPlayVideo.setVisibility(VISIBLE);
-                            full_videoViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
-                            full_videoViewHolder.side_menu.setVisibility(View.VISIBLE);
-                            //progress_bar_for_video.setVisibility(View.VISIBLE);
-
-
+                            if (sideMenu != null) {
+                                sideMenu.setVisibility(View.VISIBLE);
+                            }
                         } else {
                             showLog("onPlayerStateChanged::ExoPlayer.STATE_IDLE111" );
                             progress_bar_for_video.setVisibility(View.GONE);
                             thaumbnail_for_video.setVisibility(View.GONE);
-                            full_videoViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
-                            full_videoViewHolder.side_menu.setVisibility(View.VISIBLE);
+                            if (sideMenu != null) {
+                                sideMenu.setVisibility(View.VISIBLE);
+                            }
                             showLog("fullimageadapter"+ "click visible");
                         }
                         if (playbackState == ExoPlayer.STATE_ENDED) {
                             showLog("onPlayerStateChanged::ExoPlayer.STATE_ENDED" );
-                            //  exoPlayer.prepare(mediaSource);
-                            // exoPlayer.setPlayWhenReady(true);
                             thaumbnail_for_video.setVisibility(View.VISIBLE);
                             imageViewExoVideoPlayVideo.setVisibility(View.VISIBLE);
-                            full_videoViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
-                            full_videoViewHolder.side_menu.setVisibility(View.VISIBLE);
+                            if (sideMenu != null) {
+                                sideMenu.setVisibility(View.VISIBLE);
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onIsPlayingChanged(boolean isPlaying) {
+                        LinearLayout sideMenu = finalConvertViewFull.findViewById(R.id.video_side_menu);
+                        if (sideMenu == null) {
+                            return;
+                        }
+                        if (!isPlaying) {
+                            sideMenu.setVisibility(View.VISIBLE);
+                            sideMenu.bringToFront();
                         }
                     }
                 });
@@ -6824,6 +6841,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (playBtn != null) {
                     playBtn.setVisibility(VISIBLE);
                 }
+                LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
+                if (sideMenu != null) {
+                    sideMenu.setVisibility(View.VISIBLE);
+                    sideMenu.bringToFront();
+                }
             });
         }
         if (playBtn != null) {
@@ -6838,6 +6860,37 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
             });
         }
+    }
+
+    /**
+     * Sync Like/Comment/Share (video_side_menu) with ExoPlayer controller visibility.
+     * Tap the playing video to show controls + engagement row; they auto-hide after the
+     * controller timeout. Fixes share being unreachable until the user left and returned.
+     */
+    private void wireFullVideoExoSideMenuWithController(PlayerView playerView, View convertView) {
+        if (playerView == null || convertView == null) {
+            return;
+        }
+        final LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
+        playerView.setControllerShowTimeoutMs(3500);
+        playerView.setControllerHideOnTouch(true);
+        playerView.setControllerAutoShow(true);
+        playerView.setControllerVisibilityListener(visibility -> {
+            if (sideMenu == null) {
+                return;
+            }
+            if (visibility == View.VISIBLE) {
+                sideMenu.setVisibility(View.VISIBLE);
+                sideMenu.bringToFront();
+                sideMenu.setClickable(true);
+            } else {
+                boolean playing = exoPlayer != null && exoPlayer.isPlaying();
+                sideMenu.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
+                if (!playing) {
+                    sideMenu.bringToFront();
+                }
+            }
+        });
     }
 
     public void shareVideoDirect(int position, VideoShareHelper.ShareMode mode) {

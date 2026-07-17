@@ -482,10 +482,25 @@ public class StartingActivity extends AppCompatActivity {
         }
     }
 
-    /** Parse post id from /p/{id}, /post/{id}, or /{id} (anws.in). */
+    /** Parse post id from /p/{id}, /post/{id}, anynews://post/{id}, or /{id} (anws.in). */
     private String articleIdFromPath(Uri uri) {
         if (uri == null) {
             return null;
+        }
+        // anynews://post/{id}
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        if (scheme != null && "anynews".equalsIgnoreCase(scheme)
+                && host != null && "post".equalsIgnoreCase(host)) {
+            String path = uri.getPath();
+            if (path != null) {
+                String trimmed = path.startsWith("/") ? path.substring(1) : path;
+                int slash = trimmed.indexOf('/');
+                String idPart = slash >= 0 ? trimmed.substring(0, slash) : trimmed;
+                if (idPart.matches("\\d+")) {
+                    return idPart;
+                }
+            }
         }
         String path = uri.getPath();
         if (path == null || path.isEmpty() || "/".equals(path)) {
@@ -505,7 +520,6 @@ public class StartingActivity extends AppCompatActivity {
             }
         }
         // anws.in/{postId}
-        String host = uri.getHost();
         if (host != null && host.contains("anws.in")) {
             for (String seg : segments) {
                 if (seg != null && seg.matches("\\d+")) {
