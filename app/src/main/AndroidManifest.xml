@@ -196,6 +196,25 @@
                     android:host="anynews.fusionvertexsolutions.com"
                     android:pathPrefix="/p/" />
             </intent-filter>
+            <!-- Future brand apex: DNS/SSL/assetlinks → Coolify; no extra APK if this host is used -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="anynews.co.in"
+                    android:pathPrefix="/p/" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="www.anynews.co.in"
+                    android:pathPrefix="/p/" />
+            </intent-filter>
             <!-- Brand short domain (when SSL / assetlinks are valid) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
