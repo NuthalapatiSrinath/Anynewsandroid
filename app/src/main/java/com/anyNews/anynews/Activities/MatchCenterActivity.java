@@ -53,7 +53,7 @@ import retrofit2.Response;
  * The header scoreboard comes from the active_match contract. The Scorecard tab
  * fetches real per-ball detail from the app-facing /app/v3/cricket_match_detail
  * endpoint and renders the innings batting/bowling tables plus the consolidated
- * live stats, win probability, match info, summary/top performers and
+ * live stats, match info, summary/top performers and
  * ball-by-ball commentary. Sections with no data from CREX are simply omitted,
  * and an empty match shows a clean empty state.
  */
@@ -1403,11 +1403,11 @@ public class MatchCenterActivity extends AppCompatActivity {
      * Extras and Total row, a grey Yet to Bat list and the innings' bowling +
      * fall-of-wickets — followed by a Match Details card (match / venue / date /
      * toss). Sections consolidated from the removed tabs that no longer fit this
-     * clean layout (live stats, win probability, summary / player of the match /
-     * top performers) are appended BELOW the Match Details card so no snapshot
-     * data is lost. Ball-by-ball commentary is NOT dumped here — instead a
-     * paginated over-wise summary list (last 3 + Load more) is shown. Every
-     * value binds to the DB snapshot; sections with no data are omitted.
+     * clean layout (live stats, summary / player of the match / top performers)
+     * are appended BELOW the Match Details card so no snapshot data is lost.
+     * Ball-by-ball commentary is NOT dumped here — instead a paginated
+     * over-wise summary list (last 3 + Load more) is shown. Every value binds
+     * to the DB snapshot; sections with no data are omitted.
      */
     private void renderScorecard() {
         contentScorecard.removeAllViews();
@@ -2148,56 +2148,7 @@ public class MatchCenterActivity extends AppCompatActivity {
             any = true;
         }
 
-        // Win probability bar.
-        if (live != null && live.getWin_probability() != null) {
-            CricketMatchDetailResponse.WinProbability wp = live.getWin_probability();
-            int p1 = wp.getTeam1() != null ? wp.getTeam1().getPct() : 0;
-            int p2 = wp.getTeam2() != null ? wp.getTeam2().getPct() : 0;
-            if (p1 > 0 || p2 > 0) {
-                LinearLayout wpCard = card();
-                wpCard.addView(sectionTitle("Win probability"));
-                wpCard.addView(winProbBar(wp));
-                container.addView(wpCard);
-                any = true;
-            }
-        }
-
         return any;
-    }
-
-    private View winProbBar(CricketMatchDetailResponse.WinProbability wp) {
-        LinearLayout wrap = new LinearLayout(this);
-        wrap.setOrientation(LinearLayout.VERTICAL);
-
-        int p1 = wp.getTeam1() != null ? wp.getTeam1().getPct() : 0;
-        int p2 = wp.getTeam2() != null ? wp.getTeam2().getPct() : 0;
-        int pd = wp.getDraw() != null ? wp.getDraw().getPct() : 0;
-
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(10));
-        barLp.topMargin = dp(6);
-        barLp.bottomMargin = dp(6);
-        bar.setLayoutParams(barLp);
-        bar.addView(barSegment(p1, ContextCompat.getColor(this, R.color.cmp_brand_orange)));
-        if (pd > 0) bar.addView(barSegment(pd, ContextCompat.getColor(this, R.color.cmp_text_secondary)));
-        bar.addView(barSegment(p2, 0xFF2563EB));
-        wrap.addView(bar);
-
-        StringBuilder legend = new StringBuilder();
-        if (wp.getTeam1() != null) legend.append(wp.getTeam1().getLabel()).append(' ').append(p1).append('%');
-        if (wp.getTeam2() != null) legend.append("   ").append(wp.getTeam2().getLabel()).append(' ').append(p2).append('%');
-        wrap.addView(mutedLine(legend.toString()));
-        return wrap;
-    }
-
-    private View barSegment(int weight, int color) {
-        View v = new View(this);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, Math.max(weight, 0));
-        v.setLayoutParams(lp);
-        v.setBackgroundColor(color);
-        return v;
     }
 
     // ---- View builders ------------------------------------------------------
