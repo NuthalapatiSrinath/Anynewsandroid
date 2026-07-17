@@ -42,13 +42,19 @@ import retrofit2.Response;
  * snackbar with an orange UNDO to restore it for the session.
  *
  * Adds NO footer / bottom-nav tab — it purely floats above the reading UI.
+ *
+ * Polls {@code /app/v3/cricket_active_match} every {@link #POLL_MS} while the
+ * host is resumed so admin mini-player ON/OFF changes appear within a couple
+ * of seconds without needing a full feed reload.
  */
 public class CricketMiniPlayerManager {
 
-    private static final int POLL_MS = 15000;
+    /** Fast enough to feel instant after an admin toggle; light on the API. */
+    private static final int POLL_MS = 2500;
 
-    // Dismissed match ids for this app process (session). A brand-new active
-    // match id will re-show; UNDO clears the id so it comes back immediately.
+    // Dismissed match ids for this app process (session). Cleared when the
+    // admin turns the mini player OFF (null active_match) so turning the same
+    // match back ON shows the player again. UNDO also clears the id.
     private static final Set<String> dismissedForSession = new HashSet<>();
 
     private final WeakReference<Activity> activityRef;
@@ -56,14 +62,19 @@ public class CricketMiniPlayerManager {
 
     private View miniView;
     private ActiveMatch current;
+    /** Last non-null active match id from the server (for dismiss / OFF cleanup). */
+    private String lastServerActiveId;
     private boolean attached = false;
     private boolean pollingEnabled = true;
+    private boolean pollInFlight = false;
 
     private final Runnable pollRunnable = new Runnable() {
         @Override
         public void run() {
             refreshFromServer();
-            handler.postDelayed(this, POLL_MS);
+            if (pollingEnabled) {
+                handler.postDelayed(this, POLL_MS);
+            }
         }
     };
 
@@ -74,13 +85,20 @@ public class CricketMiniPlayerManager {
     /** Enable/disable background polling of the dedicated endpoint. */
     public void setPollingEnabled(boolean enabled) {
         this.pollingEnabled = enabled;
+        if (!enabled) {
+            handler.removeCallbacks(pollRunnable);
+        }
     }
 
+    /**
+     * Host became visible: fetch immediately, then keep polling every
+     * {@link #POLL_MS}. Previously delayed the first poll by a full interval,
+     * which made admin toggles feel up to 15s late.
+     */
     public void onResume() {
-        if (pollingEnabled) {
-            handler.removeCallbacks(pollRunnable);
-            handler.postDelayed(pollRunnable, POLL_MS);
-        }
+        if (!pollingEnabled) return;
+        handler.removeCallbacks(pollRunnable);
+        handler.post(pollRunnable);
     }
 
     public void onPause() {
@@ -90,6 +108,11 @@ public class CricketMiniPlayerManager {
     public void onDestroy() {
         handler.removeCallbacks(pollRunnable);
         detach();
+    }
+
+    /** Immediate one-shot refresh (e.g. after feed reload). */
+    public void refreshNow() {
+        refreshFromServer();
     }
 
     /**
@@ -102,14 +125,26 @@ public class CricketMiniPlayerManager {
         if (activity == null || activity.isFinishing()) return;
 
         if (match == null || TextUtils.isEmpty(match.getMatch_id())) {
+            // Admin turned mini player OFF — clear dismiss so OFF→ON re-shows.
+            if (!TextUtils.isEmpty(lastServerActiveId)) {
+                dismissedForSession.remove(lastServerActiveId);
+                lastServerActiveId = null;
+            }
             current = null;
             hide();
             return;
         }
 
+        String matchId = match.getMatch_id();
+
+        // Switched active match A→B: drop A's dismiss and show B.
+        if (!TextUtils.isEmpty(lastServerActiveId) && !lastServerActiveId.equals(matchId)) {
+            dismissedForSession.remove(lastServerActiveId);
+        }
+        lastServerActiveId = matchId;
         current = match;
 
-        if (dismissedForSession.contains(match.getMatch_id())) {
+        if (dismissedForSession.contains(matchId)) {
             hide();
             return;
         }
@@ -323,12 +358,15 @@ public class CricketMiniPlayerManager {
     private void refreshFromServer() {
         Activity activity = activityRef.get();
         if (activity == null || activity.isFinishing()) return;
+        if (pollInFlight) return;
+        pollInFlight = true;
         try {
             APIService api = RestApiClient.getClient().create(APIService.class);
             api.cricketActiveMatch("v3").enqueue(new Callback<CricketActiveMatchResponse>() {
                 @Override
                 public void onResponse(@NonNull Call<CricketActiveMatchResponse> call,
                                        @NonNull Response<CricketActiveMatchResponse> response) {
+                    pollInFlight = false;
                     if (response.body() != null) {
                         update(response.body().getActive_match());
                     }
@@ -336,10 +374,12 @@ public class CricketMiniPlayerManager {
 
                 @Override
                 public void onFailure(@NonNull Call<CricketActiveMatchResponse> call, @NonNull Throwable t) {
+                    pollInFlight = false;
                     // Offline / transient — keep last known state, don't crash.
                 }
             });
         } catch (Exception ignored) {
+            pollInFlight = false;
         }
     }
 

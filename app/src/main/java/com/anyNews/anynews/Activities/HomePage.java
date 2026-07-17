@@ -3760,10 +3760,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     ScreenCaptureHelper.saveAllowed(HomePage.this, encreptionRequest.isAllow_screen_capture());
                     // Re-apply so a toggle change takes effect on this screen without restart.
                     ScreenCaptureHelper.applySecureFlag(HomePage.this);
-                    // Cricket Live Mini Player: reflect the single active match (or none)
-                    // reported by the backend on this feed load.
+                    // Cricket Live Mini Player: apply feed config immediately, then
+                    // kick a dedicated poll so admin ON/OFF is not stuck on a stale
+                    // feed payload until the next resume cycle.
                     if (cricketMiniPlayerManager != null) {
                         cricketMiniPlayerManager.update(encreptionRequest.getActive_match());
+                        cricketMiniPlayerManager.refreshNow();
                     }
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
                         int listSizeBeforeAppend = list.size();
