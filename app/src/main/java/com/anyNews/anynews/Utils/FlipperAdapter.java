@@ -524,20 +524,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (tv == null) return;
         int c = count == null ? 0 : count;
         if (c <= 0) {
-            tv.setVisibility(View.GONE);
+            // INVISIBLE (not GONE) so the action row keeps a fixed height and
+            // the content below does not jump when a count appears/disappears.
+            tv.setText("");
+            tv.setVisibility(View.INVISIBLE);
             return;
         }
         tv.setText(formatCount(c));
-        // Circular action bar: count sits directly below the ring as plain text.
-        // Theme-aware color keeps it readable on white (light) and dark cards.
+        // Count sits below the icon as plain text; theme-aware for light/dark.
         tv.setBackground(null);
         tv.setTextColor(context.getColor(R.color.text_color_primary));
         tv.setTypeface(tv.getTypeface(), Typeface.BOLD);
         tv.setVisibility(View.VISIBLE);
     }
 
-    // Circular action bar like icon: orange outline ring + orange thumb when not
-    // liked; solid orange disc + white thumb when liked. No glow/particles.
+    // Half-feed like icon: no outline ring. Unliked = orange thumb only;
+    // liked = solid orange disc + white thumb (same fixed ImageView size).
     private void bindHalfLikeIcon(ImageView icon, Integer status) {
         if (icon == null) return;
         boolean liked = status != null && status == 1;
@@ -546,7 +548,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             icon.setBackgroundResource(R.drawable.bg_action_filled);
             icon.setImageTintList(ColorStateList.valueOf(context.getColor(R.color.on_brand_text)));
         } else {
-            icon.setBackgroundResource(R.drawable.bg_action_ring);
+            icon.setBackground(null);
             icon.setImageTintList(ColorStateList.valueOf(context.getColor(R.color.brand_orange)));
         }
     }
