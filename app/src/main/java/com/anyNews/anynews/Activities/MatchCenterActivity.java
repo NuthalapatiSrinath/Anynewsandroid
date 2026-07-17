@@ -2119,6 +2119,10 @@ public class MatchCenterActivity extends AppCompatActivity {
 
     // ---- Stats (consolidated into Scorecard) --------------------------------
 
+    /**
+     * Live run-rate / partnership / last-wicket only. Do not render CREX win-%
+     * bars here (or on Live) — the API may still send them; we ignore them.
+     */
     private boolean appendStats(LinearLayout container) {
         if (detail == null) return false;
         CricketMatchDetailResponse.Live live = detail.getLive();

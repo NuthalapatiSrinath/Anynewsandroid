@@ -497,9 +497,8 @@ public class CricketMatchDetailResponse implements Serializable {
         @SerializedName("last_wicket")
         @Expose
         private LastWicket last_wicket;
-        @SerializedName("win_probability")
-        @Expose
-        private WinProbability win_probability;
+        // CREX win-% payload is intentionally not modeled — Match Center must
+        // not render that card on Live or Scorecard.
 
         public String getStatus_text() {
             return safe(status_text);
@@ -531,10 +530,6 @@ public class CricketMatchDetailResponse implements Serializable {
 
         public LastWicket getLast_wicket() {
             return last_wicket;
-        }
-
-        public WinProbability getWin_probability() {
-            return win_probability;
         }
     }
 
@@ -624,47 +619,6 @@ public class CricketMatchDetailResponse implements Serializable {
 
         public String getText() {
             return safe(text);
-        }
-    }
-
-    public static class WinProbability implements Serializable {
-        @SerializedName("team1")
-        @Expose
-        private WinProbSide team1;
-        @SerializedName("team2")
-        @Expose
-        private WinProbSide team2;
-        @SerializedName("draw")
-        @Expose
-        private WinProbSide draw;
-
-        public WinProbSide getTeam1() {
-            return team1;
-        }
-
-        public WinProbSide getTeam2() {
-            return team2;
-        }
-
-        public WinProbSide getDraw() {
-            return draw;
-        }
-    }
-
-    public static class WinProbSide implements Serializable {
-        @SerializedName("label")
-        @Expose
-        private String label;
-        @SerializedName("pct")
-        @Expose
-        private Double pct;
-
-        public String getLabel() {
-            return safe(label);
-        }
-
-        public int getPct() {
-            return pct == null ? 0 : (int) Math.round(pct);
         }
     }
 
