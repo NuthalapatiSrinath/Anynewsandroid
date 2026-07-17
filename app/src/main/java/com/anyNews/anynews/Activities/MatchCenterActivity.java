@@ -47,7 +47,10 @@ public class MatchCenterActivity extends AppCompatActivity {
 
     public static final String EXTRA_MATCH = "extra_active_match";
 
-    private static final int DETAIL_POLL_MS = 8000;
+    // Detail + header both refresh on this cadence while the screen is open.
+    // Reads are served from the backend DB snapshot (no per-request CREX call),
+    // so a few seconds keeps the score/commentary live without hammering CREX.
+    private static final int DETAIL_POLL_MS = 3000;
 
     private ActiveMatch match;
     private CricketMatchDetailResponse.Detail detail;
@@ -66,6 +69,9 @@ public class MatchCenterActivity extends AppCompatActivity {
     private final Runnable detailPoll = new Runnable() {
         @Override
         public void run() {
+            // Keep BOTH the header (active_match) and the tab detail live on the
+            // same cadence so the orange header never lags the Summary/Live tabs.
+            refresh();
             fetchDetail();
             handler.postDelayed(this, DETAIL_POLL_MS);
         }

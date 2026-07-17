@@ -57,6 +57,11 @@ public class CricketMiniPlayerManager {
     // match back ON shows the player again. UNDO also clears the id.
     private static final Set<String> dismissedForSession = new HashSet<>();
 
+    // Last non-null active match seen this app process. Shown INSTANTLY when a
+    // new host screen opens so the card never flashes blank while the first poll
+    // is in flight; the poll then refreshes it in place.
+    private static ActiveMatch lastKnownActive;
+
     private final WeakReference<Activity> activityRef;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -97,6 +102,16 @@ public class CricketMiniPlayerManager {
      */
     public void onResume() {
         if (!pollingEnabled) return;
+        // Paint the last-known active match immediately (cached, no network) so
+        // the mini player appears instantly on open instead of after the first
+        // poll returns. The poll below refreshes it with live data in place.
+        if (lastKnownActive != null && !TextUtils.isEmpty(lastKnownActive.getMatch_id())
+                && !dismissedForSession.contains(lastKnownActive.getMatch_id())) {
+            current = lastKnownActive;
+            lastServerActiveId = lastKnownActive.getMatch_id();
+            show();
+            bind(lastKnownActive);
+        }
         handler.removeCallbacks(pollRunnable);
         handler.post(pollRunnable);
     }
@@ -143,6 +158,7 @@ public class CricketMiniPlayerManager {
         }
         lastServerActiveId = matchId;
         current = match;
+        lastKnownActive = match;
 
         if (dismissedForSession.contains(matchId)) {
             hide();
