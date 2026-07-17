@@ -1,10 +1,12 @@
 package com.anyNews.anynews.Utils;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.anyNews.anynews.R;
@@ -54,6 +56,14 @@ public final class EngagementCountHelper {
         tv.setBackground(badge);
         tv.setTextColor(context.getColor(R.color.engagement_badge_text));
         tv.setTypeface(tv.getTypeface(), Typeface.BOLD);
+    }
+
+    /** Tints half-post action icons with the same admin engagement color as counts. */
+    public static void applyIconTint(Context context, ImageView icon) {
+        if (context == null || icon == null) {
+            return;
+        }
+        icon.setImageTintList(ColorStateList.valueOf(getCountColor(context)));
     }
 
     public static String normalizeColor(String color) {

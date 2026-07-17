@@ -142,12 +142,12 @@
 
                     </androidx.constraintlayout.widget.ConstraintLayout>
 
-                    <!--middle content like comment share-->
+                    <!-- Trial: like/comment/share/flag row under media, then headline/body -->
                     <LinearLayout
                         android:id="@+id/layoutParentMiddle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="-15dp"
+                        android:layout_marginTop="0dp"
                         android:clipChildren="false"
                         android:clipToPadding="false"
                         android:minHeight="40dp"
@@ -159,17 +159,16 @@
                             android:id="@+id/with_out_strips_layout"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:background="#FFF7F7F7"
                             android:clipChildren="false"
                             android:clipToPadding="false"
-                            android:gravity="top|end"
-                            android:minHeight="40dp"
+                            android:gravity="center_vertical|start"
+                            android:minHeight="44dp"
                             android:orientation="horizontal"
-                            android:paddingEnd="8dp">
-
-                            <View
-                                android:layout_width="0dp"
-                                android:layout_height="1dp"
-                                android:layout_weight="1" />
+                            android:paddingStart="12dp"
+                            android:paddingTop="6dp"
+                            android:paddingEnd="8dp"
+                            android:paddingBottom="2dp">
 
                             <LinearLayout
                                 android:id="@+id/half_image_like_icon"

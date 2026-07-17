@@ -31,7 +31,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.database.Cursor;
@@ -533,24 +532,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         tv.setText(formatCount(c));
         // Count sits below the icon as plain text. Color comes from admin
         // "Engagement Icon Counts → Count color" (engagement_badge_color via
-        // splash + articles API); default #FF6300 when unset.
+        // splash + articles API); default #FF6300 when unset. Same color also
+        // tints the four action icons (see tintHalfActionIcons).
         tv.setBackground(null);
         tv.setTextColor(EngagementCountHelper.getCountColor(context));
         tv.setTypeface(tv.getTypeface(), Typeface.BOLD);
         tv.setVisibility(View.VISIBLE);
     }
 
-    // Half-feed like icon (Option C - Duo/Filled Accent): no ring, always brand
-    // orange so it reads on both light and dark cards. Not-liked = OUTLINE
-    // heart; liked = SOLID FILLED orange heart. Both drawables share the same
-    // 24x24 bounds inside the fixed-size ImageView, so toggling never shifts
-    // layout.
+    // Half-feed like icon (Option C): not-liked = OUTLINE heart; liked = SOLID
+    // FILLED heart. Tint follows admin engagement_badge_color (same as counts).
+    // Both drawables share 24x24 bounds so toggling never shifts layout.
     private void bindHalfLikeIcon(ImageView icon, Integer status) {
         if (icon == null) return;
         boolean liked = status != null && status == 1;
         icon.setBackground(null);
         icon.setImageResource(liked ? R.drawable.ic_action_like_filled : R.drawable.ic_action_like);
-        icon.setImageTintList(ColorStateList.valueOf(context.getColor(R.color.brand_orange)));
+        EngagementCountHelper.applyIconTint(context, icon);
+    }
+
+    /** Apply admin engagement color to like/comment/share/flag on half posts. */
+    private void tintHalfActionIcons(View convertView) {
+        if (convertView == null) return;
+        EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_image_like));
+        EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_comment_icon));
+        EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_share_icon));
+        EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.share));
+        EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.report_icon));
+        EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.video_report));
     }
 
     private void bindLikeCountForView(TextView countView, int likes) {
@@ -566,6 +575,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         bindHalfActionCount(convertView.findViewById(R.id.half_like_count), list.get(position).getLikes());
         bindHalfActionCount(convertView.findViewById(R.id.half_comment_count), list.get(position).getComments());
         bindHalfActionCount(convertView.findViewById(R.id.half_share_count), list.get(position).getShares());
+        tintHalfActionIcons(convertView);
         applyActionIconRowOffset(convertView);
     }
 
@@ -4539,6 +4549,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfVideoExoPlayerHolder.half_comment_icon.setImageResource(R.drawable.ic_action_comment);
         halfVideoExoPlayerHolder.share.setImageResource(R.drawable.ic_action_share);
         halfVideoExoPlayerHolder.video_report.setImageResource(R.drawable.ic_action_report);
+        tintHalfActionIcons(convertView);
 
 
         halfVideoExoPlayerHolder.writer_follow = convertView.findViewById(R.id.writer_follow);
