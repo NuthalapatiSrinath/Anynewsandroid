@@ -40,8 +40,32 @@ public class FooterStyleConfig implements Serializable {
     @Expose
     private String labelActiveColor;
 
+    /** Center "+" FAB diameter (activity_home_page.xml fabCustomSize). Default 42. */
+    @SerializedName("fab_size_dp")
+    @Expose
+    private Float fabSizeDp;
+
+    /** Plus logo drawable max size inside the FAB (maxImageSize). Default 30. */
+    @SerializedName("fab_icon_size_dp")
+    @Expose
+    private Float fabIconSizeDp;
+
     public float getIconSizeDp() {
         return iconSizeDp != null && iconSizeDp > 0 ? iconSizeDp : 24f;
+    }
+
+    public float getFabSizeDp() {
+        float v = fabSizeDp != null && fabSizeDp > 0 ? fabSizeDp : 42f;
+        if (v < 32f) return 32f;
+        if (v > 64f) return 64f;
+        return v;
+    }
+
+    public float getFabIconSizeDp() {
+        float v = fabIconSizeDp != null && fabIconSizeDp > 0 ? fabIconSizeDp : 30f;
+        if (v < 20f) return 20f;
+        if (v > 40f) return 40f;
+        return v;
     }
 
     public float getLabelSizeSp() {

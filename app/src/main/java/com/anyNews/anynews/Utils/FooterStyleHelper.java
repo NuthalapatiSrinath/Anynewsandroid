@@ -13,15 +13,17 @@ import android.widget.TextView;
 
 import com.anyNews.anynews.Pojo.FooterStyleConfig;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.gson.Gson;
 
 /**
  * Applies the admin-configured {@link FooterStyleConfig} (bottom-nav footer icon
- * size + label typography) at render time. Reads the JSON cached in SharedPrefs
- * from the splash config. If nothing is cached the footer is left untouched, so
- * the current compiled look is preserved. Because the backend serves defaults
- * that equal the current hardcoded values (icon 24dp, labels 11/12sp bold,
- * selector colors kept), applying them reproduces the current look exactly.
+ * size + label typography + center "+" FAB size) at render time. Reads the JSON
+ * cached in SharedPrefs from the splash config. If nothing is cached the footer
+ * is left untouched, so the current compiled look is preserved. Because the
+ * backend serves defaults that equal the current hardcoded values (icon 24dp,
+ * labels 11/12sp bold, FAB 42/30, selector colors kept), applying them
+ * reproduces the current look exactly.
  */
 public final class FooterStyleHelper {
 
@@ -77,6 +79,41 @@ public final class FooterStyleHelper {
             }
         } catch (Exception e) {
             Log.e(TAG, "label styling failed", e);
+        }
+    }
+
+    /**
+     * Applies admin-configured center "+" FAB diameter and plus-logo max size.
+     * Defaults (42dp / 30dp) match activity_home_page.xml; unset prefs leave
+     * the compiled layout values unchanged.
+     */
+    public static void applyFab(Context context, FloatingActionButton fab) {
+        if (context == null || fab == null) {
+            return;
+        }
+        FooterStyleConfig cfg = load(context);
+        if (cfg == null) {
+            return;
+        }
+        try {
+            float density = context.getResources().getDisplayMetrics().density;
+            float fabDp = cfg.getFabSizeDp();
+            float iconDp = cfg.getFabIconSizeDp();
+            if (fabDp > 0) {
+                int fabPx = Math.round(fabDp * density);
+                fab.setCustomSize(fabPx);
+                ViewGroup.LayoutParams lp = fab.getLayoutParams();
+                if (lp != null) {
+                    lp.width = fabPx;
+                    lp.height = fabPx;
+                    fab.setLayoutParams(lp);
+                }
+            }
+            if (iconDp > 0) {
+                fab.setMaxImageSize(Math.round(iconDp * density));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "fab size failed", e);
         }
     }
 

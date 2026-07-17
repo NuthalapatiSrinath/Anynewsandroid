@@ -555,6 +555,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             @Override
             public void run() {
                 FooterStyleHelper.apply(HomePage.this, bottomNavigationView);
+                FooterStyleHelper.applyFab(HomePage.this, floatingActionButtonHome);
             }
         });
 
