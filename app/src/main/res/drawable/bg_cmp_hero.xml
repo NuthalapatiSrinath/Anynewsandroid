@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stadium-style hero background for the Match Center header: a warm orange
+     gradient base with two soft "floodlight" glows in the top corners. Pure
+     vector/gradient (no bitmap) so it stays lightweight. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:startColor="@color/cmp_brand_orange_2"
+                android:centerColor="@color/cmp_brand_orange"
+                android:endColor="#D6390F"
+                android:angle="270" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="55%p"
+                android:centerX="0.12"
+                android:centerY="0.10"
+                android:startColor="#4DFFFFFF"
+                android:endColor="#00FFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="55%p"
+                android:centerX="0.88"
+                android:centerY="0.10"
+                android:startColor="#4DFFFFFF"
+                android:endColor="#00FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

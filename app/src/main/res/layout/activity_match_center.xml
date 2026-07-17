@@ -6,20 +6,21 @@
     android:orientation="vertical"
     android:background="@color/cmp_surface_alt">
 
-    <!-- Header (orange background extends up behind the status bar; the
-         status-bar inset is added to paddingTop at runtime so the title never
-         draws under the system clock). -->
+    <!-- Orange stadium hero header (the gradient background extends up behind the
+         status bar; the status-bar inset is added to paddingTop at runtime so the
+         title never draws under the system clock). -->
     <LinearLayout
         android:id="@+id/mc_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="@drawable/bg_cmp_header"
-        android:paddingStart="8dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="18dp">
+        android:background="@drawable/bg_cmp_hero"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="16dp">
 
+        <!-- Top bar: back · (series + title, centred) · LIVE pill · overflow -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -28,8 +29,8 @@
 
             <ImageView
                 android:id="@+id/mc_back"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:padding="8dp"
                 android:contentDescription="Back"
                 android:src="@drawable/ic_arrowwhite_back" />
@@ -39,25 +40,27 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical"
-                android:layout_marginStart="4dp">
+                android:gravity="center">
 
                 <TextView
                     android:id="@+id/mc_series"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
+                    android:gravity="center"
                     android:text="Series"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:alpha="0.9" />
+                    android:textSize="11sp"
+                    android:alpha="0.92" />
 
                 <TextView
                     android:id="@+id/mc_title"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:ellipsize="end"
+                    android:gravity="center"
                     android:text="Match Center"
                     android:textColor="#FFFFFF"
                     android:textSize="18sp"
@@ -77,112 +80,301 @@
                 android:textColor="#FFFFFF"
                 android:textSize="11sp"
                 android:textStyle="bold" />
+
+            <ImageView
+                android:id="@+id/mc_overflow"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="4dp"
+                android:padding="4dp"
+                android:contentDescription="More"
+                android:src="@drawable/ic_cmp_more" />
         </LinearLayout>
 
-        <!-- Scoreboard -->
+        <!-- Team score row: flag + name + big score (overs) + run rate, with a
+             centre divider carrying a small LIVE badge. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="14dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="16dp">
 
+            <!-- Team 1 (left) -->
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <TextView
-                    android:id="@+id/mc_team1_code"
+                <ImageView
+                    android:id="@+id/mc_team1_flag"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="8dp"
+                    android:contentDescription="Team 1 flag" />
+
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:text="IND"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/mc_team1_score"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="245/6 (42.3)"
-                    android:textColor="#FFFFFF"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/mc_team1_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:text="Team 1"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="bottom"
+                        android:layout_marginTop="1dp">
+
+                        <TextView
+                            android:id="@+id/mc_team1_score"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0/0"
+                            android:textColor="#FFFFFF"
+                            android:textSize="24sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/mc_team1_overs"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:layout_marginBottom="3dp"
+                            android:text=""
+                            android:textColor="#FFFFFF"
+                            android:alpha="0.88"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/mc_team1_rr"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textColor="#FFFFFF"
+                        android:alpha="0.82"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+                </LinearLayout>
             </LinearLayout>
 
+            <!-- Centre divider + LIVE badge -->
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp">
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="52dp"
+                    android:layout_gravity="center_horizontal"
+                    android:background="#3DFFFFFF" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <TextView
+                        android:id="@+id/mc_center_live"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_cmp_live_center"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingBottom="2dp"
+                        android:text="LIVE"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/mc_center_sub"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text=""
+                        android:textColor="#FFFFFF"
+                        android:alpha="0.9"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- Team 2 (right, mirrored) -->
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="6dp">
+                android:gravity="center_vertical">
 
-                <TextView
-                    android:id="@+id/mc_team2_code"
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:text="AUS"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/mc_team2_score"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="120/4 (22.1)"
-                    android:textColor="#FFFFFF"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/mc_team2_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:gravity="end"
+                        android:text="Team 2"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="bottom|end"
+                        android:layout_marginTop="1dp">
+
+                        <TextView
+                            android:id="@+id/mc_team2_score"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0/0"
+                            android:textColor="#FFFFFF"
+                            android:textSize="24sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/mc_team2_overs"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:layout_marginBottom="3dp"
+                            android:text=""
+                            android:textColor="#FFFFFF"
+                            android:alpha="0.88"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/mc_team2_rr"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text=""
+                        android:textColor="#FFFFFF"
+                        android:alpha="0.82"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/mc_team2_flag"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="Team 2 flag" />
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/mc_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="Live"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/mc_venue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text=""
-                android:textColor="#FFFFFF"
-                android:alpha="0.85"
-                android:textSize="11sp" />
         </LinearLayout>
+
+        <!-- Equation / match-status pill -->
+        <TextView
+            android:id="@+id/mc_equation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_cmp_equation_pill"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="9dp"
+            android:paddingBottom="9dp"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
     </LinearLayout>
 
-    <!-- Custom tab bar -->
+    <!-- Custom tab bar with an orange active underline. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:background="@color/cmp_surface">
 
-        <TextView
-            android:id="@+id/tab_live"
-            style="@style/CmpTab"
-            android:text="Live" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tab_scorecard"
-            style="@style/CmpTab"
-            android:text="Scorecard" />
+            <TextView
+                android:id="@+id/tab_live"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="14dp"
+                android:paddingBottom="11dp"
+                android:text="Live"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/cmp_text_secondary" />
+
+            <View
+                android:id="@+id/tab_live_indicator"
+                android:layout_width="52dp"
+                android:layout_height="3dp"
+                android:layout_gravity="center_horizontal"
+                android:background="@drawable/bg_cmp_tab_indicator" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tab_scorecard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:paddingTop="14dp"
+                android:paddingBottom="11dp"
+                android:text="Scorecard"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/cmp_text_secondary" />
+
+            <View
+                android:id="@+id/tab_scorecard_indicator"
+                android:layout_width="52dp"
+                android:layout_height="3dp"
+                android:layout_gravity="center_horizontal"
+                android:background="@drawable/bg_cmp_tab_indicator"
+                android:visibility="invisible" />
+        </LinearLayout>
     </LinearLayout>
 
     <View
@@ -201,75 +393,20 @@
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="16dp">
+            android:padding="14dp">
 
-            <!-- Live tab -->
+            <!-- Live tab — every card is built at runtime by renderLive(). -->
             <LinearLayout
                 android:id="@+id/content_live"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Match status"
-                    android:textColor="@color/cmp_text_secondary"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/live_status_text"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Live"
-                    android:textColor="@color/cmp_text_primary"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="14dp"
-                    android:layout_marginBottom="14dp"
-                    android:background="@color/cmp_border" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Last ball / recent"
-                    android:textColor="@color/cmp_text_secondary"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/live_last_ball"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="—"
-                    android:textColor="@color/cmp_text_primary"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:id="@+id/live_result"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text=""
-                    android:textColor="@color/cmp_brand_orange"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
-
-                <!-- Batsmen / over strips / All Overs button built at runtime. -->
                 <LinearLayout
                     android:id="@+id/live_dynamic"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="4dp" />
+                    android:orientation="vertical" />
             </LinearLayout>
 
             <!-- Scorecard tab: innings breakdown plus the consolidated
