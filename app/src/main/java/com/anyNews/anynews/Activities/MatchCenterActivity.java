@@ -1172,18 +1172,21 @@ public class MatchCenterActivity extends AppCompatActivity {
     // ---- Scorecard ----------------------------------------------------------
 
     /**
-     * Scorecard tab: the full innings breakdown (batting/bowling/fall of
-     * wickets) plus the sections consolidated from the removed tabs — live
-     * stats / win probability / match info (former Stats tab), summary +
-     * player of the match + top performers (former Summary tab) and ball-by-ball
-     * commentary (former Commentary tab). All sections reuse the same card
-     * builders, so the styling is unchanged.
+     * Scorecard tab (CREX-style): one white innings card per innings — a team
+     * header (flag + name + total), the batting table (R/B/4s/6s/SR), an orange
+     * Extras and Total row, a grey Yet to Bat list and the innings' bowling +
+     * fall-of-wickets — followed by a Match Details card (match / venue / date /
+     * toss). Sections consolidated from the removed tabs that no longer fit this
+     * clean layout (live stats, win probability, summary / player of the match /
+     * top performers and ball-by-ball commentary) are appended BELOW the Match
+     * Details card so no snapshot data is lost. Every value binds to the DB
+     * snapshot; sections with no data are omitted gracefully.
      */
     private void renderScorecard() {
         contentScorecard.removeAllViews();
         boolean any = false;
 
-        // Innings breakdown (the primary scorecard content).
+        // Innings cards — the primary scorecard content, one per innings.
         List<CricketMatchDetailResponse.Innings> innings = detail != null ? detail.getScorecards() : null;
         if (innings != null && !innings.isEmpty()) {
             for (CricketMatchDetailResponse.Innings inn : innings) {
@@ -1192,7 +1195,15 @@ public class MatchCenterActivity extends AppCompatActivity {
             any = true;
         }
 
-        // Consolidated sections from the former Stats / Summary / Commentary tabs.
+        // Match Details card (match / venue / date / toss) from the info snapshot.
+        View matchDetails = buildMatchDetailsCard();
+        if (matchDetails != null) {
+            contentScorecard.addView(matchDetails);
+            any = true;
+        }
+
+        // Sections that do not fit the clean scorecard layout are kept BELOW the
+        // Match Details card so no snapshot data is lost.
         any |= appendStats(contentScorecard);
         any |= appendSummary(contentScorecard);
         any |= appendCommentary(contentScorecard);
@@ -1207,75 +1218,406 @@ public class MatchCenterActivity extends AppCompatActivity {
         contentScorecard.setVisibility(View.VISIBLE);
     }
 
+    /** One innings as a white rounded card matching the CREX scorecard layout. */
     private View buildInningsCard(CricketMatchDetailResponse.Innings inn) {
         LinearLayout card = card();
 
-        String header = inn.getLabel();
-        if (TextUtils.isEmpty(header)) header = inn.getTeam_name();
-        if (!TextUtils.isEmpty(inn.getScore())) header = header + " — " + inn.getScore();
-        card.addView(sectionTitle(header + (inn.isCurrent() ? "  ●" : "")));
+        // Team header: circular flag + team name (left), total score (right).
+        card.addView(buildInningsHeader(inn));
 
-        // Batting table.
-        card.addView(tableRow(true, "Batter", "R", "B", "4s", "6s", "SR"));
+        // Batting table header + one row per batter; collect the did-not-bats.
+        card.addView(thinDivider());
+        card.addView(scHeaderRow());
         List<CricketMatchDetailResponse.Batting> batting = inn.getBatting();
+        StringBuilder yetToBat = new StringBuilder();
         boolean anyBatter = false;
         if (batting != null) {
             for (CricketMatchDetailResponse.Batting b : batting) {
-                if (b.isDid_not_bat()) continue;
-                anyBatter = true;
-                LinearLayout row = tableRow(false, b.getName(),
-                        String.valueOf(b.getRuns()), String.valueOf(b.getBalls()),
-                        String.valueOf(b.getFours()), String.valueOf(b.getSixes()), b.getStrike_rate());
-                String note = "batting".equalsIgnoreCase(b.getStatus())
-                        ? "batting"
-                        : b.getDismissal();
-                if (!TextUtils.isEmpty(note)) {
-                    TextView sub = new TextView(this);
-                    sub.setText(note);
-                    sub.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
-                    sub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-                    sub.setPadding(0, 0, 0, dp(4));
-                    card.addView(row);
-                    card.addView(sub);
+                if (b.isDid_not_bat()) {
+                    if (yetToBat.length() > 0) yetToBat.append(", ");
+                    yetToBat.append(b.getName());
                     continue;
                 }
-                card.addView(row);
+                card.addView(thinDivider());
+                card.addView(scBattingRow(b));
+                anyBatter = true;
             }
         }
         if (!anyBatter) {
             card.addView(mutedLine("Yet to bat."));
         }
 
+        // Extras (orange label) + Total (all orange), mirroring the reference.
         if (!TextUtils.isEmpty(inn.getExtras())) {
-            card.addView(mutedLine("Extras  " + inn.getExtras()));
+            card.addView(thinDivider());
+            card.addView(accentRow("Extras", inn.getExtras(), false));
+        }
+        String total = innTotalText(inn);
+        if (!TextUtils.isEmpty(total)) {
+            card.addView(thinDivider());
+            card.addView(accentRow("Total", total, true));
         }
 
-        // Bowling table.
+        // Yet to Bat — grey label + comma-separated names.
+        if (yetToBat.length() > 0) {
+            card.addView(thinDivider());
+            card.addView(buildYetToBat(yetToBat.toString()));
+        }
+
+        // Bowling figures for this innings (retained scorecard data).
         List<CricketMatchDetailResponse.Bowling> bowling = inn.getBowling();
         if (bowling != null && !bowling.isEmpty()) {
-            card.addView(divider());
-            card.addView(tableRow(true, "Bowler", "O", "R", "W", "Econ", ""));
+            card.addView(thinDivider());
+            card.addView(scBowlHeaderRow());
             for (CricketMatchDetailResponse.Bowling bw : bowling) {
-                card.addView(tableRow(false, bw.getName(), bw.getOvers(),
-                        String.valueOf(bw.getRuns()), String.valueOf(bw.getWickets()), bw.getEconomy(), ""));
+                card.addView(thinDivider());
+                card.addView(scBowlingRow(bw));
             }
         }
 
-        // Fall of wickets.
+        // Fall of wickets (retained scorecard data).
         List<CricketMatchDetailResponse.FallOfWicket> fow = inn.getFall_of_wickets();
         if (fow != null && !fow.isEmpty()) {
-            card.addView(divider());
-            card.addView(labelLine("Fall of wickets"));
-            StringBuilder sb = new StringBuilder();
-            for (CricketMatchDetailResponse.FallOfWicket f : fow) {
-                if (sb.length() > 0) sb.append("   ");
-                sb.append(f.getScore());
-                if (!TextUtils.isEmpty(f.getBatsman())) sb.append(" (").append(f.getBatsman()).append(')');
-            }
-            card.addView(mutedLine(sb.toString()));
+            card.addView(thinDivider());
+            card.addView(buildFallOfWickets(fow));
         }
 
         return card;
+    }
+
+    /** Innings card header: circular flag + team name on the left, total right. */
+    private View buildInningsHeader(CricketMatchDetailResponse.Innings inn) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 0, 0, dp(6));
+
+        ImageView flag = new ImageView(this);
+        LinearLayout.LayoutParams flagLp = new LinearLayout.LayoutParams(dp(26), dp(26));
+        flagLp.rightMargin = dp(10);
+        flag.setLayoutParams(flagLp);
+        String flagUrl = flagForTeam(inn.getTeam_name());
+        if (!TextUtils.isEmpty(flagUrl)) {
+            try {
+                Glide.with(this).load(flagUrl).circleCrop().into(flag);
+            } catch (Exception ignored) {
+            }
+        }
+        row.addView(flag);
+
+        TextView name = new TextView(this);
+        name.setText(inn.getTeam_name());
+        name.setTextColor(color(R.color.cmp_text_primary));
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        name.setTypeface(Typeface.DEFAULT_BOLD);
+        name.setMaxLines(1);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        name.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(name);
+
+        String total = innTotalText(inn);
+        if (!TextUtils.isEmpty(total)) {
+            TextView tot = new TextView(this);
+            tot.setText(total);
+            tot.setTextColor(color(R.color.cmp_text_primary));
+            tot.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            tot.setTypeface(Typeface.DEFAULT_BOLD);
+            tot.setPadding(dp(8), 0, 0, 0);
+            row.addView(tot);
+        }
+        return row;
+    }
+
+    private LinearLayout scHeaderRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(6), 0, dp(6));
+        int grey = color(R.color.cmp_text_secondary);
+        row.addView(scCell("Batting", 3.6f, Gravity.START, grey, 11.5f, false));
+        row.addView(scCell("R", 1.0f, Gravity.CENTER, grey, 11.5f, false));
+        row.addView(scCell("B", 1.0f, Gravity.CENTER, grey, 11.5f, false));
+        row.addView(scCell("4s", 1.0f, Gravity.CENTER, grey, 11.5f, false));
+        row.addView(scCell("6s", 1.0f, Gravity.CENTER, grey, 11.5f, false));
+        row.addView(scCell("SR", 1.6f, Gravity.END, grey, 11.5f, false));
+        return row;
+    }
+
+    private View scBattingRow(CricketMatchDetailResponse.Batting b) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(9), 0, dp(9));
+        int dark = color(R.color.cmp_text_primary);
+
+        boolean striker = isStrikerInScorecard(b.getName());
+        String name = b.getName() + (striker ? " *" : "");
+        row.addView(scCell(name, 3.6f, Gravity.START, dark, 13f, striker));
+        row.addView(scCell(String.valueOf(b.getRuns()), 1.0f, Gravity.CENTER, dark, 13f, true));
+        row.addView(scCell(String.valueOf(b.getBalls()), 1.0f, Gravity.CENTER, dark, 13f, false));
+        row.addView(scCell(String.valueOf(b.getFours()), 1.0f, Gravity.CENTER, dark, 13f, false));
+        row.addView(scCell(String.valueOf(b.getSixes()), 1.0f, Gravity.CENTER, dark, 13f, false));
+        row.addView(scCell(TextUtils.isEmpty(b.getStrike_rate()) ? "-" : b.getStrike_rate(),
+                1.6f, Gravity.END, dark, 13f, false));
+        wrap.addView(row);
+
+        // Dismissal sub-line for out batters (retains "how out"; not-out shows none).
+        String note = "batting".equalsIgnoreCase(b.getStatus()) ? null : b.getDismissal();
+        if (!TextUtils.isEmpty(note)) {
+            TextView sub = new TextView(this);
+            sub.setText(note);
+            sub.setTextColor(color(R.color.cmp_text_secondary));
+            sub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            sub.setPadding(0, 0, 0, dp(6));
+            wrap.addView(sub);
+        }
+        return wrap;
+    }
+
+    private LinearLayout scBowlHeaderRow() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(6), 0, dp(6));
+        int grey = color(R.color.cmp_text_secondary);
+        row.addView(scCell("Bowling", 3.6f, Gravity.START, grey, 11.5f, false));
+        row.addView(scCell("O", 1.2f, Gravity.CENTER, grey, 11.5f, false));
+        row.addView(scCell("R", 1.0f, Gravity.CENTER, grey, 11.5f, false));
+        row.addView(scCell("W", 1.0f, Gravity.CENTER, grey, 11.5f, false));
+        row.addView(scCell("Econ", 1.6f, Gravity.END, grey, 11.5f, false));
+        return row;
+    }
+
+    private View scBowlingRow(CricketMatchDetailResponse.Bowling bw) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(9), 0, dp(9));
+        int dark = color(R.color.cmp_text_primary);
+        row.addView(scCell(bw.getName(), 3.6f, Gravity.START, dark, 13f, false));
+        row.addView(scCell(TextUtils.isEmpty(bw.getOvers()) ? "-" : bw.getOvers(),
+                1.2f, Gravity.CENTER, dark, 13f, false));
+        row.addView(scCell(String.valueOf(bw.getRuns()), 1.0f, Gravity.CENTER, dark, 13f, false));
+        row.addView(scCell(String.valueOf(bw.getWickets()), 1.0f, Gravity.CENTER, dark, 13f, true));
+        row.addView(scCell(TextUtils.isEmpty(bw.getEconomy()) ? "-" : bw.getEconomy(),
+                1.6f, Gravity.END, dark, 13f, false));
+        return row;
+    }
+
+    private View buildFallOfWickets(List<CricketMatchDetailResponse.FallOfWicket> fow) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(0, dp(8), 0, dp(2));
+
+        TextView label = new TextView(this);
+        label.setText("Fall of Wickets");
+        label.setTextColor(color(R.color.cmp_text_secondary));
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        label.setTypeface(Typeface.DEFAULT_BOLD);
+        col.addView(label);
+
+        StringBuilder sb = new StringBuilder();
+        for (CricketMatchDetailResponse.FallOfWicket f : fow) {
+            if (sb.length() > 0) sb.append("   ");
+            sb.append(f.getScore());
+            if (!TextUtils.isEmpty(f.getBatsman())) sb.append(" (").append(f.getBatsman()).append(')');
+        }
+        TextView val = new TextView(this);
+        val.setText(sb.toString());
+        val.setTextColor(color(R.color.cmp_text_secondary));
+        val.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        val.setPadding(0, dp(3), 0, 0);
+        col.addView(val);
+        return col;
+    }
+
+    /** Orange-accented Extras / Total row (Total's value is orange too). */
+    private View accentRow(String label, String value, boolean valueOrange) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(9), 0, dp(9));
+        int orange = color(R.color.cmp_brand_orange);
+
+        TextView k = new TextView(this);
+        k.setText(label);
+        k.setTextColor(orange);
+        k.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        k.setTypeface(Typeface.DEFAULT_BOLD);
+        k.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(k);
+
+        TextView v = new TextView(this);
+        v.setText(value);
+        v.setTextColor(valueOrange ? orange : color(R.color.cmp_text_primary));
+        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        v.setTypeface(Typeface.DEFAULT_BOLD);
+        v.setGravity(Gravity.END);
+        v.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2.4f));
+        row.addView(v);
+        return row;
+    }
+
+    private View buildYetToBat(String names) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(0, dp(8), 0, dp(2));
+
+        TextView label = new TextView(this);
+        label.setText("Yet to Bat");
+        label.setTextColor(color(R.color.cmp_text_secondary));
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        label.setTypeface(Typeface.DEFAULT_BOLD);
+        col.addView(label);
+
+        TextView val = new TextView(this);
+        val.setText(names);
+        val.setTextColor(color(R.color.cmp_text_secondary));
+        val.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
+        val.setPadding(0, dp(3), 0, 0);
+        col.addView(val);
+        return col;
+    }
+
+    /** Bottom "Match Details" card — match / venue / date / toss label rows. */
+    private View buildMatchDetailsCard() {
+        if (detail == null) return null;
+        CricketMatchDetailResponse.Info info = detail.getInfo();
+
+        java.util.List<String[]> rows = new java.util.ArrayList<>();
+
+        String matchLine = matchHeading();
+        String num = info != null ? info.getMatch_number() : "";
+        if (!TextUtils.isEmpty(matchLine)) {
+            if (!TextUtils.isEmpty(num)) matchLine = matchLine + ", " + num;
+            rows.add(new String[]{"Match", matchLine});
+        }
+        String venue = info != null && !TextUtils.isEmpty(info.getVenue())
+                ? info.getVenue()
+                : (match != null ? match.getVenue() : "");
+        if (!TextUtils.isEmpty(venue)) rows.add(new String[]{"Venue", venue});
+        String date = info != null ? formatMatchDate(info.getStart_time()) : "";
+        if (!TextUtils.isEmpty(date)) rows.add(new String[]{"Date", date});
+        String toss = info != null ? info.getToss() : "";
+        if (!TextUtils.isEmpty(toss)) rows.add(new String[]{"Toss", toss});
+
+        if (rows.isEmpty()) return null;
+
+        LinearLayout card = card();
+        card.addView(sectionTitle("Match Details"));
+        for (int i = 0; i < rows.size(); i++) {
+            card.addView(thinDivider());
+            card.addView(detailRow(rows.get(i)[0], rows.get(i)[1]));
+        }
+        return card;
+    }
+
+    private View detailRow(String label, String value) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(9), 0, dp(9));
+
+        TextView k = new TextView(this);
+        k.setText(label);
+        k.setTextColor(color(R.color.cmp_text_secondary));
+        k.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        k.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(k);
+
+        TextView v = new TextView(this);
+        v.setText(value);
+        v.setTextColor(color(R.color.cmp_text_primary));
+        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        v.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2.4f));
+        row.addView(v);
+        return row;
+    }
+
+    /** Full team flag URL for an innings, matched by team name against the header. */
+    private String flagForTeam(String teamName) {
+        if (match == null || TextUtils.isEmpty(teamName)) return "";
+        if (teamMatches(teamName, match.getTeam1_name(), match.getTeam1_code())) return match.getTeam1_flag();
+        if (teamMatches(teamName, match.getTeam2_name(), match.getTeam2_code())) return match.getTeam2_flag();
+        return "";
+    }
+
+    /** Overs for an innings' team, taken from the header active_match feed. */
+    private String oversForTeam(String teamName) {
+        if (match == null || TextUtils.isEmpty(teamName)) return "";
+        if (teamMatches(teamName, match.getTeam1_name(), match.getTeam1_code())) return match.getTeam1_overs();
+        if (teamMatches(teamName, match.getTeam2_name(), match.getTeam2_code())) return match.getTeam2_overs();
+        return "";
+    }
+
+    private static boolean teamMatches(String teamName, String name, String code) {
+        return namesMatch(teamName, name) || namesMatch(teamName, code);
+    }
+
+    /** "44/1 (21.2 Overs)" — innings score plus overs when the feed carries them. */
+    private String innTotalText(CricketMatchDetailResponse.Innings inn) {
+        String score = inn.getScore();
+        if (TextUtils.isEmpty(score)) return "";
+        String overs = oversForTeam(inn.getTeam_name());
+        if (!TextUtils.isEmpty(overs)) return score + " (" + overs + " Overs)";
+        return score;
+    }
+
+    /** True when the scorecard batter is currently on strike per the live feed. */
+    private boolean isStrikerInScorecard(String name) {
+        if (detail == null || detail.getLive() == null || TextUtils.isEmpty(name)) return false;
+        List<CricketMatchDetailResponse.Batsman> bs = detail.getLive().getBatsmen();
+        if (bs == null) return false;
+        for (CricketMatchDetailResponse.Batsman b : bs) {
+            if (b.isOn_strike() && namesMatch(b.getName(), name)) return true;
+        }
+        return false;
+    }
+
+    /** Format an ISO / epoch start_time into "17 July 2026"; blank on failure. */
+    private String formatMatchDate(String raw) {
+        if (TextUtils.isEmpty(raw)) return "";
+        String r = raw.trim();
+        try {
+            java.text.SimpleDateFormat out =
+                    new java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale.US);
+            if (r.matches("\\d{10,}")) {
+                long v = Long.parseLong(r);
+                long ms = r.length() <= 10 ? v * 1000L : v;
+                return out.format(new java.util.Date(ms));
+            }
+            String datePart = r.contains("T") ? r.substring(0, r.indexOf('T')) : r;
+            java.text.SimpleDateFormat in =
+                    new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
+            java.util.Date d = in.parse(datePart);
+            if (d != null) return out.format(d);
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    private int color(int res) {
+        return ContextCompat.getColor(this, res);
+    }
+
+    private TextView scCell(String text, float weight, int gravity, int textColor,
+                            float sizeSp, boolean bold) {
+        TextView t = new TextView(this);
+        t.setText(text == null ? "" : text);
+        t.setGravity(gravity);
+        t.setMaxLines(1);
+        t.setEllipsize(TextUtils.TruncateAt.END);
+        t.setTextColor(textColor);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp);
+        if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, weight));
+        return t;
+    }
+
+    private View thinDivider() {
+        View v = new View(this);
+        v.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(0.5f))));
+        v.setBackgroundColor(color(R.color.cmp_border));
+        return v;
     }
 
     // ---- Commentary (consolidated into Scorecard) ---------------------------
@@ -1373,7 +1715,6 @@ public class MatchCenterActivity extends AppCompatActivity {
     private boolean appendStats(LinearLayout container) {
         if (detail == null) return false;
         CricketMatchDetailResponse.Live live = detail.getLive();
-        CricketMatchDetailResponse.Info info = detail.getInfo();
         boolean any = false;
 
         LinearLayout live_card = card();
@@ -1414,19 +1755,6 @@ public class MatchCenterActivity extends AppCompatActivity {
             }
         }
 
-        // Match info.
-        LinearLayout infoCard = card();
-        if (info != null) {
-            if (!TextUtils.isEmpty(info.getSeries())) infoCard.addView(keyValue("Series", info.getSeries()));
-            if (!TextUtils.isEmpty(info.getFormat())) infoCard.addView(keyValue("Format", info.getFormat()));
-            if (!TextUtils.isEmpty(info.getVenue())) infoCard.addView(keyValue("Venue", info.getVenue()));
-            if (!TextUtils.isEmpty(info.getToss())) infoCard.addView(keyValue("Toss", info.getToss()));
-        }
-        if (infoCard.getChildCount() > 0) {
-            infoCard.addView(sectionTitle("Match info"), 0);
-            container.addView(infoCard);
-            any = true;
-        }
         return any;
     }
 
@@ -1512,17 +1840,6 @@ public class MatchCenterActivity extends AppCompatActivity {
         return t;
     }
 
-    private View divider() {
-        View v = new View(this);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
-        lp.topMargin = dp(8);
-        lp.bottomMargin = dp(8);
-        v.setLayoutParams(lp);
-        v.setBackgroundColor(ContextCompat.getColor(this, R.color.cmp_border));
-        return v;
-    }
-
     private View keyValue(String key, String value) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1544,37 +1861,6 @@ public class MatchCenterActivity extends AppCompatActivity {
         val.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f));
         row.addView(val);
         return row;
-    }
-
-    private LinearLayout tableRow(boolean header, String c0, String c1, String c2, String c3, String c4, String c5) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, dp(6), 0, dp(6));
-
-        row.addView(cell(c0, 4f, Gravity.START, header));
-        row.addView(cell(c1, 1.1f, Gravity.CENTER, header));
-        row.addView(cell(c2, 1.1f, Gravity.CENTER, header));
-        row.addView(cell(c3, 1.1f, Gravity.CENTER, header));
-        row.addView(cell(c4, 1.3f, Gravity.CENTER, header));
-        row.addView(cell(c5, 1.3f, Gravity.CENTER, header));
-        return row;
-    }
-
-    private TextView cell(String text, float weight, int gravity, boolean header) {
-        TextView t = new TextView(this);
-        t.setText(text == null ? "" : text);
-        t.setGravity(gravity);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, header ? 11 : 13);
-        t.setMaxLines(1);
-        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        if (header) {
-            t.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
-            t.setTypeface(Typeface.DEFAULT_BOLD);
-        } else {
-            t.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
-        }
-        t.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, weight));
-        return t;
     }
 
     // ---- Networking ---------------------------------------------------------

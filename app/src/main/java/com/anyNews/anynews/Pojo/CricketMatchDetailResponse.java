@@ -443,6 +443,9 @@ public class CricketMatchDetailResponse implements Serializable {
         @SerializedName("match_number")
         @Expose
         private String match_number;
+        @SerializedName("start_time")
+        @Expose
+        private String start_time;
 
         public String getSeries() {
             return safe(series);
@@ -462,6 +465,10 @@ public class CricketMatchDetailResponse implements Serializable {
 
         public String getMatch_number() {
             return safe(match_number);
+        }
+
+        public String getStart_time() {
+            return safe(start_time);
         }
     }
 
