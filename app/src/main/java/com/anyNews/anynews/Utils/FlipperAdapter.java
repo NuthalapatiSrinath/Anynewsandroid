@@ -540,13 +540,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         tv.setVisibility(View.VISIBLE);
     }
 
-    // Half-feed like icon (Option C): not-liked = OUTLINE heart; liked = SOLID
-    // FILLED heart. Tint follows admin engagement_badge_color (same as counts).
-    // Both drawables share 24x24 bounds so toggling never shifts layout.
+    // Half-feed like icon: not-liked = OUTLINE heart; liked = SOLID FILLED heart,
+    // each sitting inside the old white circular chip (white_oval). Tint follows
+    // admin engagement_badge_color (same as counts). Both heart drawables share
+    // 24x24 bounds so toggling never shifts layout.
     private void bindHalfLikeIcon(ImageView icon, Integer status) {
         if (icon == null) return;
         boolean liked = status != null && status == 1;
-        icon.setBackground(null);
+        icon.setBackgroundResource(R.drawable.white_oval);
         icon.setImageResource(liked ? R.drawable.ic_action_like_filled : R.drawable.ic_action_like);
         EngagementCountHelper.applyIconTint(context, icon);
     }
