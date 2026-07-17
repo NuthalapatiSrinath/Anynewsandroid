@@ -286,10 +286,13 @@ public class CricketMiniPlayerManager {
         format.setText(TextUtils.isEmpty(m.getFormat()) ? "" : m.getFormat());
         format.setVisibility(TextUtils.isEmpty(m.getFormat()) ? View.GONE : View.VISIBLE);
 
-        String line1 = m.scoreLine(m.getTeam1_code(), m.getTeam1_score(), m.getTeam1_overs());
-        String line2 = m.scoreLine(m.getTeam2_code(), m.getTeam2_score(), m.getTeam2_overs());
-        team1.setText(TextUtils.isEmpty(line1) ? m.getTeam1_code() : line1);
-        team2.setText(TextUtils.isEmpty(line2) ? m.getTeam2_code() : line2);
+        // Prefer full team names (e.g. "Washington Freedom"), fall back to code.
+        String t1 = teamLabel(m.getTeam1_name(), m.getTeam1_code());
+        String t2 = teamLabel(m.getTeam2_name(), m.getTeam2_code());
+        String line1 = m.scoreLine(t1, m.getTeam1_score(), m.getTeam1_overs());
+        String line2 = m.scoreLine(t2, m.getTeam2_score(), m.getTeam2_overs());
+        team1.setText(TextUtils.isEmpty(line1) ? t1 : line1);
+        team2.setText(TextUtils.isEmpty(line2) ? t2 : line2);
 
         String st = m.getStatus_text();
         status.setText(TextUtils.isEmpty(st) ? m.getSeries_name() : st);
@@ -396,5 +399,11 @@ public class CricketMiniPlayerManager {
 
     private static String safeUpper(String s) {
         return s == null ? "" : s.toUpperCase();
+    }
+
+    /** Prefer the full team name; fall back to the short code. */
+    private static String teamLabel(String name, String code) {
+        if (!TextUtils.isEmpty(name) && !name.equalsIgnoreCase(code)) return name;
+        return code == null ? "" : code;
     }
 }

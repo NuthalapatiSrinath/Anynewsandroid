@@ -65,6 +65,13 @@ public class CricketMatchDetailResponse implements Serializable {
         @SerializedName("player_of_series")
         @Expose
         private PlayerOf player_of_series;
+        @SerializedName("summary")
+        @Expose
+        private Summary summary;
+
+        public Summary getSummary() {
+            return summary;
+        }
 
         public String getCrex_key() {
             return safe(crex_key);
@@ -114,6 +121,12 @@ public class CricketMatchDetailResponse implements Serializable {
         @SerializedName("label")
         @Expose
         private String label;
+        @SerializedName("figures")
+        @Expose
+        private String figures;
+        @SerializedName("image")
+        @Expose
+        private String image;
 
         public String getName() {
             return safe(name);
@@ -121,6 +134,195 @@ public class CricketMatchDetailResponse implements Serializable {
 
         public String getLabel() {
             return safe(label);
+        }
+
+        public String getFigures() {
+            return safe(figures);
+        }
+
+        public String getImage() {
+            return safe(image);
+        }
+    }
+
+    // ---- Summary tab ---------------------------------------------------------
+
+    public static class Summary implements Serializable {
+        @SerializedName("is_completed")
+        @Expose
+        private Boolean is_completed;
+        @SerializedName("result_text")
+        @Expose
+        private String result_text;
+        @SerializedName("winner_team")
+        @Expose
+        private String winner_team;
+        @SerializedName("teams")
+        @Expose
+        private List<SummaryTeam> teams;
+        @SerializedName("last_over")
+        @Expose
+        private Over last_over;
+        @SerializedName("player_of_match")
+        @Expose
+        private PlayerOf player_of_match;
+        @SerializedName("top_performers")
+        @Expose
+        private List<TopPerformer> top_performers;
+
+        public boolean isCompleted() {
+            return is_completed != null && is_completed;
+        }
+
+        public String getResult_text() {
+            return safe(result_text);
+        }
+
+        public String getWinner_team() {
+            return safe(winner_team);
+        }
+
+        public List<SummaryTeam> getTeams() {
+            return teams;
+        }
+
+        public Over getLast_over() {
+            return last_over;
+        }
+
+        public PlayerOf getPlayer_of_match() {
+            return player_of_match;
+        }
+
+        public List<TopPerformer> getTop_performers() {
+            return top_performers;
+        }
+    }
+
+    public static class SummaryTeam implements Serializable {
+        @SerializedName("team")
+        @Expose
+        private String team;
+        @SerializedName("short")
+        @Expose
+        private String short_name;
+        @SerializedName("flag")
+        @Expose
+        private String flag;
+        @SerializedName("is_winner")
+        @Expose
+        private Boolean is_winner;
+        @SerializedName("innings")
+        @Expose
+        private List<TeamInnings> innings;
+
+        public String getTeam() {
+            return safe(team);
+        }
+
+        public String getShort_name() {
+            return safe(short_name);
+        }
+
+        public String getFlag() {
+            return safe(flag);
+        }
+
+        public boolean isWinner() {
+            return is_winner != null && is_winner;
+        }
+
+        public List<TeamInnings> getInnings() {
+            return innings;
+        }
+    }
+
+    public static class TeamInnings implements Serializable {
+        @SerializedName("score")
+        @Expose
+        private String score;
+        @SerializedName("overs")
+        @Expose
+        private String overs;
+
+        public String getScore() {
+            return safe(score);
+        }
+
+        public String getOvers() {
+            return safe(overs);
+        }
+    }
+
+    public static class TopPerformer implements Serializable {
+        @SerializedName("label")
+        @Expose
+        private String label;
+        @SerializedName("team_name")
+        @Expose
+        private String team_name;
+        @SerializedName("team_code")
+        @Expose
+        private String team_code;
+        @SerializedName("top_batters")
+        @Expose
+        private List<TopPlayer> top_batters;
+        @SerializedName("top_bowler")
+        @Expose
+        private TopPlayer top_bowler;
+
+        public String getLabel() {
+            return safe(label);
+        }
+
+        public String getTeam_name() {
+            return safe(team_name);
+        }
+
+        public List<TopPlayer> getTop_batters() {
+            return top_batters;
+        }
+
+        public TopPlayer getTop_bowler() {
+            return top_bowler;
+        }
+    }
+
+    public static class TopPlayer implements Serializable {
+        @SerializedName("name")
+        @Expose
+        private String name;
+        @SerializedName("image")
+        @Expose
+        private String image;
+        @SerializedName("figures")
+        @Expose
+        private String figures;
+        @SerializedName("strike_rate")
+        @Expose
+        private String strike_rate;
+        @SerializedName("economy")
+        @Expose
+        private String economy;
+
+        public String getName() {
+            return safe(name);
+        }
+
+        public String getImage() {
+            return safe(image);
+        }
+
+        public String getFigures() {
+            return safe(figures);
+        }
+
+        public String getStrike_rate() {
+            return safe(strike_rate);
+        }
+
+        public String getEconomy() {
+            return safe(economy);
         }
     }
 
@@ -487,6 +689,10 @@ public class CricketMatchDetailResponse implements Serializable {
         @SerializedName("fall_of_wickets")
         @Expose
         private List<FallOfWicket> fall_of_wickets;
+
+        public int innings() {
+            return innings == null ? 0 : innings;
+        }
 
         public String getTeam_name() {
             return safe(team_name);

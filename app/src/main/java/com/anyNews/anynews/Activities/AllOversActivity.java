@@ -22,7 +22,10 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -103,7 +106,7 @@ public class AllOversActivity extends AppCompatActivity {
                     if (isFinishing() || response.body() == null) return;
                     if (response.body().getSuccess() != null && response.body().getSuccess()
                             && response.body().getData() != null) {
-                        render(response.body().getData().getAll_overs());
+                        render(response.body().getData());
                     } else {
                         showMessage("Over-by-over data is not available for this match.");
                     }
@@ -119,16 +122,68 @@ public class AllOversActivity extends AppCompatActivity {
         }
     }
 
-    private void render(List<CricketMatchDetailResponse.Over> overs) {
+    private void render(CricketMatchDetailResponse.Detail data) {
         container.removeAllViews();
+        List<CricketMatchDetailResponse.Over> overs = data != null ? data.getAll_overs() : null;
         if (overs == null || overs.isEmpty()) {
             showMessage("Over-by-over data is not available for this match.");
             return;
         }
-        // Newest over first, like the reference screen.
-        for (int i = overs.size() - 1; i >= 0; i--) {
-            container.addView(buildOverCard(overs.get(i)));
+
+        // Map innings number → readable label from the scorecard (e.g.
+        // "India 1st Inn"), so each innings group has a proper heading.
+        Map<Integer, String> inningLabels = new LinkedHashMap<>();
+        if (data.getScorecards() != null) {
+            for (CricketMatchDetailResponse.Innings inn : data.getScorecards()) {
+                String label = !TextUtils.isEmpty(inn.getLabel()) ? inn.getLabel() : inn.getTeam_name();
+                if (!TextUtils.isEmpty(label)) inningLabels.put(inn.innings(), label);
+            }
         }
+
+        // Group overs by innings, preserving innings order (ascending). Within
+        // each innings, list every over newest-first like the reference.
+        Map<Integer, List<CricketMatchDetailResponse.Over>> byInnings = new LinkedHashMap<>();
+        for (CricketMatchDetailResponse.Over o : overs) {
+            int inn = o.getInning();
+            List<CricketMatchDetailResponse.Over> list = byInnings.get(inn);
+            if (list == null) {
+                list = new ArrayList<>();
+                byInnings.put(inn, list);
+            }
+            list.add(o);
+        }
+
+        for (Map.Entry<Integer, List<CricketMatchDetailResponse.Over>> entry : byInnings.entrySet()) {
+            int inn = entry.getKey();
+            String label = inningLabels.get(inn);
+            if (TextUtils.isEmpty(label)) {
+                label = inn > 0 ? ordinal(inn) + " Innings" : "Overs";
+            }
+            container.addView(buildInningsHeader(label, entry.getValue().size()));
+            List<CricketMatchDetailResponse.Over> list = entry.getValue();
+            for (int i = list.size() - 1; i >= 0; i--) {
+                container.addView(buildOverCard(list.get(i)));
+            }
+        }
+    }
+
+    private static String ordinal(int n) {
+        switch (n) {
+            case 1: return "1st";
+            case 2: return "2nd";
+            case 3: return "3rd";
+            default: return n + "th";
+        }
+    }
+
+    private View buildInningsHeader(String label, int overCount) {
+        TextView t = new TextView(this);
+        t.setText(label + "  ·  " + overCount + (overCount == 1 ? " over" : " overs"));
+        t.setTextColor(ContextCompat.getColor(this, R.color.cmp_brand_orange));
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setPadding(dp(2), dp(14), dp(2), dp(8));
+        return t;
     }
 
     private View buildOverCard(CricketMatchDetailResponse.Over over) {

@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import com.bumptech.glide.Glide;
 import com.anyNews.anynews.Pojo.ActiveMatch;
 import com.anyNews.anynews.Pojo.CricketActiveMatchResponse;
 import com.anyNews.anynews.Pojo.CricketMatchDetailResponse;
@@ -51,13 +52,15 @@ public class MatchCenterActivity extends AppCompatActivity {
     private ActiveMatch match;
     private CricketMatchDetailResponse.Detail detail;
 
-    private TextView tabLive, tabScorecard, tabCommentary, tabStats;
+    private TextView tabSummary, tabLive, tabScorecard, tabCommentary, tabStats;
     private View contentLive, contentPlaceholder;
-    private LinearLayout contentScorecard, contentCommentary, contentStats;
+    private LinearLayout contentSummary, contentScorecard, contentCommentary, contentStats;
     private LinearLayout liveDynamic;
     private TextView placeholderTitle, placeholderMessage;
 
-    private int currentTab = 0;
+    // Tab indices: 0 Summary · 1 Live · 2 Scorecard · 3 Commentary · 4 Stats.
+    private int currentTab = 1;
+    private boolean initialTabChosen = false;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable detailPoll = new Runnable() {
@@ -87,10 +90,12 @@ public class MatchCenterActivity extends AppCompatActivity {
             }
         });
 
+        tabSummary = findViewById(R.id.tab_summary);
         tabLive = findViewById(R.id.tab_live);
         tabScorecard = findViewById(R.id.tab_scorecard);
         tabCommentary = findViewById(R.id.tab_commentary);
         tabStats = findViewById(R.id.tab_stats);
+        contentSummary = findViewById(R.id.content_summary);
         contentLive = findViewById(R.id.content_live);
         liveDynamic = findViewById(R.id.live_dynamic);
         contentScorecard = findViewById(R.id.content_scorecard);
@@ -100,13 +105,14 @@ public class MatchCenterActivity extends AppCompatActivity {
         placeholderTitle = findViewById(R.id.placeholder_title);
         placeholderMessage = findViewById(R.id.placeholder_message);
 
-        tabLive.setOnClickListener(v -> selectTab(0));
-        tabScorecard.setOnClickListener(v -> selectTab(1));
-        tabCommentary.setOnClickListener(v -> selectTab(2));
-        tabStats.setOnClickListener(v -> selectTab(3));
+        tabSummary.setOnClickListener(v -> selectTab(0));
+        tabLive.setOnClickListener(v -> selectTab(1));
+        tabScorecard.setOnClickListener(v -> selectTab(2));
+        tabCommentary.setOnClickListener(v -> selectTab(3));
+        tabStats.setOnClickListener(v -> selectTab(4));
 
         bind();
-        selectTab(0);
+        selectTab(1);
 
         refresh();
         fetchDetail();
@@ -168,10 +174,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         TextView liveBadge = findViewById(R.id.mc_live_badge);
 
         series.setText(match.getSeries_name());
-        String heading = !TextUtils.isEmpty(match.getMatch_title())
-                ? match.getMatch_title()
-                : match.getTeam1_code() + " vs " + match.getTeam2_code();
-        title.setText(heading);
+        title.setText(matchHeading());
 
         t1code.setText(fullTeam(match.getTeam1_code(), match.getTeam1_name()));
         t2code.setText(fullTeam(match.getTeam2_code(), match.getTeam2_name()));
@@ -205,15 +208,17 @@ public class MatchCenterActivity extends AppCompatActivity {
         currentTab = index;
         int active = ContextCompat.getColor(this, R.color.cmp_brand_orange);
         int inactive = ContextCompat.getColor(this, R.color.cmp_text_secondary);
-        tabLive.setTextColor(index == 0 ? active : inactive);
-        tabScorecard.setTextColor(index == 1 ? active : inactive);
-        tabCommentary.setTextColor(index == 2 ? active : inactive);
-        tabStats.setTextColor(index == 3 ? active : inactive);
+        tabSummary.setTextColor(index == 0 ? active : inactive);
+        tabLive.setTextColor(index == 1 ? active : inactive);
+        tabScorecard.setTextColor(index == 2 ? active : inactive);
+        tabCommentary.setTextColor(index == 3 ? active : inactive);
+        tabStats.setTextColor(index == 4 ? active : inactive);
 
-        contentLive.setVisibility(index == 0 ? View.VISIBLE : View.GONE);
-        contentScorecard.setVisibility(index == 1 ? View.VISIBLE : View.GONE);
-        contentCommentary.setVisibility(index == 2 ? View.VISIBLE : View.GONE);
-        contentStats.setVisibility(index == 3 ? View.VISIBLE : View.GONE);
+        contentSummary.setVisibility(index == 0 ? View.VISIBLE : View.GONE);
+        contentLive.setVisibility(index == 1 ? View.VISIBLE : View.GONE);
+        contentScorecard.setVisibility(index == 2 ? View.VISIBLE : View.GONE);
+        contentCommentary.setVisibility(index == 3 ? View.VISIBLE : View.GONE);
+        contentStats.setVisibility(index == 4 ? View.VISIBLE : View.GONE);
         contentPlaceholder.setVisibility(View.GONE);
 
         renderCurrentTab();
@@ -221,13 +226,16 @@ public class MatchCenterActivity extends AppCompatActivity {
 
     private void renderCurrentTab() {
         switch (currentTab) {
-            case 1:
-                renderScorecard();
+            case 0:
+                renderSummary();
                 break;
             case 2:
-                renderCommentary();
+                renderScorecard();
                 break;
             case 3:
+                renderCommentary();
+                break;
+            case 4:
                 renderStats();
                 break;
             default:
@@ -237,6 +245,7 @@ public class MatchCenterActivity extends AppCompatActivity {
     }
 
     private void showEmptyFor(String title, String message) {
+        contentSummary.setVisibility(View.GONE);
         contentLive.setVisibility(View.GONE);
         contentScorecard.setVisibility(View.GONE);
         contentCommentary.setVisibility(View.GONE);
@@ -244,6 +253,218 @@ public class MatchCenterActivity extends AppCompatActivity {
         contentPlaceholder.setVisibility(View.VISIBLE);
         placeholderTitle.setText(title);
         placeholderMessage.setText(message);
+    }
+
+    // ---- Summary ------------------------------------------------------------
+
+    /**
+     * Summary tab (matches the reference): each side with flag + full name +
+     * score, a trophy on the winning team, the winner/result line, the last-over
+     * ball strip, a Player of the Match card (photo + name + figures) and
+     * per-innings Top Performers (top batters with SR, best bowler with ER).
+     */
+    private void renderSummary() {
+        contentSummary.removeAllViews();
+        CricketMatchDetailResponse.Summary summary = detail != null ? detail.getSummary() : null;
+        if (summary == null) {
+            showEmptyFor("Summary", detail == null
+                    ? "Loading summary…"
+                    : "The match summary will appear here.");
+            return;
+        }
+        contentPlaceholder.setVisibility(View.GONE);
+        contentSummary.setVisibility(View.VISIBLE);
+
+        // Teams card with flags, scores and trophy on the winner.
+        List<CricketMatchDetailResponse.SummaryTeam> teams = summary.getTeams();
+        if (teams != null && !teams.isEmpty()) {
+            LinearLayout teamsCard = card();
+            for (CricketMatchDetailResponse.SummaryTeam t : teams) {
+                teamsCard.addView(buildSummaryTeamRow(t));
+            }
+            if (!TextUtils.isEmpty(summary.getResult_text())) {
+                TextView res = new TextView(this);
+                res.setText(summary.getResult_text());
+                res.setTextColor(ContextCompat.getColor(this, R.color.cmp_brand_orange));
+                res.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+                res.setTypeface(Typeface.DEFAULT_BOLD);
+                res.setPadding(0, dp(10), 0, 0);
+                teamsCard.addView(res);
+            }
+            contentSummary.addView(teamsCard);
+        }
+
+        // Last over ball strip.
+        CricketMatchDetailResponse.Over lastOver = summary.getLast_over();
+        if (lastOver != null && lastOver.getBalls() != null && !lastOver.getBalls().isEmpty()) {
+            LinearLayout overCard = card();
+            overCard.addView(sectionTitle("Last over"));
+            overCard.addView(buildOverStrip(lastOver));
+            contentSummary.addView(overCard);
+        }
+
+        // Player of the Match.
+        CricketMatchDetailResponse.PlayerOf mom = summary.getPlayer_of_match() != null
+                ? summary.getPlayer_of_match()
+                : (detail != null ? detail.getPlayer_of_match() : null);
+        if (mom != null && !TextUtils.isEmpty(mom.getName())) {
+            contentSummary.addView(buildPlayerOfMatchCard(mom));
+        }
+
+        // Top performers per innings.
+        List<CricketMatchDetailResponse.TopPerformer> performers = summary.getTop_performers();
+        if (performers != null && !performers.isEmpty()) {
+            LinearLayout tpCard = card();
+            tpCard.addView(sectionTitle("Top Performers"));
+            for (CricketMatchDetailResponse.TopPerformer tp : performers) {
+                tpCard.addView(buildTopPerformerBlock(tp));
+            }
+            contentSummary.addView(tpCard);
+        }
+
+        if (contentSummary.getChildCount() == 0) {
+            showEmptyFor("Summary", "The match summary will appear here once the match is under way.");
+        }
+    }
+
+    private View buildSummaryTeamRow(CricketMatchDetailResponse.SummaryTeam t) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(6), 0, dp(6));
+
+        ImageView flag = new ImageView(this);
+        LinearLayout.LayoutParams flagLp = new LinearLayout.LayoutParams(dp(30), dp(30));
+        flagLp.rightMargin = dp(10);
+        flag.setLayoutParams(flagLp);
+        if (!TextUtils.isEmpty(t.getFlag())) {
+            try {
+                Glide.with(this).load(t.getFlag()).circleCrop().into(flag);
+            } catch (Exception ignored) {
+            }
+        }
+        row.addView(flag);
+
+        TextView name = new TextView(this);
+        name.setText(t.getTeam() + (t.isWinner() ? "  🏆" : ""));
+        name.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        name.setTypeface(t.isWinner() ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+        name.setMaxLines(1);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(name);
+
+        StringBuilder scoreSb = new StringBuilder();
+        List<CricketMatchDetailResponse.TeamInnings> inns = t.getInnings();
+        if (inns != null) {
+            for (CricketMatchDetailResponse.TeamInnings inn : inns) {
+                if (scoreSb.length() > 0) scoreSb.append(" & ");
+                scoreSb.append(inn.getScore());
+                if (!TextUtils.isEmpty(inn.getOvers())) scoreSb.append(" (").append(inn.getOvers()).append(')');
+            }
+        }
+        TextView score = new TextView(this);
+        score.setText(scoreSb.toString());
+        score.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
+        score.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        score.setTypeface(Typeface.DEFAULT_BOLD);
+        row.addView(score);
+        return row;
+    }
+
+    private View buildPlayerOfMatchCard(CricketMatchDetailResponse.PlayerOf mom) {
+        LinearLayout cardView = card();
+        cardView.addView(labelLine(TextUtils.isEmpty(mom.getLabel()) ? "Player of the Match" : mom.getLabel()));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        ImageView photo = new ImageView(this);
+        LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(dp(48), dp(48));
+        pLp.rightMargin = dp(12);
+        photo.setLayoutParams(pLp);
+        if (!TextUtils.isEmpty(mom.getImage())) {
+            try {
+                Glide.with(this).load(mom.getImage()).circleCrop().into(photo);
+            } catch (Exception ignored) {
+            }
+        }
+        row.addView(photo);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView name = new TextView(this);
+        name.setText(mom.getName());
+        name.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        name.setTypeface(Typeface.DEFAULT_BOLD);
+        col.addView(name);
+        if (!TextUtils.isEmpty(mom.getFigures())) {
+            TextView fig = new TextView(this);
+            fig.setText(mom.getFigures());
+            fig.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
+            fig.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            col.addView(fig);
+        }
+        row.addView(col);
+        cardView.addView(row);
+        return cardView;
+    }
+
+    private View buildTopPerformerBlock(CricketMatchDetailResponse.TopPerformer tp) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(0, dp(8), 0, dp(4));
+
+        TextView label = new TextView(this);
+        label.setText(TextUtils.isEmpty(tp.getLabel()) ? tp.getTeam_name() : tp.getLabel());
+        label.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        label.setTypeface(Typeface.DEFAULT_BOLD);
+        wrap.addView(label);
+
+        List<CricketMatchDetailResponse.TopPlayer> batters = tp.getTop_batters();
+        if (batters != null) {
+            for (CricketMatchDetailResponse.TopPlayer b : batters) {
+                wrap.addView(buildPerfRow(b.getName(), b.getFigures(),
+                        TextUtils.isEmpty(b.getStrike_rate()) ? "" : "SR " + b.getStrike_rate()));
+            }
+        }
+        CricketMatchDetailResponse.TopPlayer bowler = tp.getTop_bowler();
+        if (bowler != null && !TextUtils.isEmpty(bowler.getName())) {
+            wrap.addView(buildPerfRow(bowler.getName(), bowler.getFigures(),
+                    TextUtils.isEmpty(bowler.getEconomy()) ? "" : "ER " + bowler.getEconomy()));
+        }
+        return wrap;
+    }
+
+    private View buildPerfRow(String name, String figures, String extra) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(4), 0, dp(4));
+
+        TextView n = new TextView(this);
+        n.setText(name);
+        n.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
+        n.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        n.setMaxLines(1);
+        n.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        n.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(n);
+
+        TextView f = new TextView(this);
+        String txt = figures == null ? "" : figures;
+        if (!TextUtils.isEmpty(extra)) txt = txt + "   " + extra;
+        f.setText(txt);
+        f.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
+        f.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        f.setTypeface(Typeface.DEFAULT_BOLD);
+        row.addView(f);
+        return row;
     }
 
     // ---- Live ---------------------------------------------------------------
@@ -348,10 +569,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(key)) return;
         android.content.Intent intent = new android.content.Intent(this, AllOversActivity.class);
         intent.putExtra(AllOversActivity.EXTRA_CREX_KEY, key);
-        String title = !TextUtils.isEmpty(match.getMatch_title())
-                ? match.getMatch_title()
-                : match.getTeam1_code() + " vs " + match.getTeam2_code();
-        intent.putExtra(AllOversActivity.EXTRA_TITLE, title);
+        intent.putExtra(AllOversActivity.EXTRA_TITLE, matchHeading());
         startActivity(intent);
     }
 
@@ -878,6 +1096,17 @@ public class MatchCenterActivity extends AppCompatActivity {
                     if (response.body().getSuccess() != null && response.body().getSuccess()
                             && response.body().getData() != null) {
                         detail = response.body().getData();
+                        // First load of a finished match opens on Summary (like the
+                        // reference). Live matches stay on the Live tab.
+                        if (!initialTabChosen) {
+                            initialTabChosen = true;
+                            boolean completed = detail.isCompleted()
+                                    || (detail.getSummary() != null && detail.getSummary().isCompleted());
+                            if (completed) {
+                                selectTab(0);
+                                return;
+                            }
+                        }
                         renderCurrentTab();
                     }
                 }
@@ -897,11 +1126,20 @@ public class MatchCenterActivity extends AppCompatActivity {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
+    /** Prefer the FULL team name; fall back to the short code only if needed. */
     private static String fullTeam(String code, String name) {
         if (!TextUtils.isEmpty(name) && !name.equalsIgnoreCase(code)) {
-            return TextUtils.isEmpty(code) ? name : code + " · " + name;
+            return name;
         }
         return TextUtils.isEmpty(code) ? name : code;
+    }
+
+    private String matchHeading() {
+        if (match == null) return "Match Center";
+        if (!TextUtils.isEmpty(match.getMatch_title())) return match.getMatch_title();
+        String t1 = fullTeam(match.getTeam1_code(), match.getTeam1_name());
+        String t2 = fullTeam(match.getTeam2_code(), match.getTeam2_name());
+        return t1 + " vs " + t2;
     }
 
     private static String scoreOrDash(String score, String overs) {

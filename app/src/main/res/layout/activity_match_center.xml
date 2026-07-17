@@ -175,6 +175,11 @@
         android:background="@color/cmp_surface">
 
         <TextView
+            android:id="@+id/tab_summary"
+            style="@style/CmpTab"
+            android:text="Summary" />
+
+        <TextView
             android:id="@+id/tab_live"
             style="@style/CmpTab"
             android:text="Live" />
@@ -212,6 +217,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="16dp">
+
+            <!-- Summary tab (cards built at runtime) -->
+            <LinearLayout
+                android:id="@+id/content_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
 
             <!-- Live tab -->
             <LinearLayout
