@@ -51,6 +51,12 @@ public interface APIService {
     @GET("app/{version}/cricket_active_match")
     Call<com.anyNews.anynews.Pojo.CricketActiveMatchResponse> cricketActiveMatch(@Path("version") String version);
 
+    // Cricket Match Center — full scorecard / commentary / stats for a match.
+    @GET("app/{version}/cricket_match_detail")
+    Call<com.anyNews.anynews.Pojo.CricketMatchDetailResponse> cricketMatchDetail(
+            @Path("version") String version,
+            @retrofit2.http.Query("crex_key") String crexKey);
+
     //Shops
     @POST("app/{version}/Update_Device_FCM_Token")                  //  ok
     Call<AddLikeResponse> tokens(@Path("version") String version, @Body JsonObject shop);

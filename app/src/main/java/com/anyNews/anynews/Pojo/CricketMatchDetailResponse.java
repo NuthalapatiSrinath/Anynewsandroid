@@ -1,0 +1,575 @@
+package com.anyNews.anynews.Pojo;
+
+import com.google.gson.annotations.Expose;
+import com.google.gson.annotations.SerializedName;
+
+import java.io.Serializable;
+import java.util.List;
+
+/**
+ * Response of the app-facing /app/v3/cricket_match_detail endpoint. Mirrors the
+ * admin crex_get_match_detail payload (helpers/crex/crexMatchDetail.js) but only
+ * models the subset the Match Center tabs render: full scorecard (batting +
+ * bowling), ball-by-ball commentary, and live stats.
+ */
+public class CricketMatchDetailResponse implements Serializable {
+
+    @SerializedName("success")
+    @Expose
+    private Boolean success;
+
+    @SerializedName("data")
+    @Expose
+    private Detail data;
+
+    public Boolean getSuccess() {
+        return success;
+    }
+
+    public Detail getData() {
+        return data;
+    }
+
+    private static String safe(String s) {
+        return s == null ? "" : s;
+    }
+
+    public static class Detail implements Serializable {
+        @SerializedName("crex_key")
+        @Expose
+        private String crex_key;
+        @SerializedName("info")
+        @Expose
+        private Info info;
+        @SerializedName("live")
+        @Expose
+        private Live live;
+        @SerializedName("scorecards")
+        @Expose
+        private List<Innings> scorecards;
+        @SerializedName("commentary")
+        @Expose
+        private List<Commentary> commentary;
+
+        public String getCrex_key() {
+            return safe(crex_key);
+        }
+
+        public Info getInfo() {
+            return info;
+        }
+
+        public Live getLive() {
+            return live;
+        }
+
+        public List<Innings> getScorecards() {
+            return scorecards;
+        }
+
+        public List<Commentary> getCommentary() {
+            return commentary;
+        }
+    }
+
+    public static class Info implements Serializable {
+        @SerializedName("series")
+        @Expose
+        private String series;
+        @SerializedName("venue")
+        @Expose
+        private String venue;
+        @SerializedName("toss")
+        @Expose
+        private String toss;
+        @SerializedName("format")
+        @Expose
+        private String format;
+        @SerializedName("match_number")
+        @Expose
+        private String match_number;
+
+        public String getSeries() {
+            return safe(series);
+        }
+
+        public String getVenue() {
+            return safe(venue);
+        }
+
+        public String getToss() {
+            return safe(toss);
+        }
+
+        public String getFormat() {
+            return safe(format);
+        }
+
+        public String getMatch_number() {
+            return safe(match_number);
+        }
+    }
+
+    public static class Live implements Serializable {
+        @SerializedName("status_text")
+        @Expose
+        private String status_text;
+        @SerializedName("current_run_rate")
+        @Expose
+        private String current_run_rate;
+        @SerializedName("required_rate")
+        @Expose
+        private String required_rate;
+        @SerializedName("session_label")
+        @Expose
+        private String session_label;
+        @SerializedName("batsmen")
+        @Expose
+        private List<Batsman> batsmen;
+        @SerializedName("bowler")
+        @Expose
+        private Bowler bowler;
+        @SerializedName("partnership")
+        @Expose
+        private Partnership partnership;
+        @SerializedName("last_wicket")
+        @Expose
+        private LastWicket last_wicket;
+        @SerializedName("win_probability")
+        @Expose
+        private WinProbability win_probability;
+
+        public String getStatus_text() {
+            return safe(status_text);
+        }
+
+        public String getCurrent_run_rate() {
+            return safe(current_run_rate);
+        }
+
+        public String getRequired_rate() {
+            return safe(required_rate);
+        }
+
+        public String getSession_label() {
+            return safe(session_label);
+        }
+
+        public List<Batsman> getBatsmen() {
+            return batsmen;
+        }
+
+        public Bowler getBowler() {
+            return bowler;
+        }
+
+        public Partnership getPartnership() {
+            return partnership;
+        }
+
+        public LastWicket getLast_wicket() {
+            return last_wicket;
+        }
+
+        public WinProbability getWin_probability() {
+            return win_probability;
+        }
+    }
+
+    public static class Batsman implements Serializable {
+        @SerializedName("name")
+        @Expose
+        private String name;
+        @SerializedName("runs")
+        @Expose
+        private String runs;
+        @SerializedName("balls")
+        @Expose
+        private String balls;
+        @SerializedName("strike_rate")
+        @Expose
+        private String strike_rate;
+        @SerializedName("on_strike")
+        @Expose
+        private Boolean on_strike;
+
+        public String getName() {
+            return safe(name);
+        }
+
+        public String getRuns() {
+            return safe(runs);
+        }
+
+        public String getBalls() {
+            return safe(balls);
+        }
+
+        public String getStrike_rate() {
+            return safe(strike_rate);
+        }
+
+        public boolean isOn_strike() {
+            return on_strike != null && on_strike;
+        }
+    }
+
+    public static class Bowler implements Serializable {
+        @SerializedName("name")
+        @Expose
+        private String name;
+        @SerializedName("figures")
+        @Expose
+        private String figures;
+        @SerializedName("overs")
+        @Expose
+        private String overs;
+        @SerializedName("economy")
+        @Expose
+        private String economy;
+
+        public String getName() {
+            return safe(name);
+        }
+
+        public String getFigures() {
+            return safe(figures);
+        }
+
+        public String getOvers() {
+            return safe(overs);
+        }
+
+        public String getEconomy() {
+            return safe(economy);
+        }
+    }
+
+    public static class Partnership implements Serializable {
+        @SerializedName("text")
+        @Expose
+        private String text;
+
+        public String getText() {
+            return safe(text);
+        }
+    }
+
+    public static class LastWicket implements Serializable {
+        @SerializedName("text")
+        @Expose
+        private String text;
+
+        public String getText() {
+            return safe(text);
+        }
+    }
+
+    public static class WinProbability implements Serializable {
+        @SerializedName("team1")
+        @Expose
+        private WinProbSide team1;
+        @SerializedName("team2")
+        @Expose
+        private WinProbSide team2;
+        @SerializedName("draw")
+        @Expose
+        private WinProbSide draw;
+
+        public WinProbSide getTeam1() {
+            return team1;
+        }
+
+        public WinProbSide getTeam2() {
+            return team2;
+        }
+
+        public WinProbSide getDraw() {
+            return draw;
+        }
+    }
+
+    public static class WinProbSide implements Serializable {
+        @SerializedName("label")
+        @Expose
+        private String label;
+        @SerializedName("pct")
+        @Expose
+        private Double pct;
+
+        public String getLabel() {
+            return safe(label);
+        }
+
+        public int getPct() {
+            return pct == null ? 0 : (int) Math.round(pct);
+        }
+    }
+
+    public static class Innings implements Serializable {
+        @SerializedName("innings")
+        @Expose
+        private Integer innings;
+        @SerializedName("team_name")
+        @Expose
+        private String team_name;
+        @SerializedName("score")
+        @Expose
+        private String score;
+        @SerializedName("label")
+        @Expose
+        private String label;
+        @SerializedName("extras")
+        @Expose
+        private String extras;
+        @SerializedName("is_current")
+        @Expose
+        private Boolean is_current;
+        @SerializedName("batting")
+        @Expose
+        private List<Batting> batting;
+        @SerializedName("bowling")
+        @Expose
+        private List<Bowling> bowling;
+        @SerializedName("fall_of_wickets")
+        @Expose
+        private List<FallOfWicket> fall_of_wickets;
+
+        public String getTeam_name() {
+            return safe(team_name);
+        }
+
+        public String getScore() {
+            return safe(score);
+        }
+
+        public String getLabel() {
+            return safe(label);
+        }
+
+        public String getExtras() {
+            return safe(extras);
+        }
+
+        public boolean isCurrent() {
+            return is_current != null && is_current;
+        }
+
+        public List<Batting> getBatting() {
+            return batting;
+        }
+
+        public List<Bowling> getBowling() {
+            return bowling;
+        }
+
+        public List<FallOfWicket> getFall_of_wickets() {
+            return fall_of_wickets;
+        }
+    }
+
+    public static class Batting implements Serializable {
+        @SerializedName("name")
+        @Expose
+        private String name;
+        @SerializedName("runs")
+        @Expose
+        private Integer runs;
+        @SerializedName("balls")
+        @Expose
+        private Integer balls;
+        @SerializedName("fours")
+        @Expose
+        private Integer fours;
+        @SerializedName("sixes")
+        @Expose
+        private Integer sixes;
+        @SerializedName("strike_rate")
+        @Expose
+        private String strike_rate;
+        @SerializedName("dismissal")
+        @Expose
+        private String dismissal;
+        @SerializedName("status")
+        @Expose
+        private String status;
+        @SerializedName("did_not_bat")
+        @Expose
+        private Boolean did_not_bat;
+
+        public String getName() {
+            return safe(name);
+        }
+
+        public int getRuns() {
+            return runs == null ? 0 : runs;
+        }
+
+        public int getBalls() {
+            return balls == null ? 0 : balls;
+        }
+
+        public int getFours() {
+            return fours == null ? 0 : fours;
+        }
+
+        public int getSixes() {
+            return sixes == null ? 0 : sixes;
+        }
+
+        public String getStrike_rate() {
+            return safe(strike_rate);
+        }
+
+        public String getDismissal() {
+            return safe(dismissal);
+        }
+
+        public String getStatus() {
+            return safe(status);
+        }
+
+        public boolean isDid_not_bat() {
+            return did_not_bat != null && did_not_bat;
+        }
+    }
+
+    public static class Bowling implements Serializable {
+        @SerializedName("name")
+        @Expose
+        private String name;
+        @SerializedName("overs")
+        @Expose
+        private String overs;
+        @SerializedName("runs")
+        @Expose
+        private Integer runs;
+        @SerializedName("wickets")
+        @Expose
+        private Integer wickets;
+        @SerializedName("economy")
+        @Expose
+        private String economy;
+
+        public String getName() {
+            return safe(name);
+        }
+
+        public String getOvers() {
+            return safe(overs);
+        }
+
+        public int getRuns() {
+            return runs == null ? 0 : runs;
+        }
+
+        public int getWickets() {
+            return wickets == null ? 0 : wickets;
+        }
+
+        public String getEconomy() {
+            return safe(economy);
+        }
+    }
+
+    public static class FallOfWicket implements Serializable {
+        @SerializedName("batsman")
+        @Expose
+        private String batsman;
+        @SerializedName("score")
+        @Expose
+        private String score;
+
+        public String getBatsman() {
+            return safe(batsman);
+        }
+
+        public String getScore() {
+            return safe(score);
+        }
+    }
+
+    public static class Commentary implements Serializable {
+        @SerializedName("type")
+        @Expose
+        private String type;
+        @SerializedName("over")
+        @Expose
+        private String over;
+        @SerializedName("score")
+        @Expose
+        private String score;
+        @SerializedName("title")
+        @Expose
+        private String title;
+        @SerializedName("description")
+        @Expose
+        private String description;
+        @SerializedName("text")
+        @Expose
+        private String text;
+        @SerializedName("runs")
+        @Expose
+        private String runs;
+        @SerializedName("team")
+        @Expose
+        private String team;
+        @SerializedName("is_wicket")
+        @Expose
+        private Boolean is_wicket;
+        @SerializedName("is_four")
+        @Expose
+        private Boolean is_four;
+        @SerializedName("is_six")
+        @Expose
+        private Boolean is_six;
+
+        public String getType() {
+            return safe(type);
+        }
+
+        public String getOver() {
+            return safe(over);
+        }
+
+        public String getScore() {
+            return safe(score);
+        }
+
+        public String getTitle() {
+            return safe(title);
+        }
+
+        public String getDescription() {
+            return safe(description);
+        }
+
+        public String getText() {
+            return safe(text);
+        }
+
+        public String getRuns() {
+            return safe(runs);
+        }
+
+        public String getTeam() {
+            return safe(team);
+        }
+
+        public boolean isWicket() {
+            return is_wicket != null && is_wicket;
+        }
+
+        public boolean isFour() {
+            return is_four != null && is_four;
+        }
+
+        public boolean isSix() {
+            return is_six != null && is_six;
+        }
+
+        public boolean isOver() {
+            return "over".equalsIgnoreCase(getType());
+        }
+    }
+}

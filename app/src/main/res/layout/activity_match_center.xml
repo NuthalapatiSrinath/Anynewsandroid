@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mc_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/cmp_surface_alt">
 
-    <!-- Header -->
+    <!-- Header (orange background extends up behind the status bar; the
+         status-bar inset is added to paddingTop at runtime so the title never
+         draws under the system clock). -->
     <LinearLayout
+        android:id="@+id/mc_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -197,9 +201,11 @@
         android:background="@color/cmp_border" />
 
     <ScrollView
+        android:id="@+id/mc_scroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:clipToPadding="false"
         android:fillViewport="true">
 
         <FrameLayout
@@ -268,7 +274,31 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <!-- Placeholder tabs -->
+            <!-- Scorecard tab (innings sections built at runtime) -->
+            <LinearLayout
+                android:id="@+id/content_scorecard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <!-- Commentary tab (ball-by-ball rows built at runtime) -->
+            <LinearLayout
+                android:id="@+id/content_commentary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <!-- Stats tab (cards built at runtime) -->
+            <LinearLayout
+                android:id="@+id/content_stats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <!-- Shared loading / empty state -->
             <LinearLayout
                 android:id="@+id/content_placeholder"
                 android:layout_width="match_parent"
