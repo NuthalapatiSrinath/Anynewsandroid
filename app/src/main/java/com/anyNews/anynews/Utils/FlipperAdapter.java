@@ -531,9 +531,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         tv.setText(formatCount(c));
-        // Count sits below the icon as plain text; theme-aware for light/dark.
+        // Count sits below the icon as plain text. Color comes from admin
+        // "Engagement Icon Counts → Count color" (engagement_badge_color via
+        // splash + articles API); default #FF6300 when unset.
         tv.setBackground(null);
-        tv.setTextColor(context.getColor(R.color.text_color_primary));
+        tv.setTextColor(EngagementCountHelper.getCountColor(context));
         tv.setTypeface(tv.getTypeface(), Typeface.BOLD);
         tv.setVisibility(View.VISIBLE);
     }
