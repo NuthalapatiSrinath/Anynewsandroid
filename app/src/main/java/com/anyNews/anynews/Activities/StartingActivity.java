@@ -749,6 +749,14 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getAllowScreenCapture()
                         );
 
+                        // Admin-controlled vertical offset (dp) for the half-post action icon row.
+                        SharedPrefsData.putInt(
+                                getApplicationContext(),
+                                Constants.ACTION_ICON_ROW_OFFSET,
+                                startActivityReqModel.getData().getActionIconRowOffset(),
+                                Constants.PREF_NAME
+                        );
+
                         LanguageFontConfig splashFontConfig = startActivityReqModel.getData().getFontConfig();
                         Map<String, LanguageFontConfig> splashFontSettings =
                                 startActivityReqModel.getData().getLanguageFontSettings();

@@ -31,6 +31,10 @@ public class LanguageFontConfig implements Serializable {
     @Expose
     private Float programmaticBodySize;
 
+    @SerializedName("line_spacing_multiplier")
+    @Expose
+    private Float lineSpacingMultiplier;
+
     @SerializedName("state_selection_font_size")
     @Expose
     private Float stateSelectionFontSize;
@@ -111,6 +115,17 @@ public class LanguageFontConfig implements Serializable {
 
     public boolean hasProgrammaticBodySize() {
         return programmaticBodySize != null && programmaticBodySize > 0;
+    }
+
+    /** Feed body line-spacing multiplier. Defaults to 1.0 (neutral) when unset. */
+    public float getLineSpacingMultiplier() {
+        if (lineSpacingMultiplier == null || lineSpacingMultiplier <= 0f) {
+            return 1.0f;
+        }
+        // Clamp to the same range the admin/backend enforce.
+        if (lineSpacingMultiplier < 0.5f) return 0.5f;
+        if (lineSpacingMultiplier > 3.0f) return 3.0f;
+        return lineSpacingMultiplier;
     }
 
     public float getStateSelectionFontSize() {

@@ -566,6 +566,33 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         bindHalfActionCount(convertView.findViewById(R.id.half_like_count), list.get(position).getLikes());
         bindHalfActionCount(convertView.findViewById(R.id.half_comment_count), list.get(position).getComments());
         bindHalfActionCount(convertView.findViewById(R.id.half_share_count), list.get(position).getShares());
+        applyActionIconRowOffset(convertView);
+    }
+
+    /**
+     * Admin-controlled vertical position of the four action icons (like/comment/
+     * share/report) on half posts. Reads the dp offset saved from the splash/
+     * articles config and shifts the icon row with translationY. Negative = up,
+     * positive = down, 0 = unchanged (default). Runtime only; no layout rebuild.
+     */
+    private void applyActionIconRowOffset(View convertView) {
+        if (convertView == null) {
+            return;
+        }
+        View iconRow = convertView.findViewById(R.id.with_out_strips_layout);
+        if (iconRow == null) {
+            return;
+        }
+        int offsetDp = 0;
+        try {
+            offsetDp = SharedPrefsData.getInt(context, Constants.ACTION_ICON_ROW_OFFSET, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        // Clamp to the same range the admin/backend enforce.
+        if (offsetDp < -40) offsetDp = -40;
+        if (offsetDp > 40) offsetDp = 40;
+        float px = offsetDp * context.getResources().getDisplayMetrics().density;
+        iconRow.setTranslationY(px);
     }
 
     private static String formatCount(int c) {

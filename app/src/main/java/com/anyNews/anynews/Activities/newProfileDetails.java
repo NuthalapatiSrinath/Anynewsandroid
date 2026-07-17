@@ -1180,9 +1180,85 @@ public class newProfileDetails extends AppCompatActivity {
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
     }
 
+    /**
+     * Renders the last-known reporter profile from SharedPrefs cache so the screen
+     * shows real content immediately on open (name, location, counts, points, email
+     * and avatar) instead of a blank blocking "Loading..." spinner. The live network
+     * response then updates these values when it returns. No-op when there is no
+     * cached profile yet (first ever open).
+     */
+    private void showCachedProfileInstant() {
+        try {
+            String cached = SharedPrefsData.getString(getApplicationContext(), Constants.PROFILE_CACHE, Constants.PREF_NAME);
+            if (cached == null || cached.isEmpty()) {
+                return;
+            }
+            NewUserProfileResponse resp = new Gson().fromJson(cached, NewUserProfileResponse.class);
+            if (resp == null || !Boolean.TRUE.equals(resp.getSuccess()) || resp.getData() == null) {
+                return;
+            }
+            NewUserProfileResponse.Data d = resp.getData();
+
+            // Reveal content, hide the blocking spinner.
+            loadingProgressbar.setVisibility(View.GONE);
+            loadingProfileView.setVisibility(View.VISIBLE);
+            imageupload_progressbar.setVisibility(View.GONE);
+            img_upload_photo.setVisibility(View.VISIBLE);
+            local_distic_name.setVisibility(View.VISIBLE);
+
+            username_text.setText(d.getUserName());
+            local_distic_name.setText(d.getLocation());
+            profile_article_count.setText("" + d.getArticles());
+            profile_like_count.setText("" + d.getLikes());
+            profile_followers_count.setText("" + d.getFollowers());
+            profile_following_count.setText("" + d.getFollowing());
+            writer_following_count.setText("" + d.getFollowing());
+            profile_total_amount.setText("\u20B9 " + d.getTotalPoints());
+            earned_total_amount.setText("\u20B9 " + d.getAvailablePoints());
+            user_login_number.setText(" " + d.getEmail());
+            currentUserEmail = d.getEmail() != null ? d.getEmail() : "";
+            payment_layout.setVisibility(View.VISIBLE);
+
+            boolean isReporter = Boolean.TRUE.equals(d.getIsReporter())
+                    && d.getMobileNumber() != null
+                    && !d.getMobileNumber().equals("")
+                    && !d.getMobileNumber().equals("null");
+            if (isReporter) {
+                profile_articales_list.setVisibility(View.VISIBLE);
+                profile_following_list.setVisibility(View.VISIBLE);
+                progressMainLayout.setVisibility(View.VISIBLE);
+                user_articales_list.setVisibility(View.GONE);
+                profile_follower_list.setVisibility(View.VISIBLE);
+                profile_refer_list.setVisibility(View.VISIBLE);
+                only_profile_follower_list.setVisibility(View.VISIBLE);
+                profile_one.setVisibility(View.GONE);
+            } else {
+                reportLayout.setVisibility(View.GONE);
+                userLayout.setVisibility(View.VISIBLE);
+                progressMainLayout.setVisibility(View.GONE);
+            }
+
+            try {
+                if (d.getProfilePic() != null) {
+                    Picasso.get().load(MediaUrl.resolve(d.getProfilePic())).into(img_upload_photo);
+                    layout_with_out_data.setVisibility(View.GONE);
+                    layout_with_data.setVisibility(View.VISIBLE);
+                }
+            } catch (IllegalArgumentException e) {
+                e.printStackTrace();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public void getWriterProfileData() {
 
         userProfileResponse = new ArrayList<>();
+
+        // Paint cached profile immediately (avatar/name/counts) so the screen shows
+        // content right away while the network request refreshes it in the background.
+        showCachedProfileInstant();
 
         JsonObject otp = set_writer_profile_data();
 
@@ -1208,6 +1284,12 @@ public class newProfileDetails extends AppCompatActivity {
                 NewUserProfileResponse newUserProfileResponse = gsonObj.fromJson(encrpt_data, NewUserProfileResponse.class);
 
                 if (newUserProfileResponse.getSuccess()) {
+                    // Cache the decrypted profile so the next open can paint instantly
+                    // (from cache) instead of showing a blank "Loading..." spinner.
+                    try {
+                        SharedPrefsData.putString(getApplicationContext(), Constants.PROFILE_CACHE, encrpt_data, Constants.PREF_NAME);
+                    } catch (Exception ignored) {
+                    }
                     local_distic_name.setVisibility(View.VISIBLE);
                  //   username_text.setTextColor(getResources().getColor(R.color.white));
                     username_text.setText(newUserProfileResponse.getData().getUserName());

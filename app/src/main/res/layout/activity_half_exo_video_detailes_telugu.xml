@@ -129,7 +129,7 @@
                         android:layout_marginTop="-15dp"
                         android:clipChildren="false"
                         android:clipToPadding="false"
-                        android:minHeight="50dp"
+                        android:minHeight="40dp"
                         android:orientation="horizontal"
                         android:visibility="visible">
 
@@ -141,7 +141,7 @@
                             android:clipChildren="false"
                             android:clipToPadding="false"
                             android:gravity="top|end"
-                            android:minHeight="50dp"
+                            android:minHeight="40dp"
                             android:orientation="horizontal"
                             android:paddingEnd="8dp"
                             android:visibility="visible">
@@ -159,7 +159,7 @@
                                 android:clipChildren="false"
                                 android:clipToPadding="false"
                                 android:gravity="center_horizontal"
-                                android:minHeight="50dp"
+                                android:minHeight="40dp"
                                 android:orientation="vertical">
 
                                 <ImageView
@@ -173,8 +173,8 @@
                                 <TextView
                                     android:id="@+id/half_like_count"
                                     android:layout_width="match_parent"
-                                    android:layout_height="14dp"
-                                    android:layout_marginTop="2dp"
+                                    android:layout_height="12dp"
+                                    android:layout_marginTop="0dp"
                                     android:fontFamily="@font/roboto_medium"
                                     android:gravity="center"
                                     android:textColor="@color/text_color_primary"
@@ -192,7 +192,7 @@
                                 android:clipChildren="false"
                                 android:clipToPadding="false"
                                 android:gravity="center_horizontal"
-                                android:minHeight="50dp"
+                                android:minHeight="40dp"
                                 android:orientation="vertical">
 
                                 <ImageView
@@ -206,8 +206,8 @@
                                 <TextView
                                     android:id="@+id/half_comment_count"
                                     android:layout_width="match_parent"
-                                    android:layout_height="14dp"
-                                    android:layout_marginTop="2dp"
+                                    android:layout_height="12dp"
+                                    android:layout_marginTop="0dp"
                                     android:fontFamily="@font/roboto_medium"
                                     android:gravity="center"
                                     android:textColor="@color/text_color_primary"
@@ -225,7 +225,7 @@
                                 android:clipChildren="false"
                                 android:clipToPadding="false"
                                 android:gravity="center_horizontal"
-                                android:minHeight="50dp"
+                                android:minHeight="40dp"
                                 android:orientation="vertical">
 
                                 <ImageView
@@ -239,8 +239,8 @@
                                 <TextView
                                     android:id="@+id/half_share_count"
                                     android:layout_width="match_parent"
-                                    android:layout_height="14dp"
-                                    android:layout_marginTop="2dp"
+                                    android:layout_height="12dp"
+                                    android:layout_marginTop="0dp"
                                     android:fontFamily="@font/roboto_medium"
                                     android:gravity="center"
                                     android:textColor="@color/text_color_primary"
@@ -256,7 +256,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginEnd="4dp"
                                 android:gravity="center_horizontal"
-                                android:minHeight="50dp"
+                                android:minHeight="40dp"
                                 android:orientation="vertical">
 
                                 <ImageView

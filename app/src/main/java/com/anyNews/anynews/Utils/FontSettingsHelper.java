@@ -158,8 +158,24 @@ public final class FontSettingsHelper {
         if (bodyView != null) {
             setTextSizeSdp(context, bodyView, bodySize);
             applyTypeface(context, bodyView, bodyFamily);
+            applyLineSpacing(bodyView, cfg.getLineSpacingMultiplier());
             Log.d(TAG, "applied body pxSize=" + bodyView.getTextSize() + " on " + viewLabel(bodyView));
         }
+    }
+
+    /**
+     * Applies the admin-configured per-language line-spacing multiplier to a body
+     * TextView while preserving whatever lineSpacingExtra the layout XML defined
+     * (so a multiplier of 1.0 keeps the exact current look). Lower values tighten
+     * the lines (e.g. Malayalam), higher values open them up.
+     */
+    public static void applyLineSpacing(TextView view, float multiplier) {
+        if (view == null || multiplier <= 0f) {
+            return;
+        }
+        float extraPx = view.getLineSpacingExtra();
+        view.setLineSpacing(extraPx, multiplier);
+        Log.d(TAG, "applyLineSpacing mult=" + multiplier + " extraPx=" + extraPx + " on " + viewLabel(view));
     }
 
     public static void applyTypeface(Context context, TextView view, String fontFamilyKey) {

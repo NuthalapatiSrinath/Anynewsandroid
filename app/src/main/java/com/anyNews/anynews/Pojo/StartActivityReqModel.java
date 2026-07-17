@@ -83,6 +83,18 @@ public class StartActivityReqModel implements Serializable {
             this.allowScreenCapture = allowScreenCapture;
         }
 
+        @SerializedName("action_icon_row_offset")
+        @Expose
+        private Integer actionIconRowOffset = 0;
+
+        public int getActionIconRowOffset() {
+            return actionIconRowOffset != null ? actionIconRowOffset : 0;
+        }
+
+        public void setActionIconRowOffset(Integer actionIconRowOffset) {
+            this.actionIconRowOffset = actionIconRowOffset;
+        }
+
         @SerializedName("font_config")
         @Expose
         private LanguageFontConfig fontConfig;
