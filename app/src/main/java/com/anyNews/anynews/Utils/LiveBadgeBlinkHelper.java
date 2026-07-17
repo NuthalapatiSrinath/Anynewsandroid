@@ -46,6 +46,12 @@ public final class LiveBadgeBlinkHelper {
         if (badge == null) {
             return stop(null, existing);
         }
+        // Keep a running pulse across poll refreshes — restarting every few
+        // seconds made the LIVE chip look jumpy.
+        if (existing != null && existing.isRunning() && existing.getTarget() == badge) {
+            badge.setVisibility(View.VISIBLE);
+            return existing;
+        }
         stop(badge, existing);
         badge.setAlpha(1f);
         ObjectAnimator anim = ObjectAnimator.ofFloat(badge, View.ALPHA, 1f, MIN_ALPHA);

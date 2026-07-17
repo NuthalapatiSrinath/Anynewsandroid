@@ -15,6 +15,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -69,7 +70,8 @@ public class MatchCenterActivity extends AppCompatActivity {
     private CricketMatchDetailResponse.Detail detail;
 
     private TextView tabLive, tabScorecard;
-    private View tabLiveIndicator, tabScorecardIndicator;
+    private View tabIndicator;
+    private View tabBar;
     private View contentLive, contentPlaceholder;
     private LinearLayout contentScorecard;
     private LinearLayout liveDynamic;
@@ -79,6 +81,8 @@ public class MatchCenterActivity extends AppCompatActivity {
     // that used to live on the removed Summary / Commentary / Stats tabs.
     private int currentTab = 1;
     private boolean initialTabChosen = false;
+    private boolean tabUiReady = false;
+    private static final long TAB_ANIM_MS = 220;
 
     // Scorecard "Overs" list: show newest first, 3 at a time, then Load more.
     private static final int OVERS_PAGE_SIZE = 3;
@@ -121,8 +125,8 @@ public class MatchCenterActivity extends AppCompatActivity {
 
         tabLive = findViewById(R.id.tab_live);
         tabScorecard = findViewById(R.id.tab_scorecard);
-        tabLiveIndicator = findViewById(R.id.tab_live_indicator);
-        tabScorecardIndicator = findViewById(R.id.tab_scorecard_indicator);
+        tabIndicator = findViewById(R.id.tab_indicator);
+        tabBar = findViewById(R.id.mc_tab_bar);
         contentLive = findViewById(R.id.content_live);
         liveDynamic = findViewById(R.id.live_dynamic);
         contentScorecard = findViewById(R.id.content_scorecard);
@@ -130,11 +134,17 @@ public class MatchCenterActivity extends AppCompatActivity {
         placeholderTitle = findViewById(R.id.placeholder_title);
         placeholderMessage = findViewById(R.id.placeholder_message);
 
-        tabLive.setOnClickListener(v -> selectTab(1));
-        tabScorecard.setOnClickListener(v -> selectTab(2));
+        tabLive.setOnClickListener(v -> selectTab(1, true));
+        tabScorecard.setOnClickListener(v -> selectTab(2, true));
 
         bind();
-        selectTab(1);
+        selectTab(1, false);
+
+        // Position the sliding underline once the tab bar has a real width.
+        tabBar.post(() -> {
+            tabUiReady = true;
+            moveTabIndicator(currentTab, false);
+        });
 
         refresh();
         fetchDetail();
@@ -407,19 +417,102 @@ public class MatchCenterActivity extends AppCompatActivity {
     }
 
     private void selectTab(int index) {
+        selectTab(index, false);
+    }
+
+    private void selectTab(int index, boolean animate) {
+        if (index != 1 && index != 2) return;
+        boolean switching = tabUiReady && currentTab != index;
+        int from = currentTab;
         currentTab = index;
+
         int active = ContextCompat.getColor(this, R.color.cmp_brand_orange);
         int inactive = ContextCompat.getColor(this, R.color.cmp_text_secondary);
         tabLive.setTextColor(index == 1 ? active : inactive);
         tabScorecard.setTextColor(index == 2 ? active : inactive);
-        tabLiveIndicator.setVisibility(index == 1 ? View.VISIBLE : View.INVISIBLE);
-        tabScorecardIndicator.setVisibility(index == 2 ? View.VISIBLE : View.INVISIBLE);
+        moveTabIndicator(index, animate && switching);
 
-        contentLive.setVisibility(index == 1 ? View.VISIBLE : View.GONE);
-        contentScorecard.setVisibility(index == 2 ? View.VISIBLE : View.GONE);
         contentPlaceholder.setVisibility(View.GONE);
+        contentPlaceholder.animate().cancel();
+        contentLive.animate().cancel();
+        contentScorecard.animate().cancel();
+
+        if (animate && switching) {
+            // Preempt a one-frame flash of the incoming panel at full opacity.
+            View incoming = index == 1 ? contentLive : contentScorecard;
+            incoming.setAlpha(0f);
+            incoming.setVisibility(View.VISIBLE);
+        }
 
         renderCurrentTab();
+
+        if (animate && switching) {
+            animateTabContent(from, index);
+        } else {
+            contentLive.setAlpha(1f);
+            contentLive.setTranslationX(0f);
+            contentScorecard.setAlpha(1f);
+            contentScorecard.setTranslationX(0f);
+            contentLive.setVisibility(index == 1 ? View.VISIBLE : View.GONE);
+            contentScorecard.setVisibility(index == 2 ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    /** Slide the shared orange underline under the active tab label. */
+    private void moveTabIndicator(int index, boolean animate) {
+        if (tabIndicator == null || tabBar == null) return;
+        int barW = tabBar.getWidth();
+        int indW = tabIndicator.getWidth();
+        if (barW <= 0 || indW <= 0) {
+            tabBar.post(() -> moveTabIndicator(index, animate));
+            return;
+        }
+        float half = barW / 2f;
+        float target = (index == 1 ? half * 0.5f : half * 1.5f) - indW / 2f;
+        tabIndicator.animate().cancel();
+        if (animate) {
+            tabIndicator.animate()
+                    .translationX(target)
+                    .setDuration(TAB_ANIM_MS)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        } else {
+            tabIndicator.setTranslationX(target);
+        }
+    }
+
+    /** Crossfade + short horizontal slide between Live and Scorecard panels. */
+    private void animateTabContent(int from, int to) {
+        final View hide = from == 1 ? contentLive : contentScorecard;
+        final View show = to == 1 ? contentLive : contentScorecard;
+        float slide = dp(22);
+        int dir = to > from ? 1 : -1;
+
+        show.setVisibility(View.VISIBLE);
+        show.setAlpha(0f);
+        show.setTranslationX(dir * slide);
+        hide.setVisibility(View.VISIBLE);
+
+        hide.animate()
+                .alpha(0f)
+                .translationX(-dir * slide)
+                .setDuration(TAB_ANIM_MS)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> {
+                    if (currentTab != from) {
+                        hide.setVisibility(View.GONE);
+                        hide.setAlpha(1f);
+                        hide.setTranslationX(0f);
+                    }
+                })
+                .start();
+
+        show.animate()
+                .alpha(1f)
+                .translationX(0f)
+                .setDuration(TAB_ANIM_MS)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
     }
 
     private void renderCurrentTab() {
@@ -431,8 +524,14 @@ public class MatchCenterActivity extends AppCompatActivity {
     }
 
     private void showEmptyFor(String title, String message) {
+        contentLive.animate().cancel();
+        contentScorecard.animate().cancel();
         contentLive.setVisibility(View.GONE);
         contentScorecard.setVisibility(View.GONE);
+        contentLive.setAlpha(1f);
+        contentLive.setTranslationX(0f);
+        contentScorecard.setAlpha(1f);
+        contentScorecard.setTranslationX(0f);
         contentPlaceholder.setVisibility(View.VISIBLE);
         placeholderTitle.setText(title);
         placeholderMessage.setText(message);
@@ -652,7 +751,13 @@ public class MatchCenterActivity extends AppCompatActivity {
      */
     private void renderLive() {
         contentPlaceholder.setVisibility(View.GONE);
-        contentLive.setVisibility(View.VISIBLE);
+        // Visibility / crossfade is owned by selectTab — only force-show when
+        // this is the active tab and no transition is in flight.
+        if (currentTab == 1 && contentLive.getVisibility() != View.VISIBLE) {
+            contentLive.setVisibility(View.VISIBLE);
+            contentLive.setAlpha(1f);
+            contentLive.setTranslationX(0f);
+        }
         liveDynamic.removeAllViews();
         if (detail == null) return;
 
@@ -1329,7 +1434,11 @@ public class MatchCenterActivity extends AppCompatActivity {
             return;
         }
         contentPlaceholder.setVisibility(View.GONE);
-        contentScorecard.setVisibility(View.VISIBLE);
+        if (currentTab == 2 && contentScorecard.getVisibility() != View.VISIBLE) {
+            contentScorecard.setVisibility(View.VISIBLE);
+            contentScorecard.setAlpha(1f);
+            contentScorecard.setTranslationX(0f);
+        }
     }
 
     /** One innings as a white rounded card matching the CREX scorecard layout. */
@@ -2092,10 +2201,11 @@ public class MatchCenterActivity extends AppCompatActivity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(orientation);
         card.setBackgroundResource(R.drawable.bg_cmp_card);
-        card.setPadding(dp(12), dp(12), dp(12), dp(12));
+        card.setPadding(dp(14), dp(14), dp(14), dp(14));
+        card.setElevation(dp(1.5f));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = dp(12);
+        lp.bottomMargin = dp(14);
         card.setLayoutParams(lp);
         return card;
     }
