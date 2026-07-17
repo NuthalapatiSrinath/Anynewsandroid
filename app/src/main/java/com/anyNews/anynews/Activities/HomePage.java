@@ -597,6 +597,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         SHARE_REDIRECT_ID = "" + getIntent().getStringExtra("SHARE_REDIRECT_ID");
         TITLE_REWARDS = "" + getIntent().getStringExtra("TITLE_REWARDS");
         DATAFROM2G = "" + getIntent().getStringExtra("DATAFROM2G");
+        // Fallback: some splash routing branches launch HomePage without the
+        // SHARE_REDIRECT_ID extra. StartingActivity persists the shared post id
+        // as a one-shot; consume it here (and clear it) so the exact post opens.
+        if (SHARE_REDIRECT_ID == null || SHARE_REDIRECT_ID.equals("null") || SHARE_REDIRECT_ID.trim().isEmpty()) {
+            String pendingShare = SharedPrefsData.getString(getApplicationContext(), Constants.PENDING_SHARE_POST, Constants.PREF_NAME);
+            if (pendingShare != null && !pendingShare.trim().isEmpty() && !pendingShare.equals("0")) {
+                SHARE_REDIRECT_ID = pendingShare.trim();
+            }
+        }
+        SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
         showLog("SHARE_REDIRECT_ID::" + SHARE_REDIRECT_ID);
         if (SHARE_REDIRECT_ID == null || SHARE_REDIRECT_ID.equals("null") || SHARE_REDIRECT_ID.trim().isEmpty()) {
             SHARE_ID = 0;

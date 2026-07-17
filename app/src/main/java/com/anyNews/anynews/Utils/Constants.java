@@ -134,6 +134,11 @@ public class Constants {
     public static String ACTION_ICON_ROW_OFFSET = "action_icon_row_offset";
     public static String FOOTER_STYLE = "footer_style";
     public static String WRITER_STRIP_STYLE = "writer_strip_style";
+    // One-shot post id parsed from a shared deep link (/p/{id}, anynews://post/{id},
+    // anws.in/{id}, ...). Persisted by StartingActivity and consumed+cleared by
+    // HomePage so the exact post opens even on splash routes that don't forward
+    // the SHARE_REDIRECT_ID intent extra (returning-user paths).
+    public static String PENDING_SHARE_POST = "pending_share_post_id";
     public static String PROFILE_CACHE = "reporter_profile_cache_json";
     public static String Selected_YES_PERCENT="Selected_YES_PERCENT";
     public static String Selected_NO_PERCENT="Selected_NO_PERCENT";

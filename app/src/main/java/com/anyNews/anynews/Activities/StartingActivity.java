@@ -169,6 +169,9 @@ public class StartingActivity extends AppCompatActivity {
         Intent intent = getIntent();
         TITLE = "" + intent.getStringExtra("TITILE");
         SharedPrefsData.putString(getApplicationContext(), Constants.REFERRER_POST, "0", Constants.PREF_NAME);
+        // Clear any stale pending share post before parsing this launch's intent;
+        // extractData() re-sets it only when this launch is an actual share link.
+        SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
 
         OBJECT = "" + intent.getStringExtra("OBJECT");
         TITLE_REWARDS = "" +intent.getStringExtra("TITLE_REWARDS");
@@ -474,6 +477,11 @@ public class StartingActivity extends AppCompatActivity {
             if (articleId2 != null && !articleId2.isEmpty()) {
                 articleId1 = articleId2;
                 TITLE = articleId2;
+                // Persist as a one-shot so the exact post still opens even when a
+                // splash routing branch launches HomePage without the
+                // SHARE_REDIRECT_ID extra (e.g. returning-user static-data path).
+                SharedPrefsData.putString(getApplicationContext(),
+                        Constants.PENDING_SHARE_POST, articleId2, Constants.PREF_NAME);
             } else {
                 DATAFROM2G = uri.toString();
             }
@@ -1098,7 +1106,10 @@ public class StartingActivity extends AppCompatActivity {
                                                         showLog("CHECK POINT HOMEPAGE 7");
                                                         Intent intent = new Intent(StartingActivity.this, HomePage.class);
                                                         intent.putExtra("EXTRA_SESSION_ID", "0");
+                                                        intent.putExtra("TITLE", TITLE);
                                                         intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
+                                                        intent.putExtra("SHARE_REDIRECT_ID",articleId1);
+                                                        intent.putExtra("DATAFROM2G",DATAFROM2G);
                                                         if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                                             startActivity(intent);
                                                             finish();
@@ -1526,7 +1537,10 @@ public class StartingActivity extends AppCompatActivity {
                                                 showLog("CHECK POINT HOMEPAGE 9");
                                                 Intent intent = new Intent(StartingActivity.this, HomePage.class);
                                                 intent.putExtra("EXTRA_SESSION_ID", "0");
+                                                intent.putExtra("TITLE", TITLE);
                                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
+                                                intent.putExtra("SHARE_REDIRECT_ID",articleId1);
+                                                intent.putExtra("DATAFROM2G",DATAFROM2G);
                                                 if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                                     startActivity(intent);
                                                     finish();

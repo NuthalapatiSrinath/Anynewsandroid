@@ -61,6 +61,14 @@ public final class WriterStripStyleHelper {
         }
         WriterStripStyleConfig cfg = load(context);
         if (cfg == null) {
+            // No admin config cached: the compiled layouts use @color/black,
+            // which day/night remaps to white in dark mode. Re-assert the
+            // theme-aware colour anyway so the strip is guaranteed readable in
+            // BOTH themes even if a stale literal colour was applied earlier.
+            applyThemeColor(context, name);
+            applyThemeColor(context, designation);
+            applyThemeColor(context, time);
+            applyThemeColor(context, location);
             return;
         }
         styleText(context, name, cfg.getNameSizeSdp(), cfg.isNameBold(), cfg.getNameFontFamily(), cfg.getNameColor());
@@ -99,21 +107,51 @@ public final class WriterStripStyleHelper {
         if (bold != null) {
             tv.setTypeface(tv.getTypeface(), bold ? Typeface.BOLD : Typeface.NORMAL);
         }
-        if (!TextUtils.isEmpty(color)) {
-            // Admin explicitly set a color -> honor it verbatim (override wins).
+        if (isThemeDefaultColor(color)) {
+            // No admin colour, OR the admin colour is plain black (which is the
+            // backend/admin DEFAULT, e.g. "#000000"). Plain black is NOT a real
+            // choice here: it is invisible on the dark card in night mode, so we
+            // treat it as "use the theme default" and fall back to the
+            // day/night-aware text_color_primary (black in light, white in dark).
+            applyThemeColor(context, tv);
+        } else {
+            // Admin explicitly picked a non-black colour -> honour it verbatim.
             try {
                 tv.setTextColor(Color.parseColor(color.trim()));
             } catch (IllegalArgumentException ignored) {
             }
-        } else {
-            // No admin color -> use a theme-aware default so the writer strip is
-            // readable in BOTH light and dark mode (text_color_primary flips to
-            // white via values-night). Previously the default resolved to black
-            // (#000000), which was invisible on the dark card.
-            try {
-                tv.setTextColor(ContextCompat.getColor(context, R.color.text_color_primary));
-            } catch (Exception ignored) {
-            }
+        }
+    }
+
+    /**
+     * Applies the day/night-aware {@code text_color_primary} (black in light
+     * mode, white in dark mode) so writer-strip text is always readable.
+     */
+    private static void applyThemeColor(Context context, TextView tv) {
+        if (context == null || tv == null) {
+            return;
+        }
+        try {
+            tv.setTextColor(ContextCompat.getColor(context, R.color.text_color_primary));
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Returns {@code true} when the colour should be ignored in favour of the
+     * theme-aware default: either unset/blank, unparseable, or plain black
+     * (the shipped default) which would be invisible in dark mode.
+     */
+    private static boolean isThemeDefaultColor(String color) {
+        if (TextUtils.isEmpty(color)) {
+            return true;
+        }
+        try {
+            int c = Color.parseColor(color.trim());
+            // Ignore alpha; treat any fully-opaque/!opaque pure black as default.
+            return (c & 0x00FFFFFF) == 0x000000;
+        } catch (IllegalArgumentException e) {
+            return true;
         }
     }
 }
