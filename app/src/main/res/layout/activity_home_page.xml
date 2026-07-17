@@ -410,7 +410,7 @@
                     <com.google.android.material.bottomnavigation.BottomNavigationView
                         android:id="@+id/nav_view"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="50dp"
                         android:layout_gravity="bottom"
                         android:background="@color/bottom_navigation_view_color"
                         app:itemIconTint="@color/selector_item_primary_color"
@@ -481,10 +481,12 @@
                         android:contentDescription="@string/post_selection"
                         app:backgroundTint="@color/bottom_navigation_view_color"
                         app:elevation="0dp"
+                        app:borderWidth="0dp"
+                        app:fabCustomSize="42dp"
                         android:visibility="visible"
                         app:layout_anchor="@+id/nav_view"
                         app:layout_anchorGravity="center"
-                        app:maxImageSize="50dp" />
+                        app:maxImageSize="30dp" />
                 </androidx.coordinatorlayout.widget.CoordinatorLayout>
 
 

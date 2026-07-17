@@ -757,6 +757,25 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
+                        // Admin-controlled footer + writer-strip styling. Cached as JSON and
+                        // applied at render time; unset → current hardcoded look.
+                        if (startActivityReqModel.getData().getFooterStyle() != null) {
+                            SharedPrefsData.putString(
+                                    getApplicationContext(),
+                                    Constants.FOOTER_STYLE,
+                                    new Gson().toJson(startActivityReqModel.getData().getFooterStyle()),
+                                    Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getWriterStripStyle() != null) {
+                            SharedPrefsData.putString(
+                                    getApplicationContext(),
+                                    Constants.WRITER_STRIP_STYLE,
+                                    new Gson().toJson(startActivityReqModel.getData().getWriterStripStyle()),
+                                    Constants.PREF_NAME
+                            );
+                        }
+
                         LanguageFontConfig splashFontConfig = startActivityReqModel.getData().getFontConfig();
                         Map<String, LanguageFontConfig> splashFontSettings =
                                 startActivityReqModel.getData().getLanguageFontSettings();

@@ -103,12 +103,28 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Map<String, LanguageFontConfig> languageFontSettings;
 
+        @SerializedName("footer_style")
+        @Expose
+        private FooterStyleConfig footerStyle;
+
+        @SerializedName("writer_strip_style")
+        @Expose
+        private WriterStripStyleConfig writerStripStyle;
+
         public LanguageFontConfig getFontConfig() {
             return fontConfig;
         }
 
         public Map<String, LanguageFontConfig> getLanguageFontSettings() {
             return languageFontSettings;
+        }
+
+        public FooterStyleConfig getFooterStyle() {
+            return footerStyle;
+        }
+
+        public WriterStripStyleConfig getWriterStripStyle() {
+            return writerStripStyle;
         }
 
         public String getEngagementBadgeColor() {

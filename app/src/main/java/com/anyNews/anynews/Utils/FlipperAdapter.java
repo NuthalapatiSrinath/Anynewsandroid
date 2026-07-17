@@ -3905,6 +3905,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         halfImageActivity.writer_time.setText("" + commonMethods.getHrsFormatfromDate(list.get(position).getPublishedTime()));
 
+        WriterStripStyleHelper.apply(
+                context,
+                halfImageActivity.writer_name,
+                halfImageActivity.writer_designation,
+                halfImageActivity.writer_time,
+                halfImageActivity.my_feed,
+                halfImageActivity.ll_refer_and_earn_half
+        );
+
         if (list.get(position).getIsFollow() == 0) {
 
             halfImageActivity.writer_follower.setVisibility(View.GONE);
@@ -4613,6 +4622,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfVideoExoPlayerHolder.writer_name.setText("" + list.get(position).getWriterName());
         halfVideoExoPlayerHolder.writer_designation.setText("" + list.get(position).getRole());
         halfVideoExoPlayerHolder.writer_time.setText("" + commonMethods.getHrsFormatfromDate(list.get(position).getPublishedTime()));
+        WriterStripStyleHelper.apply(
+                context,
+                halfVideoExoPlayerHolder.writer_name,
+                halfVideoExoPlayerHolder.writer_designation,
+                halfVideoExoPlayerHolder.writer_time,
+                halfVideoExoPlayerHolder.my_feed,
+                halfVideoExoPlayerHolder.ll_refer_and_earn_halfy
+        );
         int width = displayMetrics.widthPixels;
         //halfVideoExoPlayerHolder.imageViewItems.setVisibility(View.VISIBLE);
         //halfVideoExoPlayerHolder.youTubePlayerView.setVisibility(View.GONE);
@@ -5249,6 +5266,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         half_youTubePlayerHolder.writer_name.setText("" + list.get(position).getWriterName());
         half_youTubePlayerHolder.writer_designation.setText("" + list.get(position).getRole());
         half_youTubePlayerHolder.writer_time.setText("" + commonMethods.getHrsFormatfromDate(list.get(position).getPublishedTime()));
+        WriterStripStyleHelper.apply(
+                context,
+                half_youTubePlayerHolder.writer_name,
+                half_youTubePlayerHolder.writer_designation,
+                half_youTubePlayerHolder.writer_time,
+                half_youTubePlayerHolder.my_feed,
+                half_youTubePlayerHolder.ll_refer_and_earn_halfy
+        );
         int width = displayMetrics.widthPixels;
         //half_youTubePlayerHolder.imageViewItems.setVisibility(View.VISIBLE);
         //half_youTubePlayerHolder.youTubePlayerView.setVisibility(View.GONE);

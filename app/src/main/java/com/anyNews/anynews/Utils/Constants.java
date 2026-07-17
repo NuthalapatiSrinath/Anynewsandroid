@@ -132,6 +132,8 @@ public class Constants {
     public static String ALLOW_SCREEN_CAPTURE = "allow_screen_capture";
     public static String LANGUAGE_FONT_SETTINGS = "language_font_settings";
     public static String ACTION_ICON_ROW_OFFSET = "action_icon_row_offset";
+    public static String FOOTER_STYLE = "footer_style";
+    public static String WRITER_STRIP_STYLE = "writer_strip_style";
     public static String PROFILE_CACHE = "reporter_profile_cache_json";
     public static String Selected_YES_PERCENT="Selected_YES_PERCENT";
     public static String Selected_NO_PERCENT="Selected_NO_PERCENT";

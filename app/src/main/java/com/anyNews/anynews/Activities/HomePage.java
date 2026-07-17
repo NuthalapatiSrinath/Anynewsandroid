@@ -138,6 +138,7 @@ import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
@@ -547,6 +548,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
         bottomNavigationView = findViewById(R.id.nav_view);
+
+        // Admin-configurable footer icon/label styling (defaults = current look).
+        // Posted so the internal nav item views exist before we style them.
+        bottomNavigationView.post(new Runnable() {
+            @Override
+            public void run() {
+                FooterStyleHelper.apply(HomePage.this, bottomNavigationView);
+            }
+        });
 
 
         Window window = getWindow();
