@@ -1997,7 +1997,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         if (!TextUtils.isEmpty(b2)) parts.add(b2);
         String bowl = formatBowlerLine(c.getBowler(), c.getBowler_figures());
         if (!TextUtils.isEmpty(bowl)) parts.add(bowl);
-        if (!parts.isEmpty()) return TextUtils.join(parts, " · ");
+        if (!parts.isEmpty()) return TextUtils.join(" · ", parts);
         if (!TextUtils.isEmpty(c.getDescription())) return c.getDescription();
         if (!TextUtils.isEmpty(c.getText())) return c.getText();
         return "";
