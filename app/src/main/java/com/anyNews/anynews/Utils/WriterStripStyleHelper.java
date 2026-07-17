@@ -8,7 +8,10 @@ import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
+import androidx.core.content.ContextCompat;
+
 import com.anyNews.anynews.Pojo.WriterStripStyleConfig;
+import com.anyNews.anynews.R;
 import com.google.gson.Gson;
 
 /**
@@ -97,9 +100,19 @@ public final class WriterStripStyleHelper {
             tv.setTypeface(tv.getTypeface(), bold ? Typeface.BOLD : Typeface.NORMAL);
         }
         if (!TextUtils.isEmpty(color)) {
+            // Admin explicitly set a color -> honor it verbatim (override wins).
             try {
                 tv.setTextColor(Color.parseColor(color.trim()));
             } catch (IllegalArgumentException ignored) {
+            }
+        } else {
+            // No admin color -> use a theme-aware default so the writer strip is
+            // readable in BOTH light and dark mode (text_color_primary flips to
+            // white via values-night). Previously the default resolved to black
+            // (#000000), which was invisible on the dark card.
+            try {
+                tv.setTextColor(ContextCompat.getColor(context, R.color.text_color_primary));
+            } catch (Exception ignored) {
             }
         }
     }

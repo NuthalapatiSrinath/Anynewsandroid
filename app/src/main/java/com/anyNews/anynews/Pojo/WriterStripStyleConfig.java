@@ -90,8 +90,13 @@ public class WriterStripStyleConfig implements Serializable {
         return nameFontFamily == null ? "" : nameFontFamily.trim();
     }
 
+    /**
+     * Returns the admin-set name color, or {@code null} when unset so the
+     * renderer can fall back to a theme-aware default (readable in light AND
+     * dark mode). An explicit admin value still wins.
+     */
     public String getNameColor() {
-        return nameColor == null ? "#000000" : nameColor.trim();
+        return isBlank(nameColor) ? null : nameColor.trim();
     }
 
     public float getDesignationSizeSdp() {
@@ -107,7 +112,7 @@ public class WriterStripStyleConfig implements Serializable {
     }
 
     public String getDesignationColor() {
-        return designationColor == null ? "#000000" : designationColor.trim();
+        return isBlank(designationColor) ? null : designationColor.trim();
     }
 
     public float getTimeSizeSdp() {
@@ -123,7 +128,7 @@ public class WriterStripStyleConfig implements Serializable {
     }
 
     public String getTimeColor() {
-        return timeColor == null ? "#000000" : timeColor.trim();
+        return isBlank(timeColor) ? null : timeColor.trim();
     }
 
     public float getLocationSizeSdp() {
@@ -131,7 +136,7 @@ public class WriterStripStyleConfig implements Serializable {
     }
 
     public String getLocationColor() {
-        return locationColor == null ? "#000000" : locationColor.trim();
+        return isBlank(locationColor) ? null : locationColor.trim();
     }
 
     public String getLocationFontFamily() {
@@ -140,5 +145,9 @@ public class WriterStripStyleConfig implements Serializable {
 
     public float getLocationRightOffsetDp() {
         return locationRightOffsetDp != null ? locationRightOffsetDp : 0f;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
     }
 }

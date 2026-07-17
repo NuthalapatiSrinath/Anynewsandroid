@@ -538,19 +538,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         tv.setVisibility(View.VISIBLE);
     }
 
-    // Half-feed like icon: no outline ring. Unliked = orange thumb only;
-    // liked = solid orange disc + white thumb (same fixed ImageView size).
+    // Half-feed like icon (Option C - Duo/Filled Accent): no ring, always brand
+    // orange so it reads on both light and dark cards. Not-liked = OUTLINE
+    // heart; liked = SOLID FILLED orange heart. Both drawables share the same
+    // 24x24 bounds inside the fixed-size ImageView, so toggling never shifts
+    // layout.
     private void bindHalfLikeIcon(ImageView icon, Integer status) {
         if (icon == null) return;
         boolean liked = status != null && status == 1;
-        icon.setImageResource(R.drawable.ic_action_like);
-        if (liked) {
-            icon.setBackgroundResource(R.drawable.bg_action_filled);
-            icon.setImageTintList(ColorStateList.valueOf(context.getColor(R.color.on_brand_text)));
-        } else {
-            icon.setBackground(null);
-            icon.setImageTintList(ColorStateList.valueOf(context.getColor(R.color.brand_orange)));
-        }
+        icon.setBackground(null);
+        icon.setImageResource(liked ? R.drawable.ic_action_like_filled : R.drawable.ic_action_like);
+        icon.setImageTintList(ColorStateList.valueOf(context.getColor(R.color.brand_orange)));
     }
 
     private void bindLikeCountForView(TextView countView, int likes) {
