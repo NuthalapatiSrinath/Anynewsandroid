@@ -175,11 +175,6 @@
         android:background="@color/cmp_surface">
 
         <TextView
-            android:id="@+id/tab_summary"
-            style="@style/CmpTab"
-            android:text="Summary" />
-
-        <TextView
             android:id="@+id/tab_live"
             style="@style/CmpTab"
             android:text="Live" />
@@ -188,16 +183,6 @@
             android:id="@+id/tab_scorecard"
             style="@style/CmpTab"
             android:text="Scorecard" />
-
-        <TextView
-            android:id="@+id/tab_commentary"
-            style="@style/CmpTab"
-            android:text="Commentary" />
-
-        <TextView
-            android:id="@+id/tab_stats"
-            style="@style/CmpTab"
-            android:text="Stats" />
     </LinearLayout>
 
     <View
@@ -217,14 +202,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="16dp">
-
-            <!-- Summary tab (cards built at runtime) -->
-            <LinearLayout
-                android:id="@+id/content_summary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone" />
 
             <!-- Live tab -->
             <LinearLayout
@@ -295,25 +272,10 @@
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
-            <!-- Scorecard tab (innings sections built at runtime) -->
+            <!-- Scorecard tab: innings breakdown plus the consolidated
+                 stats / summary / commentary sections (all built at runtime). -->
             <LinearLayout
                 android:id="@+id/content_scorecard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone" />
-
-            <!-- Commentary tab (ball-by-ball rows built at runtime) -->
-            <LinearLayout
-                android:id="@+id/content_commentary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone" />
-
-            <!-- Stats tab (cards built at runtime) -->
-            <LinearLayout
-                android:id="@+id/content_stats"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"

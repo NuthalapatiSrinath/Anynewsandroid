@@ -34,14 +34,15 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
- * Cricket Match Center — full scoreboard + tabs (Live / Scorecard / Commentary /
- * Stats). Opened when the user taps the floating mini player.
+ * Cricket Match Center — full scoreboard + two tabs (Live / Scorecard). Opened
+ * when the user taps the floating mini player.
  *
- * The header scoreboard comes from the active_match contract; the Scorecard,
- * Commentary and Stats tabs fetch real per-ball detail from the app-facing
- * /app/v3/cricket_match_detail endpoint and render batting/bowling tables,
- * ball-by-ball commentary and live stats. Sections with no data from CREX show
- * a clean empty state.
+ * The header scoreboard comes from the active_match contract. The Scorecard tab
+ * fetches real per-ball detail from the app-facing /app/v3/cricket_match_detail
+ * endpoint and renders the innings batting/bowling tables plus the consolidated
+ * live stats, win probability, match info, summary/top performers and
+ * ball-by-ball commentary. Sections with no data from CREX are simply omitted,
+ * and an empty match shows a clean empty state.
  */
 public class MatchCenterActivity extends AppCompatActivity {
 
@@ -55,13 +56,14 @@ public class MatchCenterActivity extends AppCompatActivity {
     private ActiveMatch match;
     private CricketMatchDetailResponse.Detail detail;
 
-    private TextView tabSummary, tabLive, tabScorecard, tabCommentary, tabStats;
+    private TextView tabLive, tabScorecard;
     private View contentLive, contentPlaceholder;
-    private LinearLayout contentSummary, contentScorecard, contentCommentary, contentStats;
+    private LinearLayout contentScorecard;
     private LinearLayout liveDynamic;
     private TextView placeholderTitle, placeholderMessage;
 
-    // Tab indices: 0 Summary · 1 Live · 2 Scorecard · 3 Commentary · 4 Stats.
+    // Two tabs only — 1 Live · 2 Scorecard. Scorecard consolidates everything
+    // that used to live on the removed Summary / Commentary / Stats tabs.
     private int currentTab = 1;
     private boolean initialTabChosen = false;
 
@@ -96,26 +98,17 @@ public class MatchCenterActivity extends AppCompatActivity {
             }
         });
 
-        tabSummary = findViewById(R.id.tab_summary);
         tabLive = findViewById(R.id.tab_live);
         tabScorecard = findViewById(R.id.tab_scorecard);
-        tabCommentary = findViewById(R.id.tab_commentary);
-        tabStats = findViewById(R.id.tab_stats);
-        contentSummary = findViewById(R.id.content_summary);
         contentLive = findViewById(R.id.content_live);
         liveDynamic = findViewById(R.id.live_dynamic);
         contentScorecard = findViewById(R.id.content_scorecard);
-        contentCommentary = findViewById(R.id.content_commentary);
-        contentStats = findViewById(R.id.content_stats);
         contentPlaceholder = findViewById(R.id.content_placeholder);
         placeholderTitle = findViewById(R.id.placeholder_title);
         placeholderMessage = findViewById(R.id.placeholder_message);
 
-        tabSummary.setOnClickListener(v -> selectTab(0));
         tabLive.setOnClickListener(v -> selectTab(1));
         tabScorecard.setOnClickListener(v -> selectTab(2));
-        tabCommentary.setOnClickListener(v -> selectTab(3));
-        tabStats.setOnClickListener(v -> selectTab(4));
 
         bind();
         selectTab(1);
@@ -214,72 +207,45 @@ public class MatchCenterActivity extends AppCompatActivity {
         currentTab = index;
         int active = ContextCompat.getColor(this, R.color.cmp_brand_orange);
         int inactive = ContextCompat.getColor(this, R.color.cmp_text_secondary);
-        tabSummary.setTextColor(index == 0 ? active : inactive);
         tabLive.setTextColor(index == 1 ? active : inactive);
         tabScorecard.setTextColor(index == 2 ? active : inactive);
-        tabCommentary.setTextColor(index == 3 ? active : inactive);
-        tabStats.setTextColor(index == 4 ? active : inactive);
 
-        contentSummary.setVisibility(index == 0 ? View.VISIBLE : View.GONE);
         contentLive.setVisibility(index == 1 ? View.VISIBLE : View.GONE);
         contentScorecard.setVisibility(index == 2 ? View.VISIBLE : View.GONE);
-        contentCommentary.setVisibility(index == 3 ? View.VISIBLE : View.GONE);
-        contentStats.setVisibility(index == 4 ? View.VISIBLE : View.GONE);
         contentPlaceholder.setVisibility(View.GONE);
 
         renderCurrentTab();
     }
 
     private void renderCurrentTab() {
-        switch (currentTab) {
-            case 0:
-                renderSummary();
-                break;
-            case 2:
-                renderScorecard();
-                break;
-            case 3:
-                renderCommentary();
-                break;
-            case 4:
-                renderStats();
-                break;
-            default:
-                renderLive();
-                break;
+        if (currentTab == 2) {
+            renderScorecard();
+        } else {
+            renderLive();
         }
     }
 
     private void showEmptyFor(String title, String message) {
-        contentSummary.setVisibility(View.GONE);
         contentLive.setVisibility(View.GONE);
         contentScorecard.setVisibility(View.GONE);
-        contentCommentary.setVisibility(View.GONE);
-        contentStats.setVisibility(View.GONE);
         contentPlaceholder.setVisibility(View.VISIBLE);
         placeholderTitle.setText(title);
         placeholderMessage.setText(message);
     }
 
-    // ---- Summary ------------------------------------------------------------
+    // ---- Summary (consolidated into Scorecard) ------------------------------
 
     /**
-     * Summary tab (matches the reference): each side with flag + full name +
-     * score, a trophy on the winning team, the winner/result line, the last-over
-     * ball strip, a Player of the Match card (photo + name + figures) and
-     * per-innings Top Performers (top batters with SR, best bowler with ER).
+     * Former Summary tab, now appended under Scorecard: each side with flag +
+     * full name + score, a trophy on the winning team, the winner/result line,
+     * the last-over ball strip, a Player of the Match card (photo + name +
+     * figures) and per-innings Top Performers (top batters with SR, best bowler
+     * with ER). Returns true when anything was added.
      */
-    private void renderSummary() {
-        contentSummary.removeAllViews();
+    private boolean appendSummary(LinearLayout container) {
         CricketMatchDetailResponse.Summary summary = detail != null ? detail.getSummary() : null;
-        if (summary == null) {
-            showEmptyFor("Summary", detail == null
-                    ? "Loading summary…"
-                    : "The match summary will appear here.");
-            return;
-        }
-        contentPlaceholder.setVisibility(View.GONE);
-        contentSummary.setVisibility(View.VISIBLE);
+        if (summary == null) return false;
+        boolean any = false;
 
         // Teams card with flags, scores and trophy on the winner.
         List<CricketMatchDetailResponse.SummaryTeam> teams = summary.getTeams();
@@ -297,7 +263,8 @@ public class MatchCenterActivity extends AppCompatActivity {
                 res.setPadding(0, dp(10), 0, 0);
                 teamsCard.addView(res);
             }
-            contentSummary.addView(teamsCard);
+            container.addView(teamsCard);
+            any = true;
         }
 
         // Last over ball strip.
@@ -306,15 +273,17 @@ public class MatchCenterActivity extends AppCompatActivity {
             LinearLayout overCard = card();
             overCard.addView(sectionTitle("Last over"));
             overCard.addView(buildOverStrip(lastOver));
-            contentSummary.addView(overCard);
+            container.addView(overCard);
+            any = true;
         }
 
         // Player of the Match.
         CricketMatchDetailResponse.PlayerOf mom = summary.getPlayer_of_match() != null
                 ? summary.getPlayer_of_match()
-                : (detail != null ? detail.getPlayer_of_match() : null);
+                : detail.getPlayer_of_match();
         if (mom != null && !TextUtils.isEmpty(mom.getName())) {
-            contentSummary.addView(buildPlayerOfMatchCard(mom));
+            container.addView(buildPlayerOfMatchCard(mom));
+            any = true;
         }
 
         // Top performers per innings.
@@ -325,12 +294,10 @@ public class MatchCenterActivity extends AppCompatActivity {
             for (CricketMatchDetailResponse.TopPerformer tp : performers) {
                 tpCard.addView(buildTopPerformerBlock(tp));
             }
-            contentSummary.addView(tpCard);
+            container.addView(tpCard);
+            any = true;
         }
-
-        if (contentSummary.getChildCount() == 0) {
-            showEmptyFor("Summary", "The match summary will appear here once the match is under way.");
-        }
+        return any;
     }
 
     private View buildSummaryTeamRow(CricketMatchDetailResponse.SummaryTeam t) {
@@ -661,17 +628,37 @@ public class MatchCenterActivity extends AppCompatActivity {
 
     // ---- Scorecard ----------------------------------------------------------
 
+    /**
+     * Scorecard tab: the full innings breakdown (batting/bowling/fall of
+     * wickets) plus the sections consolidated from the removed tabs — live
+     * stats / win probability / match info (former Stats tab), summary +
+     * player of the match + top performers (former Summary tab) and ball-by-ball
+     * commentary (former Commentary tab). All sections reuse the same card
+     * builders, so the styling is unchanged.
+     */
     private void renderScorecard() {
         contentScorecard.removeAllViews();
+        boolean any = false;
+
+        // Innings breakdown (the primary scorecard content).
         List<CricketMatchDetailResponse.Innings> innings = detail != null ? detail.getScorecards() : null;
-        if (innings == null || innings.isEmpty()) {
+        if (innings != null && !innings.isEmpty()) {
+            for (CricketMatchDetailResponse.Innings inn : innings) {
+                contentScorecard.addView(buildInningsCard(inn));
+            }
+            any = true;
+        }
+
+        // Consolidated sections from the former Stats / Summary / Commentary tabs.
+        any |= appendStats(contentScorecard);
+        any |= appendSummary(contentScorecard);
+        any |= appendCommentary(contentScorecard);
+
+        if (!any) {
             showEmptyFor("Scorecard", detail == null
                     ? "Loading scorecard…"
                     : "The full batting & bowling scorecard will appear here once the match is under way.");
             return;
-        }
-        for (CricketMatchDetailResponse.Innings inn : innings) {
-            contentScorecard.addView(buildInningsCard(inn));
         }
         contentPlaceholder.setVisibility(View.GONE);
         contentScorecard.setVisibility(View.VISIBLE);
@@ -748,22 +735,18 @@ public class MatchCenterActivity extends AppCompatActivity {
         return card;
     }
 
-    // ---- Commentary ---------------------------------------------------------
+    // ---- Commentary (consolidated into Scorecard) ---------------------------
 
-    private void renderCommentary() {
-        contentCommentary.removeAllViews();
+    private boolean appendCommentary(LinearLayout container) {
         List<CricketMatchDetailResponse.Commentary> items = detail != null ? detail.getCommentary() : null;
-        if (items == null || items.isEmpty()) {
-            showEmptyFor("Commentary", detail == null
-                    ? "Loading commentary…"
-                    : "Ball-by-ball commentary will appear here while the match is live.");
-            return;
-        }
+        if (items == null || items.isEmpty()) return false;
+        TextView heading = sectionTitle("Commentary");
+        heading.setPadding(dp(2), dp(4), 0, dp(8));
+        container.addView(heading);
         for (CricketMatchDetailResponse.Commentary c : items) {
-            contentCommentary.addView(buildCommentaryRow(c));
+            container.addView(buildCommentaryRow(c));
         }
-        contentPlaceholder.setVisibility(View.GONE);
-        contentCommentary.setVisibility(View.VISIBLE);
+        return true;
     }
 
     private View buildCommentaryRow(CricketMatchDetailResponse.Commentary c) {
@@ -842,14 +825,10 @@ public class MatchCenterActivity extends AppCompatActivity {
         return row;
     }
 
-    // ---- Stats --------------------------------------------------------------
+    // ---- Stats (consolidated into Scorecard) --------------------------------
 
-    private void renderStats() {
-        contentStats.removeAllViews();
-        if (detail == null) {
-            showEmptyFor("Stats", "Loading stats…");
-            return;
-        }
+    private boolean appendStats(LinearLayout container) {
+        if (detail == null) return false;
         CricketMatchDetailResponse.Live live = detail.getLive();
         CricketMatchDetailResponse.Info info = detail.getInfo();
         boolean any = false;
@@ -858,28 +837,24 @@ public class MatchCenterActivity extends AppCompatActivity {
         if (live != null) {
             if (!TextUtils.isEmpty(live.getSession_label())) {
                 live_card.addView(keyValue("Session", live.getSession_label()));
-                any = true;
             }
             if (!TextUtils.isEmpty(live.getCurrent_run_rate())) {
                 live_card.addView(keyValue("Current run rate", live.getCurrent_run_rate()));
-                any = true;
             }
             if (!TextUtils.isEmpty(live.getRequired_rate())) {
                 live_card.addView(keyValue("Required run rate", live.getRequired_rate()));
-                any = true;
             }
             if (live.getPartnership() != null && !TextUtils.isEmpty(live.getPartnership().getText())) {
                 live_card.addView(keyValue("Partnership", live.getPartnership().getText()));
-                any = true;
             }
             if (live.getLast_wicket() != null && !TextUtils.isEmpty(live.getLast_wicket().getText())) {
                 live_card.addView(keyValue("Last wicket", live.getLast_wicket().getText()));
-                any = true;
             }
         }
         if (live_card.getChildCount() > 0) {
             live_card.addView(sectionTitle("Live stats"), 0);
-            contentStats.addView(live_card);
+            container.addView(live_card);
+            any = true;
         }
 
         // Win probability bar.
@@ -891,7 +866,7 @@ public class MatchCenterActivity extends AppCompatActivity {
                 LinearLayout wpCard = card();
                 wpCard.addView(sectionTitle("Win probability"));
                 wpCard.addView(winProbBar(wp));
-                contentStats.addView(wpCard);
+                container.addView(wpCard);
                 any = true;
             }
         }
@@ -906,16 +881,10 @@ public class MatchCenterActivity extends AppCompatActivity {
         }
         if (infoCard.getChildCount() > 0) {
             infoCard.addView(sectionTitle("Match info"), 0);
-            contentStats.addView(infoCard);
+            container.addView(infoCard);
             any = true;
         }
-
-        if (!any) {
-            showEmptyFor("Stats", "Match stats will appear here once the match is live.");
-        } else {
-            contentPlaceholder.setVisibility(View.GONE);
-            contentStats.setVisibility(View.VISIBLE);
-        }
+        return any;
     }
 
     private View winProbBar(CricketMatchDetailResponse.WinProbability wp) {
@@ -1102,14 +1071,14 @@ public class MatchCenterActivity extends AppCompatActivity {
                     if (response.body().getSuccess() != null && response.body().getSuccess()
                             && response.body().getData() != null) {
                         detail = response.body().getData();
-                        // First load of a finished match opens on Summary (like the
-                        // reference). Live matches stay on the Live tab.
+                        // First load of a finished match opens on Scorecard (which
+                        // now carries the summary content). Live matches stay on Live.
                         if (!initialTabChosen) {
                             initialTabChosen = true;
                             boolean completed = detail.isCompleted()
                                     || (detail.getSummary() != null && detail.getSummary().isCompleted());
                             if (completed) {
-                                selectTab(0);
+                                selectTab(2);
                                 return;
                             }
                         }
