@@ -50,6 +50,21 @@ public class CricketMatchDetailResponse implements Serializable {
         @SerializedName("commentary")
         @Expose
         private List<Commentary> commentary;
+        @SerializedName("all_overs")
+        @Expose
+        private List<Over> all_overs;
+        @SerializedName("is_completed")
+        @Expose
+        private Boolean is_completed;
+        @SerializedName("from_snapshot")
+        @Expose
+        private Boolean from_snapshot;
+        @SerializedName("player_of_match")
+        @Expose
+        private PlayerOf player_of_match;
+        @SerializedName("player_of_series")
+        @Expose
+        private PlayerOf player_of_series;
 
         public String getCrex_key() {
             return safe(crex_key);
@@ -69,6 +84,144 @@ public class CricketMatchDetailResponse implements Serializable {
 
         public List<Commentary> getCommentary() {
             return commentary;
+        }
+
+        public List<Over> getAll_overs() {
+            return all_overs;
+        }
+
+        public boolean isCompleted() {
+            return is_completed != null && is_completed;
+        }
+
+        public boolean isFromSnapshot() {
+            return from_snapshot != null && from_snapshot;
+        }
+
+        public PlayerOf getPlayer_of_match() {
+            return player_of_match;
+        }
+
+        public PlayerOf getPlayer_of_series() {
+            return player_of_series;
+        }
+    }
+
+    public static class PlayerOf implements Serializable {
+        @SerializedName("name")
+        @Expose
+        private String name;
+        @SerializedName("label")
+        @Expose
+        private String label;
+
+        public String getName() {
+            return safe(name);
+        }
+
+        public String getLabel() {
+            return safe(label);
+        }
+    }
+
+    public static class Over implements Serializable {
+        @SerializedName("inning")
+        @Expose
+        private Integer inning;
+        @SerializedName("over")
+        @Expose
+        private Integer over;
+        @SerializedName("over_label")
+        @Expose
+        private String over_label;
+        @SerializedName("bowler")
+        @Expose
+        private String bowler;
+        @SerializedName("team_code")
+        @Expose
+        private String team_code;
+        @SerializedName("runs")
+        @Expose
+        private Integer runs;
+        @SerializedName("score")
+        @Expose
+        private String score;
+        @SerializedName("balls")
+        @Expose
+        private List<Ball> balls;
+
+        public int getInning() {
+            return inning == null ? 0 : inning;
+        }
+
+        public int getOver() {
+            return over == null ? 0 : over;
+        }
+
+        public String getOver_label() {
+            return TextUtils_isEmpty(over_label) ? ("Over " + getOver()) : over_label;
+        }
+
+        public String getBowler() {
+            return safe(bowler);
+        }
+
+        public String getTeam_code() {
+            return safe(team_code);
+        }
+
+        public String getRuns() {
+            return runs == null ? "" : String.valueOf(runs);
+        }
+
+        public String getScore() {
+            return safe(score);
+        }
+
+        public List<Ball> getBalls() {
+            return balls;
+        }
+
+        private static boolean TextUtils_isEmpty(String s) {
+            return s == null || s.length() == 0;
+        }
+    }
+
+    public static class Ball implements Serializable {
+        @SerializedName("value")
+        @Expose
+        private String value;
+        @SerializedName("is_wicket")
+        @Expose
+        private Boolean is_wicket;
+        @SerializedName("is_four")
+        @Expose
+        private Boolean is_four;
+        @SerializedName("is_six")
+        @Expose
+        private Boolean is_six;
+        @SerializedName("wicket_batsman")
+        @Expose
+        private String wicket_batsman;
+
+        public String getValue() {
+            return safe(value);
+        }
+
+        public boolean isWicket() {
+            return is_wicket != null && is_wicket;
+        }
+
+        public boolean isFour() {
+            return is_four != null && is_four;
+        }
+
+        public boolean isSix() {
+            return is_six != null && is_six;
+        }
+
+        public String getWicket_batsman() {
+            return safe(wicket_batsman);
         }
     }
 

@@ -54,6 +54,7 @@ public class MatchCenterActivity extends AppCompatActivity {
     private TextView tabLive, tabScorecard, tabCommentary, tabStats;
     private View contentLive, contentPlaceholder;
     private LinearLayout contentScorecard, contentCommentary, contentStats;
+    private LinearLayout liveDynamic;
     private TextView placeholderTitle, placeholderMessage;
 
     private int currentTab = 0;
@@ -91,6 +92,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         tabCommentary = findViewById(R.id.tab_commentary);
         tabStats = findViewById(R.id.tab_stats);
         contentLive = findViewById(R.id.content_live);
+        liveDynamic = findViewById(R.id.live_dynamic);
         contentScorecard = findViewById(R.id.content_scorecard);
         contentCommentary = findViewById(R.id.content_commentary);
         contentStats = findViewById(R.id.content_stats);
@@ -229,6 +231,7 @@ public class MatchCenterActivity extends AppCompatActivity {
                 renderStats();
                 break;
             default:
+                renderLive();
                 break;
         }
     }
@@ -241,6 +244,195 @@ public class MatchCenterActivity extends AppCompatActivity {
         contentPlaceholder.setVisibility(View.VISIBLE);
         placeholderTitle.setText(title);
         placeholderMessage.setText(message);
+    }
+
+    // ---- Live ---------------------------------------------------------------
+
+    /**
+     * Live tab: current/last batsmen, recent over-by-over ball strips (Over 18,
+     * 19, 20 …) and an "All Overs" button — all kept visible after the match
+     * ends (the backend serves a persisted snapshot). Player of the match /
+     * series is shown when CREX exposes it.
+     */
+    private void renderLive() {
+        contentPlaceholder.setVisibility(View.GONE);
+        contentLive.setVisibility(View.VISIBLE);
+        liveDynamic.removeAllViews();
+        if (detail == null) return;
+
+        CricketMatchDetailResponse.Live live = detail.getLive();
+
+        // Batsmen status.
+        if (live != null && live.getBatsmen() != null && !live.getBatsmen().isEmpty()) {
+            liveDynamic.addView(sectionDivider());
+            liveDynamic.addView(sectionTitle("Batsmen"));
+            for (CricketMatchDetailResponse.Batsman b : live.getBatsmen()) {
+                liveDynamic.addView(buildBatsmanRow(b));
+            }
+        }
+
+        // Recent over strips.
+        List<CricketMatchDetailResponse.Over> overs = detail.getAll_overs();
+        if (overs != null && !overs.isEmpty()) {
+            liveDynamic.addView(sectionDivider());
+            LinearLayout headRow = new LinearLayout(this);
+            headRow.setOrientation(LinearLayout.HORIZONTAL);
+            headRow.setGravity(Gravity.CENTER_VERTICAL);
+            TextView title = sectionTitle("Recent overs");
+            title.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            headRow.addView(title);
+            headRow.addView(buildAllOversButton());
+            liveDynamic.addView(headRow);
+
+            int from = Math.max(0, overs.size() - 3);
+            for (int i = from; i < overs.size(); i++) {
+                liveDynamic.addView(buildOverStrip(overs.get(i)));
+            }
+        }
+
+        // Player of the match / series (graceful — only when CREX provides it).
+        renderPlayerOf(detail.getPlayer_of_match());
+        renderPlayerOf(detail.getPlayer_of_series());
+    }
+
+    private void renderPlayerOf(CricketMatchDetailResponse.PlayerOf player) {
+        if (player == null || TextUtils.isEmpty(player.getName())) return;
+        liveDynamic.addView(sectionDivider());
+        liveDynamic.addView(labelLine(TextUtils.isEmpty(player.getLabel()) ? "Player of the Match" : player.getLabel()));
+        TextView t = new TextView(this);
+        t.setText(player.getName());
+        t.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        liveDynamic.addView(t);
+    }
+
+    private View buildBatsmanRow(CricketMatchDetailResponse.Batsman b) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(5), 0, dp(5));
+
+        TextView name = new TextView(this);
+        name.setText(b.getName() + (b.isOn_strike() ? "  *" : ""));
+        name.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        name.setTypeface(b.isOn_strike() ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+        name.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(name);
+
+        TextView score = new TextView(this);
+        String balls = b.getBalls().replaceAll("[()]", "");
+        score.setText(b.getRuns() + (TextUtils.isEmpty(balls) ? "" : " (" + balls + ")"));
+        score.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
+        score.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        score.setTypeface(Typeface.DEFAULT_BOLD);
+        row.addView(score);
+        return row;
+    }
+
+    private View buildAllOversButton() {
+        TextView btn = new TextView(this);
+        btn.setText("All Overs");
+        btn.setTextColor(ContextCompat.getColor(this, R.color.cmp_brand_orange));
+        btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        btn.setTypeface(Typeface.DEFAULT_BOLD);
+        btn.setPadding(dp(10), dp(6), dp(4), dp(6));
+        btn.setOnClickListener(v -> openAllOvers());
+        return btn;
+    }
+
+    private void openAllOvers() {
+        if (match == null) return;
+        final String key = !TextUtils.isEmpty(match.getCrex_key()) ? match.getCrex_key() : match.getMatch_id();
+        if (TextUtils.isEmpty(key)) return;
+        android.content.Intent intent = new android.content.Intent(this, AllOversActivity.class);
+        intent.putExtra(AllOversActivity.EXTRA_CREX_KEY, key);
+        String title = !TextUtils.isEmpty(match.getMatch_title())
+                ? match.getMatch_title()
+                : match.getTeam1_code() + " vs " + match.getTeam2_code();
+        intent.putExtra(AllOversActivity.EXTRA_TITLE, title);
+        startActivity(intent);
+    }
+
+    private View buildOverStrip(CricketMatchDetailResponse.Over over) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(0, dp(8), 0, dp(4));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView label = new TextView(this);
+        String labelText = over.getOver_label();
+        if (!TextUtils.isEmpty(over.getBowler())) labelText = labelText + " · " + over.getBowler();
+        label.setText(labelText);
+        label.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        label.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        head.addView(label);
+
+        if (!TextUtils.isEmpty(over.getRuns())) {
+            TextView total = new TextView(this);
+            total.setText(over.getRuns() + " runs");
+            total.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
+            total.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            total.setTypeface(Typeface.DEFAULT_BOLD);
+            head.addView(total);
+        }
+        wrap.addView(head);
+
+        List<CricketMatchDetailResponse.Ball> balls = over.getBalls();
+        if (balls != null && !balls.isEmpty()) {
+            android.widget.HorizontalScrollView hsv = new android.widget.HorizontalScrollView(this);
+            hsv.setHorizontalScrollBarEnabled(false);
+            LinearLayout inner = new LinearLayout(this);
+            inner.setOrientation(LinearLayout.HORIZONTAL);
+            inner.setPadding(0, dp(6), 0, 0);
+            for (CricketMatchDetailResponse.Ball b : balls) {
+                inner.addView(ballBadge(b));
+            }
+            hsv.addView(inner);
+            wrap.addView(hsv);
+        }
+        return wrap;
+    }
+
+    private TextView ballBadge(CricketMatchDetailResponse.Ball b) {
+        TextView badge = new TextView(this);
+        badge.setGravity(Gravity.CENTER);
+        badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        badge.setTypeface(Typeface.DEFAULT_BOLD);
+        badge.setText(b.isWicket() ? "W" : (TextUtils.isEmpty(b.getValue()) ? "0" : b.getValue()));
+
+        int size = dp(30);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+        lp.rightMargin = dp(6);
+        badge.setLayoutParams(lp);
+
+        if (b.isWicket()) {
+            badge.setTextColor(0xFFFFFFFF);
+            badge.setBackgroundResource(R.drawable.bg_over_ball_red);
+        } else if (b.isFour() || b.isSix()) {
+            badge.setTextColor(0xFFFFFFFF);
+            badge.setBackgroundResource(R.drawable.bg_over_ball_orange);
+        } else {
+            badge.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_primary));
+            badge.setBackgroundResource(R.drawable.bg_over_ball_grey);
+        }
+        return badge;
+    }
+
+    private View sectionDivider() {
+        View v = new View(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+        lp.topMargin = dp(14);
+        lp.bottomMargin = dp(10);
+        v.setLayoutParams(lp);
+        v.setBackgroundColor(ContextCompat.getColor(this, R.color.cmp_border));
+        return v;
     }
 
     // ---- Scorecard ----------------------------------------------------------

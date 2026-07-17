@@ -272,6 +272,14 @@
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
+
+                <!-- Batsmen / over strips / All Overs button built at runtime. -->
+                <LinearLayout
+                    android:id="@+id/live_dynamic"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="4dp" />
             </LinearLayout>
 
             <!-- Scorecard tab (innings sections built at runtime) -->
