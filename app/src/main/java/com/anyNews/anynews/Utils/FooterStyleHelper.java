@@ -110,7 +110,20 @@ public final class FooterStyleHelper {
                 }
             }
             if (iconDp > 0) {
-                fab.setMaxImageSize(Math.round(iconDp * density));
+                // material:1.1.0 has no setMaxImageSize — scale drawable bounds instead
+                int iconPx = Math.round(iconDp * density);
+                try {
+                    fab.getClass()
+                            .getMethod("setMaxImageSize", int.class)
+                            .invoke(fab, iconPx);
+                } catch (ReflectiveOperationException ignored) {
+                    android.graphics.drawable.Drawable d = fab.getDrawable();
+                    if (d != null) {
+                        d = d.mutate();
+                        d.setBounds(0, 0, iconPx, iconPx);
+                        fab.setImageDrawable(d);
+                    }
+                }
             }
         } catch (Exception e) {
             Log.e(TAG, "fab size failed", e);

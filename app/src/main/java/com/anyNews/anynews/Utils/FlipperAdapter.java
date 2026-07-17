@@ -6873,7 +6873,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         playerView.setControllerShowTimeoutMs(3500);
         playerView.setControllerHideOnTouch(true);
         playerView.setControllerAutoShow(true);
-        playerView.setControllerVisibilityListener(visibility -> {
+        // Explicit type — Media3 PlayerView overloads VisibilityListener + ControllerVisibilityListener
+        playerView.setControllerVisibilityListener(
+                (PlayerView.ControllerVisibilityListener) visibility -> {
             if (sideMenu == null) {
                 return;
             }
