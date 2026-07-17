@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+<!-- Capsule LIVE chip — solid red, used by mini player + Match Center header. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
     <solid android:color="@color/cmp_live_red" />
-    <corners android:radius="4dp" />
+    <corners android:radius="999dp" />
 </shape>

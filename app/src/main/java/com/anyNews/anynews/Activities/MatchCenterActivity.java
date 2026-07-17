@@ -1,5 +1,6 @@
 package com.anyNews.anynews.Activities;
 
+import android.animation.ObjectAnimator;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -26,6 +27,7 @@ import com.anyNews.anynews.Pojo.CricketMatchDetailResponse;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
+import com.anyNews.anynews.Utils.LiveBadgeBlinkHelper;
 
 import java.util.List;
 
@@ -80,6 +82,10 @@ public class MatchCenterActivity extends AppCompatActivity {
         }
     };
 
+    /** Whole-pill opacity blink for header + centre LIVE chips while match is live. */
+    private ObjectAnimator headerLiveBlink;
+    private ObjectAnimator centerLiveBlink;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -133,6 +139,12 @@ public class MatchCenterActivity extends AppCompatActivity {
         super.onPause();
     }
 
+    @Override
+    protected void onDestroy() {
+        stopLiveBadgeBlink();
+        super.onDestroy();
+    }
+
     /**
      * targetSdk 35 forces edge-to-edge, so add the status-bar inset to the
      * header's top padding (its orange background then fills behind the status
@@ -167,11 +179,13 @@ public class MatchCenterActivity extends AppCompatActivity {
 
         TextView series = findViewById(R.id.mc_series);
         TextView title = findViewById(R.id.mc_title);
-        TextView liveBadge = findViewById(R.id.mc_live_badge);
+        View liveBadge = findViewById(R.id.mc_live_badge);
 
         series.setText(match.getSeries_name());
         title.setText(matchHeading());
-        liveBadge.setVisibility(match.isLive() ? View.VISIBLE : View.GONE);
+
+        boolean live = match.isLive();
+        headerLiveBlink = LiveBadgeBlinkHelper.sync(liveBadge, live, headerLiveBlink);
 
         // Team score rows (flag + name + big score + overs + run rate).
         bindTeam(match.getTeam1_flag(), fullTeam(match.getTeam1_code(), match.getTeam1_name()),
@@ -184,9 +198,9 @@ public class MatchCenterActivity extends AppCompatActivity {
                 R.id.mc_team2_overs, R.id.mc_team2_rr);
 
         // Centre LIVE badge + a compact format tag (e.g. T20) when available.
-        TextView centerLive = findViewById(R.id.mc_center_live);
+        View centerLive = findViewById(R.id.mc_center_live);
         TextView centerSub = findViewById(R.id.mc_center_sub);
-        centerLive.setVisibility(match.isLive() ? View.VISIBLE : View.GONE);
+        centerLiveBlink = LiveBadgeBlinkHelper.sync(centerLive, live, centerLiveBlink);
         String fmt = match.getFormat();
         if (!TextUtils.isEmpty(fmt) && fmt.length() <= 4) {
             centerSub.setVisibility(View.VISIBLE);
@@ -205,6 +219,13 @@ public class MatchCenterActivity extends AppCompatActivity {
             equation.setVisibility(View.VISIBLE);
             equation.setText(eq);
         }
+    }
+
+    private void stopLiveBadgeBlink() {
+        headerLiveBlink = LiveBadgeBlinkHelper.stop(
+                findViewById(R.id.mc_live_badge), headerLiveBlink);
+        centerLiveBlink = LiveBadgeBlinkHelper.stop(
+                findViewById(R.id.mc_center_live), centerLiveBlink);
     }
 
     /** Fill one team's flag/name/score/overs/run-rate slot in the hero header. */

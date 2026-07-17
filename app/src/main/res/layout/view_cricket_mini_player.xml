@@ -21,19 +21,37 @@
         android:gravity="center_horizontal"
         android:layout_marginEnd="10dp">
 
-        <TextView
+        <!-- LIVE pill: white dot + label; whole chip pulses while match is live. -->
+        <LinearLayout
             android:id="@+id/cmp_live_badge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
             android:background="@drawable/bg_cmp_live_badge"
             android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp"
-            android:text="● LIVE"
-            android:textColor="#FFFFFF"
-            android:textSize="10sp"
-            android:textStyle="bold" />
+            android:paddingEnd="7dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp">
+
+            <View
+                android:id="@+id/cmp_live_dot"
+                android:layout_width="5dp"
+                android:layout_height="5dp"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_cmp_live_dot" />
+
+            <TextView
+                android:id="@+id/cmp_live_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.1"
+                android:text="LIVE"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/cmp_format"

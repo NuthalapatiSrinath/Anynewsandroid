@@ -1,5 +1,6 @@
 package com.anyNews.anynews.Utils;
 
+import android.animation.ObjectAnimator;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Handler;
@@ -72,6 +73,8 @@ public class CricketMiniPlayerManager {
     private boolean attached = false;
     private boolean pollingEnabled = true;
     private boolean pollInFlight = false;
+    /** Whole LIVE-pill opacity blink while the active match is live. */
+    private ObjectAnimator liveBadgeBlink;
 
     private final Runnable pollRunnable = new Runnable() {
         @Override
@@ -290,14 +293,26 @@ public class CricketMiniPlayerManager {
     private void bind(ActiveMatch m) {
         if (miniView == null) return;
 
-        TextView liveBadge = miniView.findViewById(R.id.cmp_live_badge);
+        View liveBadge = miniView.findViewById(R.id.cmp_live_badge);
+        View liveDot = miniView.findViewById(R.id.cmp_live_dot);
+        TextView liveLabel = miniView.findViewById(R.id.cmp_live_label);
         TextView format = miniView.findViewById(R.id.cmp_format);
         TextView team1 = miniView.findViewById(R.id.cmp_team1);
         TextView team2 = miniView.findViewById(R.id.cmp_team2);
         TextView status = miniView.findViewById(R.id.cmp_status);
 
         boolean live = m.isLive();
-        liveBadge.setText(live ? "● LIVE" : "● " + safeUpper(m.getStatus()));
+        if (live) {
+            liveLabel.setText("LIVE");
+            liveLabel.setLetterSpacing(0.1f);
+            if (liveDot != null) liveDot.setVisibility(View.VISIBLE);
+            liveBadgeBlink = LiveBadgeBlinkHelper.start(liveBadge, liveBadgeBlink);
+        } else {
+            liveBadgeBlink = LiveBadgeBlinkHelper.stop(liveBadge, liveBadgeBlink);
+            liveLabel.setLetterSpacing(0f);
+            liveLabel.setText(safeUpper(m.getStatus()));
+            if (liveDot != null) liveDot.setVisibility(View.VISIBLE);
+        }
 
         format.setText(TextUtils.isEmpty(m.getFormat()) ? "" : m.getFormat());
         format.setVisibility(TextUtils.isEmpty(m.getFormat()) ? View.GONE : View.VISIBLE);
@@ -324,17 +339,24 @@ public class CricketMiniPlayerManager {
     }
 
     private void hide() {
+        stopLiveBadgeBlink();
         if (miniView != null) {
             miniView.setVisibility(View.GONE);
         }
     }
 
     private void detach() {
+        stopLiveBadgeBlink();
         if (miniView != null && miniView.getParent() instanceof ViewGroup) {
             ((ViewGroup) miniView.getParent()).removeView(miniView);
         }
         miniView = null;
         attached = false;
+    }
+
+    private void stopLiveBadgeBlink() {
+        View badge = miniView != null ? miniView.findViewById(R.id.cmp_live_badge) : null;
+        liveBadgeBlink = LiveBadgeBlinkHelper.stop(badge, liveBadgeBlink);
     }
 
     private void dismissWithUndo() {
