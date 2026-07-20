@@ -95,6 +95,90 @@ public class StartActivityReqModel implements Serializable {
             this.actionIconRowOffset = actionIconRowOffset;
         }
 
+        @SerializedName("action_icon_size_dp")
+        @Expose
+        private Integer actionIconSizeDp = 21;
+
+        public int getActionIconSizeDp() {
+            return actionIconSizeDp != null ? actionIconSizeDp : 21;
+        }
+
+        public void setActionIconSizeDp(Integer actionIconSizeDp) {
+            this.actionIconSizeDp = actionIconSizeDp;
+        }
+
+        @SerializedName("like_circle_size_dp")
+        @Expose
+        private Integer likeCircleSizeDp = 35;
+
+        public int getLikeCircleSizeDp() {
+            return likeCircleSizeDp != null ? likeCircleSizeDp : 35;
+        }
+
+        public void setLikeCircleSizeDp(Integer likeCircleSizeDp) {
+            this.likeCircleSizeDp = likeCircleSizeDp;
+        }
+
+        @SerializedName("enable_video_post")
+        @Expose
+        private Boolean enableVideoPost = Boolean.TRUE;
+
+        public boolean getEnableVideoPost() {
+            return enableVideoPost == null || enableVideoPost;
+        }
+
+        public void setEnableVideoPost(Boolean enableVideoPost) {
+            this.enableVideoPost = enableVideoPost;
+        }
+
+        @SerializedName("enable_article_post")
+        @Expose
+        private Boolean enableArticlePost = Boolean.TRUE;
+
+        public boolean getEnableArticlePost() {
+            return enableArticlePost == null || enableArticlePost;
+        }
+
+        public void setEnableArticlePost(Boolean enableArticlePost) {
+            this.enableArticlePost = enableArticlePost;
+        }
+
+        @SerializedName("enable_full_post")
+        @Expose
+        private Boolean enableFullPost = Boolean.TRUE;
+
+        public boolean getEnableFullPost() {
+            return enableFullPost == null || enableFullPost;
+        }
+
+        public void setEnableFullPost(Boolean enableFullPost) {
+            this.enableFullPost = enableFullPost;
+        }
+
+        @SerializedName("title_body_gap_dp")
+        @Expose
+        private Integer titleBodyGapDp = 0;
+
+        public int getTitleBodyGapDp() {
+            return titleBodyGapDp != null ? titleBodyGapDp : 0;
+        }
+
+        public void setTitleBodyGapDp(Integer titleBodyGapDp) {
+            this.titleBodyGapDp = titleBodyGapDp;
+        }
+
+        @SerializedName("content_block_offset_dp")
+        @Expose
+        private Integer contentBlockOffsetDp = 0;
+
+        public int getContentBlockOffsetDp() {
+            return contentBlockOffsetDp != null ? contentBlockOffsetDp : 0;
+        }
+
+        public void setContentBlockOffsetDp(Integer contentBlockOffsetDp) {
+            this.contentBlockOffsetDp = contentBlockOffsetDp;
+        }
+
         @SerializedName("font_config")
         @Expose
         private LanguageFontConfig fontConfig;
@@ -102,6 +186,11 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("language_font_settings")
         @Expose
         private Map<String, LanguageFontConfig> languageFontSettings;
+
+        /** Admin-uploaded fonts: key → public download URL. */
+        @SerializedName("custom_font_urls")
+        @Expose
+        private Map<String, String> customFontUrls;
 
         @SerializedName("footer_style")
         @Expose
@@ -117,6 +206,10 @@ public class StartActivityReqModel implements Serializable {
 
         public Map<String, LanguageFontConfig> getLanguageFontSettings() {
             return languageFontSettings;
+        }
+
+        public Map<String, String> getCustomFontUrls() {
+            return customFontUrls;
         }
 
         public FooterStyleConfig getFooterStyle() {

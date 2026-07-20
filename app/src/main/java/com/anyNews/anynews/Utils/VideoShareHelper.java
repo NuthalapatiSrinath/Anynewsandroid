@@ -15,11 +15,14 @@ import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 
+import com.anyNews.anynews.R;
+
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.List;
-import java.util.Random;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -43,6 +46,13 @@ public class VideoShareHelper {
 
     public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
                                     String shareLink, ShareMode mode, OnShareCompleteListener listener) {
+        shareVideo(context, activity, videoUrl, title, shareLink, mode,
+                context.getString(R.string.video_status_sharing), listener);
+    }
+
+    public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
+                                    String shareLink, ShareMode mode, String statusMessage,
+                                    OnShareCompleteListener listener) {
         if (videoUrl == null || videoUrl.trim().isEmpty()) {
             Toast.makeText(context, "Video is not available to share", Toast.LENGTH_SHORT).show();
             return;
@@ -51,9 +61,9 @@ public class VideoShareHelper {
         Handler mainHandler = new Handler(Looper.getMainLooper());
         mainHandler.post(() -> {
             progressDialog = new ProgressDialog(context);
-            progressDialog.setMessage("Preparing video...");
-            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-            progressDialog.setIndeterminate(false);
+            progressDialog.setMessage(statusMessage);
+            progressDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+            progressDialog.setIndeterminate(true);
             progressDialog.setCancelable(true);
             progressDialog.setOnCancelListener(dialog -> {
                 if (downloadThread != null) {
@@ -65,49 +75,43 @@ public class VideoShareHelper {
 
         downloadThread = new Thread(() -> {
             File videoFile = null;
+            File partFile = null;
             try {
-                Random rand = new Random();
-                int uniqID = rand.nextInt(1000);
                 String extension = getExtension(videoUrl);
                 File cacheDir = context.getExternalCacheDir();
                 if (cacheDir == null) {
                     cacheDir = context.getCacheDir();
                 }
-                videoFile = new File(cacheDir, "share_" + uniqID + "_" + System.currentTimeMillis() + "." + extension);
+                videoFile = new File(cacheDir, "share_" + cacheKey(videoUrl) + "." + extension);
 
-                Request request = new Request.Builder().url(videoUrl).build();
-                try (Response response = CLIENT.newCall(request).execute()) {
-                    if (!response.isSuccessful() || response.body() == null) {
-                        throw new Exception("Download failed");
-                    }
-                    long total = response.body().contentLength();
-                    InputStream input = response.body().byteStream();
-                    FileOutputStream output = new FileOutputStream(videoFile);
-                    byte[] buffer = new byte[8192];
-                    long downloaded = 0;
-                    int read;
-                    while ((read = input.read(buffer)) != -1) {
-                        if (Thread.currentThread().isInterrupted()) {
-                            output.close();
-                            input.close();
-                            videoFile.delete();
-                            mainHandler.post(VideoShareHelper::dismissProgress);
-                            return;
+                if (!(videoFile.exists() && videoFile.length() > 0)) {
+                    partFile = new File(cacheDir, videoFile.getName() + ".part");
+                    Request request = new Request.Builder().url(videoUrl).build();
+                    try (Response response = CLIENT.newCall(request).execute()) {
+                        if (!response.isSuccessful() || response.body() == null) {
+                            throw new Exception("Download failed");
                         }
-                        output.write(buffer, 0, read);
-                        downloaded += read;
-                        if (total > 0) {
-                            int progress = (int) (downloaded * 100 / total);
-                            mainHandler.post(() -> {
-                                if (progressDialog != null) {
-                                    progressDialog.setProgress(progress);
-                                }
-                            });
+                        InputStream input = response.body().byteStream();
+                        OutputStream output = new BufferedOutputStream(new FileOutputStream(partFile), 1 << 16);
+                        byte[] buffer = new byte[1 << 16];
+                        int read;
+                        while ((read = input.read(buffer)) != -1) {
+                            if (Thread.currentThread().isInterrupted()) {
+                                output.close();
+                                input.close();
+                                partFile.delete();
+                                mainHandler.post(VideoShareHelper::dismissProgress);
+                                return;
+                            }
+                            output.write(buffer, 0, read);
                         }
+                        output.flush();
+                        output.close();
+                        input.close();
                     }
-                    output.flush();
-                    output.close();
-                    input.close();
+                    if (!partFile.renameTo(videoFile)) {
+                        throw new Exception("Unable to finalize download");
+                    }
                 }
 
                 videoFile.setReadable(true, false);
@@ -121,8 +125,8 @@ public class VideoShareHelper {
                 });
             } catch (Exception e) {
                 e.printStackTrace();
-                if (videoFile != null && videoFile.exists()) {
-                    videoFile.delete();
+                if (partFile != null && partFile.exists()) {
+                    partFile.delete();
                 }
                 mainHandler.post(() -> {
                     dismissProgress();
@@ -131,6 +135,10 @@ public class VideoShareHelper {
             }
         });
         downloadThread.start();
+    }
+
+    private static String cacheKey(String url) {
+        return Integer.toHexString(url.hashCode());
     }
 
     private static void dismissProgress() {

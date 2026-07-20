@@ -146,12 +146,96 @@ public class EncreptionRequest {
     @Expose
     private boolean allow_screen_capture = false;
 
+    @SerializedName("action_icon_size_dp")
+    @Expose
+    private Integer action_icon_size_dp;
+
+    @SerializedName("like_circle_size_dp")
+    @Expose
+    private Integer like_circle_size_dp;
+
+    @SerializedName("enable_video_post")
+    @Expose
+    private Boolean enable_video_post;
+
+    @SerializedName("enable_article_post")
+    @Expose
+    private Boolean enable_article_post;
+
+    @SerializedName("enable_full_post")
+    @Expose
+    private Boolean enable_full_post;
+
+    @SerializedName("title_body_gap_dp")
+    @Expose
+    private Integer title_body_gap_dp;
+
+    @SerializedName("content_block_offset_dp")
+    @Expose
+    private Integer content_block_offset_dp;
+
     public boolean isAllow_screen_capture() {
         return allow_screen_capture;
     }
 
     public void setAllow_screen_capture(boolean allow_screen_capture) {
         this.allow_screen_capture = allow_screen_capture;
+    }
+
+    public Integer getAction_icon_size_dp() {
+        return action_icon_size_dp;
+    }
+
+    public void setAction_icon_size_dp(Integer action_icon_size_dp) {
+        this.action_icon_size_dp = action_icon_size_dp;
+    }
+
+    public Integer getLike_circle_size_dp() {
+        return like_circle_size_dp;
+    }
+
+    public void setLike_circle_size_dp(Integer like_circle_size_dp) {
+        this.like_circle_size_dp = like_circle_size_dp;
+    }
+
+    public Boolean getEnable_video_post() {
+        return enable_video_post;
+    }
+
+    public void setEnable_video_post(Boolean enable_video_post) {
+        this.enable_video_post = enable_video_post;
+    }
+
+    public Boolean getEnable_article_post() {
+        return enable_article_post;
+    }
+
+    public void setEnable_article_post(Boolean enable_article_post) {
+        this.enable_article_post = enable_article_post;
+    }
+
+    public Boolean getEnable_full_post() {
+        return enable_full_post;
+    }
+
+    public void setEnable_full_post(Boolean enable_full_post) {
+        this.enable_full_post = enable_full_post;
+    }
+
+    public Integer getTitle_body_gap_dp() {
+        return title_body_gap_dp;
+    }
+
+    public void setTitle_body_gap_dp(Integer title_body_gap_dp) {
+        this.title_body_gap_dp = title_body_gap_dp;
+    }
+
+    public Integer getContent_block_offset_dp() {
+        return content_block_offset_dp;
+    }
+
+    public void setContent_block_offset_dp(Integer content_block_offset_dp) {
+        this.content_block_offset_dp = content_block_offset_dp;
     }
 
     public String getEngagement_badge_color() {

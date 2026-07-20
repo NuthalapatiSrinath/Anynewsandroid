@@ -923,6 +923,56 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
+                        // Admin-controlled half-post action icon glyph + white-circle sizes (dp).
+                        SharedPrefsData.putInt(
+                                getApplicationContext(),
+                                Constants.ACTION_ICON_SIZE_DP,
+                                startActivityReqModel.getData().getActionIconSizeDp(),
+                                Constants.PREF_NAME
+                        );
+                        SharedPrefsData.putInt(
+                                getApplicationContext(),
+                                Constants.LIKE_CIRCLE_SIZE_DP,
+                                startActivityReqModel.getData().getLikeCircleSizeDp(),
+                                Constants.PREF_NAME
+                        );
+
+                        // Admin-controlled reporter create-menu post-type toggles.
+                        SharedPrefsData.putBool(
+                                getApplicationContext(),
+                                Constants.ENABLE_VIDEO_POST,
+                                startActivityReqModel.getData().getEnableVideoPost(),
+                                Constants.PREF_NAME
+                        );
+                        SharedPrefsData.putBool(
+                                getApplicationContext(),
+                                Constants.ENABLE_ARTICLE_POST,
+                                startActivityReqModel.getData().getEnableArticlePost(),
+                                Constants.PREF_NAME
+                        );
+                        SharedPrefsData.putBool(
+                                getApplicationContext(),
+                                Constants.ENABLE_FULL_POST,
+                                startActivityReqModel.getData().getEnableFullPost(),
+                                Constants.PREF_NAME
+                        );
+
+                        // Admin-controlled gap (dp) between the half-post title and body.
+                        SharedPrefsData.putInt(
+                                getApplicationContext(),
+                                Constants.TITLE_BODY_GAP_DP,
+                                startActivityReqModel.getData().getTitleBodyGapDp(),
+                                Constants.PREF_NAME
+                        );
+
+                        // Admin-controlled vertical offset (dp) of the half-post content block.
+                        SharedPrefsData.putInt(
+                                getApplicationContext(),
+                                Constants.CONTENT_BLOCK_OFFSET_DP,
+                                startActivityReqModel.getData().getContentBlockOffsetDp(),
+                                Constants.PREF_NAME
+                        );
+
                         // Admin-controlled footer + writer-strip styling. Cached as JSON and
                         // applied at render time; unset → current hardcoded look.
                         if (startActivityReqModel.getData().getFooterStyle() != null) {
@@ -954,6 +1004,16 @@ public class StartingActivity extends AppCompatActivity {
                                         + " legacy_font_size=" + startActivityReqModel.getData().getFontSize()
                                         + " language_id=" + splashLanguageId
                         );
+                        Map<String, String> splashCustomFonts =
+                                startActivityReqModel.getData().getCustomFontUrls();
+                        if (splashCustomFonts != null) {
+                            FontSettingsHelper.saveCustomFontUrls(
+                                    getApplicationContext(),
+                                    splashCustomFonts
+                            );
+                            FontSettingsHelper.prefetchCustomFonts(getApplicationContext());
+                        }
+
                         if (splashFontSettings != null && !splashFontSettings.isEmpty()) {
                             android.util.Log.d(
                                     FontSettingsHelper.TAG,

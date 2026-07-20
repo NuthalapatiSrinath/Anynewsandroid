@@ -578,6 +578,165 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         bindHalfActionCount(convertView.findViewById(R.id.half_share_count), list.get(position).getShares());
         tintHalfActionIcons(convertView);
         applyActionIconRowOffset(convertView);
+        applyHalfActionIconSizes(context, convertView);
+        applyTitleBodyGap(context, convertView);
+        applyContentBlockOffset(context, convertView);
+    }
+
+    // Body/description TextViews across the half-image and half-video layouts (plain
+    // + "__" video variants + language variants). Missing ids are skipped safely.
+    private static final int[] HALF_BODY_TEXT_IDS = new int[] {
+            R.id.half_content_description, R.id.tamil_half_content_description,
+            R.id.english_half_content_description, R.id.half_content_description__,
+            R.id.tamil_half_content_description__, R.id.english_half_content_description__
+    };
+
+    private static final int DEFAULT_TITLE_BODY_GAP_DP = 0;
+    private static final int TITLE_BODY_GAP_MIN_DP = -16;
+    private static final int TITLE_BODY_GAP_MAX_DP = 40;
+
+    /**
+     * Admin-controlled gap (dp) between the post title and the body paragraph on
+     * half posts. Reads the value delivered via splash/feed config, clamps it,
+     * converts dp→px and applies it as the body TextView's top margin at bind time.
+     * By-id across layout variants; default 0 reproduces the current look. Runtime
+     * only; no layout rebuild.
+     */
+    public static void applyTitleBodyGap(Context context, View convertView) {
+        if (context == null || convertView == null) {
+            return;
+        }
+        int gapDp = DEFAULT_TITLE_BODY_GAP_DP;
+        try {
+            gapDp = SharedPrefsData.getInt(context, Constants.TITLE_BODY_GAP_DP, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        gapDp = Math.max(TITLE_BODY_GAP_MIN_DP, Math.min(TITLE_BODY_GAP_MAX_DP, gapDp));
+        int gapPx = Math.round(gapDp * context.getResources().getDisplayMetrics().density);
+        for (int id : HALF_BODY_TEXT_IDS) {
+            View body = convertView.findViewById(id);
+            if (body == null) continue;
+            ViewGroup.LayoutParams lp = body.getLayoutParams();
+            if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            mlp.topMargin = gapPx;
+            body.setLayoutParams(mlp);
+        }
+    }
+
+    private static final int DEFAULT_CONTENT_BLOCK_OFFSET_DP = 0;
+    private static final int CONTENT_BLOCK_OFFSET_MIN_DP = -40;
+    private static final int CONTENT_BLOCK_OFFSET_MAX_DP = 40;
+
+    /**
+     * Admin-controlled vertical offset (dp) of the whole heading+body content block
+     * on half posts. Reads the value delivered via splash/feed config, clamps it,
+     * converts dp→px and applies it as the content container's top margin. Negative
+     * pulls the block up (closes the gap left when the action icons shrink); positive
+     * pushes it down. Applied by id across layout variants; default 0 reproduces the
+     * current look. Runtime only; no layout rebuild.
+     */
+    public static void applyContentBlockOffset(Context context, View convertView) {
+        if (context == null || convertView == null) {
+            return;
+        }
+        View container = convertView.findViewById(R.id.layoutParentTitle);
+        if (container == null) {
+            return;
+        }
+        ViewGroup.LayoutParams lp = container.getLayoutParams();
+        if (!(lp instanceof ViewGroup.MarginLayoutParams)) {
+            return;
+        }
+        int offsetDp = DEFAULT_CONTENT_BLOCK_OFFSET_DP;
+        try {
+            offsetDp = SharedPrefsData.getInt(context, Constants.CONTENT_BLOCK_OFFSET_DP, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        offsetDp = Math.max(CONTENT_BLOCK_OFFSET_MIN_DP, Math.min(CONTENT_BLOCK_OFFSET_MAX_DP, offsetDp));
+        int offsetPx = Math.round(offsetDp * context.getResources().getDisplayMetrics().density);
+        ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+        mlp.topMargin = offsetPx;
+        container.setLayoutParams(mlp);
+    }
+
+    // White-circle chip ImageViews (have the white_oval background) across the
+    // half-image and half-video layouts. Missing ids are skipped safely.
+    private static final int[] HALF_ACTION_ICON_IDS = new int[] {
+            R.id.half_image_like, R.id.half_comment_icon, R.id.half_share_icon,
+            R.id.share, R.id.report_icon, R.id.video_report
+    };
+
+    // Tappable slot containers that wrap each action icon (image + video layouts).
+    private static final int[] HALF_ACTION_SLOT_IDS = new int[] {
+            R.id.half_image_like_icon, R.id.half_comment, R.id.half_share,
+            R.id.half_share__, R.id.report
+    };
+
+    // Defaults + clamps mirror the backend (Root_Settings / Update_Configuration).
+    private static final int DEFAULT_ACTION_ICON_SIZE_DP = 21;
+    private static final int ACTION_ICON_SIZE_MIN_DP = 10;
+    private static final int ACTION_ICON_SIZE_MAX_DP = 40;
+    private static final int DEFAULT_LIKE_CIRCLE_SIZE_DP = 35;
+    private static final int LIKE_CIRCLE_SIZE_MIN_DP = 20;
+    private static final int LIKE_CIRCLE_SIZE_MAX_DP = 52;
+    // The tappable slot is the white circle plus this dp padding (42dp vs 35dp
+    // default), so the row footprint shrinks/grows with the circle.
+    private static final int ACTION_SLOT_EXTRA_DP = 7;
+
+    /**
+     * Admin-controlled sizing of the four half-post action icons (like/comment/
+     * share/report), their white circle chip, and the tappable slot. Reads the dp
+     * values delivered via splash/feed config, clamps them, converts dp→px and
+     * updates each view's LayoutParams + icon padding at bind time. Runtime only;
+     * no layout rebuild. Defaults reproduce the current 35dp circle / 21dp glyph.
+     */
+    public static void applyHalfActionIconSizes(Context context, View convertView) {
+        if (context == null || convertView == null) {
+            return;
+        }
+        int circleDp = DEFAULT_LIKE_CIRCLE_SIZE_DP;
+        int iconDp = DEFAULT_ACTION_ICON_SIZE_DP;
+        try {
+            int storedCircle = SharedPrefsData.getInt(context, Constants.LIKE_CIRCLE_SIZE_DP, Constants.PREF_NAME);
+            if (storedCircle > 0) circleDp = storedCircle;
+        } catch (Exception ignored) {
+        }
+        try {
+            int storedIcon = SharedPrefsData.getInt(context, Constants.ACTION_ICON_SIZE_DP, Constants.PREF_NAME);
+            if (storedIcon > 0) iconDp = storedIcon;
+        } catch (Exception ignored) {
+        }
+        circleDp = Math.max(LIKE_CIRCLE_SIZE_MIN_DP, Math.min(LIKE_CIRCLE_SIZE_MAX_DP, circleDp));
+        iconDp = Math.max(ACTION_ICON_SIZE_MIN_DP, Math.min(ACTION_ICON_SIZE_MAX_DP, iconDp));
+        // The glyph can never be larger than the circle it sits inside.
+        if (iconDp > circleDp) iconDp = circleDp;
+
+        float density = context.getResources().getDisplayMetrics().density;
+        int circlePx = Math.round(circleDp * density);
+        int slotPx = Math.round((circleDp + ACTION_SLOT_EXTRA_DP) * density);
+        int iconPaddingPx = Math.max(0, Math.round(((circleDp - iconDp) / 2f) * density));
+
+        for (int id : HALF_ACTION_SLOT_IDS) {
+            View slot = convertView.findViewById(id);
+            if (slot == null) continue;
+            ViewGroup.LayoutParams lp = slot.getLayoutParams();
+            if (lp == null) continue;
+            lp.width = slotPx;
+            lp.height = slotPx;
+            slot.setLayoutParams(lp);
+        }
+
+        for (int id : HALF_ACTION_ICON_IDS) {
+            View icon = convertView.findViewById(id);
+            if (icon == null) continue;
+            ViewGroup.LayoutParams lp = icon.getLayoutParams();
+            if (lp == null) continue;
+            lp.width = circlePx;
+            lp.height = circlePx;
+            icon.setLayoutParams(lp);
+            icon.setPadding(iconPaddingPx, iconPaddingPx, iconPaddingPx, iconPaddingPx);
+        }
     }
 
     /**

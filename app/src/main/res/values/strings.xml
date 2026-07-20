@@ -86,4 +86,6 @@
     <string name="share_more_options">More options</string>
     <string name="share_article_subtitle">Share article link with screenshot</string>
     <string name="share_other_apps_subtitle">Share via any installed app</string>
+    <string name="video_status_sharing">Sharing…</string>
+    <string name="video_status_downloading">Downloading…</string>
 </resources>

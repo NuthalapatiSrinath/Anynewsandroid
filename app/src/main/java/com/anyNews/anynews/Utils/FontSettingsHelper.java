@@ -17,15 +17,27 @@ import com.anyNews.anynews.R;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public final class FontSettingsHelper {
 
     public static final String TAG = "AnyNewsFont";
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, LanguageFontConfig>>() {}.getType();
+    private static final Type URL_MAP_TYPE = new TypeToken<Map<String, String>>() {}.getType();
+    private static final OkHttpClient FONT_HTTP = new OkHttpClient.Builder().build();
+    private static final ConcurrentHashMap<String, Typeface> CUSTOM_TYPEFACE_CACHE = new ConcurrentHashMap<>();
 
     private FontSettingsHelper() {
     }
@@ -45,6 +57,44 @@ public final class FontSettingsHelper {
         Log.d(TAG, "saveLanguageFontSettings saved " + settings.size() + " languages, jsonLen=" + json.length());
         for (Map.Entry<String, LanguageFontConfig> entry : settings.entrySet()) {
             Log.d(TAG, "saved lang=" + entry.getKey() + " config=" + describeConfig(entry.getValue()));
+        }
+    }
+
+    /** Persist admin-uploaded font key → URL map from splash. */
+    public static void saveCustomFontUrls(Context context, Map<String, String> urls) {
+        if (context == null) {
+            return;
+        }
+        if (urls == null || urls.isEmpty()) {
+            SharedPrefsData.putString(context, Constants.CUSTOM_FONT_URLS, "{}", Constants.PREF_NAME);
+            CUSTOM_TYPEFACE_CACHE.clear();
+            Log.d(TAG, "saveCustomFontUrls cleared");
+            return;
+        }
+        SharedPrefsData.putString(
+                context,
+                Constants.CUSTOM_FONT_URLS,
+                GSON.toJson(urls),
+                Constants.PREF_NAME
+        );
+        CUSTOM_TYPEFACE_CACHE.clear();
+        Log.d(TAG, "saveCustomFontUrls saved " + urls.size() + " fonts");
+    }
+
+    public static Map<String, String> loadCustomFontUrls(Context context) {
+        if (context == null) {
+            return new HashMap<>();
+        }
+        String json = SharedPrefsData.getString(context, Constants.CUSTOM_FONT_URLS, Constants.PREF_NAME);
+        if (TextUtils.isEmpty(json)) {
+            return new HashMap<>();
+        }
+        try {
+            Map<String, String> parsed = GSON.fromJson(json, URL_MAP_TYPE);
+            return parsed != null ? parsed : new HashMap<>();
+        } catch (Exception e) {
+            Log.e(TAG, "loadCustomFontUrls parse failed", e);
+            return new HashMap<>();
         }
     }
 
@@ -182,6 +232,9 @@ public final class FontSettingsHelper {
         if (context == null || view == null) {
             return;
         }
+        if (TextUtils.isEmpty(fontFamilyKey)) {
+            return;
+        }
         if ("sans-serif-medium".equals(fontFamilyKey)) {
             view.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
             Log.d(TAG, "typeface sans-serif-medium on " + viewLabel(view));
@@ -196,9 +249,128 @@ public final class FontSettingsHelper {
             } else {
                 Log.e(TAG, "typeface load failed key=" + fontFamilyKey + " res=" + fontRes);
             }
+            return;
+        }
+        Typeface custom = resolveCustomTypeface(context, fontFamilyKey);
+        if (custom != null) {
+            view.setTypeface(custom);
+            Log.d(TAG, "typeface custom " + fontFamilyKey + " on " + viewLabel(view));
         } else {
             Log.w(TAG, "typeface unknown key=" + fontFamilyKey + " on " + viewLabel(view));
         }
+    }
+
+    /**
+     * Load an admin-uploaded font from disk cache, downloading from the splash URL if needed.
+     * Safe to call on the UI thread for cached hits; download runs synchronously on first miss
+     * (splash already warm-starts commonly used keys).
+     */
+    private static Typeface resolveCustomTypeface(Context context, String fontFamilyKey) {
+        if (TextUtils.isEmpty(fontFamilyKey)) {
+            return null;
+        }
+        Typeface cached = CUSTOM_TYPEFACE_CACHE.get(fontFamilyKey);
+        if (cached != null) {
+            return cached;
+        }
+        File fontFile = customFontFile(context, fontFamilyKey);
+        if (fontFile != null && fontFile.exists() && fontFile.length() > 0) {
+            try {
+                Typeface tf = Typeface.createFromFile(fontFile);
+                if (tf != null) {
+                    CUSTOM_TYPEFACE_CACHE.put(fontFamilyKey, tf);
+                    return tf;
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "createFromFile failed key=" + fontFamilyKey, e);
+            }
+        }
+        Map<String, String> urls = loadCustomFontUrls(context);
+        String url = urls.get(fontFamilyKey);
+        if (TextUtils.isEmpty(url)) {
+            return null;
+        }
+        if (!downloadFontToFile(url, fontFile)) {
+            return null;
+        }
+        try {
+            Typeface tf = Typeface.createFromFile(fontFile);
+            if (tf != null) {
+                CUSTOM_TYPEFACE_CACHE.put(fontFamilyKey, tf);
+            }
+            return tf;
+        } catch (Exception e) {
+            Log.e(TAG, "createFromFile after download failed key=" + fontFamilyKey, e);
+            return null;
+        }
+    }
+
+    private static File customFontFile(Context context, String fontFamilyKey) {
+        File dir = new File(context.getFilesDir(), "custom_fonts");
+        if (!dir.exists() && !dir.mkdirs()) {
+            Log.e(TAG, "custom_fonts dir create failed");
+            return null;
+        }
+        String safe = fontFamilyKey.replaceAll("[^a-zA-Z0-9._-]", "_");
+        return new File(dir, safe + ".font");
+    }
+
+    private static boolean downloadFontToFile(String url, File dest) {
+        if (dest == null || TextUtils.isEmpty(url)) {
+            return false;
+        }
+        Request request = new Request.Builder().url(url).get().build();
+        try (Response response = FONT_HTTP.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                Log.e(TAG, "font download HTTP " + response.code() + " url=" + url);
+                return false;
+            }
+            ResponseBody body = response.body();
+            if (body == null) {
+                return false;
+            }
+            File tmp = new File(dest.getAbsolutePath() + ".tmp");
+            try (InputStream in = body.byteStream();
+                 FileOutputStream out = new FileOutputStream(tmp)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) >= 0) {
+                    out.write(buf, 0, n);
+                }
+            }
+            if (dest.exists() && !dest.delete()) {
+                Log.w(TAG, "could not replace existing font file " + dest.getName());
+            }
+            if (!tmp.renameTo(dest)) {
+                Log.e(TAG, "rename font tmp failed");
+                //noinspection ResultOfMethodCallIgnored
+                tmp.delete();
+                return false;
+            }
+            Log.d(TAG, "font downloaded bytes=" + dest.length() + " -> " + dest.getName());
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "font download failed url=" + url, e);
+            return false;
+        }
+    }
+
+    /** Best-effort prefetch so the first feed paint does not block on network. */
+    public static void prefetchCustomFonts(Context context) {
+        if (context == null) {
+            return;
+        }
+        final Context app = context.getApplicationContext();
+        new Thread(() -> {
+            Map<String, String> urls = loadCustomFontUrls(app);
+            for (String key : urls.keySet()) {
+                try {
+                    resolveCustomTypeface(app, key);
+                } catch (Exception e) {
+                    Log.w(TAG, "prefetch failed key=" + key, e);
+                }
+            }
+        }, "AnyNewsFontPrefetch").start();
     }
 
     /** Admin "Body size" drives article body; programmatic_body_size is legacy-only. */
@@ -281,6 +453,10 @@ public final class FontSettingsHelper {
                 return R.font.inter_black;
             case "inter_medium":
                 return R.font.inter_medium;
+            case "subhadra_regular":
+                return R.font.subhadra_regular;
+            case "balo_tammudu_reg":
+                return R.font.balo_tammudu_reg;
             default:
                 return null;
         }

@@ -57,7 +57,6 @@
     <color name="cmp_border">#3A414A</color>
     <color name="cmp_live_red">#FF5A45</color>
     <color name="cmp_scrim">#99000000</color>
-    <color name="cmp_over_ball_grey">#3A414A</color>
 
     <color name="colorTextSecondary">#CCCCCC</color>
     <color name="title_color">#FFFFFF</color>

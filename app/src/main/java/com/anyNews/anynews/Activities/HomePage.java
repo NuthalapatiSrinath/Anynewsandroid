@@ -3778,6 +3778,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             && !encreptionRequest.getTheme_color().isEmpty()) {
                         ThemeColorHelper.saveColor(HomePage.this, encreptionRequest.getTheme_color());
                     }
+                    // Admin-controlled half-post action icon + white-circle sizes (dp).
+                    // Cache the polled values; if they changed, re-apply immediately to the
+                    // currently visible card so the resize is live (no activity restart).
+                    applyActionIconSizeConfig(
+                            encreptionRequest.getAction_icon_size_dp(),
+                            encreptionRequest.getLike_circle_size_dp()
+                    );
+                    // Admin-controlled reporter create-menu post-type toggles. Cache the
+                    // polled values; if the create menu is open, refresh its buttons live.
+                    applyReporterPostTypeConfig(
+                            encreptionRequest.getEnable_video_post(),
+                            encreptionRequest.getEnable_article_post(),
+                            encreptionRequest.getEnable_full_post()
+                    );
+                    // Admin-controlled title↔body gap (dp). Cache and, if changed,
+                    // re-apply to the currently visible card so it updates live.
+                    applyTitleBodyGapConfig(encreptionRequest.getTitle_body_gap_dp());
+                    // Admin-controlled content-block vertical offset (dp). Same live path.
+                    applyContentBlockOffsetConfig(encreptionRequest.getContent_block_offset_dp());
                     ScreenCaptureHelper.saveAllowed(HomePage.this, encreptionRequest.isAllow_screen_capture());
                     // Re-apply so a toggle change takes effect on this screen without restart.
                     ScreenCaptureHelper.applySecureFlag(HomePage.this);
@@ -4110,6 +4129,152 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } else {
             yes_internet.setVisibility(View.GONE);
             no_internet.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /**
+     * Admin-controlled gap (dp) between the half-post title and body, delivered on
+     * every feed poll. Caches the value in prefs (FlipperAdapter reads it at bind
+     * time) and, when it changes, re-applies to the currently visible card so the
+     * spacing updates live without an activity restart.
+     */
+    private void applyTitleBodyGapConfig(Integer titleBodyGapDp) {
+        try {
+            if (titleBodyGapDp == null) {
+                return;
+            }
+            int prev = SharedPrefsData.getInt(HomePage.this, Constants.TITLE_BODY_GAP_DP, Constants.PREF_NAME);
+            if (prev != titleBodyGapDp) {
+                SharedPrefsData.putInt(HomePage.this, Constants.TITLE_BODY_GAP_DP, titleBodyGapDp, Constants.PREF_NAME);
+                if (mFlipView != null) {
+                    final FlipView flipView = mFlipView;
+                    flipView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            FlipperAdapter.applyTitleBodyGap(HomePage.this, flipView);
+                            flipView.requestLayout();
+                        }
+                    });
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Admin-controlled vertical offset (dp) of the half-post heading+body content
+     * block, delivered on every feed poll. Caches the value in prefs (FlipperAdapter
+     * reads it at bind time) and, when it changes, re-applies to the currently
+     * visible card so the block shifts live without an activity restart.
+     */
+    private void applyContentBlockOffsetConfig(Integer contentBlockOffsetDp) {
+        try {
+            if (contentBlockOffsetDp == null) {
+                return;
+            }
+            int prev = SharedPrefsData.getInt(HomePage.this, Constants.CONTENT_BLOCK_OFFSET_DP, Constants.PREF_NAME);
+            if (prev != contentBlockOffsetDp) {
+                SharedPrefsData.putInt(HomePage.this, Constants.CONTENT_BLOCK_OFFSET_DP, contentBlockOffsetDp, Constants.PREF_NAME);
+                if (mFlipView != null) {
+                    final FlipView flipView = mFlipView;
+                    flipView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            FlipperAdapter.applyContentBlockOffset(HomePage.this, flipView);
+                            flipView.requestLayout();
+                        }
+                    });
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Admin-controlled reporter create-menu post-type toggles. Caches the polled
+     * values in prefs (default true) and, if the create menu is currently open,
+     * refreshes its button visibility live without an activity restart.
+     */
+    private void applyReporterPostTypeConfig(Boolean video, Boolean article, Boolean full) {
+        try {
+            if (video != null) {
+                SharedPrefsData.putBool(HomePage.this, Constants.ENABLE_VIDEO_POST, video, Constants.PREF_NAME);
+            }
+            if (article != null) {
+                SharedPrefsData.putBool(HomePage.this, Constants.ENABLE_ARTICLE_POST, article, Constants.PREF_NAME);
+            }
+            if (full != null) {
+                SharedPrefsData.putBool(HomePage.this, Constants.ENABLE_FULL_POST, full, Constants.PREF_NAME);
+            }
+            if (post_news_scrren != null && post_news_scrren.getVisibility() == View.VISIBLE) {
+                post_news_scrren.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        applyReporterPostTypeVisibility();
+                    }
+                });
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Reads the reporter create-menu post-type toggles from prefs (default true =
+     * enabled) and shows/hides each button (icon + label) in the expanded "+" menu.
+     * Called when the menu opens and when a live poll updates a visible menu, so a
+     * freshly-opened menu always honors the latest saved config. No rebuild needed.
+     */
+    private void applyReporterPostTypeVisibility() {
+        try {
+            android.content.SharedPreferences sp =
+                    getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+            int videoVis = sp.getBoolean(Constants.ENABLE_VIDEO_POST, true) ? View.VISIBLE : View.GONE;
+            int articleVis = sp.getBoolean(Constants.ENABLE_ARTICLE_POST, true) ? View.VISIBLE : View.GONE;
+            int fullVis = sp.getBoolean(Constants.ENABLE_FULL_POST, true) ? View.VISIBLE : View.GONE;
+            if (fab1 != null) fab1.setVisibility(videoVis);
+            if (fab_video != null) fab_video.setVisibility(videoVis);
+            if (fab4 != null) fab4.setVisibility(articleVis);
+            if (fab_article != null) fab_article.setVisibility(articleVis);
+            if (fab2 != null) fab2.setVisibility(fullVis);
+            if (fab_fullpost != null) fab_fullpost.setVisibility(fullVis);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Admin-controlled half-post action icon + white-circle sizes (dp), delivered
+     * on every feed poll. Caches the values in prefs (FlipperAdapter reads them at
+     * bind time) and, when a value actually changes, re-applies to the currently
+     * visible card immediately so the resize is live without an activity restart.
+     */
+    private void applyActionIconSizeConfig(Integer actionIconSizeDp, Integer likeCircleSizeDp) {
+        try {
+            boolean changed = false;
+            if (actionIconSizeDp != null) {
+                int prev = SharedPrefsData.getInt(HomePage.this, Constants.ACTION_ICON_SIZE_DP, Constants.PREF_NAME);
+                if (prev != actionIconSizeDp) {
+                    SharedPrefsData.putInt(HomePage.this, Constants.ACTION_ICON_SIZE_DP, actionIconSizeDp, Constants.PREF_NAME);
+                    changed = true;
+                }
+            }
+            if (likeCircleSizeDp != null) {
+                int prev = SharedPrefsData.getInt(HomePage.this, Constants.LIKE_CIRCLE_SIZE_DP, Constants.PREF_NAME);
+                if (prev != likeCircleSizeDp) {
+                    SharedPrefsData.putInt(HomePage.this, Constants.LIKE_CIRCLE_SIZE_DP, likeCircleSizeDp, Constants.PREF_NAME);
+                    changed = true;
+                }
+            }
+            if (changed && mFlipView != null) {
+                final FlipView flipView = mFlipView;
+                flipView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        FlipperAdapter.applyHalfActionIconSizes(HomePage.this, flipView);
+                        flipView.requestLayout();
+                    }
+                });
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -4751,6 +4916,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                         mFlipView.setVisibility(View.GONE);
                                         floating_action_button.setVisibility(View.VISIBLE);
                                         top_item_layout.setVisibility(View.GONE);
+                                        applyReporterPostTypeVisibility();
 
                                     } else {
                                         Intent intent = new Intent(HomePage.this, LoginActivityDetails.class);

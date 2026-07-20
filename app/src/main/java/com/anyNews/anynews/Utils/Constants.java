@@ -131,7 +131,16 @@ public class Constants {
     public static String THEME_COLOR = "theme_color";
     public static String ALLOW_SCREEN_CAPTURE = "allow_screen_capture";
     public static String LANGUAGE_FONT_SETTINGS = "language_font_settings";
+    /** JSON map of custom font key → download URL (admin-uploaded TTF/OTF). */
+    public static String CUSTOM_FONT_URLS = "custom_font_urls";
     public static String ACTION_ICON_ROW_OFFSET = "action_icon_row_offset";
+    public static String ACTION_ICON_SIZE_DP = "action_icon_size_dp";
+    public static String LIKE_CIRCLE_SIZE_DP = "like_circle_size_dp";
+    public static String ENABLE_VIDEO_POST = "enable_video_post";
+    public static String ENABLE_ARTICLE_POST = "enable_article_post";
+    public static String ENABLE_FULL_POST = "enable_full_post";
+    public static String TITLE_BODY_GAP_DP = "title_body_gap_dp";
+    public static String CONTENT_BLOCK_OFFSET_DP = "content_block_offset_dp";
     public static String FOOTER_STYLE = "footer_style";
     public static String WRITER_STRIP_STYLE = "writer_strip_style";
     // One-shot post id parsed from a shared deep link (/p/{id}, anynews://post/{id},
