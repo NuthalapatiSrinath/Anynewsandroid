@@ -50,6 +50,7 @@ import com.anyNews.anynews.Utils.CricketMiniPlayerPositionHelper;
 import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
+import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Pojo.LanguageFontConfig;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
@@ -884,6 +885,7 @@ public class StartingActivity extends AppCompatActivity {
 
                         SharedPrefsData.putInt(getApplicationContext(), Constants.DraftID, startActivityReqModel.getData().getDraftId(), Constants.PREF_NAME);
                         SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID, startActivityReqModel.getData().getLanguageId(), Constants.PREF_NAME);
+                        SessionAnalyticsTracker.get().onIdentityReady(getApplicationContext());
                         SharedPrefsData.putInt(getApplicationContext(), Constants.Show_Animation, startActivityReqModel.getData().getShowAnimation(), Constants.PREF_NAME);
                         SharedPrefsData.putInt(getApplicationContext(), Constants.StaticDataApi, startActivityReqModel.getData().getStaticDataApi(), Constants.PREF_NAME);
                         SharedPrefsData.putInt(getApplicationContext(), Constants.StaticDataApi, startActivityReqModel.getData().getStaticDataApi(), Constants.PREF_NAME);

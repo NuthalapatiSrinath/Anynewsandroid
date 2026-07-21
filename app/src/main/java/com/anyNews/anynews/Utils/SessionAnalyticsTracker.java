@@ -45,9 +45,10 @@ import retrofit2.Response;
  * - ACTION_SCREEN_OFF → close immediately
  * - ACTION_SCREEN_ON / USER_PRESENT → reopen only if still foreground + interactive
  *
- * Close persists to SharedPrefs and flushes with a blocking wait so background /
- * screen-off / process death do not lose the close. Heartbeats keep last_heartbeat_at
- * fresh so admin live elapsed stays trustworthy.
+ * Close persists to SharedPrefs and flushes on a worker thread (never blocks the
+ * main thread — Lifecycle/SCREEN_OFF would ANR). Heartbeats keep last_heartbeat_at
+ * fresh so admin live elapsed stays trustworthy. Pending prefs + server stale
+ * auto-close cover process death before the close POST completes.
  */
 public final class SessionAnalyticsTracker {
 
@@ -225,6 +226,17 @@ public final class SessionAnalyticsTracker {
         }
     }
 
+    /**
+     * Call after DraftID is first written (splash). openSession no-ops until then;
+     * without this nudge, a cold install would wait until the next lifecycle event.
+     */
+    public synchronized void onIdentityReady(Context context) {
+        if (sessionOpen) return;
+        if (!processForeground && startedCount <= 0) return;
+        refreshScreenFromDevice(context);
+        evaluateTracking(context.getApplicationContext(), false);
+    }
+
     /** Flush dwell + session when process is about to die. */
     public synchronized void onAppTerminate(Context context) {
         cancelActivityClose();
@@ -282,6 +294,12 @@ public final class SessionAnalyticsTracker {
 
     private void openSession(Context context) {
         if (sessionOpen) return;
+        // Prefer not to mark a local session open until draft_id exists — otherwise
+        // fresh installs open during splash (draft still 0), never POST /session/open,
+        // and later resumes skip open because sessionOpen is already true.
+        int draftId = SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME);
+        if (draftId <= 0) return;
+
         sessionId = UUID.randomUUID().toString();
         openAtMs = System.currentTimeMillis();
         sessionOpen = true;
@@ -314,6 +332,12 @@ public final class SessionAnalyticsTracker {
 
         Future<?> future = NET_EXEC.submit(() -> executeSessionCall(context, body, true));
         if (awaitFlush) {
+            // Never block the main thread: ProcessLifecycle / SCREEN_OFF / onTerminate
+            // all run there; future.get(2.5s) is an ANR risk. Pending prefs + next
+            // open flush + server stale auto-close cover process death.
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                return;
+            }
             try {
                 future.get(CLOSE_FLUSH_WAIT_MS, TimeUnit.MILLISECONDS);
             } catch (Exception e) {
