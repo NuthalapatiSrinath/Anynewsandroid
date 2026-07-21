@@ -75,7 +75,15 @@ public final class PostDwellTracker {
         startedAtMs = 0L;
     }
 
+    /** Screen off / session close — flush critical and pause timer (same as pause). */
+    public synchronized void onScreenOff(Context context) {
+        flush(context, true);
+        startedAtMs = 0L;
+    }
+
     public synchronized void onResumed(Context context) {
+        // Only resume dwell while a session is active (foreground + screen on).
+        if (SessionAnalyticsTracker.get().getActiveSessionId() == null) return;
         if (postId > 0 && startedAtMs <= 0) {
             startedAtMs = System.currentTimeMillis();
         }

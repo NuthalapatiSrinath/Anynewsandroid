@@ -1,10 +1,20 @@
 package com.anyNews.anynews.Utils;
 
+import android.app.Application;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 
 import androidx.annotation.Nullable;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.OnLifecycleEvent;
+import androidx.lifecycle.ProcessLifecycleOwner;
 
 import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
@@ -18,22 +28,35 @@ import org.json.JSONObject;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import retrofit2.Call;
 import retrofit2.Response;
 
 /**
  * Tracks app foreground sessions and posts open/close to /app/v3/session.
- * Also exposes the active session_id for per-post dwell events.
  *
- * Close must survive process pause: persist pending close, flush with a
- * blocking call on a background thread, and retry on next open (before open).
+ * Time counts only while the process is in the foreground AND the screen is on
+ * (interactive). Sources:
+ * - ProcessLifecycleOwner ON_START / ON_STOP
+ * - ActivityLifecycleCallbacks (backup for start/stop count)
+ * - ACTION_SCREEN_OFF → close immediately
+ * - ACTION_SCREEN_ON / USER_PRESENT → reopen only if still foreground + interactive
+ *
+ * Close persists to SharedPrefs and flushes with a blocking wait so background /
+ * screen-off / process death do not lose the close. Heartbeats keep last_heartbeat_at
+ * fresh so admin live elapsed stays trustworthy.
  */
 public final class SessionAnalyticsTracker {
 
     private static final String PREF_APP_SESSION_ID = "app_session_analytics_id";
     private static final String PREF_PENDING_CLOSE = "app_session_pending_close_json";
-    private static final long CLOSE_DELAY_MS = 400L;
+    /** Short grace only for activity-to-activity transitions (not screen/process). */
+    private static final long ACTIVITY_CLOSE_DELAY_MS = 300L;
+    private static final long HEARTBEAT_INTERVAL_MS = 45_000L;
+    private static final long CLOSE_FLUSH_WAIT_MS = 2_500L;
 
     private static final SessionAnalyticsTracker INSTANCE = new SessionAnalyticsTracker();
     private static final ExecutorService NET_EXEC = Executors.newSingleThreadExecutor(r -> {
@@ -42,12 +65,21 @@ public final class SessionAnalyticsTracker {
         return t;
     });
 
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final AtomicBoolean initialized = new AtomicBoolean(false);
+
     private int startedCount = 0;
+    private boolean processForeground = false;
+    private boolean screenOn = true;
+    /** After SCREEN_OFF, wait for USER_PRESENT (or fresh ON_START) before counting again. */
+    private boolean awaitingUnlock = false;
     private long openAtMs = 0L;
     @Nullable private String sessionId;
     private boolean sessionOpen = false;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    @Nullable private Runnable pendingClose;
+    @Nullable private Runnable pendingActivityClose;
+    @Nullable private Runnable heartbeatRunnable;
+    @Nullable private BroadcastReceiver screenReceiver;
+    @Nullable private Context appContext;
 
     private SessionAnalyticsTracker() {}
 
@@ -55,58 +87,201 @@ public final class SessionAnalyticsTracker {
         return INSTANCE;
     }
 
+    /**
+     * Call once from Application.onCreate. Registers ProcessLifecycleOwner + screen receiver.
+     */
+    public void init(Application application) {
+        if (!initialized.compareAndSet(false, true)) return;
+        appContext = application.getApplicationContext();
+        screenOn = isDeviceInteractive(appContext);
+
+        ProcessLifecycleOwner.get().getLifecycle().addObserver(new LifecycleObserver() {
+            @OnLifecycleEvent(Lifecycle.Event.ON_START)
+            public void onAppForeground() {
+                onMoveToForeground(appContext);
+            }
+
+            @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
+            public void onAppBackground() {
+                onMoveToBackground(appContext);
+            }
+        });
+
+        screenReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null || intent.getAction() == null) return;
+                String action = intent.getAction();
+                Context ctx = context.getApplicationContext();
+                if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                    onScreenOff(ctx);
+                } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+                    onScreenOn(ctx);
+                } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                    onUserPresent(ctx);
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_SCREEN_OFF);
+        filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_USER_PRESENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            application.registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            application.registerReceiver(screenReceiver, filter);
+        }
+
+        // Flush any close that never reached the server on a prior kill.
+        NET_EXEC.execute(() -> flushPendingCloseBlocking(appContext));
+    }
+
     @Nullable
     public String getActiveSessionId() {
         return sessionOpen ? sessionId : null;
     }
 
-    public synchronized void onActivityStarted(Context context) {
-        if (pendingClose != null) {
-            mainHandler.removeCallbacks(pendingClose);
-            pendingClose = null;
+    /** ProcessLifecycleOwner ON_START — app moved to foreground. */
+    public synchronized void onMoveToForeground(Context context) {
+        processForeground = true;
+        awaitingUnlock = false;
+        cancelActivityClose();
+        refreshScreenFromDevice(context);
+        evaluateTracking(context.getApplicationContext(), false);
+    }
+
+    /** ProcessLifecycleOwner ON_STOP — app fully backgrounded; close immediately. */
+    public synchronized void onMoveToBackground(Context context) {
+        processForeground = false;
+        awaitingUnlock = false;
+        cancelActivityClose();
+        evaluateTracking(context.getApplicationContext(), true);
+    }
+
+    /** Power button / screen off while (possibly) still "started". */
+    public synchronized void onScreenOff(Context context) {
+        screenOn = false;
+        awaitingUnlock = true;
+        cancelActivityClose();
+        evaluateTracking(context.getApplicationContext(), true);
+    }
+
+    /**
+     * Screen on — do not reopen yet (lock screen must not accrue time).
+     * Reopen on USER_PRESENT or ProcessLifecycle ON_START.
+     */
+    public synchronized void onScreenOn(Context context) {
+        // Keep awaitingUnlock; USER_PRESENT / ON_START clears it.
+        if (!awaitingUnlock) {
+            screenOn = isDeviceInteractive(context);
+            evaluateTracking(context.getApplicationContext(), false);
         }
+    }
+
+    /** User unlocked — safe to count again if still foreground. */
+    public synchronized void onUserPresent(Context context) {
+        awaitingUnlock = false;
+        screenOn = true;
+        evaluateTracking(context.getApplicationContext(), false);
+    }
+
+    /** ActivityLifecycleCallbacks backup (config-change grace via short delay). */
+    public synchronized void onActivityStarted(Context context) {
+        cancelActivityClose();
         startedCount++;
-        if (startedCount == 1 && !sessionOpen) {
-            openSession(context.getApplicationContext());
+        if (startedCount == 1) {
+            processForeground = true;
+            refreshScreenFromDevice(context);
+            evaluateTracking(context.getApplicationContext(), false);
         }
     }
 
     public synchronized void onActivityStopped(Context context) {
         startedCount = Math.max(0, startedCount - 1);
-        if (startedCount == 0 && sessionOpen) {
+        if (startedCount == 0) {
             final Context appCtx = context.getApplicationContext();
-            pendingClose = () -> {
+            // Short delay so activity→activity transitions do not flicker close/open.
+            // ProcessLifecycle / SCREEN_OFF already close immediately and cancel this.
+            pendingActivityClose = () -> {
                 synchronized (SessionAnalyticsTracker.this) {
-                    if (startedCount == 0 && sessionOpen) {
-                        try {
-                            PostDwellTracker.get().flush(appCtx);
-                        } catch (Exception ignored) {
-                        }
-                        closeSession(appCtx);
+                    pendingActivityClose = null;
+                    if (startedCount == 0) {
+                        processForeground = false;
+                        evaluateTracking(appCtx, true);
                     }
-                    pendingClose = null;
                 }
             };
-            mainHandler.postDelayed(pendingClose, CLOSE_DELAY_MS);
+            mainHandler.postDelayed(pendingActivityClose, ACTIVITY_CLOSE_DELAY_MS);
+        }
+    }
+
+    /** Activity resumed — reopen only if not waiting for unlock after SCREEN_OFF. */
+    public synchronized void onActivityResumed(Context context) {
+        if (awaitingUnlock) return;
+        refreshScreenFromDevice(context);
+        if (processForeground || startedCount > 0) {
+            processForeground = true;
+            evaluateTracking(context.getApplicationContext(), false);
         }
     }
 
     /** Flush dwell + session when process is about to die. */
     public synchronized void onAppTerminate(Context context) {
-        if (pendingClose != null) {
-            mainHandler.removeCallbacks(pendingClose);
-            pendingClose = null;
-        }
+        cancelActivityClose();
+        stopHeartbeat();
         try {
             PostDwellTracker.get().flush(context.getApplicationContext());
         } catch (Exception ignored) {
         }
         if (sessionOpen) {
-            closeSession(context.getApplicationContext());
+            closeSession(context.getApplicationContext(), true);
         }
     }
 
+    private void evaluateTracking(Context context, boolean awaitCloseFlush) {
+        boolean shouldTrack = processForeground
+                && screenOn
+                && !awaitingUnlock
+                && isDeviceInteractive(context);
+        if (shouldTrack) {
+            if (!sessionOpen) {
+                openSession(context);
+            }
+            startHeartbeat(context);
+        } else {
+            stopHeartbeat();
+            if (sessionOpen) {
+                try {
+                    PostDwellTracker.get().onScreenOff(context);
+                } catch (Exception ignored) {
+                }
+                closeSession(context, awaitCloseFlush);
+            }
+        }
+    }
+
+    private void cancelActivityClose() {
+        if (pendingActivityClose != null) {
+            mainHandler.removeCallbacks(pendingActivityClose);
+            pendingActivityClose = null;
+        }
+    }
+
+    private void refreshScreenFromDevice(Context context) {
+        screenOn = isDeviceInteractive(context);
+    }
+
+    private static boolean isDeviceInteractive(Context context) {
+        try {
+            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (pm != null) return pm.isInteractive();
+        } catch (Exception ignored) {
+        }
+        return true;
+    }
+
     private void openSession(Context context) {
+        if (sessionOpen) return;
         sessionId = UUID.randomUUID().toString();
         openAtMs = System.currentTimeMillis();
         sessionOpen = true;
@@ -114,7 +289,6 @@ public final class SessionAnalyticsTracker {
 
         final String sid = sessionId;
         final long opened = openAtMs;
-        // Serialize: pending close (if any) then open, on one worker thread.
         NET_EXEC.execute(() -> {
             flushPendingCloseBlocking(context);
             JSONObject body = buildSessionBody(context, "open", sid, opened, 0L, 0L);
@@ -124,7 +298,7 @@ public final class SessionAnalyticsTracker {
         });
     }
 
-    private void closeSession(Context context) {
+    private void closeSession(Context context, boolean awaitFlush) {
         if (!sessionOpen || sessionId == null) return;
         long closeAt = System.currentTimeMillis();
         long duration = Math.max(0L, closeAt - openAtMs);
@@ -134,11 +308,51 @@ public final class SessionAnalyticsTracker {
         sessionId = null;
         openAtMs = 0L;
         SharedPrefsData.putString(context, PREF_APP_SESSION_ID, "", Constants.PREF_NAME);
-        // Persist first so a killed process can still close on next launch.
         persistPendingClose(context, sid, opened, closeAt, duration);
         final JSONObject body = buildSessionBody(context, "close", sid, opened, closeAt, duration);
         if (body == null) return;
-        NET_EXEC.execute(() -> executeSessionCall(context, body, true));
+
+        Future<?> future = NET_EXEC.submit(() -> executeSessionCall(context, body, true));
+        if (awaitFlush) {
+            try {
+                future.get(CLOSE_FLUSH_WAIT_MS, TimeUnit.MILLISECONDS);
+            } catch (Exception e) {
+                // Pending close remains in prefs for retry on next open.
+            }
+        }
+    }
+
+    private void startHeartbeat(Context context) {
+        if (heartbeatRunnable != null) return;
+        final Context appCtx = context.getApplicationContext();
+        heartbeatRunnable = new Runnable() {
+            @Override
+            public void run() {
+                synchronized (SessionAnalyticsTracker.this) {
+                    if (!sessionOpen || sessionId == null || !processForeground || !screenOn) {
+                        heartbeatRunnable = null;
+                        return;
+                    }
+                    final String sid = sessionId;
+                    final long opened = openAtMs;
+                    NET_EXEC.execute(() -> {
+                        JSONObject body = buildSessionBody(appCtx, "heartbeat", sid, opened, 0L, 0L);
+                        if (body != null) {
+                            executeSessionCall(appCtx, body, false);
+                        }
+                    });
+                    mainHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS);
+                }
+            }
+        };
+        mainHandler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_MS);
+    }
+
+    private void stopHeartbeat() {
+        if (heartbeatRunnable != null) {
+            mainHandler.removeCallbacks(heartbeatRunnable);
+            heartbeatRunnable = null;
+        }
     }
 
     private void persistPendingClose(Context context, String sid, long openAt, long closeAt, long durationMs) {
@@ -188,7 +402,11 @@ public final class SessionAnalyticsTracker {
             body.put("app_version", BuildConfig.VERSION_NAME);
             body.put("open_at", openAt);
             if (closeAt > 0) body.put("close_at", closeAt);
-            if (durationMs > 0) body.put("duration_ms", durationMs);
+            if ("close".equals(action)) {
+                body.put("duration_ms", Math.max(0L, durationMs));
+            } else if (durationMs > 0) {
+                body.put("duration_ms", durationMs);
+            }
             return body;
         } catch (Exception e) {
             e.printStackTrace();

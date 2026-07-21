@@ -84,6 +84,9 @@ public class AppController extends MultiDexApplication {
         MobileAds.initialize(this, initializationStatus -> {
         });
 
+        // Session time: ProcessLifecycle + screen off/on + activity callbacks.
+        SessionAnalyticsTracker.get().init(this);
+
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle bundle) {
@@ -127,6 +130,7 @@ public class AppController extends MultiDexApplication {
 
             @Override
             public void onActivityResumed(@NonNull Activity activity) {
+                SessionAnalyticsTracker.get().onActivityResumed(activity);
             }
 
             @Override
