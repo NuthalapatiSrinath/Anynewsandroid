@@ -137,6 +137,7 @@ import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.CricketFooterLabel;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
@@ -242,6 +243,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private View layoutMagazineShareFooter;
     private ImageView ivMagazineShareFooter;
     private TextView tvMagazineShareFooter;
+    // Admin-controlled bottom-footer cricket tab (APK 3.40.79+). Shown only when
+    // the admin enables it AND there is an active match; hidden otherwise so the
+    // footer is exactly as before. Opens the same Match Center as the mini player.
+    private View layoutCricketFooterBar;
+    private View layoutCricketFooter;
+    private ImageView ivCricketFooter;
+    private TextView tvCricketFooter;
+    private ObjectAnimator cricketFooterBlinkAnimator;
+    private com.anyNews.anynews.Pojo.ActiveMatch cricketFooterActiveMatch;
     boolean isOpen = false;
 
     /* flipView Detailes*/
@@ -532,6 +542,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         layoutMagazineShareFooter = findViewById(R.id.layoutMagazineShareFooter);
         ivMagazineShareFooter = findViewById(R.id.ivMagazineShareFooter);
         tvMagazineShareFooter = findViewById(R.id.tvMagazineShareFooter);
+
+        // Bottom-footer cricket tab (starts GONE; driven by the cricket poll below).
+        layoutCricketFooterBar = findViewById(R.id.layoutCricketFooterBar);
+        layoutCricketFooter = findViewById(R.id.layoutCricketFooter);
+        ivCricketFooter = findViewById(R.id.ivCricketFooter);
+        tvCricketFooter = findViewById(R.id.tvCricketFooter);
+        if (cricketMiniPlayerManager != null) {
+            cricketMiniPlayerManager.setPollListener(
+                    (match, footerEnabled) -> updateCricketFooterTab(match, footerEnabled));
+        }
 
 
 
@@ -3042,6 +3062,96 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (layoutMagazineShareFooter != null) {
             layoutMagazineShareFooter.clearAnimation();
             layoutMagazineShareFooter.setAlpha(1f);
+        }
+    }
+
+    /**
+     * Shows / hides the bottom-footer cricket tab from the cricket poll. The tab
+     * appears ONLY when the admin enabled it AND there is a live/active match, so
+     * when the footer flag is off (default) the footer is EXACTLY as before — the
+     * bar is GONE and reserves no space. Tapping opens the SAME Match Center the
+     * mini player opens. The tab and mini player are independent surfaces.
+     */
+    private void updateCricketFooterTab(com.anyNews.anynews.Pojo.ActiveMatch match,
+                                        boolean footerEnabled) {
+        if (layoutCricketFooterBar == null) {
+            return;
+        }
+        boolean hasMatch = match != null && !TextUtils.isEmpty(match.getMatch_id());
+        if (!footerEnabled || !hasMatch) {
+            cricketFooterActiveMatch = null;
+            stopCricketFooterBlink();
+            if (layoutCricketFooterBar.getVisibility() != View.GONE) {
+                layoutCricketFooterBar.setVisibility(View.GONE);
+            }
+            if (layoutCricketFooter != null) {
+                layoutCricketFooter.setOnClickListener(null);
+                layoutCricketFooter.setClickable(false);
+            }
+            return;
+        }
+
+        cricketFooterActiveMatch = match;
+        if (tvCricketFooter != null) {
+            String label = CricketFooterLabel.forCurrentLanguage(HomePage.this);
+            tvCricketFooter.setText(label);
+            layoutCricketFooter.setContentDescription(label);
+        }
+        if (layoutCricketFooterBar.getVisibility() != View.VISIBLE) {
+            layoutCricketFooterBar.setVisibility(View.VISIBLE);
+        }
+        if (layoutCricketFooter != null) {
+            layoutCricketFooter.setClickable(true);
+            layoutCricketFooter.setOnClickListener(v -> openCricketMatchCenter());
+        }
+        startCricketFooterBlink();
+    }
+
+    /** Opens the cricket Match Center for the current footer match (same as mini player). */
+    private void openCricketMatchCenter() {
+        com.anyNews.anynews.Pojo.ActiveMatch match = cricketFooterActiveMatch;
+        if (match == null) {
+            match = com.anyNews.anynews.Utils.CricketMiniPlayerManager.getLastKnownActive();
+        }
+        if (match == null || TextUtils.isEmpty(match.getMatch_id())) {
+            return;
+        }
+        try {
+            Intent intent = new Intent(HomePage.this, MatchCenterActivity.class);
+            intent.putExtra(MatchCenterActivity.EXTRA_MATCH, match);
+            startActivity(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** Subtle infinite alpha pulse on the cricket icon (same feel as the Share bulb). */
+    private void startCricketFooterBlink() {
+        if (ivCricketFooter == null) {
+            return;
+        }
+        if (cricketFooterBlinkAnimator != null && cricketFooterBlinkAnimator.isRunning()) {
+            return;
+        }
+        stopCricketFooterBlink();
+        ivCricketFooter.setAlpha(1f);
+        ObjectAnimator animator = ObjectAnimator.ofFloat(ivCricketFooter, View.ALPHA, 1f, 0.35f);
+        animator.setDuration(750);
+        animator.setRepeatCount(ValueAnimator.INFINITE);
+        animator.setRepeatMode(ValueAnimator.REVERSE);
+        animator.setInterpolator(new AccelerateDecelerateInterpolator());
+        cricketFooterBlinkAnimator = animator;
+        animator.start();
+    }
+
+    private void stopCricketFooterBlink() {
+        if (cricketFooterBlinkAnimator != null) {
+            cricketFooterBlinkAnimator.cancel();
+            cricketFooterBlinkAnimator = null;
+        }
+        if (ivCricketFooter != null) {
+            ivCricketFooter.clearAnimation();
+            ivCricketFooter.setAlpha(1f);
         }
     }
 

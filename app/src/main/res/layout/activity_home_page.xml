@@ -399,6 +399,57 @@
 
                 </LinearLayout>
 
+                <!--  Cricket footer tab (admin-controlled, APK 3.40.79+). GONE by
+                      default so the footer is EXACTLY as before until enabled AND
+                      a live match exists. Sits just above the bottom nav; adds no
+                      space when hidden. -->
+                <LinearLayout
+                    android:id="@+id/layoutCricketFooterBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="0.5dp"
+                        android:background="#22000000" />
+
+                    <LinearLayout
+                        android:id="@+id/layoutCricketFooter"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@color/bottom_navigation_view_color"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:paddingTop="7dp"
+                        android:paddingBottom="7dp">
+
+                        <ImageView
+                            android:id="@+id/ivCricketFooter"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:contentDescription="@string/cricket"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_cricket_footer"
+                            app:tint="@color/selector_item_primary_color" />
+
+                        <TextView
+                            android:id="@+id/tvCricketFooter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="@string/cricket"
+                            android:textAppearance="@style/BottomNavLabelActive"
+                            android:textColor="@color/selector_item_primary_color" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <!--  Bottom Menu -->
                 <androidx.coordinatorlayout.widget.CoordinatorLayout
                     android:id="@+id/home_page_navigation"

@@ -79,6 +79,27 @@ public class CricketMiniPlayerManager {
     /** Last applied placement JSON — avoid resetting the card on every poll. */
     private String lastAppliedPositionJson;
 
+    /**
+     * Admin toggle for the floating mini player. Default true = current behavior.
+     * When false the card is never shown, but polling continues so the footer tab
+     * (driven by {@link #pollListener}) still works.
+     */
+    private boolean miniPlayerEnabled = true;
+    /** Admin toggle for the bottom-footer cricket tab; forwarded to the host. */
+    private boolean footerTabEnabled = false;
+
+    /**
+     * Optional host callback fired on each poll (and on the cached onResume paint)
+     * with the current active match + footer flag, so a host screen can show or
+     * hide its own footer cricket tab. The mini player and footer tab are
+     * independent surfaces of the same active match.
+     */
+    public interface CricketPollListener {
+        void onCricketPoll(ActiveMatch match, boolean footerTabEnabled);
+    }
+
+    private CricketPollListener pollListener;
+
     private final Runnable pollRunnable = new Runnable() {
         @Override
         public void run() {
@@ -91,6 +112,10 @@ public class CricketMiniPlayerManager {
 
     public CricketMiniPlayerManager(Activity activity) {
         this.activityRef = new WeakReference<>(activity);
+        // Seed from cached splash/poll flags so the very first paint respects the
+        // admin toggles even before the first network poll returns.
+        this.miniPlayerEnabled = CricketSurfaceConfigHelper.isMiniPlayerEnabled(activity);
+        this.footerTabEnabled = CricketSurfaceConfigHelper.isFooterTabEnabled(activity);
     }
 
     /** Enable/disable background polling of the dedicated endpoint. */
@@ -98,6 +123,25 @@ public class CricketMiniPlayerManager {
         this.pollingEnabled = enabled;
         if (!enabled) {
             handler.removeCallbacks(pollRunnable);
+        }
+    }
+
+    /** Register a host callback for footer-tab driving (see {@link CricketPollListener}). */
+    public void setPollListener(CricketPollListener listener) {
+        this.pollListener = listener;
+    }
+
+    /** Last active match seen this process (used by a host footer tab tap). */
+    public static ActiveMatch getLastKnownActive() {
+        return lastKnownActive;
+    }
+
+    private void notifyPollListener(ActiveMatch match) {
+        if (pollListener != null) {
+            try {
+                pollListener.onCricketPoll(match, footerTabEnabled);
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -111,13 +155,16 @@ public class CricketMiniPlayerManager {
         // Paint the last-known active match immediately (cached, no network) so
         // the mini player appears instantly on open instead of after the first
         // poll returns. The poll below refreshes it with live data in place.
-        if (lastKnownActive != null && !TextUtils.isEmpty(lastKnownActive.getMatch_id())
+        if (miniPlayerEnabled && lastKnownActive != null
+                && !TextUtils.isEmpty(lastKnownActive.getMatch_id())
                 && !dismissedForSession.contains(lastKnownActive.getMatch_id())) {
             current = lastKnownActive;
             lastServerActiveId = lastKnownActive.getMatch_id();
             show();
             bind(lastKnownActive);
         }
+        // Let a host footer tab paint from the cached active match too.
+        notifyPollListener(lastKnownActive);
         handler.removeCallbacks(pollRunnable);
         handler.post(pollRunnable);
     }
@@ -165,6 +212,13 @@ public class CricketMiniPlayerManager {
         lastServerActiveId = matchId;
         current = match;
         lastKnownActive = match;
+
+        // Admin turned the floating mini player OFF: never show the card, but keep
+        // tracking the active match so an enabled footer tab still works.
+        if (!miniPlayerEnabled) {
+            hide();
+            return;
+        }
 
         if (dismissedForSession.contains(matchId)) {
             hide();
@@ -429,9 +483,10 @@ public class CricketMiniPlayerManager {
                                        @NonNull Response<CricketActiveMatchResponse> response) {
                     pollInFlight = false;
                     if (response.body() != null) {
-                        if (response.body().getMini_player_position() != null) {
+                        CricketActiveMatchResponse body = response.body();
+                        if (body.getMini_player_position() != null) {
                             Activity host = activityRef.get();
-                            CricketMiniPlayerPosition pos = response.body().getMini_player_position();
+                            CricketMiniPlayerPosition pos = body.getMini_player_position();
                             String posJson = String.valueOf(pos.isUseDefault())
                                     + "|" + pos.getXPercent() + "|" + pos.getYPercent();
                             CricketMiniPlayerPositionHelper.save(host, pos);
@@ -444,7 +499,19 @@ public class CricketMiniPlayerManager {
                                 lastAppliedPositionJson = posJson;
                             }
                         }
-                        update(response.body().getActive_match());
+                        // Cache + apply the two independent surface toggles live.
+                        Activity host = activityRef.get();
+                        if (body.getCricket_mini_player_enabled() != null) {
+                            miniPlayerEnabled = body.isMiniPlayerEnabled();
+                            CricketSurfaceConfigHelper.saveMiniPlayerEnabled(host, miniPlayerEnabled);
+                        }
+                        if (body.getCricket_footer_tab_enabled() != null) {
+                            footerTabEnabled = body.isFooterTabEnabled();
+                            CricketSurfaceConfigHelper.saveFooterTabEnabled(host, footerTabEnabled);
+                        }
+                        update(body.getActive_match());
+                        // Drive the host footer tab with the same active match + flag.
+                        notifyPollListener(body.getActive_match());
                     }
                 }
 

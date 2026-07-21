@@ -47,6 +47,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketMiniPlayerPositionHelper;
+import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -999,6 +1000,17 @@ public class StartingActivity extends AppCompatActivity {
                                     startActivityReqModel.getData().getCricketMiniPlayerPosition()
                             );
                         }
+
+                        // Independent cricket surface toggles (null flags are left
+                        // untouched → defaults: mini player ON, footer tab OFF).
+                        CricketSurfaceConfigHelper.saveMiniPlayerEnabled(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getCricketMiniPlayerEnabled()
+                        );
+                        CricketSurfaceConfigHelper.saveFooterTabEnabled(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getCricketFooterTabEnabled()
+                        );
 
                         LanguageFontConfig splashFontConfig = startActivityReqModel.getData().getFontConfig();
                         Map<String, LanguageFontConfig> splashFontSettings =

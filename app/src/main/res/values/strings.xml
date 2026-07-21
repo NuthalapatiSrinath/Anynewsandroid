@@ -25,6 +25,10 @@
 
     <string name="todo">TODO</string>
 
+    <!-- Bottom-footer cricket tab label (English fallback). Other languages are
+         resolved by in-app language_id in CricketFooterLabel.java. -->
+    <string name="cricket">Cricket</string>
+
 
     <!-- link to email must be: mailto:your@email.com -->
 

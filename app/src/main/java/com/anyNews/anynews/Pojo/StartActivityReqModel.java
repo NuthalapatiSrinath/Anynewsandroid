@@ -204,6 +204,16 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private CricketMiniPlayerPosition cricketMiniPlayerPosition;
 
+        // Independent cricket surface toggles delivered at splash. Null (old
+        // server) → mini player enabled / footer tab disabled = current behavior.
+        @SerializedName("cricket_mini_player_enabled")
+        @Expose
+        private Boolean cricketMiniPlayerEnabled;
+
+        @SerializedName("cricket_footer_tab_enabled")
+        @Expose
+        private Boolean cricketFooterTabEnabled;
+
         public LanguageFontConfig getFontConfig() {
             return fontConfig;
         }
@@ -226,6 +236,15 @@ public class StartActivityReqModel implements Serializable {
 
         public CricketMiniPlayerPosition getCricketMiniPlayerPosition() {
             return cricketMiniPlayerPosition;
+        }
+
+        /** Null flag → not sent by server; caller keeps whatever is already cached. */
+        public Boolean getCricketMiniPlayerEnabled() {
+            return cricketMiniPlayerEnabled;
+        }
+
+        public Boolean getCricketFooterTabEnabled() {
+            return cricketFooterTabEnabled;
         }
 
         public String getEngagementBadgeColor() {

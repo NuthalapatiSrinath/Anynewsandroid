@@ -145,6 +145,10 @@ public class Constants {
     public static String WRITER_STRIP_STYLE = "writer_strip_style";
     /** JSON of {@link com.anyNews.anynews.Pojo.CricketMiniPlayerPosition} from splash / poll. */
     public static String CRICKET_MINI_PLAYER_POSITION = "cricket_mini_player_position";
+    /** "true"/"false" admin toggle for the floating cricket mini player (default true). */
+    public static String CRICKET_MINI_PLAYER_ENABLED = "cricket_mini_player_enabled";
+    /** "true"/"false" admin toggle for the bottom-footer cricket tab (default false). */
+    public static String CRICKET_FOOTER_TAB_ENABLED = "cricket_footer_tab_enabled";
     // One-shot post id parsed from a shared deep link (/p/{id}, anynews://post/{id},
     // anws.in/{id}, ...). Persisted by StartingActivity and consumed+cleared by
     // HomePage so the exact post opens even on splash routes that don't forward
