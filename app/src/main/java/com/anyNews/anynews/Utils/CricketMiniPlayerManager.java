@@ -20,6 +20,7 @@ import androidx.annotation.NonNull;
 import com.anyNews.anynews.Activities.MatchCenterActivity;
 import com.anyNews.anynews.Pojo.ActiveMatch;
 import com.anyNews.anynews.Pojo.CricketActiveMatchResponse;
+import com.anyNews.anynews.Pojo.CricketMiniPlayerPosition;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
@@ -75,6 +76,8 @@ public class CricketMiniPlayerManager {
     private boolean pollInFlight = false;
     /** Whole LIVE-pill opacity blink while the active match is live. */
     private ObjectAnimator liveBadgeBlink;
+    /** Last applied placement JSON — avoid resetting the card on every poll. */
+    private String lastAppliedPositionJson;
 
     private final Runnable pollRunnable = new Runnable() {
         @Override
@@ -203,11 +206,28 @@ public class CricketMiniPlayerManager {
                 int viewW = miniView.getWidth();
                 int viewH = miniView.getHeight();
                 float margin = dp(12);
-                // Start near bottom, offset up so it floats over the reading area.
-                float x = parentW - viewW - margin;
-                float y = parentH - viewH - dp(140);
+                float x;
+                float y;
+
+                Activity activity = activityRef.get();
+                CricketMiniPlayerPosition custom = CricketMiniPlayerPositionHelper.loadCustom(activity);
+                if (custom != null) {
+                    // Custom: x/y % of the movable range inside a 12dp margin.
+                    float maxX = Math.max(0f, parentW - viewW - 2f * margin);
+                    float maxY = Math.max(0f, parentH - viewH - 2f * margin);
+                    x = margin + maxX * (float) (custom.getXPercent() / 100d);
+                    y = margin + maxY * (float) (custom.getYPercent() / 100d);
+                } else {
+                    // Default: bottom-right, 12dp from right, 140dp up from bottom.
+                    x = parentW - viewW - margin;
+                    y = parentH - viewH - dp(140);
+                }
                 if (x < margin) x = margin;
                 if (y < margin) y = margin;
+                float maxXClamp = Math.max(margin, parentW - viewW - margin);
+                float maxYClamp = Math.max(margin, parentH - viewH - margin);
+                x = clamp(x, margin, maxXClamp);
+                y = clamp(y, margin, maxYClamp);
                 miniView.setX(x);
                 miniView.setY(y);
             }
@@ -409,6 +429,21 @@ public class CricketMiniPlayerManager {
                                        @NonNull Response<CricketActiveMatchResponse> response) {
                     pollInFlight = false;
                     if (response.body() != null) {
+                        if (response.body().getMini_player_position() != null) {
+                            Activity host = activityRef.get();
+                            CricketMiniPlayerPosition pos = response.body().getMini_player_position();
+                            String posJson = String.valueOf(pos.isUseDefault())
+                                    + "|" + pos.getXPercent() + "|" + pos.getYPercent();
+                            CricketMiniPlayerPositionHelper.save(host, pos);
+                            if (attached && miniView != null && host != null
+                                    && !posJson.equals(lastAppliedPositionJson)) {
+                                lastAppliedPositionJson = posJson;
+                                ViewGroup root = host.findViewById(android.R.id.content);
+                                if (root != null) positionInitial(root);
+                            } else if (lastAppliedPositionJson == null) {
+                                lastAppliedPositionJson = posJson;
+                            }
+                        }
                         update(response.body().getActive_match());
                     }
                 }

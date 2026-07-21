@@ -16,11 +16,20 @@ public class CricketActiveMatchResponse implements Serializable {
     @Expose
     private ActiveMatch active_match;
 
+    /** Global mini-player placement; ignored by older APKs. */
+    @SerializedName("mini_player_position")
+    @Expose
+    private CricketMiniPlayerPosition mini_player_position;
+
     public Boolean getSuccess() {
         return success;
     }
 
     public ActiveMatch getActive_match() {
         return active_match;
+    }
+
+    public CricketMiniPlayerPosition getMini_player_position() {
+        return mini_player_position;
     }
 }

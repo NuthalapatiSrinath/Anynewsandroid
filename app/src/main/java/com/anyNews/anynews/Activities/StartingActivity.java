@@ -46,6 +46,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.CricketMiniPlayerPositionHelper;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -989,6 +990,13 @@ public class StartingActivity extends AppCompatActivity {
                                     Constants.WRITER_STRIP_STYLE,
                                     new Gson().toJson(startActivityReqModel.getData().getWriterStripStyle()),
                                     Constants.PREF_NAME
+                            );
+                        }
+
+                        if (startActivityReqModel.getData().getCricketMiniPlayerPosition() != null) {
+                            CricketMiniPlayerPositionHelper.save(
+                                    getApplicationContext(),
+                                    startActivityReqModel.getData().getCricketMiniPlayerPosition()
                             );
                         }
 

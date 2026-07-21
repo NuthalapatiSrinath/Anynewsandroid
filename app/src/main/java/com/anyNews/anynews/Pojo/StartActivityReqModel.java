@@ -200,6 +200,10 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private WriterStripStyleConfig writerStripStyle;
 
+        @SerializedName("cricket_mini_player_position")
+        @Expose
+        private CricketMiniPlayerPosition cricketMiniPlayerPosition;
+
         public LanguageFontConfig getFontConfig() {
             return fontConfig;
         }
@@ -218,6 +222,10 @@ public class StartActivityReqModel implements Serializable {
 
         public WriterStripStyleConfig getWriterStripStyle() {
             return writerStripStyle;
+        }
+
+        public CricketMiniPlayerPosition getCricketMiniPlayerPosition() {
+            return cricketMiniPlayerPosition;
         }
 
         public String getEngagementBadgeColor() {
