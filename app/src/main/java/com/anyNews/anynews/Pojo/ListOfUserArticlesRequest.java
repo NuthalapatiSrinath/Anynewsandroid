@@ -14,6 +14,10 @@ public class ListOfUserArticlesRequest implements Serializable {
     @Expose
     private Long postId;
 
+    @SerializedName("session_id")
+    @Expose
+    private String analyticsSessionId;
+
     @SerializedName("language_id")
     @Expose
     private Integer languageId;
@@ -97,6 +101,14 @@ public class ListOfUserArticlesRequest implements Serializable {
 
     public void setPostId(Long postId) {
         this.postId = postId;
+    }
+
+    public String getAnalyticsSessionId() {
+        return analyticsSessionId;
+    }
+
+    public void setAnalyticsSessionId(String analyticsSessionId) {
+        this.analyticsSessionId = analyticsSessionId;
     }
 
     public String getuSERID() {

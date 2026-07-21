@@ -35,6 +35,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.ImageLoaderInit;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
+import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.facebook.ads.AdSettings;
 import com.facebook.ads.AudienceNetworkAds;
 import com.google.android.gms.ads.MobileAds;
@@ -121,6 +122,7 @@ public class AppController extends MultiDexApplication {
             }
             @Override
             public void onActivityStarted(@NonNull Activity activity) {
+                SessionAnalyticsTracker.get().onActivityStarted(activity);
             }
 
             @Override
@@ -133,6 +135,7 @@ public class AppController extends MultiDexApplication {
 
             @Override
             public void onActivityStopped(@NonNull Activity activity) {
+                SessionAnalyticsTracker.get().onActivityStopped(activity);
             }
 
             @Override
@@ -146,6 +149,15 @@ public class AppController extends MultiDexApplication {
 
 
 
+    }
+
+    @Override
+    public void onTerminate() {
+        try {
+            SessionAnalyticsTracker.get().onAppTerminate(this);
+        } catch (Exception ignored) {
+        }
+        super.onTerminate();
     }
 
     class adsLoadingInit implements OnInitializationCompleteListener {

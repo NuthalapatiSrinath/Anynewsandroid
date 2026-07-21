@@ -389,6 +389,9 @@ public interface APIService {
     @POST("app/{version}/views")
     Call<JsonObject> get_views(@Path("version") String version, @Body JsonObject pincode);
 
+    @POST("app/{version}/session")
+    Call<JsonObject> post_session(@Path("version") String version, @Body JsonObject session);
+
     @POST("app/{version}/regions")   // get_districts
     Call<EncreptionRequest>get_regions_requiest(@Path("version") String version, @Body JsonObject langgg);
 

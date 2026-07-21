@@ -147,6 +147,8 @@ import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.MovementMethodTV;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.PostDwellTracker;
+import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.flipview.FlipView;
 import com.anyNews.anynews.flipview.OverFlipMode;
 import com.anyNews.anynews.fragments.CommentsBottomSheetDialog;
@@ -4365,6 +4367,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             updated_post_id_firebase = list.get(positionx).getPostId().intValue();
             // REST fallback so views are counted even when the GCM upstream path fails
             setViewsApi();
+            PostDwellTracker.get().onPostShown(this, updated_post_id_firebase, post_type);
         } catch (NullPointerException e) {
             e.printStackTrace();
         }
@@ -4469,6 +4472,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void onDestroy() {
+        try {
+            PostDwellTracker.get().flush(this);
+        } catch (Exception ignored) {
+        }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onDestroy();
         adapter = null;
         stopMagazineShareBlink();
@@ -4504,6 +4511,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void onResume() {
         super.onResume();
+        try {
+            PostDwellTracker.get().onResumed(this);
+        } catch (Exception ignored) {
+        }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onResume();
         updateSpecialTabBlinkIndicator();
         try {
@@ -4678,6 +4689,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void onPause() {
+        try {
+            PostDwellTracker.get().onPaused(this);
+        } catch (Exception ignored) {
+        }
         //new flip
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onPause();
         pauseVideo();
@@ -5107,6 +5122,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         ListOfUserArticlesRequest requestModel = new ListOfUserArticlesRequest();
         requestModel.setPostId((long) updated_post_id_firebase);
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));   //
+        String analyticsSession = SessionAnalyticsTracker.get().getActiveSessionId();
+        if (analyticsSession != null) {
+            requestModel.setAnalyticsSessionId(analyticsSession);
+        }
 
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
