@@ -670,7 +670,7 @@
                                                     android:enabled="false"
                                                     android:gravity="left|bottom"
                                                     android:paddingLeft="5dp"
-                                                    android:text="Next Payment "
+                                                    android:text="Earnings"
                                                     android:textColor="@color/black"
                                                     android:textSize="@dimen/_13sdp" />
 

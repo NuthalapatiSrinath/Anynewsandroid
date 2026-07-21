@@ -15,11 +15,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 
-import com.anyNews.anynews.Adapters.DistricsAdopter;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.LanguageModelResponse;
-import com.anyNews.anynews.Pojo.LanguageSelectionRequest;
 import com.anyNews.anynews.Pojo.RedeemPageRequest;
 import com.anyNews.anynews.Pojo.RedeemWalletRespouse;
 import com.anyNews.anynews.R;
@@ -28,7 +26,6 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.SharedPrefsData;
-import com.anyNews.anynews.models.DistricsModel;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -41,6 +38,10 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 import static java.util.Objects.isNull;
 
+/**
+ * Reporter Earnings / Request Payout screen.
+ * Collects UPI ID + amount; admin processes payout from the dashboard.
+ */
 public class RedeemPageActivity extends AppCompatActivity {
 
     TextView total_amount;
@@ -92,75 +93,76 @@ public class RedeemPageActivity extends AppCompatActivity {
         }
 
         total_amount.setText("" + REDEEM_VALUE);
-        enter_paytm_number.setText("" + SharedPrefsData.getString(getApplicationContext(), Constants.Selected_Phone_Number, Constants.PREF_NAME));
+        // Do not prefill mobile as UPI — reporter must enter their UPI ID
+        enter_paytm_number.setText("");
+        enter_paytm_number.setHint(getString(R.string.edittext_enter_upi_id));
+        enter_paytm_number.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        enter_paytm_number.setMaxLines(1);
+        enter_paytm_number.setFilters(new android.text.InputFilter[]{});
 
         redeem_send_button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
 
-                if (enter_paytm_number.getText().toString().length() >= 10) {
+                String upiId = enter_paytm_number.getText().toString().trim();
+                if (!isValidUpi(upiId)) {
+                    Toast.makeText(RedeemPageActivity.this, "Enter a valid UPI ID (e.g. name@upi)", Toast.LENGTH_SHORT).show();
+                    enter_paytm_number.requestFocus();
+                    return;
+                }
 
-                    panCardNo = enter_pan_card_number.getText().toString();
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        if (isNull(panCardNo) || !panCardNo.matches(pan_pattern) || panCardNo.length() < 10) {
-                            enter_pan_card_number.setError("Please enter valid Pancard No");
-                        //    Toast.makeText(RedeemPageActivity.this, ""languageModelResponse.getData().getple(), Toast.LENGTH_SHORT).show();
-                            enter_pan_card_number.requestFocus();
-                            return;
+                panCardNo = enter_pan_card_number.getText().toString();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    if (isNull(panCardNo) || !panCardNo.matches(pan_pattern) || panCardNo.length() < 10) {
+                        enter_pan_card_number.setError("Please enter valid Pancard No");
+                        enter_pan_card_number.requestFocus();
+                        return;
+                    } else {
+
+                        if (enter_amount.getText().toString().equals("") ||
+                                enter_amount.getText().toString().equals(null) ||
+                                enter_amount.getText().toString().equals("null")) {
+
+                            enter_amount1 = 0;
+
                         } else {
-
-                            if (enter_amount.getText().toString().equals("") ||
-                                    enter_amount.getText().toString().equals(null) ||
-                                    enter_amount.getText().toString().equals("null")) {
-
-                                enter_amount1 = 0;
-
-                            } else {
-                                enter_amount1 = Long.parseLong(enter_amount.getText().toString());
-                            }
+                            enter_amount1 = Long.parseLong(enter_amount.getText().toString());
+                        }
 
 
-                            long enter_amount_value = enter_amount1;
-                            long REDEEM_UP_TO_VALUE_DATA = Long.parseLong(REDEEM_UP_TO_VALUE);
+                        long enter_amount_value = enter_amount1;
+                        long REDEEM_UP_TO_VALUE_DATA = Long.parseLong(REDEEM_UP_TO_VALUE);
 
-                            long total_amount_value = Long.parseLong(REDEEM_VALUE);
-
-
-                            if (enter_amount_value >= REDEEM_UP_TO_VALUE_DATA) {
+                        long total_amount_value = Long.parseLong(REDEEM_VALUE);
 
 
-                                if (total_amount_value >= enter_amount_value) {
-                                    redeem_send_progress.setVisibility(View.VISIBLE);
-                                    redeem_send_button.setVisibility(View.GONE);
+                        if (enter_amount_value >= REDEEM_UP_TO_VALUE_DATA) {
 
-                                    if(enter_pan_card_number.getText().toString().equals("AAAAA0000A")){
-                                        enter_pan_card_number.setText("");
-                                        getRedeemActivity();
-                                    }else {
-                                        getRedeemActivity();
-                                    }
 
+                            if (total_amount_value >= enter_amount_value) {
+                                redeem_send_progress.setVisibility(View.VISIBLE);
+                                redeem_send_button.setVisibility(View.GONE);
+
+                                if (enter_pan_card_number.getText().toString().equals("AAAAA0000A")) {
+                                    enter_pan_card_number.setText("");
+                                    getRedeemActivity();
                                 } else {
-
-                                    Toast.makeText(RedeemPageActivity.this, "Please Check the amount before you will withdrawal ", Toast.LENGTH_SHORT).show();
-
+                                    getRedeemActivity();
                                 }
 
-
                             } else {
-                                 //  Toast.makeText(RedeemPageActivity.this, ""+languageModelResponse.getData().getple(), Toast.LENGTH_SHORT).show();
 
-                                Toast.makeText(RedeemPageActivity.this, "Minimum withdrawal amount is " + REDEEM_UP_TO_VALUE_DATA, Toast.LENGTH_SHORT).show();
+                                Toast.makeText(RedeemPageActivity.this, "Please check the amount before requesting payout", Toast.LENGTH_SHORT).show();
+
                             }
 
+
+                        } else {
+                            Toast.makeText(RedeemPageActivity.this, "Minimum payout amount is " + REDEEM_UP_TO_VALUE_DATA, Toast.LENGTH_SHORT).show();
                         }
+
                     }
-
-
-                } else {
-                    Toast.makeText(RedeemPageActivity.this, " Enter Paytm Number ", Toast.LENGTH_SHORT).show();
-                    // Toast.makeText(RedeemPageActivity.this, ""+languageModelResponse.getData().getpa(), Toast.LENGTH_SHORT).show();
-
                 }
 
             }
@@ -178,6 +180,17 @@ public class RedeemPageActivity extends AppCompatActivity {
 
     }
 
+    private boolean isValidUpi(String upi) {
+        if (upi == null) return false;
+        String t = upi.trim();
+        if (t.length() < 5) return false;
+        // UPI format name@handle, or legacy 10-digit mobile
+        if (t.contains("@") && t.indexOf("@") > 0 && t.indexOf("@") < t.length() - 1) {
+            return true;
+        }
+        return t.matches("^[6-9]\\d{9}$");
+    }
+
 
     private JsonObject set_districs() {
 
@@ -186,15 +199,12 @@ public class RedeemPageActivity extends AppCompatActivity {
 
         requestModel.setUserId(SharedPrefsData.getLong(RedeemPageActivity.this, Constants.USER_ID, Constants.PREF_NAME));
         requestModel.setDraftId(SharedPrefsData.getInt(RedeemPageActivity.this, Constants.DraftID, Constants.PREF_NAME));
-        requestModel.setPaymentType("wallet");
-        requestModel.setTransferTo("" + enter_paytm_number.getText().toString());
+        requestModel.setPaymentType("upi");
+        requestModel.setTransferTo("" + enter_paytm_number.getText().toString().trim());
         requestModel.setPanNumber("" + enter_pan_card_number.getText().toString());
         requestModel.setWithdrawAmount(enter_amount_for_user);
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
-        /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            encrpt_data = encrypt(jsonString);
-        }*/
         encrpt_data = encrypt(jsonString);
         showLog("API REQUEST E" + jsonString.toString());
         EncritonRequestData Encriton_Request = new EncritonRequestData();
@@ -211,7 +221,6 @@ public class RedeemPageActivity extends AppCompatActivity {
         Call<EncreptionRequest> apiResponse = apiService.redeem_wallet("v3", otp);
 
         apiResponse.enqueue(new Callback<EncreptionRequest>() {
-            //@RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
@@ -236,7 +245,9 @@ public class RedeemPageActivity extends AppCompatActivity {
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
+                redeem_send_progress.setVisibility(View.GONE);
+                redeem_send_button.setVisibility(View.VISIBLE);
+                Toast.makeText(RedeemPageActivity.this, "Could not submit payout request", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -247,12 +258,17 @@ public class RedeemPageActivity extends AppCompatActivity {
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
         avilable_amount.setText(languageModelResponse.getData().getAvailableBalance());
-        username.setText("" + languageModelResponse.getData().getPayment());
+        username.setText("Earnings");
         title_pan_card.setText("" + languageModelResponse.getData().getPanCard());
         enter_pan_card_number.setHint("" + languageModelResponse.getData().getEnterPan());
         enter_amount.setHint("" + languageModelResponse.getData().getEnterAmount());
-        payment_charges_detailes.setText("" + languageModelResponse.getData().getPaymentNote());
-        redeem_text.setText("" + languageModelResponse.getData().getRedeem());
+        String note = languageModelResponse.getData().getPaymentNote();
+        if (note != null && note.toLowerCase().contains("paytm")) {
+            payment_charges_detailes.setText("Enter your UPI ID. Payouts are processed by AnyNews within 2–3 business days.");
+        } else {
+            payment_charges_detailes.setText("" + note);
+        }
+        redeem_text.setText("Request Payout");
 
     }
 }

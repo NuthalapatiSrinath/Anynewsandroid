@@ -270,8 +270,8 @@ public class MainActivity extends AppCompatActivity
 
         un_selected_article_transaction.setText("" + languageModelResponse.getData().getArticleTransactions());
         selected_article_transaction.setText("" + languageModelResponse.getData().getArticleTransactions());
-        un_selected_redeem_transaction.setText("" + languageModelResponse.getData().getRedeemTransactions());
-        selected_redeem_transaction.setText("" + languageModelResponse.getData().getRedeemTransactions());
+        un_selected_redeem_transaction.setText("Payment History");
+        selected_redeem_transaction.setText("Payment History");
         total_earning.setText("" + languageModelResponse.getData().getTotalEarning());
 
     }

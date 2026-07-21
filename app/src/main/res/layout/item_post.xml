@@ -648,7 +648,7 @@
                                                     android:textStyle="normal"
                                                     android:gravity="left"
                                                     android:textSize="@dimen/_9sdp"
-                                                    android:text="To PAYTM id 6305307807 "
+                                                    android:text="UPI / Transfer"
                                                     android:textColor="@color/payment_history_border_discreption"
                                                     android:layout_height="match_parent">
 

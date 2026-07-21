@@ -3,7 +3,8 @@
 
 
     <string name="edittext_title_hint"><font size="12">Write your news title here !</font></string>
-    <string name="edittext_enter_phone_number_redeem"><font size="14">Enter Paytm Number</font></string>
+    <string name="edittext_enter_phone_number_redeem"><font size="14">Enter UPI ID</font></string>
+    <string name="edittext_enter_upi_id">Enter UPI ID (e.g. name@upi)</string>
     <string name="edittext_enter_pan_card"><font size="14">Enter Pan Card Number</font></string>
 
 

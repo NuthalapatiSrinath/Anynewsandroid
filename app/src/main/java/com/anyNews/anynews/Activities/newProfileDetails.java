@@ -1131,7 +1131,7 @@ public class newProfileDetails extends AppCompatActivity {
         user_follow_more_data.setText("" + languageModelResponse.getData().getFollowMore());
         only_language_name.setText("" + languageModelResponse.getData().getLanguage());
         total_amount.setText("" + languageModelResponse.getData().getTotalAmount());
-        profile_next_payment.setText("" + languageModelResponse.getData().getNextPayment());
+        profile_next_payment.setText("Earnings");
         logintext.setText("" + languageModelResponse.getData().getLogin());
         account_delete_name.setText("" + languageModelResponse.getData().getDelete_account());
         if(languageModelResponse.getData().getDelete_account()!=null && !languageModelResponse.getData().getDelete_account().equalsIgnoreCase("null")){
