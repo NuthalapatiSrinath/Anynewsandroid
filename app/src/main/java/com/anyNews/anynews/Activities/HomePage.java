@@ -4365,8 +4365,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             updated_post_id_firebase = list.get(positionx).getPostId().intValue();
-            // REST fallback so views are counted even when the GCM upstream path fails
-            setViewsApi();
+            // Views are written once via BundleDataToGcmPush → onFlip → consume.* → post-views.
+            // Do NOT also call setViewsApi() here — that double-counted every open as 2 impressions
+            // (rest-* + onFlip) in admin Users/Impressions modals.
             PostDwellTracker.get().onPostShown(this, updated_post_id_firebase, post_type);
         } catch (NullPointerException e) {
             e.printStackTrace();
