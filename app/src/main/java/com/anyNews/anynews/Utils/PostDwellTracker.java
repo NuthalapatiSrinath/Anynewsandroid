@@ -12,17 +12,28 @@ import com.google.gson.JsonObject;
 
 import org.json.JSONObject;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
  * Per-post dwell timer. Start when an article is shown; flush seconds when
- * leaving (flip away / pause). Sends duration via POST /app/v3/views.
+ * leaving (flip away / pause / background). Sends duration via POST /app/v3/views.
+ *
+ * Background flushes use a blocking call on a worker thread so the request is
+ * not dropped when the process is paused after fire-and-forget enqueue.
  */
 public final class PostDwellTracker {
 
     private static final PostDwellTracker INSTANCE = new PostDwellTracker();
+    private static final ExecutorService NET_EXEC = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "post-dwell-net");
+        t.setPriority(Thread.NORM_PRIORITY);
+        return t;
+    });
 
     private long postId = 0L;
     private long startedAtMs = 0L;
@@ -41,7 +52,7 @@ public final class PostDwellTracker {
             String t = type.toLowerCase();
             if (t.equals("ad") || t.equals("share_app") || t.equals("ratings")
                     || t.equals("web_ads") || t.equals("web")) {
-                flush(context);
+                flush(context, false);
                 postId = 0L;
                 startedAtMs = 0L;
                 postType = null;
@@ -49,7 +60,7 @@ public final class PostDwellTracker {
             }
         }
         if (postId > 0 && postId != newPostId) {
-            flush(context);
+            flush(context, false);
         }
         if (postId != newPostId || startedAtMs <= 0) {
             postId = newPostId;
@@ -59,7 +70,7 @@ public final class PostDwellTracker {
     }
 
     public synchronized void onPaused(Context context) {
-        flush(context);
+        flush(context, true);
         // Keep postId so resume can restart the same article timer
         startedAtMs = 0L;
     }
@@ -71,6 +82,10 @@ public final class PostDwellTracker {
     }
 
     public synchronized void flush(Context context) {
+        flush(context, true);
+    }
+
+    public synchronized void flush(Context context, boolean critical) {
         if (postId <= 0 || startedAtMs <= 0) return;
         long elapsedSec = Math.max(0L, (System.currentTimeMillis() - startedAtMs) / 1000L);
         long pid = postId;
@@ -78,10 +93,11 @@ public final class PostDwellTracker {
         startedAtMs = 0L;
         // Minimum 1s if they actually saw it briefly (avoids noise of 0)
         if (elapsedSec < 1) elapsedSec = 1;
-        sendDwell(context.getApplicationContext(), pid, elapsedSec, type);
+        sendDwell(context.getApplicationContext(), pid, elapsedSec, type, critical);
     }
 
-    private void sendDwell(Context context, long pid, long durationSeconds, @Nullable String type) {
+    private void sendDwell(
+            Context context, long pid, long durationSeconds, @Nullable String type, boolean critical) {
         try {
             int draftId = SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME);
             if (draftId <= 0) return;
@@ -100,13 +116,25 @@ public final class PostDwellTracker {
             JsonObject payload = new Gson().toJsonTree(enc).getAsJsonObject();
 
             APIService api = RestApiClient.getClient().create(APIService.class);
-            api.get_views("v3", payload).enqueue(new Callback<JsonObject>() {
-                @Override
-                public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {}
+            Call<JsonObject> call = api.get_views("v3", payload);
 
-                @Override
-                public void onFailure(Call<JsonObject> call, Throwable t) {}
-            });
+            if (critical) {
+                NET_EXEC.execute(() -> {
+                    try {
+                        call.execute();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
+            } else {
+                call.enqueue(new Callback<JsonObject>() {
+                    @Override
+                    public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {}
+
+                    @Override
+                    public void onFailure(Call<JsonObject> call, Throwable t) {}
+                });
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

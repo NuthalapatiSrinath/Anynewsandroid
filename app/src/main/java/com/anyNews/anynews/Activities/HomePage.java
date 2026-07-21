@@ -4476,9 +4476,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             updated_post_id_firebase = list.get(positionx).getPostId().intValue();
-            // Views are written once via BundleDataToGcmPush → onFlip → consume.* → post-views.
-            // Do NOT also call setViewsApi() here — that double-counted every open as 2 impressions
-            // (rest-* + onFlip) in admin Users/Impressions modals.
+            // Reliable view write via REST /app/v3/views (eventId rest-*). GCM onFlip →
+            // consume.* is best-effort and often never lands; server skips onFlip rows
+            // that already have a near-window rest-* so impressions stay at 1.
+            if (!post_type.equalsIgnoreCase("ad")
+                    && !post_type.equalsIgnoreCase("share_app")
+                    && !post_type.equalsIgnoreCase("ratings")
+                    && !post_type.equalsIgnoreCase("web_ads")
+                    && !post_type.equalsIgnoreCase("web")) {
+                setViewsApi();
+            }
             PostDwellTracker.get().onPostShown(this, updated_post_id_firebase, post_type);
         } catch (NullPointerException e) {
             e.printStackTrace();
