@@ -14,10 +14,7 @@ import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.provider.Settings;
-import android.util.Log;
-import android.widget.Toast;
 
-import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.anyNews.anynews.BuildConfig;
@@ -39,6 +36,9 @@ public class GpsTracker extends Service implements LocationListener {
     double latitude; // latitude
     double longitude; // longitude
 
+    /** At most one GPS-settings dialog per process (avoids create-post spam). */
+    private static boolean sSettingsAlertShownThisSession = false;
+
     // The minimum distance to change Updates in meters
     private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 10; // 10 meters
 
@@ -53,9 +53,26 @@ public class GpsTracker extends Service implements LocationListener {
         getLocation();
     }
 
-    private boolean hasLocationPermission() {
+    public boolean hasLocationPermission() {
         return ContextCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 || ContextCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** True when GPS or network location provider is enabled on the device. */
+    public boolean isLocationProviderEnabled() {
+        try {
+            if (locationManager == null) {
+                locationManager = (LocationManager) mContext.getSystemService(LOCATION_SERVICE);
+            }
+            if (locationManager == null) {
+                return false;
+            }
+            isGPSEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+            isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+            return isGPSEnabled || isNetworkEnabled;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public Location getLocation() {
@@ -65,8 +82,7 @@ public class GpsTracker extends Service implements LocationListener {
                 return location;
             }
 
-            // Location is optional in core reporter flow and permissions are not declared
-            // in the manifest — skip quietly rather than ClassCast / security crashes.
+            // Location is optional for posting — skip quietly without permission.
             if (!hasLocationPermission()) {
                 this.canGetLocation = false;
                 return location;
@@ -183,19 +199,22 @@ public class GpsTracker extends Service implements LocationListener {
      * */
 
     public void showSettingsAlert(){
-        if (!(mContext instanceof Activity)) {
-            Toast.makeText(mContext, "Location unavailable", Toast.LENGTH_SHORT).show();
+        if (sSettingsAlertShownThisSession) {
             return;
         }
+        if (!(mContext instanceof Activity)) {
+            return;
+        }
+        Activity activity = (Activity) mContext;
+        if (activity.isFinishing()) {
+            return;
+        }
+        sSettingsAlertShownThisSession = true;
         AlertDialog.Builder alertDialog = new AlertDialog.Builder(mContext);
 
-        // Setting Dialog Title
-        alertDialog.setTitle("GPS is settings");
-
-        // Setting Dialog Message
+        alertDialog.setTitle("GPS settings");
         alertDialog.setMessage("GPS is not enabled. Do you want to go to settings menu?");
 
-        // On pressing Settings button
         alertDialog.setPositiveButton("Settings", new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog,int which) {
                 Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
@@ -205,7 +224,6 @@ public class GpsTracker extends Service implements LocationListener {
             }
         });
 
-        // on pressing cancel button
         alertDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
                 dialog.cancel();

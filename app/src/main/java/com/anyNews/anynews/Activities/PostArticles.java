@@ -162,11 +162,28 @@ public class PostArticles extends AppCompatActivity {
 
     private ActivityResultLauncher<CropImageContractOptions> cropImage;
     private ActivityResultLauncher<PickVisualMediaRequest> pickVisualMedia;
+    private ActivityResultLauncher<String[]> locationPermissionLauncher;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_post_artical_image);
+
+        locationPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestMultiplePermissions(),
+                new ActivityResultCallback<Map<String, Boolean>>() {
+                    @Override
+                    public void onActivityResult(Map<String, Boolean> result) {
+                        boolean granted = Boolean.TRUE.equals(result.get(Manifest.permission.ACCESS_FINE_LOCATION))
+                                || Boolean.TRUE.equals(result.get(Manifest.permission.ACCESS_COARSE_LOCATION));
+                        if (granted) {
+                            applyLocationFromTracker(true);
+                        } else {
+                            latitude = 0.0;
+                            longitude = 0.0;
+                        }
+                    }
+                });
         edt_news_headlines = findViewById(R.id.edt_news_headlines);
 
         edt_news_description = findViewById(R.id.edt_news_description);
@@ -299,14 +316,6 @@ public class PostArticles extends AppCompatActivity {
                 requestStoragePermission();
             }
         });
-        try {
-            if (ContextCompat.checkSelfPermission(getApplicationContext(), android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 101);
-
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
         btn_upload.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -728,17 +737,40 @@ public class PostArticles extends AppCompatActivity {
         Log.e(TAG, "clearDraftImageState");
     }
 
+    private boolean hasLocationPermission() {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
     private void getLocation() {
+        if (hasLocationPermission()) {
+            applyLocationFromTracker(true);
+        } else if (locationPermissionLauncher != null) {
+            locationPermissionLauncher.launch(new String[]{
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+            });
+        } else {
+            latitude = 0.0;
+            longitude = 0.0;
+        }
+    }
 
-
+    /** Reads lat/long when possible. Settings dialog only if permission granted but providers off. */
+    private void applyLocationFromTracker(boolean allowGpsSettingsDialog) {
         gpsTracker = new GpsTracker(PostArticles.this);
         if (gpsTracker.canGetLocation()) {
             latitude = gpsTracker.getLatitude();
             longitude = gpsTracker.getLongitude();
-        } else {
+            return;
+        }
+        latitude = 0.0;
+        longitude = 0.0;
+        if (allowGpsSettingsDialog
+                && gpsTracker.hasLocationPermission()
+                && !gpsTracker.isLocationProviderEnabled()) {
             gpsTracker.showSettingsAlert();
         }
-
     }
 
     @Override
