@@ -1,5 +1,6 @@
 package com.anyNews.anynews.Utils;
 
+import android.app.Activity;
 import android.app.Application;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -19,21 +20,27 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Services.APIService;
+import com.anyNews.anynews.Services.CommonUtilities;
 import com.anyNews.anynews.Services.RestApiClient;
+import com.anyNews.anynews.Services.SessionFlushService;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import org.json.JSONObject;
 
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import okhttp3.OkHttpClient;
 import retrofit2.Call;
 import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
 
 /**
  * Tracks app foreground sessions and posts open/close to /app/v3/session.
@@ -41,14 +48,15 @@ import retrofit2.Response;
  * Time counts only while the process is in the foreground AND the screen is on
  * (interactive). Sources:
  * - ProcessLifecycleOwner ON_START / ON_STOP
- * - ActivityLifecycleCallbacks (backup for start/stop count)
+ * - ActivityLifecycleCallbacks (start/stop/destroy + userLeaveHint)
  * - ACTION_SCREEN_OFF → close immediately
  * - ACTION_SCREEN_ON / USER_PRESENT → reopen only if still foreground + interactive
+ * - SessionFlushService.onTaskRemoved → Recents swipe last-chance flush
  *
  * Close persists to SharedPrefs and flushes on a worker thread (never blocks the
- * main thread — Lifecycle/SCREEN_OFF would ANR). Heartbeats keep last_heartbeat_at
- * fresh so admin live elapsed stays trustworthy. Pending prefs + server stale
- * auto-close cover process death before the close POST completes.
+ * main thread — Lifecycle/SCREEN_OFF would ANR). Critical close paths use a short
+ * OkHttp timeout + SessionFlushService so swipe-kill can still POST. Heartbeats
+ * stop on background. Pending prefs + server stale auto-close cover residual loss.
  */
 public final class SessionAnalyticsTracker {
 
@@ -58,16 +66,18 @@ public final class SessionAnalyticsTracker {
     private static final long ACTIVITY_CLOSE_DELAY_MS = 300L;
     private static final long HEARTBEAT_INTERVAL_MS = 45_000L;
     private static final long CLOSE_FLUSH_WAIT_MS = 2_500L;
+    private static final long CLOSE_HTTP_TIMEOUT_SEC = 3L;
 
     private static final SessionAnalyticsTracker INSTANCE = new SessionAnalyticsTracker();
     private static final ExecutorService NET_EXEC = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "session-analytics-net");
-        t.setPriority(Thread.NORM_PRIORITY);
+        t.setPriority(Thread.NORM_PRIORITY + 1);
         return t;
     });
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final AtomicBoolean initialized = new AtomicBoolean(false);
+    private final AtomicBoolean watchServiceStarted = new AtomicBoolean(false);
 
     private int startedCount = 0;
     private boolean processForeground = false;
@@ -81,6 +91,7 @@ public final class SessionAnalyticsTracker {
     @Nullable private Runnable heartbeatRunnable;
     @Nullable private BroadcastReceiver screenReceiver;
     @Nullable private Context appContext;
+    @Nullable private volatile Retrofit fastCloseRetrofit;
 
     private SessionAnalyticsTracker() {}
 
@@ -216,6 +227,86 @@ public final class SessionAnalyticsTracker {
         }
     }
 
+    /**
+     * Last activity finishing (not config change) — force close without the 300ms grace.
+     * Covers Recents swipe when ProcessLifecycle ON_STOP races process death.
+     */
+    public synchronized void onActivityFinishingDestroyed(Activity activity) {
+        if (activity == null) return;
+        if (activity.isChangingConfigurations()) return;
+        if (!activity.isFinishing()) return;
+        cancelActivityClose();
+        if (startedCount <= 0 && sessionOpen) {
+            processForeground = false;
+            stopHeartbeat();
+            evaluateTracking(activity.getApplicationContext(), true);
+        }
+    }
+
+    /**
+     * Activity.onUserLeaveHint — user leaving to Recents / another app.
+     * Stop heartbeats immediately (so admin cannot climb) and snapshot a pending close
+     * for kill recovery. Do NOT POST close yet — user may return from Recents.
+     * Real close: ProcessLifecycle ON_STOP / onTaskRemoved / finishing destroy.
+     */
+    public synchronized void onUserLeaveHint(Context context) {
+        if (!sessionOpen || sessionId == null) return;
+        if (startedCount > 1) return;
+        stopHeartbeat();
+        // Snapshot only — flush happens on actual background / task removed.
+        long closeAt = System.currentTimeMillis();
+        long duration = Math.max(0L, closeAt - openAtMs);
+        persistPendingClose(context.getApplicationContext(), sessionId, openAtMs, closeAt, duration);
+    }
+
+    /** Recents swipe — Service.onTaskRemoved. Close + blocking flush on worker. */
+    public void onTaskRemoved(Context context) {
+        final Context appCtx = context.getApplicationContext();
+        synchronized (this) {
+            cancelActivityClose();
+            processForeground = false;
+            stopHeartbeat();
+            if (sessionOpen) {
+                try {
+                    PostDwellTracker.get().onScreenOff(appCtx);
+                } catch (Exception ignored) {
+                }
+                closeSession(appCtx, false);
+            }
+        }
+        // Block briefly on a non-main thread so the POST can land before kill.
+        CountDownLatch done = new CountDownLatch(1);
+        NET_EXEC.execute(() -> {
+            try {
+                flushPendingCloseBlocking(appCtx);
+            } finally {
+                done.countDown();
+            }
+        });
+        try {
+            done.await(CLOSE_FLUSH_WAIT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+        stopWatchService(appCtx);
+    }
+
+    /** Called from SessionFlushService ACTION_FLUSH. */
+    public void flushPendingCloseFromService(Context context, @Nullable Runnable onDone) {
+        NET_EXEC.execute(() -> {
+            try {
+                flushPendingCloseBlocking(context.getApplicationContext());
+            } finally {
+                if (onDone != null) {
+                    try {
+                        onDone.run();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        });
+    }
+
     /** Activity resumed — reopen only if not waiting for unlock after SCREEN_OFF. */
     public synchronized void onActivityResumed(Context context) {
         if (awaitingUnlock) return;
@@ -248,6 +339,7 @@ public final class SessionAnalyticsTracker {
         if (sessionOpen) {
             closeSession(context.getApplicationContext(), true);
         }
+        stopWatchService(context.getApplicationContext());
     }
 
     private void evaluateTracking(Context context, boolean awaitCloseFlush) {
@@ -304,6 +396,7 @@ public final class SessionAnalyticsTracker {
         openAtMs = System.currentTimeMillis();
         sessionOpen = true;
         SharedPrefsData.putString(context, PREF_APP_SESSION_ID, sessionId, Constants.PREF_NAME);
+        startWatchService(context);
 
         final String sid = sessionId;
         final long opened = openAtMs;
@@ -311,7 +404,7 @@ public final class SessionAnalyticsTracker {
             flushPendingCloseBlocking(context);
             JSONObject body = buildSessionBody(context, "open", sid, opened, 0L, 0L);
             if (body != null) {
-                executeSessionCall(context, body, false);
+                executeSessionCall(context, body, false, false);
             }
         });
     }
@@ -328,9 +421,15 @@ public final class SessionAnalyticsTracker {
         SharedPrefsData.putString(context, PREF_APP_SESSION_ID, "", Constants.PREF_NAME);
         persistPendingClose(context, sid, opened, closeAt, duration);
         final JSONObject body = buildSessionBody(context, "close", sid, opened, closeAt, duration);
-        if (body == null) return;
+        stopWatchService(context);
+        if (body == null) {
+            SessionFlushService.enqueueFlush(context);
+            return;
+        }
 
-        Future<?> future = NET_EXEC.submit(() -> executeSessionCall(context, body, true));
+        Future<?> future = NET_EXEC.submit(() -> executeSessionCall(context, body, true, true));
+        // Also kick the service flush path — survives a bit longer after Recents swipe.
+        SessionFlushService.enqueueFlush(context);
         if (awaitFlush) {
             // Never block the main thread: ProcessLifecycle / SCREEN_OFF / onTerminate
             // all run there; future.get(2.5s) is an ANR risk. Pending prefs + next
@@ -344,6 +443,19 @@ public final class SessionAnalyticsTracker {
                 // Pending close remains in prefs for retry on next open.
             }
         }
+    }
+
+    private void startWatchService(Context context) {
+        if (watchServiceStarted.compareAndSet(false, true)) {
+            SessionFlushService.startWatch(context);
+        } else {
+            SessionFlushService.startWatch(context);
+        }
+    }
+
+    private void stopWatchService(Context context) {
+        watchServiceStarted.set(false);
+        SessionFlushService.stopWatch(context);
     }
 
     private void startHeartbeat(Context context) {
@@ -362,7 +474,7 @@ public final class SessionAnalyticsTracker {
                     NET_EXEC.execute(() -> {
                         JSONObject body = buildSessionBody(appCtx, "heartbeat", sid, opened, 0L, 0L);
                         if (body != null) {
-                            executeSessionCall(appCtx, body, false);
+                            executeSessionCall(appCtx, body, false, false);
                         }
                     });
                     mainHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS);
@@ -404,7 +516,7 @@ public final class SessionAnalyticsTracker {
                 clearPendingClose(context);
                 return;
             }
-            executeSessionCall(context, body, true);
+            executeSessionCall(context, body, true, true);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -438,15 +550,38 @@ public final class SessionAnalyticsTracker {
         }
     }
 
+    private APIService sessionApi(boolean fastClose) {
+        if (!fastClose) {
+            return RestApiClient.getClient().create(APIService.class);
+        }
+        Retrofit retrofit = fastCloseRetrofit;
+        if (retrofit == null) {
+            OkHttpClient client = new OkHttpClient.Builder()
+                    .connectTimeout(CLOSE_HTTP_TIMEOUT_SEC, TimeUnit.SECONDS)
+                    .readTimeout(CLOSE_HTTP_TIMEOUT_SEC, TimeUnit.SECONDS)
+                    .writeTimeout(CLOSE_HTTP_TIMEOUT_SEC, TimeUnit.SECONDS)
+                    .callTimeout(CLOSE_HTTP_TIMEOUT_SEC + 1, TimeUnit.SECONDS)
+                    .build();
+            retrofit = new Retrofit.Builder()
+                    .baseUrl(CommonUtilities.URL)
+                    .client(client)
+                    .addConverterFactory(GsonConverterFactory.create(new Gson()))
+                    .build();
+            fastCloseRetrofit = retrofit;
+        }
+        return retrofit.create(APIService.class);
+    }
+
     /** Must run on NET_EXEC for critical paths. */
-    private void executeSessionCall(Context context, JSONObject body, boolean clearPendingOnSuccess) {
+    private void executeSessionCall(
+            Context context, JSONObject body, boolean clearPendingOnSuccess, boolean fastClose) {
         try {
             String encrypted = MyUtils.encrypt(body.toString());
             EncritonRequestData enc = new EncritonRequestData();
             enc.setData(encrypted);
             JsonObject payload = new Gson().toJsonTree(enc).getAsJsonObject();
 
-            APIService api = RestApiClient.getClient().create(APIService.class);
+            APIService api = sessionApi(fastClose);
             Call<JsonObject> call = api.post_session("v3", payload);
             Response<JsonObject> response = call.execute();
             if (response.isSuccessful() && clearPendingOnSuccess) {

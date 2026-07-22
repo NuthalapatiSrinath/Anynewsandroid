@@ -148,6 +148,7 @@ public class AppController extends MultiDexApplication {
 
             @Override
             public void onActivityDestroyed(@NonNull Activity activity) {
+                SessionAnalyticsTracker.get().onActivityFinishingDestroyed(activity);
             }
         });
 

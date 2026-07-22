@@ -379,6 +379,12 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name=".Services.SessionFlushService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false" />
+
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_launcher" />

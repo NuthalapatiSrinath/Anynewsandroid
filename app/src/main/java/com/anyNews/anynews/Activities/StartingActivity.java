@@ -627,6 +627,15 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onUserLeaveHint() {
+        try {
+            SessionAnalyticsTracker.get().onUserLeaveHint(this);
+        } catch (Exception ignored) {
+        }
+        super.onUserLeaveHint();
+    }
+
+    @Override
     protected void onDestroy() {
         Logone.v(LOG_TAG, "onDestory");
         super.onDestroy();

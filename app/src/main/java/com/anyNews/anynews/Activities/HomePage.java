@@ -4807,6 +4807,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     @Override
+    protected void onUserLeaveHint() {
+        try {
+            SessionAnalyticsTracker.get().onUserLeaveHint(this);
+        } catch (Exception ignored) {
+        }
+        super.onUserLeaveHint();
+    }
+
+    @Override
     public void onPause() {
         try {
             PostDwellTracker.get().onPaused(this);
