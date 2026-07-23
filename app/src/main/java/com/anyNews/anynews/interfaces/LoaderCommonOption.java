@@ -6,6 +6,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.view.View;
 import android.widget.ImageView;
 
+import com.anyNews.anynews.R;
 import com.nostra13.universalimageloader.core.DisplayImageOptions;
 import com.nostra13.universalimageloader.core.ImageLoader;
 import com.nostra13.universalimageloader.core.assist.FailReason;
@@ -28,9 +29,12 @@ public interface LoaderCommonOption {
     ColorDrawable d4 = new ColorDrawable(Color.parseColor("#db404d"));
     ColorDrawable d5 = new ColorDrawable(Color.parseColor("#27ad60"));
     ColorDrawable d6 = new ColorDrawable(Color.parseColor("#d8d8d8"));
+    /** Shown when feed/sticky article images fail (dead S3 URLs, network, etc.). */
+    int IMAGE_FAIL_PLACEHOLDER = R.drawable.app_splash_logo;
     DisplayImageOptions options = new DisplayImageOptions.Builder()
             .showImageOnLoading(d)
-            .showImageOnFail(d)
+            .showImageOnFail(IMAGE_FAIL_PLACEHOLDER)
+            .showImageForEmptyUri(IMAGE_FAIL_PLACEHOLDER)
             .cacheInMemory(true)
             .cacheOnDisk(true)
             .bitmapConfig(Bitmap.Config.RGB_565)
@@ -133,6 +137,9 @@ public interface LoaderCommonOption {
         @Override
         public void onLoadingFailed(String imageUri, View view, FailReason failReason) {
             super.onLoadingFailed(imageUri, view, failReason);
+            if (view instanceof ImageView) {
+                ((ImageView) view).setImageResource(IMAGE_FAIL_PLACEHOLDER);
+            }
         }
 
         @Override

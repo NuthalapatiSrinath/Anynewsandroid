@@ -93,9 +93,10 @@ public class SamplePagerAdapter extends PagerAdapter {
             //Picasso.with(context).load(arrayList.get(position).toString()).skipMemoryCache().into(textView);
             options = new DisplayImageOptions.Builder()
                     // below image will be displayed when the image url is empty
-                    .showImageForEmptyUri(R.drawable.nodata)
+                    .showImageForEmptyUri(R.drawable.app_splash_logo)
                     // stub image will display when your image is loading
                     .showImageOnLoading(R.drawable.trasparent_background)
+                    .showImageOnFail(R.drawable.app_splash_logo)
                     // cachememory method will caches the image in users external storage
                     .cacheInMemory(true)
                     // cache on disc will caches the image in users internal storage
