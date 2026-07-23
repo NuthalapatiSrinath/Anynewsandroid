@@ -200,6 +200,10 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private WriterStripStyleConfig writerStripStyle;
 
+        @SerializedName("full_video_share_card")
+        @Expose
+        private FullVideoShareCardConfig fullVideoShareCard;
+
         @SerializedName("cricket_mini_player_position")
         @Expose
         private CricketMiniPlayerPosition cricketMiniPlayerPosition;
@@ -232,6 +236,10 @@ public class StartActivityReqModel implements Serializable {
 
         public WriterStripStyleConfig getWriterStripStyle() {
             return writerStripStyle;
+        }
+
+        public FullVideoShareCardConfig getFullVideoShareCard() {
+            return fullVideoShareCard;
         }
 
         public CricketMiniPlayerPosition getCricketMiniPlayerPosition() {

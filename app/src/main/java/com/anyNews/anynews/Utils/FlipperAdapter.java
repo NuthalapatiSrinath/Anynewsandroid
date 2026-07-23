@@ -7161,6 +7161,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             VideoShareHelper.prefetchVideo(context, resolveVideoShareUrl(position));
         }
 
+        View whatsappChatOption = sheetView.findViewById(R.id.option_whatsapp_chat);
+        // Full-video primary card: apply admin title/subtitle/colors/icon/bg (3.40.92+).
+        // Half-video keeps the compiled defaults for Contact (same layout ids are fine).
+        if (isFullVideo && whatsappChatOption != null) {
+            FullVideoShareCardHelper.apply(context, whatsappChatOption);
+        }
+
         View.OnClickListener dismissAndShare = actionView -> {
             bottomSheet.dismiss();
             VideoShareAction action;
@@ -7168,6 +7175,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (viewId == R.id.option_whatsapp_status) {
                 action = VideoShareAction.WHATSAPP_STATUS;
             } else if (viewId == R.id.option_whatsapp_chat) {
+                // Admin action_url (if set) replaces Send-to-Contact for full-video card.
+                if (isFullVideo && FullVideoShareCardHelper.openActionUrlIfPresent(context)) {
+                    return;
+                }
                 action = VideoShareAction.WHATSAPP_CHAT;
             } else if (viewId == R.id.option_share_article) {
                 action = VideoShareAction.SHARE_ARTICLE;
@@ -7182,7 +7193,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (whatsappStatusOption != null && whatsappStatusOption.getVisibility() == View.VISIBLE) {
             whatsappStatusOption.setOnClickListener(dismissAndShare);
         }
-        sheetView.findViewById(R.id.option_whatsapp_chat).setOnClickListener(dismissAndShare);
+        if (whatsappChatOption != null) {
+            whatsappChatOption.setOnClickListener(dismissAndShare);
+        }
         if (shareArticleOption != null && shareArticleOption.getVisibility() == View.VISIBLE) {
             shareArticleOption.setOnClickListener(dismissAndShare);
         }

@@ -97,11 +97,13 @@
             android:padding="@dimen/twelve">
 
             <FrameLayout
+                android:id="@+id/option_whatsapp_chat_icon_circle"
                 android:layout_width="52dp"
                 android:layout_height="52dp"
                 android:background="@drawable/bg_whatsapp_icon_circle">
 
                 <ImageView
+                    android:id="@+id/option_whatsapp_chat_icon"
                     android:layout_width="28dp"
                     android:layout_height="28dp"
                     android:layout_gravity="center"
@@ -110,6 +112,7 @@
             </FrameLayout>
 
             <TextView
+                android:id="@+id/option_whatsapp_chat_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/eight"
@@ -120,6 +123,7 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/option_whatsapp_chat_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"

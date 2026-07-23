@@ -54,6 +54,7 @@ import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Pojo.LanguageFontConfig;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
+import com.anyNews.anynews.Utils.FullVideoShareCardHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.facebook.FacebookSdk;
@@ -1002,6 +1003,12 @@ public class StartingActivity extends AppCompatActivity {
                                     Constants.WRITER_STRIP_STYLE,
                                     new Gson().toJson(startActivityReqModel.getData().getWriterStripStyle()),
                                     Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getFullVideoShareCard() != null) {
+                            FullVideoShareCardHelper.save(
+                                    getApplicationContext(),
+                                    startActivityReqModel.getData().getFullVideoShareCard()
                             );
                         }
 
