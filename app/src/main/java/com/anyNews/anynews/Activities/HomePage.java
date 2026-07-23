@@ -259,6 +259,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private FlipView mFlipView;
    private  FlipView currentView;
     private FlipperAdapter adapter;
+    // Tracks the FLAG_SECURE state currently applied to the window so we only touch
+    // WindowManager (which forces a window relayout) when the value actually changes,
+    // instead of on every flip. null = not yet applied.
+    private Boolean appliedSecureFlag = null;
     ArrayList<ModelClass.Datum> list;
     ArrayList<ModelClass.Datum> dummylist=new ArrayList<>();
     Response<EncreptionRequest> dummyResponse;
@@ -4497,10 +4501,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } else {
             ppi = 1;
         }
-        if(ScreenCaptureHelper.isCaptureAllowed(this) || post_type.equalsIgnoreCase("ad") || post_type.equalsIgnoreCase("web_ads") || post_type.equalsIgnoreCase("web") ){
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        }else{
-            getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+        // Whether this post is allowed to be captured (screenshots): ad/web surfaces
+        // and admin-allowed capture clear FLAG_SECURE; everything else keeps it set.
+        boolean captureAllowed = ScreenCaptureHelper.isCaptureAllowed(this)
+                || post_type.equalsIgnoreCase("ad")
+                || post_type.equalsIgnoreCase("web_ads")
+                || post_type.equalsIgnoreCase("web");
+        boolean desiredSecure = !captureAllowed;
+        // Only hit WindowManager when the secure state actually changes. Calling
+        // set/clearFlags on every flip forces a window relayout and adds visible jank.
+        if (appliedSecureFlag == null || appliedSecureFlag != desiredSecure) {
+            if (desiredSecure) {
+                getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+            } else {
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            }
+            appliedSecureFlag = desiredSecure;
         }
         if(post_type.equalsIgnoreCase("image_gallery")){
             if (mFlipView != null && ppi >= 0 && ppi < mFlipView.getChildCount()) {
