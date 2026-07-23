@@ -7117,6 +7117,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         View sheetView = LayoutInflater.from(context).inflate(R.layout.bottom_sheet_video_share, null);
         bottomSheet.setContentView(sheetView);
 
+        // Full videos: keep Status / Contact / Other apps only — hide Share Article.
+        boolean isFullVideo = layout == VideoShareLayout.FULL_EXO
+                || layout == VideoShareLayout.FULL_YOUTUBE;
+        View shareArticleOption = sheetView.findViewById(R.id.option_share_article);
+        if (isFullVideo && shareArticleOption != null) {
+            shareArticleOption.setVisibility(View.GONE);
+        }
+
+        // Warm share cache while the sheet is open so Status/Contact feel instant.
+        if (canShareVideoFile(position)) {
+            VideoShareHelper.prefetchVideo(context, resolveVideoShareUrl(position));
+        }
+
         View.OnClickListener dismissAndShare = actionView -> {
             bottomSheet.dismiss();
             VideoShareAction action;
@@ -7137,7 +7150,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         sheetView.findViewById(R.id.option_whatsapp_status).setOnClickListener(dismissAndShare);
         sheetView.findViewById(R.id.option_whatsapp_chat).setOnClickListener(dismissAndShare);
-        sheetView.findViewById(R.id.option_share_article).setOnClickListener(dismissAndShare);
+        if (shareArticleOption != null && shareArticleOption.getVisibility() == View.VISIBLE) {
+            shareArticleOption.setOnClickListener(dismissAndShare);
+        }
         sheetView.findViewById(R.id.option_other_apps).setOnClickListener(dismissAndShare);
         bottomSheet.show();
     }

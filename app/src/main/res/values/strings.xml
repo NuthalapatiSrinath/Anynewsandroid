@@ -85,7 +85,7 @@
     <string name="share_whatsapp_status">WhatsApp Status</string>
     <string name="share_whatsapp_chat">Send to Contact</string>
     <string name="share_whatsapp_status_subtitle">Post video to status</string>
-    <string name="share_whatsapp_chat_subtitle">Send video or screenshot</string>
+    <string name="share_whatsapp_chat_subtitle">Send video to a chat</string>
     <string name="share_article_link">Share Article</string>
     <string name="share_other_apps">Other apps</string>
     <string name="share_more_options">More options</string>
