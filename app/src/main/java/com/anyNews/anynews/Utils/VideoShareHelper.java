@@ -64,6 +64,16 @@ public class VideoShareHelper {
         final String sourceUrl = videoUrl.trim();
         final Handler mainHandler = new Handler(Looper.getMainLooper());
 
+        // Instant path: local/cache already ready — skip worker thread + dialog.
+        PreparedShare ready = tryResolveReadyShare(context, sourceUrl);
+        if (ready != null) {
+            launchShareIntent(context, activity, ready.uri, ready.mimeType, title, shareLink, mode);
+            if (listener != null) {
+                listener.onShareStarted();
+            }
+            return;
+        }
+
         downloadThread = new Thread(() -> {
             try {
                 PreparedShare prepared = prepareShareableVideo(context, sourceUrl, statusMessage, mainHandler, true);
@@ -86,6 +96,31 @@ public class VideoShareHelper {
             }
         }, "video-share");
         downloadThread.start();
+    }
+
+    /** Non-blocking resolve for content/file/cache hits only (no network). */
+    private static PreparedShare tryResolveReadyShare(Context context, String sourceUrl) {
+        try {
+            Uri parsed = Uri.parse(sourceUrl);
+            String scheme = parsed.getScheme();
+            if (scheme != null && scheme.equalsIgnoreCase("content")) {
+                return new PreparedShare(parsed, resolveMimeType(null, sourceUrl));
+            }
+            File localFile = resolveLocalFile(sourceUrl, parsed, scheme);
+            if (localFile != null && localFile.exists() && localFile.length() > 0) {
+                localFile.setReadable(true, false);
+                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", localFile);
+                return new PreparedShare(uri, resolveMimeType(localFile, sourceUrl));
+            }
+            File cachedFile = getCacheFile(context, sourceUrl);
+            if (cachedFile.exists() && cachedFile.length() > 0) {
+                cachedFile.setReadable(true, false);
+                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
+                return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl));
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     /**
@@ -319,6 +354,13 @@ public class VideoShareHelper {
                 if (mode == ShareMode.WHATSAPP_STATUS) {
                     intent.putExtra("jid", "status@broadcast");
                 }
+                // Skip scanning all share targets — grant WhatsApp only and launch ASAP.
+                context.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                if (activity != null) {
+                    activity.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
+                context.startActivity(intent);
+                return;
             }
 
             List<ResolveInfo> resInfoList = context.getPackageManager()
@@ -328,15 +370,7 @@ public class VideoShareHelper {
                 context.grantUriPermission(packageName, uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             }
-            if (activity != null && (mode == ShareMode.WHATSAPP_CHAT || mode == ShareMode.WHATSAPP_STATUS)) {
-                activity.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            }
-
-            if (mode == ShareMode.GENERAL) {
-                context.startActivity(Intent.createChooser(intent, "Share Video"));
-            } else {
-                context.startActivity(intent);
-            }
+            context.startActivity(Intent.createChooser(intent, "Share Video"));
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(context, "Unable to share video", Toast.LENGTH_SHORT).show();
