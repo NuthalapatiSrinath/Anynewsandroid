@@ -12,6 +12,8 @@ import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Created by barediarjun on 12/12/16.
@@ -42,6 +44,13 @@ public class Allsharedpreference {
     SharedPreferences.Editor editor;
     Context _context;
     int PRIVATE_MODE = 0;
+    /** Serializes FlipData Gson read/modify/write so setFlipData can leave the main thread. */
+    private final Object flipDataLock = new Object();
+    private static final ExecutorService FLIP_DATA_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "anynews-flip-data");
+        t.setPriority(Thread.NORM_PRIORITY - 1);
+        return t;
+    });
 
     public Allsharedpreference(Context context) {
 
@@ -144,37 +153,49 @@ public class Allsharedpreference {
         editor.commit();
     }
     public void setEmptyFlipData(){
-        editor.putString("FlipData", "");
-        editor.apply();
+        synchronized (flipDataLock) {
+            editor.putString("FlipData", "");
+            editor.apply();
+        }
     }
     public List<FlipItems> getFlipData(){
-        Gson gson = new Gson();
-        String json = pref.getString("FlipData", "");
-        if(json.equalsIgnoreCase("")){
-            return new ArrayList<FlipItems>();
-        }
-        List<FlipItems> tasks = gson.fromJson(json, new TypeToken<List<FlipItems>>(){}.getType());
-        if (tasks == null) {
-            tasks = new ArrayList<>();
-        }
-        return tasks;
-
-    }
-    public void setFlipData(FlipItems items){
-        Gson gson = new Gson();
-        List<FlipItems> tasks=new ArrayList<>();
-        String json = pref.getString("FlipData", "");
-        if (!json.equalsIgnoreCase("")) {
-            tasks = gson.fromJson(json, new TypeToken<ArrayList<FlipItems>>(){}.getType());
+        synchronized (flipDataLock) {
+            Gson gson = new Gson();
+            String json = pref.getString("FlipData", "");
+            if(json.equalsIgnoreCase("")){
+                return new ArrayList<FlipItems>();
+            }
+            List<FlipItems> tasks = gson.fromJson(json, new TypeToken<List<FlipItems>>(){}.getType());
             if (tasks == null) {
                 tasks = new ArrayList<>();
             }
-
+            return tasks;
         }
-        tasks.add(items);
-        String s = gson.toJson(tasks);
-        editor.putString("FlipData", s);
-        editor.apply();
-
+    }
+    /**
+     * Append flip analytics payload off the main thread. Growing Gson serialize/deserialize
+     * of the FlipData list was a compounding main-thread cost on every flip.
+     */
+    public void setFlipData(FlipItems items){
+        if (items == null) {
+            return;
+        }
+        FLIP_DATA_EXECUTOR.execute(() -> {
+            synchronized (flipDataLock) {
+                Gson gson = new Gson();
+                List<FlipItems> tasks = new ArrayList<>();
+                String json = pref.getString("FlipData", "");
+                if (!json.equalsIgnoreCase("")) {
+                    tasks = gson.fromJson(json, new TypeToken<ArrayList<FlipItems>>(){}.getType());
+                    if (tasks == null) {
+                        tasks = new ArrayList<>();
+                    }
+                }
+                tasks.add(items);
+                String s = gson.toJson(tasks);
+                editor.putString("FlipData", s);
+                editor.apply();
+            }
+        });
     }
 }

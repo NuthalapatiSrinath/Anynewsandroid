@@ -263,6 +263,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     // WindowManager (which forces a window relayout) when the value actually changes,
     // instead of on every flip. null = not yet applied.
     private Boolean appliedSecureFlag = null;
+    // Non-visual flip analytics deferred until OnFlipCompleted (avoids mid-animation jank).
+    private int pendingFlipTrackingPos = -1;
     ArrayList<ModelClass.Datum> list;
     ArrayList<ModelClass.Datum> dummylist=new ArrayList<>();
     Response<EncreptionRequest> dummyResponse;
@@ -3367,6 +3369,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void OnFlipCompletedListener(FlipView v) {
         showLog("OnFlipCompletedListener:::::::::");
+        flushPendingFlipTracking();
+    }
+
+    /**
+     * GCM / Firebase / FlipData persistence — safe to run after the flip animation
+     * finishes. Visual work (pause video, FAB, FLAG_SECURE, setViewsApi) stays in
+     * onFlippedToPage1.
+     */
+    private void flushPendingFlipTracking() {
+        int pos = pendingFlipTrackingPos;
+        if (pos < 0 || list == null || pos >= list.size()) {
+            return;
+        }
+        pendingFlipTrackingPos = -1;
+        try {
+            ModelClass.Datum datum = list.get(pos);
+            if (datum != null && datum.getPostType() != null) {
+                trackingEvents.FireBase("post_type", datum.getPostType() + "_pos_" + pos);
+            }
+            BundleDataToGcmPush(pos);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public class NetworkChangeReceiver extends BroadcastReceiver {
@@ -3659,6 +3684,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 adapter.setCallback(this);
                 mFlipView.setAdapter(adapter);
                 mFlipView.setOnFlipListener(this);
+                mFlipView.setOnFlipCompleteListener(this);
                 mFlipView.setOverFlipMode(OverFlipMode.GLOW);
                 mFlipView.peakNext(false);
                 mFlipView.setOnOverFlipListener(this);
@@ -3981,6 +4007,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                            adapter.setCallback(this);
                            mFlipView.setAdapter(adapter);
                            mFlipView.setOnFlipListener(this);
+                           mFlipView.setOnFlipCompleteListener(this);
                            mFlipView.setOverFlipMode(OverFlipMode.GLOW);
                            mFlipView.peakNext(false);
                            mFlipView.setOnOverFlipListener(this);
@@ -4445,6 +4472,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @SuppressLint("SetTextI18n")
     @Override
     public void onFlippedToPage(FlipView view, int position, long id) {
+        // Capture tracking target immediately; flush on OnFlipCompleted (not in +60ms mid-flip).
+        pendingFlipTrackingPos = position;
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -4593,8 +4622,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             loadAds(list.get(positionx).getNext_req_ad_code(), list.get(positionx).getNext_ad_req_position(), list.get(position).getAd_type());
         }
         showLog("CHECK POINT ONFLIPPEDTOPAGE 7");
-        trackingEvents.FireBase("post_type", list.get(position).getPostType()+"_pos_"+position);
-        BundleDataToGcmPush(position);
+        // FireBase + BundleDataToGcmPush deferred to OnFlipCompletedListener (flushPendingFlipTracking).
+        // Fallback if complete listener already ran (or first page with no gesture): flush when idle.
+        if (mFlipView != null && !mFlipView.mIsFlipping) {
+            flushPendingFlipTracking();
+        }
 
 //        if(list.get(positionx).getPostType().equalsIgnoreCase("normal_image")){
 //            LocalBroadcastManager.getInstance(getContext()).registerReceiver(CURRENT_LOCATION,

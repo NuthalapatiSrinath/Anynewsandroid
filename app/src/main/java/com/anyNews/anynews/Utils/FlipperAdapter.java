@@ -1065,10 +1065,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         pauseVideo();
                         halfImageActivity = new HalfImageActivityHolder();
                         showLog("Check Point Adapter:: 2");
-                        if (AppHelper.isTeluguLanguageSelected()) {
-                            convertView = inflater.inflate(R.layout.activity_half_image_telugu, parent, false);
-                        } else {
-                            convertView = inflater.inflate(R.layout.activity_half_image_new, parent, false);
+                        // Reuse scrap when layout type matches — avoid reinflating the large
+                        // half-image XML on every flip (biggest flip-lag win). Telugu uses a
+                        // different layout, so tag includes that.
+                        String normalImageKey = AppHelper.isTeluguLanguageSelected()
+                                ? "normal_image_telugu" : "normal_image";
+                        if (!canReuseFlipView(convertView, normalImageKey)) {
+                            if (AppHelper.isTeluguLanguageSelected()) {
+                                convertView = inflater.inflate(R.layout.activity_half_image_telugu, parent, false);
+                            } else {
+                                convertView = inflater.inflate(R.layout.activity_half_image_new, parent, false);
+                            }
+                            markFlipViewType(convertView, normalImageKey);
                         }
                         customConvertView = convertView;
                         showLog("Check Point Adapter:: 3_11");
@@ -1080,7 +1088,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         pauseVideo();
                         showLog("Check Point FULL_IMAGE:: 1");
                         fullImageActivity = new FullImageActivityHolder();
-                        convertView = inflater.inflate(R.layout.activity_full_image_new, parent, false);
+                        if (!canReuseFlipView(convertView, "full_image")) {
+                            convertView = inflater.inflate(R.layout.activity_full_image_new, parent, false);
+                            markFlipViewType(convertView, "full_image");
+                        }
                         customConvertView = convertView;
                         showFullImage(position, convertView);
                         fromWhatsapp = false;
@@ -2037,6 +2048,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         return convertView;
 
+    }
+
+    /**
+     * FlipView scrap reuse: only keep convertView when it was inflated for the same
+     * post layout key. Video/ads/gallery/etc. stay inflate-always (stateful).
+     */
+    private static boolean canReuseFlipView(View convertView, String typeKey) {
+        return convertView != null && typeKey != null && typeKey.equals(convertView.getTag());
+    }
+
+    private static void markFlipViewType(View view, String typeKey) {
+        if (view != null) {
+            view.setTag(typeKey);
+        }
     }
 
     private void showVastTagAd(View convertView, int position) {
