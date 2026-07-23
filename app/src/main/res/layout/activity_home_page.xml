@@ -450,11 +450,11 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!--  Bottom Menu -->
+                <!--  Bottom Menu — fixed 50dp so magazine Share overlay cannot grow the bar -->
                 <androidx.coordinatorlayout.widget.CoordinatorLayout
                     android:id="@+id/home_page_navigation"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="50dp"
                     android:animateLayoutChanges="true">
 
 
@@ -486,28 +486,28 @@
                         app:layout_anchor="@+id/nav_view"
                         app:layout_anchorGravity="center" />
 
-                    <!-- Magazine Share: same vertical icon+label structure as other footer tabs -->
+                    <!-- Magazine Share: tuck into the same 50dp nav slot (do not expand footer) -->
                     <LinearLayout
                         android:id="@+id/layoutMagazineShareFooter"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_height="50dp"
                         android:layout_gravity="center"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:clickable="true"
                         android:elevation="12dp"
                         android:focusable="true"
-                        android:gravity="center_horizontal"
+                        android:gravity="center"
                         android:orientation="vertical"
-                        android:paddingTop="6dp"
-                        android:paddingBottom="4dp"
+                        android:paddingTop="2dp"
+                        android:paddingBottom="2dp"
                         android:visibility="gone"
                         app:layout_anchor="@+id/nav_view"
                         app:layout_anchorGravity="center">
 
                         <ImageView
                             android:id="@+id/ivMagazineShareFooter"
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
                             android:contentDescription="@string/share"
                             android:scaleType="fitCenter"
                             android:src="@drawable/ic_share_full" />
@@ -516,8 +516,9 @@
                             android:id="@+id/tvMagazineShareFooter"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
+                            android:layout_marginTop="1dp"
                             android:ellipsize="end"
+                            android:includeFontPadding="false"
                             android:maxLines="1"
                             android:text="@string/share"
                             android:textAppearance="@style/BottomNavLabelInactive"
