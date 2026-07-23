@@ -7142,12 +7142,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         View sheetView = LayoutInflater.from(context).inflate(R.layout.bottom_sheet_video_share, null);
         bottomSheet.setContentView(sheetView);
 
-        // Full videos: keep Status / Contact / Other apps only — hide Share Article.
+        // Full videos: Contact / Other apps only — hide Status (Other apps covers it) and Share Article.
         boolean isFullVideo = layout == VideoShareLayout.FULL_EXO
                 || layout == VideoShareLayout.FULL_YOUTUBE;
         View shareArticleOption = sheetView.findViewById(R.id.option_share_article);
-        if (isFullVideo && shareArticleOption != null) {
-            shareArticleOption.setVisibility(View.GONE);
+        View whatsappStatusOption = sheetView.findViewById(R.id.option_whatsapp_status);
+        if (isFullVideo) {
+            if (shareArticleOption != null) {
+                shareArticleOption.setVisibility(View.GONE);
+            }
+            if (whatsappStatusOption != null) {
+                whatsappStatusOption.setVisibility(View.GONE);
+            }
         }
 
         // Warm share cache while the sheet is open so Status/Contact feel instant.
@@ -7173,7 +7179,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             executeVideoShare(position, layout, convertView, action);
         };
 
-        sheetView.findViewById(R.id.option_whatsapp_status).setOnClickListener(dismissAndShare);
+        if (whatsappStatusOption != null && whatsappStatusOption.getVisibility() == View.VISIBLE) {
+            whatsappStatusOption.setOnClickListener(dismissAndShare);
+        }
         sheetView.findViewById(R.id.option_whatsapp_chat).setOnClickListener(dismissAndShare);
         if (shareArticleOption != null && shareArticleOption.getVisibility() == View.VISIBLE) {
             shareArticleOption.setOnClickListener(dismissAndShare);
