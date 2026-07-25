@@ -130,8 +130,9 @@ public final class PollOptionStyleHelper {
         fill.setVisibility(View.VISIBLE);
         applyFillColor(fill, fillColor);
 
-        clip.post(() -> {
-            int parentW = clip.getWidth();
+        final View clipView = clip;
+        clipView.post(() -> {
+            int parentW = clipView.getWidth();
             if (parentW <= 0) {
                 return;
             }
