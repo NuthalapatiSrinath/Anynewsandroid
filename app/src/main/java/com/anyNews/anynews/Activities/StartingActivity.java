@@ -55,6 +55,7 @@ import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Pojo.LanguageFontConfig;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.FullVideoShareCardHelper;
+import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.facebook.FacebookSdk;
@@ -1009,6 +1010,12 @@ public class StartingActivity extends AppCompatActivity {
                             FullVideoShareCardHelper.save(
                                     getApplicationContext(),
                                     startActivityReqModel.getData().getFullVideoShareCard()
+                            );
+                        }
+                        if (startActivityReqModel.getData().getPollSurveyColors() != null) {
+                            PollOptionStyleHelper.save(
+                                    getApplicationContext(),
+                                    startActivityReqModel.getData().getPollSurveyColors()
                             );
                         }
 

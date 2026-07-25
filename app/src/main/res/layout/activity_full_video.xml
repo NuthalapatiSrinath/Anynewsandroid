@@ -20,7 +20,7 @@
                 android:id="@+id/exo_play_layout"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@color/black">
+                android:background="@color/anynews_black">
 
                 <androidx.media3.ui.PlayerView
                     android:id="@+id/normal_video_player"
@@ -30,7 +30,7 @@
                     app:resize_mode="fill"
                     app:surface_type="texture_view"
                     app:use_controller="true"
-                    app:default_artwork="@color/black"
+                    app:default_artwork="@color/anynews_black"
                     app:controller_layout_id="@layout/player_custom_ui"
                     />
 

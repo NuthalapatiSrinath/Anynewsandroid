@@ -14,6 +14,12 @@
         <item name="android:textColorHint">@color/whitesren</item>
         <item name="colorControlNormal">@color/colorTextSecondary</item>
         <item name="colorControlActivated">@color/brand_orange</item>
+        <item name="colorShadowLight">@color/neomorph_highlight_color</item>
+        <item name="colorShadowDark">@color/neomorph_shadow_color</item>
+        <item name="android:statusBarColor">@color/background_color</item>
+        <item name="android:navigationBarColor">@color/background_color</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
 
     </style>
 
@@ -217,8 +223,8 @@
         <item name="android:clickable">false</item>
         <item name="neumorph_inset">0dp</item>
         <item name="neumorph_shadowElevation">0dp</item>
-        <item name="neumorph_shadowColorLight">#ffffff</item>
-        <item name="neumorph_shadowColorDark">#ffffff</item>
+        <item name="neumorph_shadowColorLight">@color/neomorph_highlight_color</item>
+        <item name="neumorph_shadowColorDark">@color/neomorph_highlight_color</item>
         <item name="neumorph_shapeType">flat</item>
         <item name="neumorph_shapeAppearance">@style/ShapeAppearance.Neumorph.FloatingActionButton</item>
     </style>

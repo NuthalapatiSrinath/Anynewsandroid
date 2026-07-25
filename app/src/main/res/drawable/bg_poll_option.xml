@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Unselected poll/survey option fill — theme-aware (light day / dark night). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/poll_option_surface" />
+    <corners android:radius="@dimen/neomorph_view_corner_radius" />
+</shape>

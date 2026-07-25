@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Keep anynews_white as true white (CTA / on-brand text). Surface is separate. -->
+  <color name="anynews_outline">#4A4A4A</color>
+  <color name="anynews_gray">#C0C0C0</color>
+  <color name="anynews_surface">#353535</color>
+</resources>

@@ -12,12 +12,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -31,6 +34,9 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
@@ -97,6 +103,7 @@ public class LoginActivityDetails extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login_details);
+        applyLoginSystemBars();
         neumorph_next = findViewById(R.id.neumorph_next);
         txt_resend_otp = findViewById(R.id.txt_resend_otp);
         emailIdEdittext = findViewById(R.id.emailId);
@@ -714,8 +721,36 @@ public class LoginActivityDetails extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        // Re-apply after AppController.onActivityCreated so light-mode status bar stays correct.
+        applyLoginSystemBars();
         registerBroadcastReceiver();
     }
+
+    /**
+     * Keep content below the status bar and match bar colors/icons to light vs dark theme.
+     * Re-applied after AppController so this screen stays correct if global bars change.
+     */
+    private void applyLoginSystemBars() {
+        Window window = getWindow();
+        WindowCompat.setDecorFitsSystemWindows(window, true);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+
+        int bg = ContextCompat.getColor(this, R.color.background_color);
+        window.setStatusBarColor(bg);
+        window.setNavigationBarColor(bg);
+
+        boolean lightMode = (getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_YES;
+
+        WindowInsetsControllerCompat insetsController =
+                WindowCompat.getInsetsController(window, window.getDecorView());
+        if (insetsController != null) {
+            insetsController.setAppearanceLightStatusBars(lightMode);
+            insetsController.setAppearanceLightNavigationBars(lightMode);
+        }
+    }
+
     @Override
     protected void onStop() {
         super.onStop();

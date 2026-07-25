@@ -142,6 +142,7 @@ import com.anyNews.anynews.Utils.CricketFooterLabel;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
+import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
 import com.anyNews.anynews.Utils.FlipperAdapter;
@@ -265,6 +266,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private Boolean appliedSecureFlag = null;
     // Non-visual flip analytics deferred until OnFlipCompleted (avoids mid-animation jank).
     private int pendingFlipTrackingPos = -1;
+    // Heavy settle work (refreshDetails/loadAds/FLAG_SECURE/UI) runs after scroller finishes.
+    private boolean pendingFlipSettleWork = false;
     ArrayList<ModelClass.Datum> list;
     ArrayList<ModelClass.Datum> dummylist=new ArrayList<>();
     Response<EncreptionRequest> dummyResponse;
@@ -304,6 +307,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     int positionx=0,requestPostition=1;
     int requestSize=0;
     boolean isFromLocalArticles=false;
+
+    /** Bundle keys for flip position across DayNight / battery-saver recreates. */
+    private static final String STATE_FLIP_INDEX = "home_flip_index";
+    private static final String STATE_FLIP_POST_ID = "home_flip_post_id";
+    /** True after recreate until we apply (or abandon) restored flip position. */
+    private boolean pendingFlipRestore = false;
+    private int pendingRestoreFlipIndex = 0;
+    private long pendingRestorePostId = -1L;
     FCMTrackingEvents trackingEvents;
     public static boolean isPlayingVideoInFullScreen=false;
     public  boolean isDataParsed=true;
@@ -494,6 +505,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        readPendingFlipRestoreState(savedInstanceState);
         // Secure by default (blocks screenshots/recording); cleared only when the
         // remote allow_screen_capture flag is ON. Falls back to secure if unset.
         ScreenCaptureHelper.applySecureFlag(this);
@@ -592,7 +604,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         Window window = getWindow();
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.parseColor("#0D1528"));
+        // Feed chrome stays dark navy in both themes; force light system-bar icons.
+        int homeBar = Color.parseColor("#0D1528");
+        window.setStatusBarColor(homeBar);
+        window.setNavigationBarColor(homeBar);
+        androidx.core.view.WindowInsetsControllerCompat insetsController =
+                androidx.core.view.WindowCompat.getInsetsController(window, window.getDecorView());
+        if (insetsController != null) {
+            insetsController.setAppearanceLightStatusBars(false);
+            insetsController.setAppearanceLightNavigationBars(false);
+        }
 
         //
         /*search_icon = findViewById(R.id.search_icon);*/
@@ -841,6 +862,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 requestSize = 0;
                 isFromLocalArticles = true;
                 positionx = 0;
+                clearPendingFlipRestore();
                 list = new ArrayList<>();
                 dummyResponse = null;
                 inlist(-1);
@@ -872,6 +894,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 requestSize = 0;
                 isFromLocalArticles = true;
                 positionx = 0;
+                clearPendingFlipRestore();
                 list = new ArrayList<>();
                 dummyResponse = null;
                 inlist(0);
@@ -1398,6 +1421,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         requestSize=0;
                         isFromLocalArticles=true;
                         positionx=0;
+                        clearPendingFlipRestore();
                         list=new ArrayList<>();
                         dummyResponse=null;
                         inlist(-1);
@@ -1434,6 +1458,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         requestSize=0;
                         isFromLocalArticles=true;
                         positionx=0;
+                        clearPendingFlipRestore();
                         requestPostition=1;
                         dummyResponse=null;
                         //   inlist(0);
@@ -2381,6 +2406,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     requestSize=0;
                     isFromLocalArticles=true;
                     positionx=0;
+                    clearPendingFlipRestore();
                     list=new ArrayList<>();
                     dummyResponse=null;
                     inlist(-1);
@@ -2408,6 +2434,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     requestSize=0;
                     isFromLocalArticles=true;
                     positionx=0;
+                    clearPendingFlipRestore();
                     requestPostition=1;
                     dummyResponse=null;
                     inlist(0);
@@ -3295,21 +3322,46 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onFlippedToAppear(FlipView v) {
         Logone.v(LOG_TAG, ""+v.getAdapter());
         showLog("onFlippedToAppear");
-        // Redundant, reliable refresh: once a page has fully appeared, make sure the center
-        // button reflects the current post (glow Share for magazine, + / WhatsApp otherwise).
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                updateCenterFab();
-            } catch (Exception fabEx) {
-                fabEx.printStackTrace();
-            }
-        }, 80);
+        // Hide cricket mini-player for the gesture only (idempotent). Restore on settle.
+        if (cricketMiniPlayerManager != null) {
+            cricketMiniPlayerManager.setHiddenForFlipGesture(true);
+        }
+        // FAB refresh is handled in OnFlipCompletedListener — avoid a second layout
+        // pass 80ms after appear (stacking with settle work on low-end).
     }
+
+    /**
+     * Mid-flip pause: stop playback only. No seek/stop/release/YouTube re-init
+     * (those thrash Camera/GL during 3D flip on low-end). Full cleanup in
+     * {@link #teardownFlipVideoPlayers()} after settle.
+     */
+    private void pauseVideoLight() {
+        try {
+            if (FlipperAdapter.youTubePlayerViewHalf != null) {
+                FlipperAdapter.youTubePlayerViewHalf.pause();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        try {
+            if (FlipperAdapter.exoPlayer != null) {
+                FlipperAdapter.exoPlayer.setPlayWhenReady(false);
+                FlipperAdapter.exoPlayer.pause();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Heavier pause used outside active flip animation (e.g. onPause).
+     * During flip prefer {@link #pauseVideoLight()} + settle teardown.
+     */
     public  void pauseVideo(){
+        pauseVideoLight();
         try{
             showLog("pauseVideo: stopping active players");
             if (FlipperAdapter.youTubePlayerViewHalf != null) {
-                FlipperAdapter.youTubePlayerViewHalf.pause();
                 if (adapter != null) {
                     if (adapter.customPlayerUiController != null) {
                         adapter.customPlayerUiController.showUiControlls();
@@ -3325,22 +3377,70 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try{
             if (FlipperAdapter.exoPlayer != null) {
-                FlipperAdapter.exoPlayer.setPlayWhenReady(false);
-                FlipperAdapter.exoPlayer.pause();
                 FlipperAdapter.exoPlayer.stop();
-                FlipperAdapter.exoPlayer.release();
-                FlipperAdapter.exoPlayer = null;
+                // Seek only — defer release until flip settle (Narzo jank if release mid-flip).
+                FlipperAdapter.exoPlayer.seekTo(0);
             }
         }catch (Exception e){
             e.printStackTrace();
         }
         try {
+            View flipChild = getFlipChildForShare();
+            if (adapter != null && flipChild != null) {
+                ImageView imageViewItems = flipChild.findViewById(R.id.imageViewItem__);
+                LinearLayout halfyoutubecontainer = flipChild.findViewById(R.id.halfyoutubecontainer);
+                adapter.callYoutubeReInit(imageViewItems, halfyoutubecontainer);
+                if (imageViewItems != null) {
+                    imageViewItems.setVisibility(View.VISIBLE);
+                }
+                if (halfyoutubecontainer != null) {
+                    halfyoutubecontainer.setVisibility(View.GONE);
+                }
+            }
+            if (list != null && positionx >= 0 && positionx < list.size()) {
+                showLog("pauseVideo post_type::: "+list.get(positionx).getPostType());
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    /** Heavier video cleanup after flip animation finishes. */
+    private void teardownFlipVideoPlayers() {
+        try {
+            // post_type is already the DESTINATION page (set in onFlippedToPage).
+            // Do not tear down when settling ON a video — getView just bound it.
+            // Destroying here is a common cause of a blank/white 2nd (or Nth) flip page
+            // when that item is normal_video / full_video / vast.
+            boolean landingOnVideo = post_type != null
+                    && (post_type.equalsIgnoreCase("full_video")
+                    || post_type.equalsIgnoreCase("normal_video")
+                    || post_type.equalsIgnoreCase("google_vasttag"));
+            if (landingOnVideo) {
+                return;
+            }
+            boolean hadPlayers = FlipperAdapter.hasActiveVideoPlayer();
+            if (!hadPlayers) {
+                return;
+            }
+            FlipperAdapter.releaseActiveExoPlayer();
+            try {
+                if (FlipperAdapter.youTubePlayerViewHalf != null) {
+                    FlipperAdapter.youTubePlayerViewHalf.pause();
+                    FlipperAdapter.youTubePlayerViewHalf = null;
+                }
+            } catch (Exception ignored) {
+            }
             if (adapter != null && mFlipView != null) {
                 adapter.resetAllFlipChildrenVideoPlayers(mFlipView);
                 for (int i = 0; i < mFlipView.getChildCount(); i++) {
                     View flipChild = mFlipView.getChildAt(i);
+                    if (flipChild == null) continue;
                     ImageView imageViewItems = flipChild.findViewById(R.id.imageViewItem__);
                     LinearLayout halfyoutubecontainer = flipChild.findViewById(R.id.halfyoutubecontainer);
+                    if (imageViewItems == null && halfyoutubecontainer == null) {
+                        continue;
+                    }
                     adapter.callYoutubeReInit(imageViewItems, halfyoutubecontainer);
                     if (imageViewItems != null) {
                         imageViewItems.setVisibility(View.VISIBLE);
@@ -3350,10 +3450,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                 }
             }
-            if (list != null && positionx >= 0 && positionx < list.size()) {
-                showLog("pauseVideo post_type::: "+list.get(positionx).getPostType());
-            }
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -3369,13 +3466,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void OnFlipCompletedListener(FlipView v) {
         showLog("OnFlipCompletedListener:::::::::");
+        // Restore cricket mini-player after flip gesture (feature kept; only paused visually).
+        if (cricketMiniPlayerManager != null) {
+            cricketMiniPlayerManager.setHiddenForFlipGesture(false);
+        }
+        teardownFlipVideoPlayers();
+        try {
+            updateCenterFab();
+        } catch (Exception fabEx) {
+            fabEx.printStackTrace();
+        }
+        // refreshDetails / loadAds / FLAG_SECURE / gallery — after scroller finished.
+        runDeferredFlipSettleWork();
         flushPendingFlipTracking();
+        if (adapter != null) {
+            adapter.setCurrentFlipPage(positionx);
+            adapter.bindPendingNativeAdMediaForPage(positionx);
+        }
     }
 
     /**
-     * GCM / Firebase / FlipData persistence — safe to run after the flip animation
-     * finishes. Visual work (pause video, FAB, FLAG_SECURE, setViewsApi) stays in
-     * onFlippedToPage1.
+     * Analytics + view/dwell APIs — run after flip settles. AES encrypt + network
+     * on the main thread mid-flip was a major Narzo jank source vs Play 3.40.45.
      */
     private void flushPendingFlipTracking() {
         int pos = pendingFlipTrackingPos;
@@ -3385,10 +3497,35 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         pendingFlipTrackingPos = -1;
         try {
             ModelClass.Datum datum = list.get(pos);
+            String type = datum != null ? datum.getPostType() : null;
+            if (type == null) {
+                type = "";
+            }
             if (datum != null && datum.getPostType() != null) {
                 trackingEvents.FireBase("post_type", datum.getPostType() + "_pos_" + pos);
             }
             BundleDataToGcmPush(pos);
+            // REST view + dwell were previously in onFlippedToPage1 (+60ms mid/settle).
+            if (!type.equalsIgnoreCase("ad")
+                    && !type.equalsIgnoreCase("share_app")
+                    && !type.equalsIgnoreCase("ratings")
+                    && !type.equalsIgnoreCase("web_ads")
+                    && !type.equalsIgnoreCase("web")) {
+                try {
+                    if (datum != null && datum.getPostId() != null) {
+                        updated_post_id_firebase = datum.getPostId().intValue();
+                    }
+                    setViewsApi();
+                    PostDwellTracker.get().onPostShown(this, updated_post_id_firebase, type);
+                } catch (Exception viewEx) {
+                    viewEx.printStackTrace();
+                }
+            } else {
+                try {
+                    PostDwellTracker.get().onPostShown(this, 0, type);
+                } catch (Exception ignored) {
+                }
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -3682,6 +3819,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());
                 adapter.setCallback(this);
+                adapter.setCurrentFlipPage(positionx);
                 mFlipView.setAdapter(adapter);
                 mFlipView.setOnFlipListener(this);
                 mFlipView.setOnFlipCompleteListener(this);
@@ -3921,6 +4059,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             && !encreptionRequest.getTheme_color().isEmpty()) {
                         ThemeColorHelper.saveColor(HomePage.this, encreptionRequest.getTheme_color());
                     }
+                    if (encreptionRequest.getPoll_survey_colors() != null) {
+                        PollOptionStyleHelper.save(
+                                HomePage.this,
+                                encreptionRequest.getPoll_survey_colors()
+                        );
+                    }
                     // Admin-controlled half-post action icon + white-circle sizes (dp).
                     // Cache the polled values; if they changed, re-apply immediately to the
                     // currently visible card so the resize is live (no activity restart).
@@ -4005,6 +4149,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                            }
                            adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());
                            adapter.setCallback(this);
+                           adapter.setCurrentFlipPage(positionx);
                            mFlipView.setAdapter(adapter);
                            mFlipView.setOnFlipListener(this);
                            mFlipView.setOnFlipCompleteListener(this);
@@ -4023,6 +4168,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             } else {
                                 adapter.setData(list);
                             }
+                            maybeRestoreFlipPositionAfterArticlesLoad();
                             mFlipView.setVisibility(View.VISIBLE);
                             txtNoData.setVisibility(View.GONE);
                             layout_with_out_data.setVisibility(View.GONE);
@@ -4472,63 +4618,81 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @SuppressLint("SetTextI18n")
     @Override
     public void onFlippedToPage(FlipView view, int position, long id) {
-        // Capture tracking target immediately; flush on OnFlipCompleted (not in +60ms mid-flip).
+        // Mid-flip: minimal index tracking + light pause only.
+        // Heavy work (refreshDetails/loadAds/FLAG_SECURE/dwell/views) waits for OnFlipCompleted.
         pendingFlipTrackingPos = position;
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                onFlippedToPage1(view, position, id);
-            }
-        }, 60);
-    }
-    public void onFlippedToPage1(FlipView view, int position, long id) {
         if (list == null || position < 0 || position >= list.size()) {
             return;
         }
-        showLog("onFlippedToPage1:::");
-        showLog("onFlippedToPage1::POS::"+position+"....post_type.."+list.get(position).getPostType());
-        isPlayingVideoInFullScreen=false;
-        currentView=view;
-        initialCall=true;
+        showLog("onFlippedToPage:::POS::" + position + "....post_type.." + list.get(position).getPostType());
+        isPlayingVideoInFullScreen = false;
+        currentView = view;
+        initialCall = true;
         positionx = position;
         post_type = list.get(position).getPostType();
         if (post_type == null) {
             post_type = "";
         }
-
-        try {
-            updateCenterFab();
-        } catch (Exception fabEx) {
-            fabEx.printStackTrace();
+        if (adapter != null) {
+            adapter.setCurrentFlipPage(position);
         }
-
-        if (post_type.equalsIgnoreCase("ad") || post_type.equalsIgnoreCase("share_app") || post_type.equalsIgnoreCase("ratings")) {
+        // Cheap visibility toggle (no WindowManager relayout).
+        if (post_type.equalsIgnoreCase("ad")
+                || post_type.equalsIgnoreCase("share_app")
+                || post_type.equalsIgnoreCase("ratings")) {
             home_page_navigation.setVisibility(View.INVISIBLE);
-        }else{
+        } else {
             home_page_navigation.setVisibility(View.VISIBLE);
         }
-        try {
-            updated_post_id_firebase = list.get(positionx).getPostId().intValue();
-            // Reliable view write via REST /app/v3/views (eventId rest-*). GCM onFlip →
-            // consume.* is best-effort and often never lands; server skips onFlip rows
-            // that already have a near-window rest-* so impressions stay at 1.
-            if (!post_type.equalsIgnoreCase("ad")
-                    && !post_type.equalsIgnoreCase("share_app")
-                    && !post_type.equalsIgnoreCase("ratings")
-                    && !post_type.equalsIgnoreCase("web_ads")
-                    && !post_type.equalsIgnoreCase("web")) {
-                setViewsApi();
-            }
-            PostDwellTracker.get().onPostShown(this, updated_post_id_firebase, post_type);
-        } catch (NullPointerException e) {
-            e.printStackTrace();
-        }
-        showLog("CHECK POINT ONFLIPPEDTOPAGE 2");
-        firbaseJSONObj = firebaseJSON();
         if (position >= 0 && position < 2) {
             ppi = position;
         } else {
             ppi = 1;
+        }
+        pauseVideoLight();
+        pendingFlipSettleWork = true;
+        // No active flip gesture (programmatic / already settled): run settle now.
+        if (mFlipView != null && !mFlipView.mIsFlipping) {
+            if (cricketMiniPlayerManager != null) {
+                cricketMiniPlayerManager.setHiddenForFlipGesture(false);
+            }
+            runDeferredFlipSettleWork();
+            flushPendingFlipTracking();
+            if (adapter != null) {
+                adapter.bindPendingNativeAdMediaForPage(position);
+            }
+        }
+    }
+
+    /**
+     * Post-settle flip work formerly in onFlippedToPage1 (+60ms mid-animation).
+     * Matches Play intent: keep features, don't thrash during Camera flip frames.
+     */
+    private void runDeferredFlipSettleWork() {
+        if (!pendingFlipSettleWork) {
+            return;
+        }
+        pendingFlipSettleWork = false;
+        int position = positionx;
+        if (list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        showLog("runDeferredFlipSettleWork:::POS::" + position);
+        post_type = list.get(position).getPostType();
+        if (post_type == null) {
+            post_type = "";
+        }
+        try {
+            if (list.get(position).getPostId() != null) {
+                updated_post_id_firebase = list.get(position).getPostId().intValue();
+            }
+        } catch (NullPointerException e) {
+            e.printStackTrace();
+        }
+        try {
+            firbaseJSONObj = firebaseJSON();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         // Whether this post is allowed to be captured (screenshots): ad/web surfaces
         // and admin-allowed capture clear FLAG_SECURE; everything else keeps it set.
@@ -4537,8 +4701,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 || post_type.equalsIgnoreCase("web_ads")
                 || post_type.equalsIgnoreCase("web");
         boolean desiredSecure = !captureAllowed;
-        // Only hit WindowManager when the secure state actually changes. Calling
-        // set/clearFlags on every flip forces a window relayout and adds visible jank.
+        // Only hit WindowManager when the secure state actually changes.
         if (appliedSecureFlag == null || appliedSecureFlag != desiredSecure) {
             if (desiredSecure) {
                 getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
@@ -4547,8 +4710,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             appliedSecureFlag = desiredSecure;
         }
-        if(post_type.equalsIgnoreCase("image_gallery")){
-            if (mFlipView != null && ppi >= 0 && ppi < mFlipView.getChildCount()) {
+        if (post_type.equalsIgnoreCase("image_gallery")) {
+            if (adapter != null && mFlipView != null && ppi >= 0 && ppi < mFlipView.getChildCount()) {
                 View flipChild = mFlipView.getChildAt(ppi);
                 if (flipChild != null && flipChild.findViewById(R.id.relativeLayoutShareOpt) != null) {
                     adapter.closeGalleryShareLayout(flipChild);
@@ -4556,12 +4719,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         }
         refreshDetails();
-        showLog("CHECK POINT ONFLIPPEDTOPAGE 4");
-//        if (adapter != null) {
-//            adapter.hasStableIds();
-//            adapter.notifyDataSetChanged();
-//        }
-        showLog("CHECK POINT ONFLIPPEDTOPAGE 5");
         try {
             if (player != null) {
                 player.setPlayWhenReady(false);
@@ -4585,57 +4742,147 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     simpleSeekBar.setMax(0);
                 }
             }
-
         } catch (Exception e) {
             e.printStackTrace();
         }
-        showLog("CHECK POINT ONFLIPPEDTOPAGE 6");
-//        AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
-//        int maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-//
-//        int seventyVolume = (int) (maxVolume * percent);
-//       // audio.setStreamVolume(AudioManager.STREAM_MUSIC, seventyVolume, 0);
-//
-        //youTubePlayerViewHalf= FlipperAdapter.youTubePlayerViewHalf;
-       /* if (FlipperAdapter.youTubePlayerViewHalf != null) {
-            FlipperAdapter.youTubePlayerViewHalf.pause();
-            FlipperAdapter.youTubePlayerViewHalf=null;
-            adapter.hasStableIds();
-            adapter.notifyDataSetChanged();
-        } else */
-
-        //showNormalImage(view,position);
-//        if (post_type.equals("normal_video")) {
-//          //  FlipperAdapter.youTubePlayerViewHalf.cueVideo(list.get(position).getVideoUrl(),0);
-//            //adapter.showNormalVideo(currentView,position);
-//        }else{
-//            pauseVideo();
-//        }
-        pauseVideo();
-
-
-
-        //loading Ad
-        String postTypeAtPos = list.get(positionx).getPostType();
+        String postTypeAtPos = list.get(position).getPostType();
         if (postTypeAtPos != null && postTypeAtPos.equalsIgnoreCase("ad")) {
-            showLog("ONFLIPPEDTOPAGE AD Loading");
-            loadAds(list.get(positionx).getNext_req_ad_code(), list.get(positionx).getNext_ad_req_position(), list.get(position).getAd_type());
+            showLog("ONFLIPSETTLE AD Loading");
+            loadAds(list.get(position).getNext_req_ad_code(),
+                    list.get(position).getNext_ad_req_position(),
+                    list.get(position).getAd_type());
         }
-        showLog("CHECK POINT ONFLIPPEDTOPAGE 7");
-        // FireBase + BundleDataToGcmPush deferred to OnFlipCompletedListener (flushPendingFlipTracking).
-        // Fallback if complete listener already ran (or first page with no gesture): flush when idle.
-        if (mFlipView != null && !mFlipView.mIsFlipping) {
-            flushPendingFlipTracking();
-        }
-
-//        if(list.get(positionx).getPostType().equalsIgnoreCase("normal_image")){
-//            LocalBroadcastManager.getInstance(getContext()).registerReceiver(CURRENT_LOCATION,
-//                    new IntentFilter("CURRENT_LOCATION"));
-//        }
-
     }
 
 
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(STATE_FLIP_INDEX, positionx);
+        long postId = -1L;
+        try {
+            if (list != null && positionx >= 0 && positionx < list.size()) {
+                Long id = list.get(positionx).getPostId();
+                if (id != null) {
+                    postId = id;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        outState.putLong(STATE_FLIP_POST_ID, postId);
+        showLog("onSaveInstanceState flip index=" + positionx + " postId=" + postId);
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        // onCreate already reads this; re-read as a safety net if recreate skipped that path.
+        if (!pendingFlipRestore) {
+            readPendingFlipRestoreState(savedInstanceState);
+        }
+    }
+
+    private void readPendingFlipRestoreState(Bundle savedInstanceState) {
+        if (savedInstanceState == null) {
+            return;
+        }
+        pendingRestoreFlipIndex = savedInstanceState.getInt(STATE_FLIP_INDEX, 0);
+        pendingRestorePostId = savedInstanceState.getLong(STATE_FLIP_POST_ID, -1L);
+        // Cold start has null bundle. Recreate always has a bundle; restore only if we
+        // actually had a mid-feed position or a known postId.
+        pendingFlipRestore = pendingRestoreFlipIndex > 0 || pendingRestorePostId > 0;
+        showLog("pending flip restore index=" + pendingRestoreFlipIndex
+                + " postId=" + pendingRestorePostId
+                + " active=" + pendingFlipRestore);
+    }
+
+    private void clearPendingFlipRestore() {
+        pendingFlipRestore = false;
+        pendingRestoreFlipIndex = 0;
+        pendingRestorePostId = -1L;
+    }
+
+    /**
+     * After articles load (setData / append), restore the flip page that was showing
+     * before a DayNight recreate (e.g. battery saver → dark mode).
+     * <p>
+     * Behavior:
+     * <ul>
+     *   <li>Prefer matching {@code pendingRestorePostId} in the loaded list.</li>
+     *   <li>Else if saved index is within the loaded list, use that index.</li>
+     *   <li>Else stay at 0 (post not in loaded list / index past end — no extra
+     *       fetch solely for restore).</li>
+     *   <li>Cold start (no saved state) never sets pending → stays at article 0.</li>
+     * </ul>
+     */
+    private void maybeRestoreFlipPositionAfterArticlesLoad() {
+        if (!pendingFlipRestore) {
+            return;
+        }
+        if (list == null || list.isEmpty() || mFlipView == null || adapter == null) {
+            return;
+        }
+        int target = -1;
+        if (pendingRestorePostId > 0) {
+            for (int i = 0; i < list.size(); i++) {
+                try {
+                    Long id = list.get(i).getPostId();
+                    if (id != null && id.longValue() == pendingRestorePostId) {
+                        target = i;
+                        break;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (target < 0 && pendingRestoreFlipIndex > 0 && pendingRestoreFlipIndex < list.size()) {
+            target = pendingRestoreFlipIndex;
+            showLog("flip restore: postId not in list, using saved index=" + target);
+        }
+        if (target < 0) {
+            // Post not in the loaded batch and index past end — stay at 0.
+            // We do not auto-fetch extra pages solely for restore (best effort).
+            clearPendingFlipRestore();
+            showLog("flip restore: target not found in loaded list, staying at 0");
+            return;
+        }
+
+        clearPendingFlipRestore();
+        if (target <= 0) {
+            return;
+        }
+        try {
+            positionx = target;
+            adapter.setCurrentFlipPage(target);
+            final int page = target;
+            // Post so FlipView finishes setData/dataSetChanged (which flips to 0) first.
+            mFlipView.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (mFlipView == null || adapter == null) {
+                            return;
+                        }
+                        int pageCount = mFlipView.getPageCount();
+                        if (pageCount <= 0) {
+                            return;
+                        }
+                        int safePage = Math.min(page, pageCount - 1);
+                        positionx = safePage;
+                        adapter.setCurrentFlipPage(safePage);
+                        mFlipView.flipTo(safePage);
+                        showLog("flip restore: flipped to page " + safePage);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     @Override
     public void onDestroy() {
@@ -5270,22 +5517,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void setViewsApi() {
 
         try {
-            JsonObject otp = jsonObjectRequest_Views();
-            APIService apiService = RestApiClient.getClient().create(APIService.class);
-            Call<JsonObject> apiResponse = apiService.get_views("v3", otp);
+            final int postId = updated_post_id_firebase;
+            final int draftId = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+            final String analyticsSession = SessionAnalyticsTracker.get().getActiveSessionId();
+            // AES encrypt off the UI thread — was a visible hitch on Narzo after each flip.
+            new Thread(() -> {
+                try {
+                    ListOfUserArticlesRequest requestModel = new ListOfUserArticlesRequest();
+                    requestModel.setPostId((long) postId);
+                    requestModel.setDraftId(draftId);
+                    if (analyticsSession != null) {
+                        requestModel.setAnalyticsSessionId(analyticsSession);
+                    }
+                    String jsonString = new com.google.gson.Gson().toJson(requestModel);
+                    String encrpt_data = encrypt(jsonString);
+                    EncritonRequestData Encriton_Request = new EncritonRequestData();
+                    Encriton_Request.setData(encrpt_data);
+                    JsonObject otp = new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
 
-            apiResponse.enqueue(new Callback<JsonObject>() {
-                @Override
-                public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
+                    APIService apiService = RestApiClient.getClient().create(APIService.class);
+                    Call<JsonObject> apiResponse = apiService.get_views("v3", otp);
+                    apiResponse.enqueue(new Callback<JsonObject>() {
+                        @Override
+                        public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
+                            JsonObject encreptionRequest = response.body();
+                        }
 
-                    JsonObject encreptionRequest = response.body();
+                        @Override
+                        public void onFailure(Call<JsonObject> call, Throwable t) {
+                        }
+                    });
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-
-                @Override
-                public void onFailure(Call<JsonObject> call, Throwable t) {
-
-                }
-            });
+            }, "views-api").start();
 
         } catch (Exception e) {
             e.printStackTrace();

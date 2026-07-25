@@ -59,7 +59,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:background="#9EFFFFFF"
+        android:background="@color/overlay_scrim"
         android:layout_below="@+id/card_header">
 
         <LinearLayout

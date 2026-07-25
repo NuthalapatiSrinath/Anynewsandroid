@@ -142,6 +142,13 @@
     <color name="anynews_ad_green">#3A6728</color>
     <color name="anynews_gray">#808080</color>
     <color name="anynews_outline">#E0E0E0</color>
+
+    <!-- Full-video options dialog (iOS dark action sheet over video). Fixed colors. -->
+    <color name="full_video_option_dialog_bg">#E62C2C2E</color>
+    <color name="full_video_option_title">#FFFFFF</color>
+    <color name="full_video_option_message">#EBEBF599</color>
+    <color name="full_video_option_action">#0A84FF</color>
+    <color name="full_video_option_divider">#545458A0</color>
     <color name="whatsapp_green">#25D366</color>
     <color name="whatsapp_green_light">#E7F9EF</color>
     <color name="app_bg_color">#000000</color>
@@ -149,6 +156,12 @@
     <color name="loader_selected">#ffffff</color>
     <color name="share_download_icon_disabled">#D1D1D1</color>
     <color name="text_color_primary">#000000</color>
+    <!-- Image / media load placeholders (same look in light; dark in night). -->
+    <color name="image_placeholder">#d9d9d9</color>
+    <!-- Translucent overlay behind loading lists (notifications, etc.). -->
+    <color name="overlay_scrim">#9EFFFFFF</color>
+    <!-- Soft divider used on older half-post layouts. -->
+    <color name="soft_divider">#EAE8EC</color>
 
     <!-- Half-post engagement count overlays (icon corner badges) -->
     <color name="engagement_badge_bg">#FF6300</color>
@@ -157,12 +170,24 @@
 
     <!-- Always-white text on brand orange buttons (never remapped in night). -->
     <color name="on_brand_text">#FFFFFF</color>
+
+    <!-- Poll / survey option cards (day). Night overrides in values-night. -->
+    <color name="poll_option_surface">#FFFFFF</color>
+    <color name="poll_option_text">#525252</color>
+    <color name="poll_option_shadow">#D0D2D5</color>
+    <color name="poll_option_selected_bg">#42AE4D</color>
+    <color name="poll_option_selected_text">#FFFFFF</color>
+    <color name="poll_option_selected_shadow">#70CF79</color>
+    <color name="poll_option_selected_highlight">#6BCF75</color>
     <!-- Form surfaces: light in day, dark in night (see values-night). -->
     <color name="form_surface">#F5F7FB</color>
     <color name="form_surface_elevated">#FFFFFF</color>
     <color name="form_upload_text">#5A5858</color>
-    <color name="login_button_disabled_bg">#F5F7FB</color>
-    <color name="login_button_disabled_text">#8D8D8E</color>
+    <!-- Login / signup OTP screen: readable in light mode (was washed out on white). -->
+    <color name="login_hint_color">#5A5858</color>
+    <color name="login_icon_tint">#525252</color>
+    <color name="login_button_disabled_bg">#EF4923</color>
+    <color name="login_button_disabled_text">#FFFFFF</color>
 
     <!-- Cricket Live Mini Player (light; night overrides in values-night) -->
     <color name="cmp_surface">#FFFFFF</color>

@@ -35,6 +35,14 @@ public class LanguageFontConfig implements Serializable {
     @Expose
     private Float lineSpacingMultiplier;
 
+    @SerializedName("title_font_weight")
+    @Expose
+    private Integer titleFontWeight;
+
+    @SerializedName("body_font_weight")
+    @Expose
+    private Integer bodyFontWeight;
+
     @SerializedName("state_selection_font_size")
     @Expose
     private Float stateSelectionFontSize;
@@ -128,6 +136,33 @@ public class LanguageFontConfig implements Serializable {
         return lineSpacingMultiplier;
     }
 
+    /**
+     * CSS-style font weight for article titles (100..900).
+     * Default 400 matches FontSettingsHelper's historical Typeface.NORMAL apply path.
+     */
+    public int getTitleFontWeight() {
+        return clampFontWeight(titleFontWeight);
+    }
+
+    /**
+     * CSS-style font weight for article body (100..900).
+     * Default 400 matches FontSettingsHelper's historical Typeface.NORMAL apply path.
+     */
+    public int getBodyFontWeight() {
+        return clampFontWeight(bodyFontWeight);
+    }
+
+    private static int clampFontWeight(Integer raw) {
+        if (raw == null || raw <= 0) {
+            return 400;
+        }
+        int w = raw;
+        if (w < 100) w = 100;
+        if (w > 900) w = 900;
+        // Snap to nearest 100 to match admin slider steps.
+        return Math.round(w / 100f) * 100;
+    }
+
     public float getStateSelectionFontSize() {
         return stateSelectionFontSize != null ? stateSelectionFontSize : 21f;
     }
@@ -203,6 +238,10 @@ public class LanguageFontConfig implements Serializable {
         cfg.profileFontSize = 14f;
         cfg.loginFontSize = 16f;
         cfg.postSubmitFontSize = 14f;
+        // Explicit defaults so offline productionDefault matches current look
+        // (applyTypeface with Typeface.NORMAL / no weight overlay).
+        cfg.titleFontWeight = 400;
+        cfg.bodyFontWeight = 400;
         return cfg;
     }
 }

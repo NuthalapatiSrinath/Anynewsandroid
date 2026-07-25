@@ -17,7 +17,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
+import android.util.Log;
 import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -92,6 +95,8 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 public class PostVideo extends AppCompatActivity {
+    private static final String TAG = "REPORTER_VIDEO";
+
     ImageView img_upload_photo;
     private int PICK_IMAGE_REQUEST = 1;
     private static final int PICK_IMAGE_REQUEST_CAMARA = 700;
@@ -99,6 +104,14 @@ public class PostVideo extends AppCompatActivity {
     private Uri filePath;
     private Bitmap bitmap;
     private String ImageId = "";
+
+    /**
+     * Single live reference to the video chooser. Guards against the dialog being
+     * shown twice (rapid double-tap on the upload card / double permission callback),
+     * which previously left a second chooser stacked behind the first — so it re-appeared
+     * ("asks again") right after the first video was picked.
+     */
+    private androidx.appcompat.app.AlertDialog videoPickerDialog;
 
 
     ImageView img_back;
@@ -114,6 +127,7 @@ public class PostVideo extends AppCompatActivity {
     EditText edt_news_description;
     CheckBox checked_terms_conditions;
     TextView txt_select_language, news_descrip, upload_image, post_button;
+    TextView txt_title_count, txt_desc_count;
     ArrayAdapter<String> adapter_state;
     Allsharedpreference prefShare;
     LanguageModelResponse languageModelResponse;
@@ -161,6 +175,8 @@ public class PostVideo extends AppCompatActivity {
         image_upload_progress_bar = findViewById(R.id.image_upload_progress_bar);
         tv_upload_percent = findViewById(R.id.tv_upload_percent);
         tv_agree_view = findViewById(R.id.tv_agree_view);
+        txt_title_count = findViewById(R.id.txt_title_count);
+        txt_desc_count = findViewById(R.id.txt_desc_count);
         mCommonmethods = new CommonMethods(PostVideo.this);
 
 
@@ -317,7 +333,42 @@ public class PostVideo extends AppCompatActivity {
 
         getLocation();
         setStaticdata();
+        setupLiveCounters();
     }
+
+    private void setupLiveCounters() {
+        edt_news_headlines.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                txt_title_count.setText(s.length() + " / 80");
+            }
+        });
+        edt_news_description.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String text = s.toString().trim();
+                int wordCount = text.isEmpty() ? 0 : text.split("\\s+").length;
+                txt_desc_count.setText(wordCount + " words \u00b7 " + s.length() + " / 400");
+            }
+        });
+    }
+
     private void setStaticdata() {
         prefShare = new Allsharedpreference(this);
         Gson gson = new Gson();
@@ -337,11 +388,12 @@ public class PostVideo extends AppCompatActivity {
         //Initialize Google Play Services
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             AppHelper.showLog("PERMISSION");
-            if (ContextCompat.checkSelfPermission(this,
+            if ((ContextCompat.checkSelfPermission(this,
                     Manifest.permission.READ_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED)  {
+                    Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+                    || ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED)  {
                 //Location Permission already granted
                 AppHelper.showLog("PERMISSION GRANTED +++++");
                 showFileChooser();
@@ -449,6 +501,15 @@ public class PostVideo extends AppCompatActivity {
 
     private void showFileChooser() {
         AppHelper.showLog("showFileChooser");
+
+        // Never stack a second chooser. A double-tap on the upload card (or a duplicate
+        // permission callback) used to open two dialogs; picking from the top one left the
+        // second showing, so it looked like the app "asked again" after the first upload.
+        if (videoPickerDialog != null && videoPickerDialog.isShowing()) {
+            Log.e(TAG, "showFileChooser skipped - chooser already showing");
+            return;
+        }
+
         prefShare = new Allsharedpreference(PostVideo.this);
         Gson gson = new Gson();
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
@@ -498,7 +559,14 @@ public class PostVideo extends AppCompatActivity {
                 }
             }
         });
-        builder.show();
+        videoPickerDialog = builder.create();
+        videoPickerDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialog) {
+                videoPickerDialog = null;
+            }
+        });
+        videoPickerDialog.show();
 
     }
 

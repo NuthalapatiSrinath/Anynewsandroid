@@ -7,7 +7,10 @@ public class Config {
     public static final int NEWS_TOTAL_ROWS = 100;
     public static final int COMMENTS_TOTAL_ROWS = 15;
 
+    // Test / Coolify staging — switch SITE_URL back to api.anynews.co.in for Play release
     public static final String SITE_URL = "https://anynews.fusionvertexsolutions.com/";
+    // Production (Play):
+//    public static final String SITE_URL = "https://api.anynews.co.in/";
 
     static final String API_URL = SITE_URL+"api/mobileapi/";
 

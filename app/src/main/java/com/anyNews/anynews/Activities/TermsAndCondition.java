@@ -31,8 +31,8 @@ public class TermsAndCondition extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(ContextCompat.getColor(this, R.color.app_bg_color));
-        getWindow().setNavigationBarColor(ContextCompat.getColor(this, R.color.app_bg_color));
+        getWindow().setStatusBarColor(ContextCompat.getColor(this, R.color.background_color));
+        getWindow().setNavigationBarColor(ContextCompat.getColor(this, R.color.background_color));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().setDecorFitsSystemWindows(true);

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selected poll/survey option fill — rounded to match neumorph corner radius; use on
+     content inside the padded shape so green does not spill into shadow padding. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/poll_option_selected_bg" />
+    <corners android:radius="@dimen/neomorph_view_corner_radius" />
+</shape>

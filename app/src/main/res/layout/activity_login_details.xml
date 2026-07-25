@@ -2,6 +2,7 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/login_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background_color"
@@ -50,13 +51,14 @@
                 android:layout_marginRight="@dimen/_20sdp"
                 android:scaleType="centerInside"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:neumorph_shadowColorDark="#DFDDDD"
+                app:neumorph_backgroundColor="@color/neomorph_background_color"
+                app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                 app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                 app:neumorph_shadowElevation="6dp"
                 app:neumorph_shapeAppearance="@style/Login_ShapeAppearance"
                 app:neumorph_shapeType="pressed"
-                app:neumorph_strokeColor="@color/design_default_color_on_primary"
-                app:neumorph_strokeWidth="0.01dp">
+                app:neumorph_strokeColor="@color/neomorph_shadow_color"
+                app:neumorph_strokeWidth="0.5dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -69,6 +71,7 @@
                         android:layout_height="match_parent"
                         android:background="@null"
                         android:drawableLeft="@drawable/ic_username_icon"
+                        android:drawablePadding="10dp"
                         android:hint="@string/edittext_enter_user_name"
                         android:inputType="text"
                         android:layout_marginLeft="10dp"
@@ -77,7 +80,7 @@
                         android:minLines="1"
                         android:lines="1"
                         android:textColor="@color/text_color_primary"
-                        android:textColorHint="@color/whitesren">
+                        android:textColorHint="@color/login_hint_color">
 
                     </EditText>
                 </LinearLayout>
@@ -96,13 +99,14 @@
                 android:scaleType="centerInside"
                 android:visibility="visible"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:neumorph_shadowColorDark="#DFDDDD"
+                app:neumorph_backgroundColor="@color/neomorph_background_color"
+                app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                 app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                 app:neumorph_shadowElevation="6dp"
                 app:neumorph_shapeAppearance="@style/Login_ShapeAppearance"
                 app:neumorph_shapeType="pressed"
-                app:neumorph_strokeColor="@color/design_default_color_on_primary"
-                app:neumorph_strokeWidth="0.01dp">
+                app:neumorph_strokeColor="@color/neomorph_shadow_color"
+                app:neumorph_strokeWidth="0.5dp">
 
                 <LinearLayout
 
@@ -116,13 +120,14 @@
                         android:layout_height="match_parent"
                         android:background="@null"
                         android:drawableLeft="@drawable/ic_phone_icon"
+                        android:drawablePadding="10dp"
                         android:hint="@string/edittext_enter_phone_number"
                         android:inputType="phone"
                         android:layout_marginLeft="10dp"
                         android:maxLines="1"
                         android:maxLength="10"
                         android:textColor="@color/text_color_primary"
-                        android:textColorHint="@color/whitesren">
+                        android:textColorHint="@color/login_hint_color">
 
                     </EditText>
                 </LinearLayout>
@@ -138,13 +143,14 @@
                 android:scaleType="centerInside"
                 android:visibility="visible"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:neumorph_shadowColorDark="#DFDDDD"
+                app:neumorph_backgroundColor="@color/neomorph_background_color"
+                app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                 app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                 app:neumorph_shadowElevation="6dp"
                 app:neumorph_shapeAppearance="@style/Login_ShapeAppearance"
                 app:neumorph_shapeType="pressed"
-                app:neumorph_strokeColor="@color/design_default_color_on_primary"
-                app:neumorph_strokeWidth="0.01dp">
+                app:neumorph_strokeColor="@color/neomorph_shadow_color"
+                app:neumorph_strokeWidth="0.5dp">
 
                 <LinearLayout
 
@@ -158,6 +164,8 @@
                         android:layout_height="match_parent"
                         android:background="@null"
                         android:drawableLeft="@android:drawable/sym_action_email"
+                        android:drawablePadding="10dp"
+                        android:drawableTint="@color/login_icon_tint"
                         android:hint="Email Id"
                         android:layout_marginLeft="10dp"
                         android:maxLines="1"
@@ -166,7 +174,7 @@
                         android:focusable="false"
                         android:focusableInTouchMode="false"
                         android:textColor="@color/text_color_primary"
-                        android:textColorHint="@color/whitesren">
+                        android:textColorHint="@color/login_hint_color">
 
                     </EditText>
                 </LinearLayout>
@@ -188,7 +196,7 @@
                     android:scaleType="centerInside"
                     android:textSize="@dimen/_15sdp"
                     app:layout_constraintEnd_toEndOf="parent"
-                    app:neumorph_shadowColorDark="#F2DFDFDF"
+                    app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                     app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                     app:neumorph_shadowElevation="0dp"
                     app:neumorph_shapeType="flat"
@@ -233,24 +241,25 @@
                     android:text="Next"
                     android:textSize="@dimen/_15sdp"
                     app:layout_constraintEnd_toEndOf="parent"
-                    app:neumorph_shadowColorDark="#F2DFDFDF"
+                    app:neumorph_backgroundColor="@color/brand_orange"
+                    app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                     app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                     app:neumorph_shadowElevation="4dp"
                     app:neumorph_shapeType="flat"
-                    app:neumorph_strokeColor="@color/white"
-                    app:neumorph_strokeWidth="3dp">
+                    app:neumorph_strokeColor="@color/brand_orange"
+                    app:neumorph_strokeWidth="2dp">
 
 
                     <TextView
                         android:id="@+id/post_login"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@color/login_button_disabled_bg"
+                        android:background="@color/brand_orange"
                         android:gravity="center"
                         android:paddingLeft="@dimen/_40sdp"
                         android:paddingRight="@dimen/_40sdp"
                         android:text="Send OTP"
-                        android:textColor="@color/login_button_disabled_text"
+                        android:textColor="@color/on_brand_text"
                         android:textSize="@dimen/_15sdp"
                         android:textStyle="bold">
 
@@ -288,7 +297,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:neumorph_shapeAppearance="@style/ShapeAppearance"
                 app:neumorph_shapeType="pressed"
-                app:neumorph_strokeColor="#5BD6CBCB"
+                app:neumorph_strokeColor="@color/neomorph_shadow_color"
                 app:neumorph_strokeWidth="0.4dp">
 
                 <EditText
@@ -318,7 +327,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:neumorph_shapeAppearance="@style/ShapeAppearance"
                 app:neumorph_shapeType="pressed"
-                app:neumorph_strokeColor="#5BD6CBCB"
+                app:neumorph_strokeColor="@color/neomorph_shadow_color"
                 app:neumorph_strokeWidth="0.4dp">
 
                 <EditText
@@ -348,7 +357,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:neumorph_shapeAppearance="@style/ShapeAppearance"
                 app:neumorph_shapeType="pressed"
-                app:neumorph_strokeColor="#5BD6CBCB"
+                app:neumorph_strokeColor="@color/neomorph_shadow_color"
                 app:neumorph_strokeWidth="0.4dp">
 
                 <EditText
@@ -378,7 +387,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:neumorph_shapeAppearance="@style/ShapeAppearance"
                 app:neumorph_shapeType="pressed"
-                app:neumorph_strokeColor="#5BD6CBCB"
+                app:neumorph_strokeColor="@color/neomorph_shadow_color"
                 app:neumorph_strokeWidth="0.4dp">
 
                 <EditText
@@ -426,7 +435,7 @@
                 android:text="Next"
                 android:textSize="@dimen/_15sdp"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:neumorph_shadowColorDark="#F2DFDFDF"
+                app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                 app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                 app:neumorph_shadowElevation="0dp"
                 app:neumorph_shapeType="flat"
@@ -482,7 +491,7 @@
                 android:text="Next"
                 android:textSize="@dimen/_15sdp"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:neumorph_shadowColorDark="#F2DFDFDF"
+                app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                 app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                 app:neumorph_shadowElevation="0dp"
                 app:neumorph_shapeType="flat"

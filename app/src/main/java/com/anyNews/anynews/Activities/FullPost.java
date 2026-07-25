@@ -137,6 +137,14 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
     ProgressBar progressBarLarge,full_image_upload_progress_bar;
     TextView tv_agree_view;
     private ActivityResultLauncher<CropImageContractOptions> cropImage;
+
+    /**
+     * Single live reference to the "Add Photo" chooser. Guards against the dialog being
+     * shown twice (rapid double-tap on the upload card / double permission callback),
+     * which previously left a second chooser stacked behind the first — so it re-appeared
+     * ("asks again") right after the first photo was picked/uploaded.
+     */
+    private androidx.appcompat.app.AlertDialog imagePickerDialog;
     private ActivityResultLauncher<PickVisualMediaRequest> pickVisualMedia;
     private ActivityResultLauncher<String[]> locationPermissionLauncher;
 
@@ -592,6 +600,14 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
 
 
     private void showFileChooser() {
+        // Never stack a second chooser. A double-tap on the upload card (or a duplicate
+        // permission callback) used to open two dialogs; picking from the top one left the
+        // second showing, so it looked like the app "asked again" after the first upload.
+        if (imagePickerDialog != null && imagePickerDialog.isShowing()) {
+            Log.e(TAG, "showFileChooser skipped - chooser already showing");
+            return;
+        }
+
         prefShare = new Allsharedpreference(FullPost.this);
         Gson gson = new Gson();
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
@@ -619,7 +635,14 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
                 }
             }
         });
-        builder.show();
+        imagePickerDialog = builder.create();
+        imagePickerDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialog) {
+                imagePickerDialog = null;
+            }
+        });
+        imagePickerDialog.show();
     }
 
     private void openCameraForPhoto() {

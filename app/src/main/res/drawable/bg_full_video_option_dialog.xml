@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <!-- iOS-style frosted action sheet over video (light material, slight translucency). -->
+    <solid android:color="@color/full_video_option_dialog_bg" />
+    <corners android:radius="14dp" />
+</shape>

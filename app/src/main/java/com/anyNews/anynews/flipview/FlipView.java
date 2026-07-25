@@ -6,6 +6,7 @@ import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.SuppressLint;
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.TypedArray;
@@ -65,6 +66,8 @@ public class FlipView extends FrameLayout {
     public boolean farword = false;
     //SessionManager session;
     Context mContext;
+    /** Android Go / low-RAM: skip full-screen shadow/shade paints during 3D flip. */
+    private boolean mLightFlipEffects;
     List<Page> st45 = new ArrayList<Page>();
     int flipdegreeforward = 80, flipdegreebackward = 100;
     boolean st = false;
@@ -237,7 +240,26 @@ public class FlipView extends FrameLayout {
         mShadePaint.setStyle(Style.FILL);
         mShinePaint.setColor(Color.BLACK);
         mShinePaint.setStyle(Style.FILL);
+        mLightFlipEffects = shouldUseLightFlipEffects(context);
+    }
 
+    private static boolean shouldUseLightFlipEffects(Context context) {
+        try {
+            ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null && am.isLowRamDevice()) {
+                return true;
+            }
+            // Extra guard for Go-class phones that report ~2–3GB usable RAM.
+            ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+            if (am != null) {
+                am.getMemoryInfo(mi);
+                if (mi.totalMem > 0 && mi.totalMem < 3L * 1024L * 1024L * 1024L) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     public void dataSetChanged() {
@@ -1051,6 +1073,9 @@ public class FlipView extends FrameLayout {
      * @param canvas
      */
     private void drawPreviousShadow(Canvas canvas) {
+        if (mLightFlipEffects) {
+            return;
+        }
         final float degreesFlipped = getDegreesFlipped();
         if (degreesFlipped > 90) {
             final int alpha = (int) (((degreesFlipped - 90) / 90f) * MAX_SHADOW_ALPHA);
@@ -1087,6 +1112,9 @@ public class FlipView extends FrameLayout {
      * @param canvas
      */
     private void drawNextShadow(Canvas canvas) {
+        if (mLightFlipEffects) {
+            return;
+        }
         final float degreesFlipped = getDegreesFlipped();
         if (degreesFlipped <= 90) {
             final int alpha = (int) ((Math.abs(degreesFlipped - 90) / 90f) * MAX_SHADOW_ALPHA);
@@ -1227,6 +1255,9 @@ public class FlipView extends FrameLayout {
      * @param canvas
      */
     private void drawFlippingShadeShine(Canvas canvas) {
+        if (mLightFlipEffects) {
+            return;
+        }
         final float degreesFlipped = getDegreesFlipped();
         if (degreesFlipped < 90) {
             final int alpha = (int) ((degreesFlipped / 90f) * MAX_SHINE_ALPHA);

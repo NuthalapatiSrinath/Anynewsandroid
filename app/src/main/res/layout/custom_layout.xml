@@ -16,10 +16,10 @@
         android:textSize="@dimen/_15sdp"
         app:neumorph_shadowElevation="4dp"
         app:neumorph_shadowColorLight="#DFFFFFFF"
-        app:neumorph_shadowColorDark="#4BDDDCDC"
+        app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
         android:scaleType="centerInside"
         app:neumorph_strokeWidth="0.3dp"
-        app:neumorph_strokeColor="#BDD3E0"
+        app:neumorph_strokeColor="@color/profile_border"
         app:layout_constraintEnd_toEndOf="parent"
         app:neumorph_shapeType="flat" >
         <TextView
@@ -52,7 +52,7 @@
         android:textSize="@dimen/_15sdp"
         app:neumorph_shadowElevation="4dp"
         app:neumorph_shadowColorLight="#DFFFFFFF"
-        app:neumorph_shadowColorDark="#4BDDDCDC"
+        app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
         android:scaleType="centerInside"
         app:neumorph_strokeWidth="0.5dp"
         app:neumorph_strokeColor="#F63F05"

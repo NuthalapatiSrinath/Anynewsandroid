@@ -43,6 +43,13 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
+import com.permissionx.guolindev.PermissionX;
+import com.permissionx.guolindev.callback.ExplainReasonCallback;
+import com.permissionx.guolindev.callback.ForwardToSettingsCallback;
+import com.permissionx.guolindev.callback.RequestCallback;
+import com.permissionx.guolindev.request.ExplainScope;
+import com.permissionx.guolindev.request.ForwardScope;
+
 import com.android.volley.DefaultRetryPolicy;
 import com.android.volley.NetworkResponse;
 import com.android.volley.NoConnectionError;
@@ -94,6 +101,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -127,6 +135,12 @@ public class newProfileDetails extends AppCompatActivity {
     private int PICK_IMAGE_REQUEST = 1;
     private static final int PICK_IMAGE_REQUEST_CAMARA = 700;
     private static final int STORAGE_PERMISSION_CODE = 123;
+    /**
+     * Single live reference to the "Add Photo" chooser. Guards against the dialog being
+     * shown twice (rapid double-tap / duplicate permission callback), which previously left
+     * a second chooser stacked behind the first — so it re-appeared after the first pick.
+     */
+    private androidx.appcompat.app.AlertDialog imagePickerDialog;
     boolean CHECK_VALUE = false;
     CommonMethods mCommonmethods;
     private Uri filePath;
@@ -704,20 +718,73 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     private void requestStoragePermission() {
-        //Initialize Google Play Services
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(newProfileDetails.this,
-                    Manifest.permission.READ_EXTERNAL_STORAGE)
-                    == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(newProfileDetails.this,
-                    Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                //Location Permission already granted
+            // Android 13+: READ_EXTERNAL_STORAGE is never granted — must use READ_MEDIA_IMAGES.
+            // Without that check the profile photo path re-requested storage every tap.
+            boolean hasMediaAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                    ? ContextCompat.checkSelfPermission(newProfileDetails.this,
+                    Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+                    : ContextCompat.checkSelfPermission(newProfileDetails.this,
+                    Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+            boolean hasCamera = ContextCompat.checkSelfPermission(newProfileDetails.this,
+                    Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
 
+            if (hasMediaAccess && hasCamera) {
                 showFileChooser();
+            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                PermissionX.init(newProfileDetails.this)
+                        .permissions(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.CAMERA)
+                        .onExplainRequestReason(new ExplainReasonCallback() {
+                            @Override
+                            public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
+                                scope.showRequestReasonDialog(deniedList,
+                                        "Please allow the below necessary permissions to upload photos",
+                                        "OK", "Cancel");
+                            }
+                        })
+                        .onForwardToSettings(new ForwardToSettingsCallback() {
+                            @Override
+                            public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
+                                scope.showForwardToSettingsDialog(deniedList,
+                                        "Please allow the below necessary permissions manually from settings page to upload photos",
+                                        "OK", "Cancel");
+                            }
+                        })
+                        .request(new RequestCallback() {
+                            @Override
+                            public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
+                                if (allGranted) {
+                                    showFileChooser();
+                                }
+                            }
+                        });
             } else {
-                //Request Location Permission
-                requestPermissions(
-                        new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.CAMERA},
-                        STORAGE_PERMISSION_CODE);
+                PermissionX.init(newProfileDetails.this)
+                        .permissions(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.CAMERA)
+                        .onExplainRequestReason(new ExplainReasonCallback() {
+                            @Override
+                            public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
+                                scope.showRequestReasonDialog(deniedList,
+                                        "Please allow the below necessary permissions to upload photos",
+                                        "OK", "Cancel");
+                            }
+                        })
+                        .onForwardToSettings(new ForwardToSettingsCallback() {
+                            @Override
+                            public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
+                                scope.showForwardToSettingsDialog(deniedList,
+                                        "Please allow the below necessary permissions manually from settings page to upload photos",
+                                        "OK", "Cancel");
+                            }
+                        })
+                        .request(new RequestCallback() {
+                            @Override
+                            public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
+                                if (allGranted) {
+                                    showFileChooser();
+                                }
+                            }
+                        });
             }
         } else {
             showFileChooser();
@@ -726,10 +793,12 @@ public class newProfileDetails extends AppCompatActivity {
 
 
     private void showFileChooser() {
-        //   final CharSequence[] options = { "Take Photo", "Choose from Gallery","Cancel" };
-        //   AlertDialog.Builder builder = new AlertDialog.Builder(newProfileDetails.this);
-        //  builder.setTitle("Add Photo!");
-
+        // Never stack a second chooser. A double-tap on the profile photo (or a duplicate
+        // permission callback) used to open two dialogs; picking from the top one left the
+        // second showing, so it looked like the app "asked again" after the first upload.
+        if (imagePickerDialog != null && imagePickerDialog.isShowing()) {
+            return;
+        }
 
         Gson gson = new Gson();
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
@@ -746,8 +815,6 @@ public class newProfileDetails extends AppCompatActivity {
             public void onClick(DialogInterface dialog, int item) {
                 if (options[item].equals("" + languageModelResponse.getData().getTakePhoto())) {
                     Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-//                    File f = new File(android.os.Environment.getExternalStorageDirectory(), "temp.jpg");
-//                    intent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
                     if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                         startActivityForResult(intent, PICK_IMAGE_REQUEST_CAMARA);
                     }
@@ -766,7 +833,14 @@ public class newProfileDetails extends AppCompatActivity {
                 }
             }
         });
-        builder.show();
+        imagePickerDialog = builder.create();
+        imagePickerDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialog) {
+                imagePickerDialog = null;
+            }
+        });
+        imagePickerDialog.show();
     }
 
     @Override

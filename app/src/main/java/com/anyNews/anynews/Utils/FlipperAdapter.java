@@ -18,6 +18,7 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 import static com.facebook.FacebookSdk.getApplicationContext;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -59,12 +60,14 @@ import android.text.TextUtils;
 import android.text.style.ClickableSpan;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
+import android.webkit.MimeTypeMap;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
@@ -90,11 +93,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.cardview.widget.CardView;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.widget.TextViewCompat;
+import androidx.fragment.app.FragmentActivity;
 import androidx.lifecycle.Lifecycle;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.viewpager.widget.ViewPager;
@@ -134,7 +139,9 @@ import com.anyNews.anynews.interfaces.ScreenShott;
 import com.anyNews.anynews.interfaces.ShareInterfaceListener;
 import com.anyNews.anynews.interfaces.SharePostToWhatsApp;
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.load.DecodeFormat;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.request.RequestOptions;
 import com.bumptech.glide.request.target.SimpleTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.facebook.ads.AdOptionsView;
@@ -170,6 +177,12 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.nostra13.universalimageloader.core.ImageLoader;
 import com.nostra13.universalimageloader.core.ImageLoaderConfiguration;
+import com.permissionx.guolindev.PermissionX;
+import com.permissionx.guolindev.callback.ExplainReasonCallback;
+import com.permissionx.guolindev.callback.ForwardToSettingsCallback;
+import com.permissionx.guolindev.callback.RequestCallback;
+import com.permissionx.guolindev.request.ExplainScope;
+import com.permissionx.guolindev.request.ForwardScope;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.YouTubePlayerCallback;
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.YouTubePlayerListener;
@@ -245,6 +258,94 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public int customPosition;
     Callbacks callbacks;
    public NativeAd nativeAd=null;
+    /** Visible flip page — buffer pages defer heavy native MediaView attach. */
+    private int currentFlipPage = 0;
+    private final SparseArray<PendingNativeAdBind> pendingNativeAdBinds = new SparseArray<>();
+
+    private static final class PendingNativeAdBind {
+        final FrameLayout placeholder;
+        final NativeAd ad;
+        final View myView;
+        final int fromView;
+        final View convertView;
+        final boolean facebook;
+        final com.facebook.ads.NativeAd fbAd;
+        final RelativeLayout fbAdView;
+        final NativeAdLayout fbNativeAdLayout;
+
+        PendingNativeAdBind(FrameLayout placeholder, NativeAd ad, View myView, int fromView,
+                            View convertView) {
+            this.placeholder = placeholder;
+            this.ad = ad;
+            this.myView = myView;
+            this.fromView = fromView;
+            this.convertView = convertView;
+            this.facebook = false;
+            this.fbAd = null;
+            this.fbAdView = null;
+            this.fbNativeAdLayout = null;
+        }
+
+        PendingNativeAdBind(View convertView, com.facebook.ads.NativeAd fbAd,
+                            RelativeLayout fbAdView, NativeAdLayout fbNativeAdLayout) {
+            this.placeholder = null;
+            this.ad = null;
+            this.myView = null;
+            this.fromView = -1;
+            this.convertView = convertView;
+            this.facebook = true;
+            this.fbAd = fbAd;
+            this.fbAdView = fbAdView;
+            this.fbNativeAdLayout = fbNativeAdLayout;
+        }
+    }
+
+    public void setCurrentFlipPage(int page) {
+        currentFlipPage = page;
+    }
+
+    /** Attach deferred native MediaView when user lands on an ad page. */
+    public void bindPendingNativeAdMediaForPage(int page) {
+        PendingNativeAdBind pending = pendingNativeAdBinds.get(page);
+        if (pending == null) {
+            return;
+        }
+        pendingNativeAdBinds.remove(page);
+        try {
+            if (pending.facebook) {
+                if (pending.fbAd != null && pending.convertView != null) {
+                    displayFBNativeAd(pending.convertView, pending.fbAd,
+                            pending.fbAdView, pending.fbNativeAdLayout);
+                }
+            } else if (pending.ad != null && pending.placeholder != null) {
+                if (pending.fromView == 0) {
+                    displayGoogleFullNativeAd(pending.placeholder, pending.ad,
+                            pending.myView, pending.convertView);
+                } else if (pending.fromView == 1) {
+                    displayGoogleMediumNativeAd(pending.placeholder, pending.ad,
+                            pending.myView, pending.convertView);
+                } else {
+                    displayGoogleNativeAd(pending.placeholder, pending.ad,
+                            pending.myView, pending.convertView);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Cap Glide decode size/format on flip hot paths (avoids full-res ARGB decode
+     * while Camera flip is capturing adjacent pages).
+     */
+    private RequestOptions flipGlideDecodeOptions() {
+        int w = screenWidth > 0 ? screenWidth : 1080;
+        int h = screenHeight > 0 ? screenHeight : 1920;
+        return new RequestOptions()
+                .format(DecodeFormat.PREFER_RGB_565)
+                .override(w, h)
+                .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC);
+    }
 
     com.facebook.ads.NativeAd fbAd=null;
     // sound
@@ -1039,17 +1140,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             return convertView;
         }
+        String pagePostType = list.get(position).getPostType();
         if (BuildConfig.DEBUG) {
-            showLog("getView pos=" + position + " type=" + list.get(position).getPostType());
+            showLog("getView pos=" + position + " type=" + pagePostType
+                    + " postId=" + list.get(position).getPostId());
         }
         customConvertView=convertView;
         customPosition=position;
 
+        if (pagePostType == null || pagePostType.trim().isEmpty()) {
+            // Avoid NPE in switch + empty scrap: unknown/null types used to return a blank page.
+            showLog("getView blank page: null/empty post_type at pos=" + position
+                    + " postId=" + list.get(position).getPostId());
+            convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
+            showShareScreen(convertView);
+            return convertView;
+        }
 
         try {
             if (!list.isEmpty()) {
 
-                switch (list.get(position).getPostType()) {
+                switch (pagePostType) {
                     case "google_vasttag":
                         pauseVideo();
                         convertView = inflater.inflate(R.layout.activity_vast_tag, parent, false);
@@ -1062,7 +1173,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         break;
                     case "normal_image":
                         showLog("Check Point Adapter:: 1");
-                        pauseVideo();
+                        if (hasActiveVideoPlayer()) {
+                            pauseVideo();
+                        }
                         halfImageActivity = new HalfImageActivityHolder();
                         showLog("Check Point Adapter:: 2");
                         // Reuse scrap when layout type matches — avoid reinflating the large
@@ -1085,7 +1198,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         showLog("NORMAL_IMAGE Point Adapter:: 3_12");
                         break;
                     case "full_image":
-                        pauseVideo();
+                        if (hasActiveVideoPlayer()) {
+                            pauseVideo();
+                        }
                         showLog("Check Point FULL_IMAGE:: 1");
                         fullImageActivity = new FullImageActivityHolder();
                         if (!canReuseFlipView(convertView, "full_image")) {
@@ -1209,7 +1324,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         });
                         mCardAdapter = null;
                         try {
-                            Glide.with(context).load(list.get(position).getBackgroundImage()).into(new SimpleTarget<Drawable>() {
+                            Glide.with(context).load(list.get(position).getBackgroundImage())
+                                    .apply(flipGlideDecodeOptions())
+                                    .into(new SimpleTarget<Drawable>() {
                                 @Override
                                 public void onResourceReady(Drawable resource, Transition<? super Drawable> transition) {
                                     magzine_relative_slider.setBackground(resource);
@@ -1340,22 +1457,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     View finalMyView = myView;
                                     int finalFromView = fromView;
                                     NativeAd finalAd = ad;
-                                    new Handler().postDelayed(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            showLog("HomePage.nativeAdList 222 displaying native ad:");
-                                            showLog("fromView:;" + finalFromView);
-                                            if (finalFromView == 0) {
-                                                displayGoogleFullNativeAd(fl_adplaceholder, finalAd, finalMyView, finalConvertView2);
-                                            } else if (finalFromView == 1) {
-                                                displayGoogleMediumNativeAd(fl_adplaceholder, finalAd, finalMyView, finalConvertView2);
-                                            } else {
-                                                displayGoogleNativeAd(fl_adplaceholder, finalAd, finalMyView, finalConvertView2);
+                                    // Buffer/preload pages: skip heavy MediaView attach until page is current.
+                                    if (position != currentFlipPage) {
+                                        showLog("Defer native MediaView bind for buffer ad page=" + position);
+                                        pendingNativeAdBinds.put(position, new PendingNativeAdBind(
+                                                fl_adplaceholder, finalAd, finalMyView, finalFromView, finalConvertView2));
+                                        fl_adplaceholder.removeAllViews();
+                                        ProgressBar adPlaceholder = new ProgressBar(context);
+                                        fl_adplaceholder.addView(adPlaceholder,
+                                                new FrameLayout.LayoutParams(
+                                                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                                                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                                                        android.view.Gravity.CENTER));
+                                    } else {
+                                        new Handler().postDelayed(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                showLog("HomePage.nativeAdList 222 displaying native ad:");
+                                                showLog("fromView:;" + finalFromView);
+                                                if (finalFromView == 0) {
+                                                    displayGoogleFullNativeAd(fl_adplaceholder, finalAd, finalMyView, finalConvertView2);
+                                                } else if (finalFromView == 1) {
+                                                    displayGoogleMediumNativeAd(fl_adplaceholder, finalAd, finalMyView, finalConvertView2);
+                                                } else {
+                                                    displayGoogleNativeAd(fl_adplaceholder, finalAd, finalMyView, finalConvertView2);
+                                                }
                                             }
-                                            //  displayGoogleNativeMediumAd(position, nativeAd,finalConvertView2);
-                                            // displayGoogleNativeIntertitialsAd(fl_adplaceholder, nativeAd,myView, finalConvertView2);
-                                        }
-                                    }, 500);
+                                        }, 500);
+                                    }
 
                                 } else {
                                     showLog("SHARE #1");
@@ -1389,12 +1518,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 View finalConvertView1 = convertView;
                                 if (fbAd != null) {
                                     showLog(" fb ad :");
-                                    new Handler().postDelayed(new Runnable() {
-                                        @Override
-                                        public void run() {
-                                            displayFBNativeAd(finalConvertView1, fbAd, adView, nativeAdLayout);
-                                        }
-                                    }, 500);
+                                    if (position != currentFlipPage) {
+                                        showLog("Defer FB native MediaView bind for buffer ad page=" + position);
+                                        pendingNativeAdBinds.put(position, new PendingNativeAdBind(
+                                                finalConvertView1, fbAd, adView, nativeAdLayout));
+                                    } else {
+                                        new Handler().postDelayed(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                displayFBNativeAd(finalConvertView1, fbAd, adView, nativeAdLayout);
+                                            }
+                                        }, 500);
+                                    }
                                 } else {
                                     showLog(" fb ad with share:");
                                     convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
@@ -1698,6 +1833,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         convertView = inflater.inflate(R.layout.activity_survey_page_flip, parent, false);
 
                         surveyViewHolder.relativeLayoutSurveyMain = convertView.findViewById(R.id.rl_survay_main);
+                        surveyViewHolder.survey_half_image = convertView.findViewById(R.id.survey_half_image);
                         surveyViewHolder.tvSurveyQuestionEnglish = convertView.findViewById(R.id.tv_survey_question_english);
                         surveyViewHolder.neomorphFrameLayoutYes = convertView.findViewById(R.id.neomorphFrameLayoutYes);
                         surveyViewHolder.neomorphFrameLayoutYesSelected = convertView.findViewById(R.id.neomorphFrameLayoutYesSelected);
@@ -1705,27 +1841,24 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         surveyViewHolder.neomorphFrameLayoutNoSelected = convertView.findViewById(R.id.neomorphFrameLayoutNoSelected);
                         surveyViewHolder.neomorphFrameLayoutYesPercent = convertView.findViewById(R.id.neomorphFrameLayoutYesPercent);
                         surveyViewHolder.neomorphFrameLayoutNoPercent = convertView.findViewById(R.id.neomorphFrameLayoutNoPercent);
+                        surveyViewHolder.yesPercentFill = convertView.findViewById(R.id.yes_percent_fill);
+                        surveyViewHolder.noPercentFill = convertView.findViewById(R.id.no_percent_fill);
                         surveyViewHolder.tvAnswerYes = convertView.findViewById(R.id.tv_answer_yes);
                         surveyViewHolder.tvAnswerNo = convertView.findViewById(R.id.tv_answer_no);
+                        surveyViewHolder.llOptionsLayout = convertView.findViewById(R.id.ll_options_layout);
                         surveyViewHolder.llPercentLayout = convertView.findViewById(R.id.ll_percent_layout);
                         surveyViewHolder.tvYesPercent = convertView.findViewById(R.id.tv_yes_percent);
                         surveyViewHolder.tvNoPercent = convertView.findViewById(R.id.tv_no_percent);
 
                         try {
+                            // Image sits ABOVE options (survey_poll pattern) — not as a full-bleed overlay bg.
                             imageBackgroundURL = list.get(position).getBackgroundImage();
-                            Glide.with(getApplicationContext())
-                                    .load(imageBackgroundURL)
-                                    .into(new CustomTarget<Drawable>() {
-                                        @Override
-                                        public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
-                                            surveyViewHolder.relativeLayoutSurveyMain.setBackground(resource);
-                                        }
-
-                                        @Override
-                                        public void onLoadCleared(@Nullable Drawable placeholder) {
-
-                                        }
-                                    });
+                            if (surveyViewHolder.survey_half_image != null) {
+                                Glide.with(getApplicationContext())
+                                        .load(imageBackgroundURL)
+                                        .apply(flipGlideDecodeOptions())
+                                        .into(surveyViewHolder.survey_half_image);
+                            }
 
                             surveyViewHolder.tvSurveyQuestionEnglish.setText("" + list.get(position).getTitle());
                             surveyViewHolder.tvAnswerYes.setText("" + list.get(position).getYes_option());
@@ -1739,13 +1872,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                         if (list.get(position).getSurveyStatus() == 0) {
 
-                            surveyViewHolder.llPercentLayout.setVisibility(View.INVISIBLE);
-
+                            if (surveyViewHolder.llOptionsLayout != null) {
+                                surveyViewHolder.llOptionsLayout.setVisibility(View.VISIBLE);
+                            }
+                            surveyViewHolder.llPercentLayout.setVisibility(View.GONE);
+                            surveyViewHolder.neomorphFrameLayoutYes.setVisibility(View.VISIBLE);
+                            surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.VISIBLE);
+                            surveyViewHolder.neomorphFrameLayoutYesSelected.setVisibility(View.GONE);
+                            surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.GONE);
+                            applySurveyPercentFills(surveyViewHolder, 0f, 0f, false);
 
                         } else {
 
+                            if (surveyViewHolder.llOptionsLayout != null) {
+                                surveyViewHolder.llOptionsLayout.setVisibility(View.GONE);
+                            }
                             surveyViewHolder.llPercentLayout.setVisibility(View.VISIBLE);
 
+                            float yesPct = parsePercent(list.get(position).getYes_percent());
+                            float noPct = parsePercent(list.get(position).getNo_percent());
                             surveyViewHolder.tvYesPercent.setText(" " + list.get(position).getYes_percent() + "%");
                             surveyViewHolder.tvNoPercent.setText(" " + list.get(position).getNo_percent() + "%");
 
@@ -1755,16 +1900,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                             surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.GONE);
                             surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.GONE);
+                            applySurveyPercentFills(surveyViewHolder, yesPct, noPct, true);
                         }
 
                         surveyViewHolder.neomorphFrameLayoutYes.setOnClickListener(new View.OnClickListener() {
                             @Override
                             public void onClick(View view) {
 
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setVisibility(View.INVISIBLE);
+                                // GONE (not INVISIBLE) so vertical stack collapses cleanly under the image.
+                                surveyViewHolder.neomorphFrameLayoutYesSelected.setVisibility(View.GONE);
                                 surveyViewHolder.neomorphFrameLayoutYes.setVisibility(View.GONE);
                                 surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.GONE);
-                                surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.INVISIBLE);
+                                surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.GONE);
+                                if (surveyViewHolder.llOptionsLayout != null) {
+                                    surveyViewHolder.llOptionsLayout.setVisibility(View.GONE);
+                                }
                                 surveyViewHolder.llPercentLayout.setVisibility(View.VISIBLE);
 
                                 surveyViewHolder.neomorphFrameLayoutYesSelected.setEnabled(false);
@@ -1786,10 +1936,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         surveyViewHolder.neomorphFrameLayoutNo.setOnClickListener(new View.OnClickListener() {
                             @Override
                             public void onClick(View view) {
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.INVISIBLE);
+                                surveyViewHolder.neomorphFrameLayoutYesSelected.setVisibility(View.GONE);
+                                surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.GONE);
                                 surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.GONE);
                                 surveyViewHolder.neomorphFrameLayoutYes.setVisibility(View.GONE);
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.INVISIBLE);
+                                if (surveyViewHolder.llOptionsLayout != null) {
+                                    surveyViewHolder.llOptionsLayout.setVisibility(View.GONE);
+                                }
                                 surveyViewHolder.llPercentLayout.setVisibility(View.VISIBLE);
 
                                 surveyViewHolder.neomorphFrameLayoutYesSelected.setEnabled(false);
@@ -1859,6 +2012,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         pollingViewHolder.select_neomorphFrameLayoutB = convertView.findViewById(R.id.select_neomorphFrameLayoutB);
                         pollingViewHolder.select_neomorphFrameLayoutC = convertView.findViewById(R.id.select_neomorphFrameLayoutC);
                         pollingViewHolder.select_neomorphFrameLayoutD = convertView.findViewById(R.id.select_neomorphFrameLayoutD);
+                        pollingViewHolder.optionFillA = convertView.findViewById(R.id.option_fill_A);
+                        pollingViewHolder.optionFillB = convertView.findViewById(R.id.option_fill_B);
+                        pollingViewHolder.optionFillC = convertView.findViewById(R.id.option_fill_C);
+                        pollingViewHolder.optionFillD = convertView.findViewById(R.id.option_fill_D);
+                        pollingViewHolder.selectOptionFillA = convertView.findViewById(R.id.select_option_fill_A);
+                        pollingViewHolder.selectOptionFillB = convertView.findViewById(R.id.select_option_fill_B);
+                        pollingViewHolder.selectOptionFillC = convertView.findViewById(R.id.select_option_fill_C);
+                        pollingViewHolder.selectOptionFillD = convertView.findViewById(R.id.select_option_fill_D);
 
 
                         pollingViewHolder.tv_polling_question.setText(list.get(position).getTitle());
@@ -2001,6 +2162,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                         }
 
+                        applyPollingPercentFills(pollingViewHolder, list.get(position));
 
                         pollingViewHolder.neomorphFrameLayoutA.setOnClickListener(new View.OnClickListener() {
                             @Override
@@ -2903,6 +3065,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (list.get(position).getVideoUrl() != null && isValidContextForGlide(context)) {
                 Glide.with(convertView.getContext())
                         .load(list.get(position).getThumbnail())
+                        .apply(flipGlideDecodeOptions())
                         .into(newFullImageView1);
             }
 
@@ -3186,6 +3349,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (list.get(position).getVideoUrl() != null && isValidContextForGlide(context)) {
             Glide.with(convertView.getContext())
                     .load(list.get(position).getThumbnail())
+                    .apply(flipGlideDecodeOptions())
                     .into(thaumbnail_for_video);
         }
         fullscreen_button.setVisibility(GONE);
@@ -3251,6 +3415,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 exoPlayer.setPlayWhenReady(true);
                 wireFullVideoExoPauseControl(simpleExoPlayerViewFull, finalConvertViewFull);
                 wireFullVideoExoSideMenuWithController(simpleExoPlayerViewFull, finalConvertViewFull);
+                attachExoCenterIconSync(simpleExoPlayerViewFull);
                 full_videoViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
                 // Hide engagement row while playing; tap player (Exo controller) to show again.
                 if (full_videoViewHolder.side_menu != null) {
@@ -4936,6 +5101,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 exoPlayer.setMediaItem(mediaItem);
                 exoPlayer.prepare();
                 exoPlayer.setPlayWhenReady(true);
+                // Media3 does not manage the legacy exo_play/exo_pause buttons in the custom
+                // controller, so wire them here to make tapping toggle play/pause and to keep
+                // exactly one center icon visible per player state.
+                wireHalfVideoExoPauseControl(simpleExoPlayerView);
+                attachExoCenterIconSync(simpleExoPlayerView);
                 exoPlayer.addListener(new Player.Listener() {
                     @Override
                     public void onPlaybackStateChanged(int playbackState) {
@@ -4967,6 +5137,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             thaumbnail_for_video.setVisibility(View.VISIBLE);
                             imageViewExoVideoPlayVideo.setVisibility(View.VISIBLE);
                         }
+                        updateExoCenterControlIcons(simpleExoPlayerView);
                     }
                 });
             }
@@ -6125,6 +6296,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             }
         }
+        if (pollingViewHolder != null && position >= 0 && position < list.size()) {
+            applyPollingPercentFills(pollingViewHolder, list.get(position));
+        }
     }
 
 
@@ -6657,9 +6831,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public static class SurveyViewHolder {
 
         LinearLayout llPercentLayout;
+        LinearLayout llOptionsLayout;
         NeomorphFrameLayout neomorphFrameLayoutYes, neomorphFrameLayoutNo, neomorphFrameLayoutYesSelected,
                 neomorphFrameLayoutNoSelected, neomorphFrameLayoutYesPercent, neomorphFrameLayoutNoPercent;
         RelativeLayout relativeLayoutSurveyMain;
+        ImageView survey_half_image;
+        View yesPercentFill, noPercentFill;
 
         private TextView tvSurveyQuestionEnglish, tvAnswerYes, tvAnswerNo, tvYesPercent, tvNoPercent;
     }
@@ -6675,6 +6852,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 neomorphFrameLayoutD;
         NeomorphFrameLayout select_neomorphFrameLayoutA, select_neomorphFrameLayoutB, select_neomorphFrameLayoutC,
                 select_neomorphFrameLayoutD;
+        View optionFillA, optionFillB, optionFillC, optionFillD;
+        View selectOptionFillA, selectOptionFillB, selectOptionFillC, selectOptionFillD;
     }
 
     public static class VideosliderHolder {
@@ -6764,6 +6943,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                         surveyViewHolder.tvYesPercent.setText(" " + surveyFeedbackResponse.getData().get(0).getPercent() + "%");
                         surveyViewHolder.tvNoPercent.setText(" " + surveyFeedbackResponse.getData().get(1).getPercent() + "%");
+                        applySurveyPercentFills(
+                                surveyViewHolder,
+                                parsePercent(surveyFeedbackResponse.getData().get(0).getPercent()),
+                                parsePercent(surveyFeedbackResponse.getData().get(1).getPercent()),
+                                true
+                        );
 
                     }
 
@@ -6779,6 +6964,105 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         });
 
+    }
+
+    private static float parsePercent(Object raw) {
+        if (raw == null) {
+            return 0f;
+        }
+        try {
+            String s = String.valueOf(raw).replace("%", "").trim();
+            if (s.isEmpty()) {
+                return 0f;
+            }
+            return Float.parseFloat(s);
+        } catch (Exception e) {
+            return 0f;
+        }
+    }
+
+    private void applySurveyPercentFills(SurveyViewHolder holder, float yesPct, float noPct, boolean show) {
+        if (holder == null) {
+            return;
+        }
+        PollOptionStyleHelper.styleResultNeomorph(context, holder.neomorphFrameLayoutYesPercent);
+        PollOptionStyleHelper.styleResultNeomorph(context, holder.neomorphFrameLayoutNoPercent);
+        PollOptionStyleHelper.applyPercentFill(
+                context, null, holder.yesPercentFill, yesPct, show, holder.tvYesPercent);
+        PollOptionStyleHelper.applyPercentFill(
+                context, null, holder.noPercentFill, noPct, show, holder.tvNoPercent);
+    }
+
+    /**
+     * After a survey_poll vote (or when rebinding results), paint each visible
+     * option with a left-aligned fill equal to that option's percentage, clipped
+     * inside the rounded neumorph bounds.
+     */
+    private void applyPollingPercentFills(PollingViewHolder holder, ModelClass.Datum datum) {
+        if (holder == null || datum == null || datum.getSurveyOptions() == null) {
+            return;
+        }
+        boolean voted = datum.getSelected_option() != 0;
+        // Instant tap path (showPollingResuilt) may not have written selected_option yet;
+        // if any select_* row is visible, treat as results mode.
+        if (!voted) {
+            voted = isVisible(holder.select_neomorphFrameLayoutA)
+                    || isVisible(holder.select_neomorphFrameLayoutB)
+                    || isVisible(holder.select_neomorphFrameLayoutC)
+                    || isVisible(holder.select_neomorphFrameLayoutD);
+        }
+
+        float[] pct = new float[]{0f, 0f, 0f, 0f};
+        int n = Math.min(4, datum.getSurveyOptions().size());
+        for (int i = 0; i < n; i++) {
+            pct[i] = parsePercent(datum.getSurveyOptions().get(i).getPercent());
+        }
+
+        applyOnePollingFill(
+                holder.neomorphFrameLayoutA, holder.select_neomorphFrameLayoutA,
+                holder.optionFillA, holder.selectOptionFillA,
+                pct[0], voted,
+                holder.tv_answer_A, holder.polling_A, holder.select_tv_answer_A, holder.select_polling_A);
+        applyOnePollingFill(
+                holder.neomorphFrameLayoutB, holder.select_neomorphFrameLayoutB,
+                holder.optionFillB, holder.selectOptionFillB,
+                pct[1], voted,
+                holder.tv_answer_B, holder.polling_B, holder.select_tv_answer_B, holder.select_polling_B);
+        applyOnePollingFill(
+                holder.neomorphFrameLayoutC, holder.select_neomorphFrameLayoutC,
+                holder.optionFillC, holder.selectOptionFillC,
+                pct[2], voted,
+                holder.tv_answer_C, holder.polling_C, holder.select_tv_answer_C, holder.select_polling_C);
+        applyOnePollingFill(
+                holder.neomorphFrameLayoutD, holder.select_neomorphFrameLayoutD,
+                holder.optionFillD, holder.selectOptionFillD,
+                pct[3], voted,
+                holder.tv_answer_D, holder.polling_D, holder.select_tv_answer_D, holder.select_polling_D);
+    }
+
+    private void applyOnePollingFill(
+            NeomorphFrameLayout unselected,
+            NeomorphFrameLayout selected,
+            View unselectedFill,
+            View selectedFill,
+            float percent,
+            boolean voted,
+            TextView... labels
+    ) {
+        PollOptionStyleHelper.styleResultNeomorph(context, unselected);
+        PollOptionStyleHelper.styleResultNeomorph(context, selected);
+
+        boolean showUnselected = voted && isVisible(unselected);
+        boolean showSelected = voted && isVisible(selected);
+
+        PollOptionStyleHelper.applyPercentFill(
+                context, null, unselectedFill, percent, showUnselected, labels);
+        PollOptionStyleHelper.applyPercentFill(
+                context, null, selectedFill, percent, showSelected, labels);
+    }
+
+    private static boolean isVisible(View v) {
+        return v != null && v.getVisibility() == View.VISIBLE;
     }
 
     private void updatearraylist(int optionID, int positionx) {
@@ -6910,19 +7194,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         Encriton_Request.setData(encrpt_data);
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
     }
+    /**
+     * Called from getView during page turns. Must stay cheap: production 3.40.45
+     * had this as a no-op. Releasing Exo / walking children here janks the 3D flip
+     * on low-end (Narzo / Go). Full teardown belongs in HomePage after settle.
+     */
     public static void pauseVideo(){
         try{
             if (youTubePlayerViewHalf != null) {
                 youTubePlayerViewHalf.pause();
             }
-            isFullYoutubeVideoIsInitialized = false;
         }catch (Exception e){
             e.printStackTrace();
         }
-        releaseActiveExoPlayer();
+        try{
+            if (exoPlayer != null) {
+                exoPlayer.setPlayWhenReady(false);
+                try {
+                    exoPlayer.pause();
+                } catch (Exception ignored) {
+                }
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }
     }
 
-    private static void releaseActiveExoPlayer() {
+    /** Full Exo release — call only after flip settles, not from getView. */
+    public static void releaseActiveExoPlayer() {
         try{
             if (exoPlayer != null) {
                 exoPlayer.setPlayWhenReady(false);
@@ -6934,6 +7233,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }catch (Exception e){
             e.printStackTrace();
         }
+    }
+
+    public static boolean hasActiveVideoPlayer() {
+        return youTubePlayerViewHalf != null || exoPlayer != null;
     }
 
     public void resetAllFlipChildrenVideoPlayers(ViewGroup flipView) {
@@ -6966,7 +7269,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 playerView.setPlayer(null);
                 playerView.setVisibility(View.GONE);
             }
-            releaseActiveExoPlayer();
+            // Do not releaseActiveExoPlayer() here — resetAllFlipChildrenVideoPlayers
+            // walks every flip child; releasing per child blanks the active video page.
 
             ImageView thumbnail = convertView.findViewById(R.id.thaumbnail_for_video);
             ImageView playButton = convertView.findViewById(R.id.imageViewVideoPlayVideo);
@@ -6994,10 +7298,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         try {
-            if (youTubePlayerViewHalf != null) {
-                youTubePlayerViewHalf.pause();
-                youTubePlayerViewHalf = null;
-            }
+            // Global YouTube player is released by HomePage.teardownFlipVideoPlayers /
+            // releaseActiveExoPlayer path once — do not null it per child walk.
             isFullYoutubeVideoIsInitialized = false;
 
             YouTubePlayerView youtubeView = convertView.findViewById(R.id.youtube_full_video);
@@ -7021,6 +7323,105 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
+    /**
+     * Keeps the custom controller's center icons in a single correct state.
+     *
+     * The custom controller layout ({@code player_custom_ui.xml}) uses the legacy separate
+     * {@code exo_play}/{@code exo_pause} buttons, but Media3 1.1.0's PlayerControlView only
+     * manages a single {@code exo_play_pause} button. As a result Media3 never toggles these
+     * buttons and both stay visible ("visible" in XML) at the same time. We drive their
+     * visibility manually from the player state so exactly one icon shows:
+     * Playing -> pause only, Paused -> play only, Ended -> neither (the big center play button
+     * over the thumbnail acts as replay).
+     */
+    private void updateExoCenterControlIcons(PlayerView playerView) {
+        if (playerView == null) {
+            return;
+        }
+        View playBtn = playerView.findViewById(R.id.exo_play);
+        View pauseBtn = playerView.findViewById(R.id.exo_pause);
+        if (playBtn == null || pauseBtn == null) {
+            return;
+        }
+        int state = exoPlayer != null ? exoPlayer.getPlaybackState() : Player.STATE_IDLE;
+        boolean ended = state == Player.STATE_ENDED;
+        boolean playing = exoPlayer != null && exoPlayer.getPlayWhenReady() && !ended;
+        if (ended) {
+            // Replay affordance is the big center play button (imageViewVideoPlayVideo) shown
+            // over the thumbnail; hide both controller icons to avoid stacked icons.
+            playBtn.setVisibility(GONE);
+            pauseBtn.setVisibility(GONE);
+        } else if (playing) {
+            pauseBtn.setVisibility(VISIBLE);
+            playBtn.setVisibility(GONE);
+        } else {
+            playBtn.setVisibility(VISIBLE);
+            pauseBtn.setVisibility(GONE);
+        }
+    }
+
+    /**
+     * Attaches a listener so the center icons re-sync whenever the player state changes
+     * (auto-play start, buffering, pause, end). Used by both half and full video.
+     */
+    private void attachExoCenterIconSync(PlayerView playerView) {
+        if (playerView == null || exoPlayer == null) {
+            return;
+        }
+        exoPlayer.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int playbackState) {
+                updateExoCenterControlIcons(playerView);
+            }
+
+            @Override
+            public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+                updateExoCenterControlIcons(playerView);
+            }
+
+            @Override
+            public void onIsPlayingChanged(boolean isPlaying) {
+                updateExoCenterControlIcons(playerView);
+            }
+        });
+        updateExoCenterControlIcons(playerView);
+    }
+
+    /**
+     * Wires the half (inline feed) video controller's play/pause buttons so tapping them
+     * actually toggles playback. Media3 does not manage these legacy buttons, so without this
+     * the half video could not be paused by tapping. Also keeps the center icon state correct.
+     */
+    private void wireHalfVideoExoPauseControl(PlayerView playerView) {
+        if (playerView == null) {
+            return;
+        }
+        View pauseBtn = playerView.findViewById(R.id.exo_pause);
+        View playBtn = playerView.findViewById(R.id.exo_play);
+        if (pauseBtn != null) {
+            pauseBtn.setOnClickListener(v -> {
+                if (exoPlayer != null) {
+                    exoPlayer.setPlayWhenReady(false);
+                    exoPlayer.pause();
+                }
+                updateExoCenterControlIcons(playerView);
+            });
+        }
+        if (playBtn != null) {
+            playBtn.setOnClickListener(v -> {
+                if (exoPlayer != null) {
+                    if (exoPlayer.getPlaybackState() == Player.STATE_ENDED) {
+                        exoPlayer.seekTo(0);
+                    }
+                    exoPlayer.setPlayWhenReady(true);
+                    exoPlayer.play();
+                }
+                updateExoCenterControlIcons(playerView);
+            });
+        }
+        updateExoCenterControlIcons(playerView);
+    }
+
     private void wireFullVideoExoPauseControl(PlayerView playerView, View convertView) {
         if (playerView == null || convertView == null) {
             return;
@@ -7033,10 +7434,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     exoPlayer.setPlayWhenReady(false);
                     exoPlayer.pause();
                 }
-                pauseBtn.setVisibility(GONE);
-                if (playBtn != null) {
-                    playBtn.setVisibility(VISIBLE);
-                }
+                updateExoCenterControlIcons(playerView);
                 LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
                 if (sideMenu != null) {
                     sideMenu.setVisibility(View.VISIBLE);
@@ -7047,15 +7445,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (playBtn != null) {
             playBtn.setOnClickListener(v -> {
                 if (exoPlayer != null) {
+                    if (exoPlayer.getPlaybackState() == Player.STATE_ENDED) {
+                        exoPlayer.seekTo(0);
+                    }
                     exoPlayer.setPlayWhenReady(true);
                     exoPlayer.play();
                 }
-                playBtn.setVisibility(GONE);
-                if (pauseBtn != null) {
-                    pauseBtn.setVisibility(VISIBLE);
-                }
+                updateExoCenterControlIcons(playerView);
             });
         }
+        updateExoCenterControlIcons(playerView);
     }
 
     /**
@@ -7137,7 +7536,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         showVideoShareChooser(position, layout, convertView);
     }
 
+    /**
+     * Full videos ask Download / Share / Dismiss first; every other video type
+     * opens the share sheet straight away as before.
+     */
     private void showVideoShareChooser(int position, VideoShareLayout layout, View convertView) {
+        if (layout == VideoShareLayout.FULL_EXO || layout == VideoShareLayout.FULL_YOUTUBE) {
+            FullVideoOptionsDialog.show(context, new FullVideoOptionsDialog.Listener() {
+                @Override
+                public void onDownloadVideo() {
+                    downloadFullVideo(position);
+                }
+
+                @Override
+                public void onShare() {
+                    showVideoShareSheet(position, layout, convertView);
+                }
+            });
+            return;
+        }
+        showVideoShareSheet(position, layout, convertView);
+    }
+
+    private void showVideoShareSheet(int position, VideoShareLayout layout, View convertView) {
         BottomSheetDialog bottomSheet = new BottomSheetDialog(context);
         View sheetView = LayoutInflater.from(context).inflate(R.layout.bottom_sheet_video_share, null);
         bottomSheet.setContentView(sheetView);
@@ -7250,6 +7671,70 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     private boolean canShareVideoFile(int position) {
         return resolveVideoShareUrl(position) != null;
+    }
+
+    /**
+     * Full-video "Download Video" option. Saves through the same DownloadManager
+     * helper the magazine/video downloads already use, so progress, the
+     * "downloaded" toast and the share notification stay identical. Android 10+
+     * writes to public Downloads without a permission; older builds ask for
+     * WRITE_EXTERNAL_STORAGE first.
+     */
+    private void downloadFullVideo(int position) {
+        if (list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        String videoUrl = resolveVideoShareUrl(position);
+        if (videoUrl == null) {
+            Toast.makeText(context, "Video is not available to download", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String fileName = buildVideoDownloadFileName(position, videoUrl);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                || ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED) {
+            downloadPDFWithProgressBar(videoUrl, fileName, position, 1);
+            return;
+        }
+        if (activity instanceof FragmentActivity) {
+            PermissionX.init((FragmentActivity) activity)
+                    .permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    .onExplainRequestReason(new ExplainReasonCallback() {
+                        @Override
+                        public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
+                            scope.showRequestReasonDialog(deniedList,
+                                    "Please allow the below necessary permissions to download videos", "OK", "Cancel");
+                        }
+                    })
+                    .onForwardToSettings(new ForwardToSettingsCallback() {
+                        @Override
+                        public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
+                            scope.showForwardToSettingsDialog(deniedList,
+                                    "Please allow below permission manually from settings page to download videos", "OK", "Cancel");
+                        }
+                    })
+                    .request(new RequestCallback() {
+                        @Override
+                        public void onResult(boolean allGranted, @NonNull List<String> grantedList,
+                                             @NonNull List<String> deniedList) {
+                            if (allGranted) {
+                                downloadPDFWithProgressBar(videoUrl, fileName, position, 1);
+                            }
+                        }
+                    });
+        } else if (activity != null) {
+            ActivityCompat.requestPermissions(activity,
+                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 234);
+        }
+    }
+
+    private String buildVideoDownloadFileName(int position, String videoUrl) {
+        String extension = MimeTypeMap.getFileExtensionFromUrl(videoUrl);
+        if (extension == null || extension.trim().isEmpty()) {
+            extension = "mp4";
+        }
+        return "anyNews_" + System.currentTimeMillis() + "_"
+                + list.get(position).getPostId() + "." + extension;
     }
 
     private void shareVideoScreenshot(int position, VideoShareLayout layout, View convertView, int whatsappMode) {

@@ -81,12 +81,13 @@
                     <soup.neumorphism.NeumorphCardView
                         android:id="@+id/user_name"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
                         android:layout_below="@+id/basin_image_view"
                         android:layout_marginTop="8dp"
                         android:scaleType="centerInside"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:neumorph_shadowColorDark="#DFDDDD"
+                        app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                         app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                         app:neumorph_shadowElevation="6dp"
                         app:neumorph_shapeAppearance="@style/ShapeAppearance"
@@ -117,6 +118,18 @@
 
                     </soup.neumorphism.NeumorphCardView>
 
+                    <TextView
+                        android:id="@+id/txt_title_count"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="@dimen/_15sdp"
+                        android:layout_marginRight="@dimen/_15sdp"
+                        android:layout_marginTop="2dp"
+                        android:gravity="right"
+                        android:text="0 / 80"
+                        android:textColor="@color/colorTextSecondary"
+                        android:textSize="@dimen/_10sdp" />
+
 
                 </LinearLayout>
 
@@ -140,12 +153,13 @@
                     <soup.neumorphism.NeumorphCardView
                         style="@style/Widget.Neumorph.ImageButton"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
                         android:layout_below="@+id/basin_image_view"
                         android:layout_marginTop="8dp"
                         android:scaleType="centerInside"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:neumorph_shadowColorDark="#DFDDDD"
+                        app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                         app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                         app:neumorph_shadowElevation="4dp"
                         app:neumorph_shapeAppearance="@style/ShapeAppearance"
@@ -176,6 +190,18 @@
 
 
                     </soup.neumorphism.NeumorphCardView>
+
+                    <TextView
+                        android:id="@+id/txt_desc_count"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="@dimen/_10sdp"
+                        android:layout_marginRight="@dimen/_10sdp"
+                        android:layout_marginTop="2dp"
+                        android:gravity="right"
+                        android:text="0 words · 0 / 400"
+                        android:textColor="@color/colorTextSecondary"
+                        android:textSize="@dimen/_10sdp" />
 
 
                 </LinearLayout>
@@ -414,7 +440,7 @@
                             android:text="Next"
                             android:textSize="@dimen/_15sdp"
                             app:layout_constraintEnd_toEndOf="parent"
-                            app:neumorph_shadowColorDark="#F2DFDFDF"
+                            app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                             app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                             app:neumorph_shadowElevation="4dp"
                             app:neumorph_shapeType="flat"

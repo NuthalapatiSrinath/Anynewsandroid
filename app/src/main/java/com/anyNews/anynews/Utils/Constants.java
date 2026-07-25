@@ -145,6 +145,8 @@ public class Constants {
     public static String WRITER_STRIP_STYLE = "writer_strip_style";
     /** JSON of full-video share primary card config from splash. */
     public static String FULL_VIDEO_SHARE_CARD = "full_video_share_card";
+    /** JSON of {@link com.anyNews.anynews.Pojo.PollSurveyColorsConfig} from splash. */
+    public static String POLL_SURVEY_COLORS = "poll_survey_colors";
     /** JSON of {@link com.anyNews.anynews.Pojo.CricketMiniPlayerPosition} from splash / poll. */
     public static String CRICKET_MINI_PLAYER_POSITION = "cricket_mini_player_position";
     /** "true"/"false" admin toggle for the floating cricket mini player (default true). */

@@ -2,6 +2,7 @@ package com.anyNews.anynews.Utils;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -33,6 +34,8 @@ import okhttp3.ResponseBody;
 public final class FontSettingsHelper {
 
     public static final String TAG = "AnyNewsFont";
+    /** CSS Regular — matches historical applyTypeface (Typeface.NORMAL) behavior. */
+    public static final int DEFAULT_FONT_WEIGHT = 400;
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, LanguageFontConfig>>() {}.getType();
     private static final Type URL_MAP_TYPE = new TypeToken<Map<String, String>>() {}.getType();
@@ -134,7 +137,7 @@ public final class FontSettingsHelper {
         }
         LanguageFontConfig cfg = getForLanguage(context, languageId);
         setTextSizeSdp(context, headerView, cfg.getSelectionHeaderFontSize());
-        applyTypeface(context, headerView, cfg.getTitleFontFamily());
+        applyTypeface(context, headerView, cfg.getTitleFontFamily(), cfg.getTitleFontWeight());
     }
 
     public static void applyStateSelectionTypography(Context context, int languageId, TextView... labels) {
@@ -163,7 +166,7 @@ public final class FontSettingsHelper {
                 continue;
             }
             setTextSizeSdp(context, label, sizeSdp);
-            applyTypeface(context, label, cfg.getBodyFontFamily());
+            applyTypeface(context, label, cfg.getBodyFontFamily(), cfg.getBodyFontWeight());
         }
     }
 
@@ -187,6 +190,8 @@ public final class FontSettingsHelper {
         float bodySize = resolveBodySize(cfg);
         String titleFamily = cfg.getTitleFontFamily();
         String bodyFamily = cfg.getBodyFontFamily();
+        int titleWeight = cfg.getTitleFontWeight();
+        int bodyWeight = cfg.getBodyFontWeight();
 
         Log.d(
                 TAG,
@@ -196,18 +201,20 @@ public final class FontSettingsHelper {
                         + " bodySize=" + bodySize
                         + " titleFont=" + titleFamily
                         + " bodyFont=" + bodyFamily
+                        + " titleWeight=" + titleWeight
+                        + " bodyWeight=" + bodyWeight
                         + " titleView=" + viewLabel(titleView)
                         + " bodyView=" + viewLabel(bodyView)
         );
 
         if (titleView != null) {
             setTextSizeSdp(context, titleView, titleSize);
-            applyTypeface(context, titleView, titleFamily);
+            applyTypeface(context, titleView, titleFamily, titleWeight);
             Log.d(TAG, "applied title pxSize=" + titleView.getTextSize() + " on " + viewLabel(titleView));
         }
         if (bodyView != null) {
             setTextSizeSdp(context, bodyView, bodySize);
-            applyTypeface(context, bodyView, bodyFamily);
+            applyTypeface(context, bodyView, bodyFamily, bodyWeight);
             applyLineSpacing(bodyView, cfg.getLineSpacingMultiplier());
             Log.d(TAG, "applied body pxSize=" + bodyView.getTextSize() + " on " + viewLabel(bodyView));
         }
@@ -229,23 +236,38 @@ public final class FontSettingsHelper {
     }
 
     public static void applyTypeface(Context context, TextView view, String fontFamilyKey) {
+        applyTypeface(context, view, fontFamilyKey, DEFAULT_FONT_WEIGHT);
+    }
+
+    /**
+     * Apply a font family and optional CSS-style weight (100..900).
+     * Weight {@link #DEFAULT_FONT_WEIGHT} (400) keeps the historical look:
+     * family applied with Typeface.NORMAL / no fake-bold overlay.
+     */
+    public static void applyTypeface(Context context, TextView view, String fontFamilyKey, int fontWeight) {
         if (context == null || view == null) {
             return;
         }
         if (TextUtils.isEmpty(fontFamilyKey)) {
             return;
         }
+        int weight = clampFontWeight(fontWeight);
+        // Clear any prior fake-bold so resetting to 400 restores the current look.
+        view.getPaint().setFakeBoldText(false);
+
         if ("sans-serif-medium".equals(fontFamilyKey)) {
-            view.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-            Log.d(TAG, "typeface sans-serif-medium on " + viewLabel(view));
+            Typeface base = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+            setTypefaceWithWeight(view, base, weight);
+            Log.d(TAG, "typeface sans-serif-medium weight=" + weight + " on " + viewLabel(view));
             return;
         }
         Integer fontRes = resolveFontRes(fontFamilyKey);
         if (fontRes != null) {
             Typeface typeface = ResourcesCompat.getFont(context, fontRes);
             if (typeface != null) {
-                view.setTypeface(typeface);
-                Log.d(TAG, "typeface " + fontFamilyKey + " res=" + fontRes + " on " + viewLabel(view));
+                setTypefaceWithWeight(view, typeface, weight);
+                Log.d(TAG, "typeface " + fontFamilyKey + " res=" + fontRes
+                        + " weight=" + weight + " on " + viewLabel(view));
             } else {
                 Log.e(TAG, "typeface load failed key=" + fontFamilyKey + " res=" + fontRes);
             }
@@ -253,10 +275,101 @@ public final class FontSettingsHelper {
         }
         Typeface custom = resolveCustomTypeface(context, fontFamilyKey);
         if (custom != null) {
-            view.setTypeface(custom);
-            Log.d(TAG, "typeface custom " + fontFamilyKey + " on " + viewLabel(view));
+            setTypefaceWithWeight(view, custom, weight);
+            Log.d(TAG, "typeface custom " + fontFamilyKey + " weight=" + weight + " on " + viewLabel(view));
         } else {
             Log.w(TAG, "typeface unknown key=" + fontFamilyKey + " on " + viewLabel(view));
+        }
+    }
+
+    private static int clampFontWeight(int weight) {
+        if (weight <= 0) return DEFAULT_FONT_WEIGHT;
+        int w = weight;
+        if (w < 100) w = 100;
+        if (w > 900) w = 900;
+        return Math.round(w / 100f) * 100;
+    }
+
+    /**
+     * Weight 400 = exact historical path (setTypeface(base) only).
+     * Other weights use API 28 Typeface.create(base, weight), fontVariationSettings
+     * when helpful, BOLD/NORMAL on older APIs, and fake-bold as a last resort.
+     */
+    private static void setTypefaceWithWeight(TextView view, Typeface base, int weight) {
+        if (view == null || base == null) {
+            return;
+        }
+        if (weight == DEFAULT_FONT_WEIGHT) {
+            view.setTypeface(base);
+            clearFontVariationSettings(view);
+            return;
+        }
+
+        Typeface weighted = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                weighted = Typeface.create(base, weight, false);
+            } catch (Exception e) {
+                Log.w(TAG, "Typeface.create(weight) failed weight=" + weight, e);
+            }
+        }
+
+        if (weighted != null) {
+            view.setTypeface(weighted);
+        } else if (weight >= 600) {
+            Typeface bold = Typeface.create(base, Typeface.BOLD);
+            view.setTypeface(bold != null ? bold : base);
+            // Single-weight fonts often ignore BOLD — synthesize when needed.
+            if (bold == null || bold.equals(base) || styleOf(bold) == Typeface.NORMAL) {
+                view.getPaint().setFakeBoldText(true);
+            }
+        } else {
+            view.setTypeface(base);
+        }
+
+        applyFontVariationWeight(view, weight);
+
+        // If API 28+ returned a face that is still too light for a bold request, fake-bold.
+        if (weight >= 600 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Typeface current = view.getTypeface();
+            if (current != null && current.getWeight() < 600) {
+                view.getPaint().setFakeBoldText(true);
+            }
+        }
+        view.invalidate();
+    }
+
+    private static int styleOf(Typeface tf) {
+        return tf != null ? tf.getStyle() : Typeface.NORMAL;
+    }
+
+    /** Prefer Typeface.create(weight) on P+; use variation settings only below P. */
+    private static void applyFontVariationWeight(TextView view, int weight) {
+        if (view == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // Weight already applied via Typeface.create(base, weight, false).
+            return;
+        }
+        if (weight == DEFAULT_FONT_WEIGHT) {
+            clearFontVariationSettings(view);
+            return;
+        }
+        try {
+            view.setFontVariationSettings("'wght' " + weight);
+        } catch (Exception e) {
+            Log.d(TAG, "fontVariationSettings unsupported weight=" + weight);
+        }
+    }
+
+    private static void clearFontVariationSettings(TextView view) {
+        if (view == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+        try {
+            view.setFontVariationSettings(null);
+        } catch (Exception ignored) {
         }
     }
 
@@ -472,6 +585,9 @@ public final class FontSettingsHelper {
                 + ",prog=" + (cfg.hasProgrammaticBodySize() ? cfg.getProgrammaticBodySize() : "null")
                 + ",titleFont=" + cfg.getTitleFontFamily()
                 + ",bodyFont=" + cfg.getBodyFontFamily()
+                + ",titleWt=" + cfg.getTitleFontWeight()
+                + ",bodyWt=" + cfg.getBodyFontWeight()
+                + ",lineSp=" + cfg.getLineSpacingMultiplier()
                 + "}";
     }
 

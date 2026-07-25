@@ -87,6 +87,10 @@ public class CricketMiniPlayerManager {
     private boolean miniPlayerEnabled = true;
     /** Admin toggle for the bottom-footer cricket tab; forwarded to the host. */
     private boolean footerTabEnabled = false;
+    /** True while HomePage is mid 3D flip — overlay hidden for gesture only. */
+    private boolean hiddenForFlipGesture = false;
+    /** Whether the card was visible when flip gesture started (for restore). */
+    private boolean visibleBeforeFlipGesture = false;
 
     /**
      * Optional host callback fired on each poll (and on the cached onResume paint)
@@ -404,6 +408,10 @@ public class CricketMiniPlayerManager {
     }
 
     private void show() {
+        // Don't fight flip-gesture hide — restore path will show after settle.
+        if (hiddenForFlipGesture) {
+            return;
+        }
         ensureAttached();
         if (miniView != null && miniView.getVisibility() != View.VISIBLE) {
             miniView.setVisibility(View.VISIBLE);
@@ -416,6 +424,41 @@ public class CricketMiniPlayerManager {
         stopLiveBadgeBlink();
         if (miniView != null) {
             miniView.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * Hide the floating mini-player only for the flip gesture duration.
+     * Feature is not removed — restores after {@code false} if it was showing.
+     * Idempotent across repeated onFlippedToAppear move callbacks.
+     */
+    public void setHiddenForFlipGesture(boolean hidden) {
+        if (hidden) {
+            if (hiddenForFlipGesture) {
+                return;
+            }
+            hiddenForFlipGesture = true;
+            visibleBeforeFlipGesture = miniView != null
+                    && miniView.getVisibility() == View.VISIBLE;
+            if (visibleBeforeFlipGesture && miniView != null) {
+                miniView.animate().cancel();
+                miniView.setAlpha(1f);
+                miniView.setVisibility(View.GONE);
+            }
+            return;
+        }
+        if (!hiddenForFlipGesture) {
+            return;
+        }
+        hiddenForFlipGesture = false;
+        boolean shouldRestore = visibleBeforeFlipGesture;
+        visibleBeforeFlipGesture = false;
+        if (shouldRestore
+                && miniPlayerEnabled
+                && current != null
+                && !TextUtils.isEmpty(current.getMatch_id())
+                && !dismissedForSession.contains(current.getMatch_id())) {
+            show();
         }
     }
 

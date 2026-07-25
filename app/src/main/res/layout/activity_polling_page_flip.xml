@@ -94,29 +94,42 @@
                             android:layout_marginEnd="@dimen/_10sdp"
                             android:weightSum="2">
 
-                            <!-- option A-->
+                            <!-- option A (unselected) -->
                             <com.anyNews.anynews.Ui.NeomorphFrameLayout
                                 android:id="@+id/neomorphFrameLayoutA"
                                 android:layout_width="match_parent"
                                 android:layout_height="0dp"
                                 android:layout_weight="0.5"
-                                app:neomorph_background_color="@color/white"
+                                android:background="@android:color/transparent"
+                                app:neomorph_background_color="@color/poll_option_surface"
                                 app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                                 app:neomorph_elevation="@dimen/neomorph_view_elevation"
                                 app:neomorph_view_type="rectangular"
-                                app:neomorph_shadow_color="#D0D2D5"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                                <LinearLayout
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/option_fill_A"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+<LinearLayout
                                     android:id="@+id/ll_A"
                                     android:layout_width="match_parent"
                                     android:orientation="horizontal"
-                                    android:background="@drawable/background_button"
+                                    android:background="@android:color/transparent"
                                     android:layout_height="match_parent">
                                     <TextView
                                         android:id="@+id/tv_answer_A"
                                         android:gravity="center"
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
+                                        android:textColor="@color/poll_option_text"
                                         android:fontFamily="@font/roboto_bold"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.9"
@@ -128,39 +141,54 @@
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
                                         android:textStyle="bold"
+                                        android:textColor="@color/poll_option_text"
                                         android:fontFamily="@font/robotolighttelugu"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.2"
                                         android:layout_height="match_parent"/>
-
                                 </LinearLayout>
+                                </FrameLayout>
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
-                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                            <!-- option A (selected) -->
                             <com.anyNews.anynews.Ui.NeomorphFrameLayout
                                 android:id="@+id/select_neomorphFrameLayoutA"
                                 android:layout_width="match_parent"
                                 android:layout_height="0dp"
                                 android:layout_weight="0.5"
+                                android:background="@android:color/transparent"
+                                android:visibility="gone"
                                 app:neomorph_shadow_type="outer"
                                 app:neomorph_layer_type="hardware"
-                                app:neomorph_background_color="#42ae4d"
+                                app:neomorph_background_color="@color/poll_option_surface"
                                 app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                                 app:neomorph_elevation="@dimen/neomorph_view_elevation"
                                 app:neomorph_view_type="rectangular"
-                                app:neomorph_shadow_color="#70cf79"
-                                android:visibility="gone"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                                <LinearLayout
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/select_option_fill_A"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+<LinearLayout
                                     android:id="@+id/select_ll_A"
                                     android:layout_width="match_parent"
                                     android:orientation="horizontal"
-                                    android:background="@drawable/green_icon_polling"
+                                    android:background="@android:color/transparent"
                                     android:layout_height="match_parent">
                                     <TextView
                                         android:id="@+id/select_tv_answer_A"
                                         android:gravity="center"
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
+                                        android:textColor="@color/poll_option_selected_text"
                                         android:fontFamily="@font/roboto_bold"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.9"
@@ -172,46 +200,58 @@
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
                                         android:textStyle="bold"
+                                        android:textColor="@color/poll_option_selected_text"
                                         android:fontFamily="@font/robotolighttelugu"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.2"
                                         android:layout_height="match_parent"/>
-
                                 </LinearLayout>
+                                </FrameLayout>
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
-                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
-                            <!-- option B-->
+                            <!-- option B (unselected) -->
                             <com.anyNews.anynews.Ui.NeomorphFrameLayout
                                 android:id="@+id/neomorphFrameLayoutB"
                                 android:visibility="visible"
                                 android:layout_width="match_parent"
                                 android:layout_height="0dp"
                                 android:layout_weight="0.5"
+                                android:background="@android:color/transparent"
                                 app:neomorph_shadow_type="outer"
                                 app:neomorph_layer_type="hardware"
-                                app:neomorph_background_color="@color/white"
+                                app:neomorph_background_color="@color/poll_option_surface"
                                 app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                                 app:neomorph_elevation="@dimen/neomorph_view_elevation"
                                 app:neomorph_view_type="rectangular"
-                                app:neomorph_shadow_color="#D0D2D5"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                                <LinearLayout
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/option_fill_B"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+<LinearLayout
                                     android:id="@+id/ll_B"
                                     android:layout_width="match_parent"
                                     android:orientation="horizontal"
-                                    android:background="@drawable/background_button"
+                                    android:background="@android:color/transparent"
                                     android:layout_height="match_parent">
                                     <TextView
                                         android:id="@+id/tv_answer_B"
                                         android:gravity="center"
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
+                                        android:textColor="@color/poll_option_text"
                                         android:fontFamily="@font/roboto_bold"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.9"
                                         android:layout_height="match_parent"/>
-
                                     <TextView
                                         android:id="@+id/polling_B"
                                         android:gravity="center"
@@ -219,37 +259,54 @@
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
                                         android:textStyle="bold"
+                                        android:textColor="@color/poll_option_text"
                                         android:fontFamily="@font/robotolighttelugu"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.2"
                                         android:layout_height="match_parent"/>
                                 </LinearLayout>
-                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                                </FrameLayout>
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            <!-- option B (selected) -->
                             <com.anyNews.anynews.Ui.NeomorphFrameLayout
                                 android:id="@+id/select_neomorphFrameLayoutB"
                                 android:layout_width="match_parent"
                                 android:layout_height="0dp"
                                 android:layout_weight="0.5"
+                                android:background="@android:color/transparent"
+                                android:visibility="gone"
                                 app:neomorph_shadow_type="outer"
                                 app:neomorph_layer_type="hardware"
-                                app:neomorph_background_color="#42ae4d"
+                                app:neomorph_background_color="@color/poll_option_surface"
                                 app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                                 app:neomorph_elevation="@dimen/neomorph_view_elevation"
                                 app:neomorph_view_type="rectangular"
-                                app:neomorph_shadow_color="#70cf79"
-                                android:visibility="gone"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                                <LinearLayout
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/select_option_fill_B"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+<LinearLayout
                                     android:id="@+id/select_ll_B"
                                     android:layout_width="match_parent"
                                     android:orientation="horizontal"
-                                    android:background="@drawable/green_icon_polling"
+                                    android:background="@android:color/transparent"
                                     android:layout_height="match_parent">
                                     <TextView
                                         android:id="@+id/select_tv_answer_B"
                                         android:gravity="center"
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
+                                        android:textColor="@color/poll_option_selected_text"
                                         android:fontFamily="@font/roboto_bold"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.9"
@@ -261,41 +318,53 @@
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
                                         android:textStyle="bold"
+                                        android:textColor="@color/poll_option_selected_text"
                                         android:fontFamily="@font/robotolighttelugu"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.2"
                                         android:layout_height="match_parent"/>
-
                                 </LinearLayout>
+                                </FrameLayout>
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
-                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
-                            <!-- option C-->
+                            <!-- option C (unselected) -->
                             <com.anyNews.anynews.Ui.NeomorphFrameLayout
                                 android:id="@+id/neomorphFrameLayoutC"
                                 android:layout_width="match_parent"
                                 android:layout_height="0dp"
                                 android:layout_weight="0.5"
+                                android:background="@android:color/transparent"
                                 app:neomorph_shadow_type="outer"
                                 app:neomorph_layer_type="hardware"
-                                app:neomorph_background_color="@color/white"
+                                app:neomorph_background_color="@color/poll_option_surface"
                                 app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                                 app:neomorph_elevation="@dimen/neomorph_view_elevation"
                                 app:neomorph_view_type="rectangular"
-                                app:neomorph_shadow_color="#D0D2D5"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_highlight_color="@color/neomorph_highlight_color">
-
-                                <LinearLayout
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/option_fill_C"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+<LinearLayout
                                     android:id="@+id/ll_C"
                                     android:layout_width="match_parent"
                                     android:orientation="horizontal"
-                                    android:background="@drawable/background_button"
+                                    android:background="@android:color/transparent"
                                     android:layout_height="match_parent">
                                     <TextView
                                         android:id="@+id/tv_answer_C"
                                         android:gravity="center"
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
+                                        android:textColor="@color/poll_option_text"
                                         android:fontFamily="@font/roboto_bold"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.9"
@@ -307,38 +376,54 @@
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
                                         android:textStyle="bold"
+                                        android:textColor="@color/poll_option_text"
                                         android:fontFamily="@font/robotolighttelugu"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.2"
                                         android:layout_height="match_parent"/>
                                 </LinearLayout>
+                                </FrameLayout>
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
-                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                            <!-- option C (selected) -->
                             <com.anyNews.anynews.Ui.NeomorphFrameLayout
                                 android:id="@+id/select_neomorphFrameLayoutC"
                                 android:layout_width="match_parent"
                                 android:layout_height="0dp"
                                 android:layout_weight="0.5"
+                                android:background="@android:color/transparent"
+                                android:visibility="gone"
                                 app:neomorph_shadow_type="outer"
                                 app:neomorph_layer_type="hardware"
-                                app:neomorph_background_color="#42ae4d"
+                                app:neomorph_background_color="@color/poll_option_surface"
                                 app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                                 app:neomorph_elevation="@dimen/neomorph_view_elevation"
                                 app:neomorph_view_type="rectangular"
-                                app:neomorph_shadow_color="#70cf79"
-                                android:visibility="gone"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                                <LinearLayout
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/select_option_fill_C"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+<LinearLayout
                                     android:id="@+id/select_ll_C"
                                     android:layout_width="match_parent"
                                     android:orientation="horizontal"
-                                    android:background="@drawable/green_icon_polling"
+                                    android:background="@android:color/transparent"
                                     android:layout_height="match_parent">
                                     <TextView
                                         android:id="@+id/select_tv_answer_C"
                                         android:gravity="center"
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
+                                        android:textColor="@color/poll_option_selected_text"
                                         android:fontFamily="@font/roboto_bold"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.9"
@@ -350,42 +435,54 @@
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
                                         android:textStyle="bold"
+                                        android:textColor="@color/poll_option_selected_text"
                                         android:fontFamily="@font/robotolighttelugu"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.2"
                                         android:layout_height="match_parent"/>
-
                                 </LinearLayout>
+                                </FrameLayout>
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
-                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
-                            <!-- option D-->
+                            <!-- option D (unselected) -->
                             <com.anyNews.anynews.Ui.NeomorphFrameLayout
                                 android:id="@+id/neomorphFrameLayoutD"
                                 android:visibility="visible"
                                 android:layout_width="match_parent"
                                 android:layout_height="0dp"
                                 android:layout_weight="0.5"
+                                android:background="@android:color/transparent"
                                 app:neomorph_shadow_type="outer"
                                 app:neomorph_layer_type="hardware"
-                                app:neomorph_background_color="@color/white"
+                                app:neomorph_background_color="@color/poll_option_surface"
                                 app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                                 app:neomorph_elevation="@dimen/neomorph_view_elevation"
                                 app:neomorph_view_type="rectangular"
-                                app:neomorph_shadow_color="#D0D2D5"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_highlight_color="@color/neomorph_highlight_color">
-
-                                <LinearLayout
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/option_fill_D"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+<LinearLayout
                                     android:id="@+id/ll_D"
                                     android:layout_width="match_parent"
                                     android:orientation="horizontal"
-                                    android:background="@drawable/background_button"
+                                    android:background="@android:color/transparent"
                                     android:layout_height="match_parent">
                                     <TextView
                                         android:id="@+id/tv_answer_D"
                                         android:gravity="center"
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
+                                        android:textColor="@color/poll_option_text"
                                         android:fontFamily="@font/roboto_bold"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.9"
@@ -397,37 +494,54 @@
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
                                         android:textStyle="bold"
+                                        android:textColor="@color/poll_option_text"
                                         android:fontFamily="@font/robotolighttelugu"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.2"
                                         android:layout_height="match_parent"/>
                                 </LinearLayout>
-                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                                </FrameLayout>
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            <!-- option D (selected) -->
                             <com.anyNews.anynews.Ui.NeomorphFrameLayout
                                 android:id="@+id/select_neomorphFrameLayoutD"
                                 android:layout_width="match_parent"
                                 android:layout_height="0dp"
                                 android:layout_weight="0.5"
+                                android:background="@android:color/transparent"
+                                android:visibility="gone"
                                 app:neomorph_shadow_type="outer"
                                 app:neomorph_layer_type="hardware"
-                                app:neomorph_background_color="#42ae4d"
+                                app:neomorph_background_color="@color/poll_option_surface"
                                 app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
                                 app:neomorph_elevation="@dimen/neomorph_view_elevation"
                                 app:neomorph_view_type="rectangular"
-                                app:neomorph_shadow_color="#70cf79"
-                                android:visibility="gone"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
                                 app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                                <LinearLayout
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/select_option_fill_D"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+<LinearLayout
                                     android:id="@+id/select_ll_D"
                                     android:layout_width="match_parent"
                                     android:orientation="horizontal"
-                                    android:background="@drawable/green_icon_polling"
+                                    android:background="@android:color/transparent"
                                     android:layout_height="match_parent">
                                     <TextView
                                         android:id="@+id/select_tv_answer_D"
                                         android:gravity="center"
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
+                                        android:textColor="@color/poll_option_selected_text"
                                         android:fontFamily="@font/roboto_bold"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.9"
@@ -439,15 +553,14 @@
                                         android:layout_margin="@dimen/_3sdp"
                                         android:textSize="@dimen/_13sdp"
                                         android:textStyle="bold"
+                                        android:textColor="@color/poll_option_selected_text"
                                         android:fontFamily="@font/robotolighttelugu"
                                         android:layout_width="0dp"
                                         android:layout_weight="0.2"
                                         android:layout_height="match_parent"/>
-
                                 </LinearLayout>
-
-                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
+                                </FrameLayout>
+                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
 
                         </LinearLayout>
 
@@ -456,247 +569,6 @@
             </LinearLayout>
         </LinearLayout>
 
-
     </RelativeLayout>
 
 </RelativeLayout>
-
-    <!--
-    <?xml version="1.0" encoding="utf-8"?>
-    <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:app="http://schemas.android.com/apk/res-auto"
-        xmlns:tools="http://schemas.android.com/tools"
-        android:id="@+id/rl_survay_main"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center">
-
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="4">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:background="@color/white"
-                        android:orientation="vertical">
-
-                        <ImageView
-                            android:id="@+id/polling_half_image"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:adjustViewBounds="true"
-                            android:scaleType="fitXY"></ImageView>
-
-                    </LinearLayout>
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_gravity="top|center"
-                    android:layout_weight="6">
-
-                    <LinearLayout
-                        android:id="@+id/rl_question"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:background="@color/white"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/tv_polling_question"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="top"
-                            android:layout_marginVertical="@dimen/_8sdp"
-                            android:layout_marginBottom="@dimen/two"
-                            android:autoSizePresetSizes="12dp"
-                            android:autoSizeTextType="none"
-                            android:ellipsize="end"
-                            android:fontFamily="@font/roboto_bold"
-                            android:gravity="center"
-                            android:letterSpacing="0.01"
-                            android:lineSpacingExtra="1sp"
-                            android:maxLength="400"
-                            android:paddingLeft="10dp"
-                            android:paddingRight="10dp"
-                            android:paddingBottom="2dp"
-                            android:text=" Will Covid-19 go by the end of August?\nWill Covid-19 go by the end of August?"
-                            android:textSize="@dimen/_14sdp"
-                            android:textStyle="bold"
-                            android:visibility="visible"
-                            app:autoSizeMaxTextSize="@dimen/_13sdp"
-                            app:autoSizeMinTextSize="@dimen/_13sdp"
-                            app:autoSizeStepGranularity="1sp" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:layout_marginStart="@dimen/_10sdp"
-                            android:layout_marginEnd="@dimen/_10sdp"
-                            android:orientation="vertical"
-                            android:layout_marginBottom="@dimen/_16sdp"
-                            android:weightSum="4">
-
-                            <LinearLayout
-                                android:id="@+id/ll_A"
-                                android:layout_width="match_parent"
-                                android:layout_height="0dp"
-                                android:layout_margin="@dimen/_5sdp"
-                                android:layout_weight="1"
-                                android:background="@drawable/background_button"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:id="@+id/tv_answer_A"
-                                    android:layout_width="0dp"
-                                    android:layout_height="match_parent"
-                                    android:layout_margin="@dimen/_3sdp"
-                                    android:layout_weight="0.9"
-                                    android:fontFamily="@font/roboto_bold"
-                                    android:gravity="center"
-                                    android:text="Yes "
-                                    android:textSize="@dimen/_13sdp" />
-
-                                <TextView
-                                    android:id="@+id/polling_A"
-                                    android:layout_width="0dp"
-                                    android:layout_height="match_parent"
-                                    android:layout_margin="@dimen/_3sdp"
-                                    android:layout_weight="0.2"
-                                    android:fontFamily="@font/robotolighttelugu"
-                                    android:gravity="center"
-                                    android:text="61%"
-                                    android:textSize="@dimen/_13sdp"
-                                    android:textStyle="bold"
-                                    android:visibility="gone" />
-
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:id="@+id/ll_B"
-                                android:layout_width="match_parent"
-                                android:layout_height="0dp"
-                                android:layout_margin="@dimen/_5sdp"
-                                android:layout_weight="1"
-                                android:background="@drawable/background_button"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:id="@+id/tv_answer_B"
-                                    android:layout_width="0dp"
-                                    android:layout_height="match_parent"
-                                    android:layout_margin="@dimen/_3sdp"
-                                    android:layout_weight="0.9"
-                                    android:fontFamily="@font/roboto_bold"
-                                    android:gravity="center"
-                                    android:text="No"
-                                    android:textSize="@dimen/_13sdp" />
-
-                                <TextView
-                                    android:id="@+id/polling_B"
-                                    android:layout_width="0dp"
-                                    android:layout_height="match_parent"
-                                    android:layout_margin="@dimen/_3sdp"
-                                    android:layout_weight="0.2"
-                                    android:fontFamily="@font/robotolighttelugu"
-                                    android:gravity="center"
-                                    android:text="19%"
-                                    android:textSize="@dimen/_13sdp"
-                                    android:textStyle="bold"
-                                    android:visibility="gone" />
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:id="@+id/ll_C"
-                                android:layout_width="match_parent"
-                                android:layout_height="0dp"
-                                android:layout_margin="@dimen/_5sdp"
-                                android:layout_weight="1"
-                                android:background="@drawable/background_button"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:id="@+id/tv_answer_C"
-                                    android:layout_width="0dp"
-                                    android:layout_height="match_parent"
-                                    android:layout_margin="@dimen/_3sdp"
-                                    android:layout_weight="0.9"
-                                    android:fontFamily="@font/roboto_bold"
-                                    android:gravity="center"
-                                    android:text="May Be "
-                                    android:textSize="@dimen/_13sdp" />
-
-                                <TextView
-                                    android:id="@+id/polling_C"
-                                    android:layout_width="0dp"
-                                    android:layout_height="match_parent"
-                                    android:layout_margin="@dimen/_3sdp"
-                                    android:layout_weight="0.2"
-                                    android:fontFamily="@font/robotolighttelugu"
-                                    android:gravity="center"
-                                    android:text="12%"
-                                    android:textSize="@dimen/_13sdp"
-                                    android:textStyle="bold"
-                                    android:visibility="gone" />
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:id="@+id/ll_D"
-                                android:layout_width="match_parent"
-                                android:layout_height="0dp"
-                                android:layout_margin="@dimen/_5sdp"
-                                android:layout_weight="1"
-                                android:background="@drawable/background_button"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:id="@+id/tv_answer_D"
-                                    android:layout_width="0dp"
-                                    android:layout_height="match_parent"
-                                    android:layout_margin="@dimen/_3sdp"
-                                    android:layout_weight="0.9"
-                                    android:fontFamily="@font/roboto_bold"
-                                    android:gravity="center"
-                                    android:text="Can't say"
-                                    android:textSize="@dimen/_13sdp" />
-
-                                <TextView
-                                    android:id="@+id/polling_D"
-                                    android:layout_width="0dp"
-                                    android:layout_height="match_parent"
-                                    android:layout_margin="@dimen/_3sdp"
-                                    android:layout_weight="0.2"
-                                    android:fontFamily="@font/robotolighttelugu"
-                                    android:gravity="center"
-                                    android:text="8%"
-                                    android:textSize="@dimen/_13sdp"
-                                    android:textStyle="bold"
-                                    android:visibility="gone" />
-                            </LinearLayout>
-
-                        </LinearLayout>
-
-                    </LinearLayout>
-
-                </LinearLayout>
-            </LinearLayout>
-
-
-        </RelativeLayout>
-
-    </RelativeLayout>
-    -->
-

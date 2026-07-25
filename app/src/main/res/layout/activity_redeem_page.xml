@@ -445,7 +445,7 @@
                 android:layout_marginRight="@dimen/_20sdp"
                 android:scaleType="centerInside"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:neumorph_shadowColorDark="#DFDDDD"
+                app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
                 app:neumorph_shadowColorLight="@color/neomorph_highlight_color"
                 app:neumorph_shadowElevation="6dp"
                 app:neumorph_shapeAppearance="@style/Login_ShapeAppearance"

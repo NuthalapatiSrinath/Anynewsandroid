@@ -26,7 +26,7 @@
                     android:id="@+id/layoutImageHeight"
                     android:layout_width="match_parent"
                     android:layout_height="340dp"
-                    android:background="#d9d9d9">
+                    android:background="@color/image_placeholder">
                     <RelativeLayout
                         android:id="@+id/galleryImageLayout"
                         android:layout_width="match_parent"
@@ -75,7 +75,7 @@
                         android:id="@+id/new_half_image"
                         android:layout_width="match_parent"
                         android:layout_height="340dp"
-                        android:background="#d9d9d9"
+                        android:background="@color/image_placeholder"
                         android:scaleType="fitXY" />
 
                     <TextView

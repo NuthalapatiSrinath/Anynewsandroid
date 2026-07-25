@@ -22,7 +22,8 @@ import java.util.List;
 
 
 public interface LoaderCommonOption {
-    ColorDrawable d  = new ColorDrawable(Color.parseColor("#d9d9d9"));
+    /** Theme-aware placeholder; resolved via color resource at load time. */
+    int IMAGE_LOADING_PLACEHOLDER = R.color.image_placeholder;
     ColorDrawable d1 = new ColorDrawable(Color.parseColor("#0baedc"));
     ColorDrawable d2 = new ColorDrawable(Color.parseColor("#f77a52"));
     ColorDrawable d3 = new ColorDrawable(Color.parseColor("#604b9f"));
@@ -32,7 +33,7 @@ public interface LoaderCommonOption {
     /** Shown when feed/sticky article images fail (dead S3 URLs, network, etc.). */
     int IMAGE_FAIL_PLACEHOLDER = R.drawable.app_splash_logo;
     DisplayImageOptions options = new DisplayImageOptions.Builder()
-            .showImageOnLoading(d)
+            .showImageOnLoading(IMAGE_LOADING_PLACEHOLDER)
             .showImageOnFail(IMAGE_FAIL_PLACEHOLDER)
             .showImageForEmptyUri(IMAGE_FAIL_PLACEHOLDER)
             .cacheInMemory(true)

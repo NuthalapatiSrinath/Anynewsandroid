@@ -4,11 +4,11 @@ import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 
@@ -90,31 +90,9 @@ public class AppController extends MultiDexApplication {
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle bundle) {
-                Window window = activity.getWindow();
-                if (Build.VERSION.SDK_INT >= 35 ) {
-                    if (!(activity instanceof StartingActivity)) {
-                        WindowCompat.setDecorFitsSystemWindows(window, true);
-                        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
-                        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-                        window.getDecorView().setSystemUiVisibility(0);
-
-                        window.setStatusBarColor(ContextCompat.getColor(activity, R.color.app_bg_color));
-                        window.setNavigationBarColor(ContextCompat.getColor(activity, R.color.app_bg_color));
-
-                        WindowInsetsControllerCompat insetsController =
-                                WindowCompat.getInsetsController(window, window.getDecorView());
-
-                        if (insetsController != null) {
-                            insetsController.setAppearanceLightStatusBars(false);
-                            insetsController.setAppearanceLightNavigationBars(false);
-                        }
-                    }
-                }
+                // Splash keeps its own full-screen look; HomePage / Login re-apply after this.
                 if (!(activity instanceof StartingActivity)) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        View decorView = window.getDecorView();
-                        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
-                    }
+                    applyThemeSystemBars(activity);
                 }
 
                 if(activity instanceof HomePage && !ScreenCaptureHelper.isCaptureAllowed(activity)){
@@ -285,5 +263,31 @@ public class AppController extends MultiDexApplication {
 
     public void setConnectivityListener(ConnectivityReceiver.ConnectivityReceiverListener listener) {
         ConnectivityReceiver.connectivityReceiverListener = listener;
+    }
+
+    /**
+     * Theme-aware status + nav bars for all activities.
+     * Light mode: light bar bg + dark icons. Dark mode: dark bar bg + light icons.
+     * HomePage / LoginActivityDetails may re-apply after this for screen-specific bars.
+     */
+    public static void applyThemeSystemBars(@NonNull Activity activity) {
+        Window window = activity.getWindow();
+        WindowCompat.setDecorFitsSystemWindows(window, true);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+
+        int bg = ContextCompat.getColor(activity, R.color.background_color);
+        window.setStatusBarColor(bg);
+        window.setNavigationBarColor(bg);
+
+        boolean lightMode = (activity.getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_YES;
+
+        WindowInsetsControllerCompat insetsController =
+                WindowCompat.getInsetsController(window, window.getDecorView());
+        if (insetsController != null) {
+            insetsController.setAppearanceLightStatusBars(lightMode);
+            insetsController.setAppearanceLightNavigationBars(lightMode);
+        }
     }
 }

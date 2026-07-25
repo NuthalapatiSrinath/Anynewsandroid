@@ -118,31 +118,33 @@ public final class PostDwellTracker {
             String sessionId = SessionAnalyticsTracker.get().getActiveSessionId();
             if (sessionId != null) body.put("session_id", sessionId);
 
-            String encrypted = MyUtils.encrypt(body.toString());
-            EncritonRequestData enc = new EncritonRequestData();
-            enc.setData(encrypted);
-            JsonObject payload = new Gson().toJsonTree(enc).getAsJsonObject();
+            final String bodyStr = body.toString();
+            final boolean runCritical = critical;
+            // Encrypt + network off caller thread (often main / flip-settle).
+            NET_EXEC.execute(() -> {
+                try {
+                    String encrypted = MyUtils.encrypt(bodyStr);
+                    EncritonRequestData enc = new EncritonRequestData();
+                    enc.setData(encrypted);
+                    JsonObject payload = new Gson().toJsonTree(enc).getAsJsonObject();
 
-            APIService api = RestApiClient.getClient().create(APIService.class);
-            Call<JsonObject> call = api.get_views("v3", payload);
-
-            if (critical) {
-                NET_EXEC.execute(() -> {
-                    try {
+                    APIService api = RestApiClient.getClient().create(APIService.class);
+                    Call<JsonObject> call = api.get_views("v3", payload);
+                    if (runCritical) {
                         call.execute();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-            } else {
-                call.enqueue(new Callback<JsonObject>() {
-                    @Override
-                    public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {}
+                    } else {
+                        call.enqueue(new Callback<JsonObject>() {
+                            @Override
+                            public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {}
 
-                    @Override
-                    public void onFailure(Call<JsonObject> call, Throwable t) {}
-                });
-            }
+                            @Override
+                            public void onFailure(Call<JsonObject> call, Throwable t) {}
+                        });
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -45,7 +45,7 @@
                     android:id="@+id/iv_ad_view_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="#7b7f76"
+                    android:background="@color/image_placeholder"
                     android:scaleType="fitXY" />
 
                 <com.google.android.gms.ads.nativead.MediaView
@@ -199,7 +199,7 @@
                                 android:layout_marginTop="@dimen/anynews_no_margin"
                                 android:layout_marginEnd="@dimen/anynews_no_margin"
                                 android:layout_marginBottom="@dimen/anynews_no_margin"
-                                android:background="@color/anynews_white"
+                                android:background="@color/form_surface_elevated"
                                 android:gravity="top"
                                 android:lines="1"
                                 android:textColor="@color/anynews_gray"
@@ -242,7 +242,7 @@
                 android:background="@color/anynews_blue"
                 android:gravity="center"
                 android:lines="1"
-                android:textColor="@color/anynews_white"
+                android:textColor="@color/on_brand_text"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintHeight_min="35dp"

@@ -1,315 +1,385 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Polling (post_type "survey"): image on top, Yes/No options stacked BELOW —
+  same placement pattern as survey_poll (activity_polling_page_flip).
+  Options are NOT overlaid on the hero image.
+-->
 <RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rl_survay_main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/transparent_white"
-    android:gravity="center"
-    android:padding="16dp">
+    android:gravity="center">
 
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center">
 
-        <androidx.cardview.widget.CardView
-            xmlns:Card_View="http://schemas.android.com/apk/res-auto"
+        <LinearLayout
+            android:orientation="vertical"
             android:layout_width="match_parent"
-            android:layout_height="350dp"
-            android:id="@+id/card_view_survey"
-            android:layout_margin="5dp"
-            android:padding="10sp"
-            Card_View:cardCornerRadius="5sp"
-            Card_View:cardBackgroundColor="@color/transparent_white"
-            Card_View:cardElevation="5sp">
+            android:layout_height="match_parent">
 
+            <!-- Hero image (top) -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:id="@+id/rl_question"
-                android:layout_margin="5dp"
-                android:orientation="vertical">
-                <TextView
-                    android:id="@+id/tv_survey_question_common"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingVertical="@dimen/_20sdp"
-                    android:layout_marginVertical="@dimen/_30sdp"
-                    android:autoSizePresetSizes="12dp"
-                    android:autoSizeTextType="none"
-                    android:ellipsize="end"
-                    android:fontFamily="@font/robotolighttelugu"
-                    android:gravity="center"
-                    android:lineSpacingExtra="-8dp"
-                    android:maxLength="400"
-                    android:paddingLeft="10dp"
-                    android:paddingRight="10dp"
-                    android:paddingBottom="2dp"
-                    android:text=""
-                    android:textColor="@color/content_title_color"
-                    android:textSize="@dimen/_12sdp"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    app:autoSizeMaxTextSize="@dimen/_11sdp"
-                    app:autoSizeMinTextSize="@dimen/_11sdp"
-                    app:autoSizeStepGranularity="1sp" />
-                <TextView
-                    android:id="@+id/tv_survey_question_tamil"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginVertical="@dimen/_30sdp"
-                    android:layout_marginBottom="@dimen/two"
-                    android:paddingVertical="@dimen/_20sdp"
-                    android:autoSizePresetSizes="12dp"
-                    android:autoSizeTextType="none"
-                    android:ellipsize="end"
-                    android:fontFamily="@font/mallannaregular"
-                    android:gravity="center"
-                    android:letterSpacing="0.01"
-                    android:maxLength="400"
-                    android:paddingLeft="10dp"
-                    android:paddingRight="10dp"
-                    android:paddingBottom="2dp"
-                    android:text=""
-                    android:textColor="@color/content_title_color"
-                    android:textSize="@dimen/_10sdp"
-                    android:textStyle="bold"
-                    android:visibility="gone"
-                    app:autoSizeMaxTextSize="@dimen/_13sdp"
-                    app:autoSizeMinTextSize="@dimen/_13sdp"
-                    app:autoSizeStepGranularity="1sp" />
-                <TextView
-                    android:id="@+id/tv_survey_question_english"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:visibility="visible"
-                    android:layout_marginVertical="@dimen/_30sdp"
-                    android:paddingVertical="@dimen/_20sdp"
-                    android:layout_marginBottom="@dimen/two"
-                    android:autoSizePresetSizes="12dp"
-                    android:autoSizeTextType="none"
-                    android:ellipsize="end"
-                    android:fontFamily="@font/roboto_bold"
-                    android:gravity="center"
-                    android:layout_gravity="top"
-                    android:letterSpacing="0.01"
-                    android:lineSpacingExtra="1sp"
-                    android:maxLength="400"
-                    android:paddingLeft="10dp"
-                    android:paddingRight="10dp"
-                    android:paddingBottom="2dp"
-                    android:text="Question"
-                    android:textColor="@color/content_title_color"
-                    android:textSize="@dimen/_13sdp"
-                    android:textStyle="bold"
-                    app:autoSizeMaxTextSize="@dimen/_13sdp"
-                    app:autoSizeMinTextSize="@dimen/_13sdp"
-                    app:autoSizeStepGranularity="1sp" />
-
-
+                android:layout_height="0dp"
+                android:layout_weight="4.5">
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="@dimen/_50sdp"
-                    android:orientation="horizontal"
-                    android:layout_marginStart="@dimen/_10sdp"
-                    android:layout_marginEnd="@dimen/_10sdp"
-                    android:layout_marginTop="@dimen/_10sdp"
-                    android:weightSum="1">
-                        <com.anyNews.anynews.Ui.NeomorphFrameLayout
-                            android:id="@+id/neomorphFrameLayoutYes"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="0.5"
-                            app:neomorph_shadow_type="outer"
-                            app:neomorph_layer_type="hardware"
-                            app:neomorph_background_color="@color/white"
-                            app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
-                            app:neomorph_elevation="@dimen/neomorph_view_elevation"
-                            app:neomorph_view_type="rectangular"
-                            app:neomorph_shadow_color="#D0D2D5"
-                            app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                            <TextView
-                                android:id="@+id/tv_answer_yes"
-                                android:text=""
-                                android:gravity="center"
-                                android:layout_margin="@dimen/_3sdp"
-                                android:background="@drawable/background_button"
-                                android:textSize="@dimen/_12sdp"
-                                android:fontFamily="@font/roboto_bold"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"/>
-                            <TextView
-                                android:id="@+id/tv_answer_yes_telugu"
-                                android:text=""
-                                android:gravity="center"
-                                android:visibility="gone"
-                                android:layout_margin="@dimen/_3sdp"
-                                android:background="@drawable/background_button"
-                                android:textSize="@dimen/_18sdp"
-                                android:fontFamily="@font/robotolighttelugu"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"/>
-                            <TextView
-                                android:id="@+id/tv_answer_yes_tamil"
-                                android:text=""
-                                android:gravity="center"
-                                android:visibility="gone"
-                                android:layout_margin="@dimen/_3sdp"
-                                android:background="@drawable/background_button"
-                                android:textSize="@dimen/_12sdp"
-                                android:fontFamily="@font/mallannaregular"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"/>
-                        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                    android:layout_height="match_parent"
+                    android:background="@color/white"
+                    android:orientation="vertical">
 
-                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
-                        android:id="@+id/neomorphFrameLayoutYesSelected"
-                        android:visibility="gone"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="0.5"
-                        app:neomorph_shadow_type="outer"
-                        app:neomorph_layer_type="hardware"
-                        app:neomorph_background_color="@color/brand_orange"
-                        app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
-                        app:neomorph_elevation="@dimen/neomorph_view_elevation"
-                        app:neomorph_view_type="rectangular"
-                        app:neomorph_shadow_color="#16EF4923"
-                        app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                        <TextView
-                            android:id="@+id/tv_answer_yes_selected"
-                            android:text=""
-                            android:gravity="center"
-                            android:layout_margin="@dimen/_3sdp"
-                            android:textColor="@color/on_brand_text"
-                            android:background="@drawable/red_color"
-                            android:textSize="@dimen/_12sdp"
-                            android:fontFamily="@font/roboto_bold"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"/>
-                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
-                        <com.anyNews.anynews.Ui.NeomorphFrameLayout
-                            android:id="@+id/neomorphFrameLayoutNo"
-                            android:layout_width="0sp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="0.5"
-                            app:neomorph_shadow_type="outer"
-                            app:neomorph_layer_type="hardware"
-                            app:neomorph_background_color="@color/white"
-                            app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
-                            app:neomorph_elevation="@dimen/neomorph_view_elevation"
-                            app:neomorph_view_type="rectangular"
-                            app:neomorph_shadow_color="#D0D2D5"
-                            app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                            <TextView
-                                android:id="@+id/tv_answer_no"
-                                android:text=""
-                                android:gravity="center"
-                                android:layout_margin="@dimen/_3sdp"
-                                android:background="@drawable/background_button"
-                                android:textSize="@dimen/_12sdp"
-                                android:fontFamily="@font/roboto_bold"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"/>
-                        </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
-                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
-                        android:id="@+id/neomorphFrameLayoutNoSelected"
-                        android:visibility="gone"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="0.5"
-                        app:neomorph_shadow_type="outer"
-                        app:neomorph_layer_type="hardware"
-                        app:neomorph_background_color="@color/brand_orange"
-                        app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
-                        app:neomorph_elevation="@dimen/neomorph_view_elevation"
-                        app:neomorph_view_type="rectangular"
-                        app:neomorph_shadow_color="#16EF4923"
-                        app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                    <TextView
-                        android:id="@+id/tv_answer_no_selected"
-                        android:text=""
-                        android:gravity="center"
-                        android:layout_margin="@dimen/_3sdp"
-                        android:textColor="@color/on_brand_text"
-                        android:background="@drawable/red_color"
-                        android:textSize="@dimen/_12sdp"
-                        android:fontFamily="@font/roboto_bold"
+                    <ImageView
+                        android:id="@+id/survey_half_image"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"/>
-                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
-
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="@dimen/_40sdp"
-                    android:id="@+id/ll_percent_layout"
-                    android:orientation="horizontal"
-                    android:layout_marginStart="@dimen/_10sdp"
-                    android:layout_marginEnd="@dimen/_10sdp"
-                    android:layout_marginTop="@dimen/_15sdp"
-                    android:visibility="invisible"
-                    android:weightSum="1">
-                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
-                        android:id="@+id/neomorphFrameLayoutYesPercent"
-                        android:layout_width="0dp"
                         android:layout_height="match_parent"
-                        android:layout_weight="0.5"
-                        app:neomorph_shadow_type="outer"
-                        app:neomorph_layer_type="hardware"
-                        app:neomorph_background_color="@color/brand_orange"
-                        app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
-                        app:neomorph_elevation="@dimen/neomorph_view_elevation"
-                        app:neomorph_view_type="rectangular"
-                        app:neomorph_shadow_color="#16EF4923"
-                        app:neomorph_highlight_color="@color/neomorph_highlight_color">
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:id="@+id/tv_yes_percent"
-                            android:textSize="@dimen/_12sdp"
-                            android:gravity="center"
-                            android:textColor="@color/on_brand_text"/>
-
-                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
-                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
-                        android:id="@+id/neomorphFrameLayoutNoPercent"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_weight="0.5"
-                        app:neomorph_shadow_type="outer"
-                        app:neomorph_layer_type="hardware"
-                        app:neomorph_background_color="@color/brand_orange"
-                        app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
-                        app:neomorph_elevation="@dimen/neomorph_view_elevation"
-                        app:neomorph_view_type="rectangular"
-                        app:neomorph_shadow_color="#16EF4923"
-                        app:neomorph_highlight_color="@color/neomorph_highlight_color">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:id="@+id/tv_no_percent"
-                            android:text=""
-                            android:textSize="@dimen/_12sdp"
-                            android:gravity="center"
-                            android:textColor="@color/on_brand_text"/>
-                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
+                        android:adjustViewBounds="true"
+                        android:src="@drawable/md_btn_selector_ripple_dark"
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
                 </LinearLayout>
-
             </LinearLayout>
-        </androidx.cardview.widget.CardView>
-    </RelativeLayout>
 
+            <!-- Question + options BELOW image -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="5.5">
+                <androidx.cardview.widget.CardView
+                    xmlns:Card_View="http://schemas.android.com/apk/res-auto"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:id="@+id/card_view_survey"
+                    Card_View:cardCornerRadius="5sp"
+                    Card_View:cardBackgroundColor="@color/white"
+                    Card_View:cardElevation="0sp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_gravity="center"
+                        android:background="@color/white"
+                        android:id="@+id/rl_question"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tv_survey_question_common"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:visibility="gone"
+                            android:autoSizePresetSizes="12dp"
+                            android:autoSizeTextType="none"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/robotolighttelugu"
+                            android:gravity="left|center"
+                            android:lineSpacingExtra="-8dp"
+                            android:maxLength="400"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:paddingBottom="2dp"
+                            android:text=""
+                            android:textColor="@color/content_title_color"
+                            android:textSize="@dimen/_12sdp"
+                            android:textStyle="bold"
+                            app:autoSizeMaxTextSize="@dimen/_11sdp"
+                            app:autoSizeMinTextSize="@dimen/_11sdp"
+                            app:autoSizeStepGranularity="1sp" />
+
+                        <TextView
+                            android:id="@+id/tv_survey_question_tamil"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:visibility="gone"
+                            android:autoSizePresetSizes="12dp"
+                            android:autoSizeTextType="none"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/mallannaregular"
+                            android:gravity="left|center"
+                            android:letterSpacing="0.01"
+                            android:maxLength="400"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:paddingBottom="2dp"
+                            android:text=""
+                            android:textColor="@color/content_title_color"
+                            android:textSize="@dimen/_10sdp"
+                            android:textStyle="bold"
+                            app:autoSizeMaxTextSize="@dimen/_13sdp"
+                            app:autoSizeMinTextSize="@dimen/_13sdp"
+                            app:autoSizeStepGranularity="1sp" />
+
+                        <TextView
+                            android:id="@+id/tv_survey_question_english"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:visibility="visible"
+                            android:layout_marginVertical="@dimen/_8sdp"
+                            android:layout_marginBottom="@dimen/two"
+                            android:autoSizePresetSizes="12dp"
+                            android:autoSizeTextType="none"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/roboto_bold"
+                            android:gravity="left|center"
+                            android:layout_gravity="top"
+                            android:letterSpacing="0.01"
+                            android:lineSpacingExtra="1sp"
+                            android:maxLength="400"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:paddingBottom="2dp"
+                            android:text="Question"
+                            android:textColor="@color/content_title_color"
+                            android:textSize="@dimen/_14sdp"
+                            android:textStyle="bold"
+                            app:autoSizeMaxTextSize="@dimen/_13sdp"
+                            app:autoSizeMinTextSize="@dimen/_13sdp"
+                            app:autoSizeStepGranularity="1sp" />
+
+                        <!-- Vertical option rows (same pattern as survey_poll) -->
+                        <LinearLayout
+                            android:id="@+id/ll_options_layout"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:layout_marginStart="@dimen/_10sdp"
+                            android:layout_marginEnd="@dimen/_10sdp"
+                            android:weightSum="2">
+
+                            <!-- Yes (unselected) -->
+                            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                android:id="@+id/neomorphFrameLayoutYes"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:background="@android:color/transparent"
+                                app:neomorph_shadow_type="outer"
+                                app:neomorph_layer_type="hardware"
+                                app:neomorph_background_color="@color/poll_option_surface"
+                                app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+                                app:neomorph_elevation="@dimen/neomorph_view_elevation"
+                                app:neomorph_view_type="rectangular"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
+                                app:neomorph_highlight_color="@color/neomorph_highlight_color">
+                                <TextView
+                                    android:id="@+id/tv_answer_yes"
+                                    android:text=""
+                                    android:gravity="center"
+                                    android:layout_margin="@dimen/_3sdp"
+                                    android:background="@android:color/transparent"
+                                    android:textColor="@color/poll_option_text"
+                                    android:textSize="@dimen/_13sdp"
+                                    android:fontFamily="@font/roboto_bold"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"/>
+                                <TextView
+                                    android:id="@+id/tv_answer_yes_telugu"
+                                    android:text=""
+                                    android:gravity="center"
+                                    android:visibility="gone"
+                                    android:layout_margin="@dimen/_3sdp"
+                                    android:background="@android:color/transparent"
+                                    android:textColor="@color/poll_option_text"
+                                    android:textSize="@dimen/_18sdp"
+                                    android:fontFamily="@font/robotolighttelugu"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"/>
+                                <TextView
+                                    android:id="@+id/tv_answer_yes_tamil"
+                                    android:text=""
+                                    android:gravity="center"
+                                    android:visibility="gone"
+                                    android:layout_margin="@dimen/_3sdp"
+                                    android:background="@android:color/transparent"
+                                    android:textColor="@color/poll_option_text"
+                                    android:textSize="@dimen/_12sdp"
+                                    android:fontFamily="@font/mallannaregular"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"/>
+                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            <!-- Yes (selected) — kept for ID compatibility; vote UI uses percent rows -->
+                            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                android:id="@+id/neomorphFrameLayoutYesSelected"
+                                android:visibility="gone"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:background="@android:color/transparent"
+                                app:neomorph_shadow_type="outer"
+                                app:neomorph_layer_type="hardware"
+                                app:neomorph_background_color="@color/poll_option_surface"
+                                app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+                                app:neomorph_elevation="@dimen/neomorph_view_elevation"
+                                app:neomorph_view_type="rectangular"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
+                                app:neomorph_highlight_color="@color/neomorph_highlight_color">
+                                <TextView
+                                    android:id="@+id/tv_answer_yes_selected"
+                                    android:text=""
+                                    android:gravity="center"
+                                    android:layout_margin="@dimen/_3sdp"
+                                    android:textColor="@color/poll_option_selected_text"
+                                    android:background="@android:color/transparent"
+                                    android:textSize="@dimen/_13sdp"
+                                    android:fontFamily="@font/roboto_bold"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"/>
+                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            <!-- No (unselected) -->
+                            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                android:id="@+id/neomorphFrameLayoutNo"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:background="@android:color/transparent"
+                                app:neomorph_shadow_type="outer"
+                                app:neomorph_layer_type="hardware"
+                                app:neomorph_background_color="@color/poll_option_surface"
+                                app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+                                app:neomorph_elevation="@dimen/neomorph_view_elevation"
+                                app:neomorph_view_type="rectangular"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
+                                app:neomorph_highlight_color="@color/neomorph_highlight_color">
+                                <TextView
+                                    android:id="@+id/tv_answer_no"
+                                    android:text=""
+                                    android:gravity="center"
+                                    android:layout_margin="@dimen/_3sdp"
+                                    android:background="@android:color/transparent"
+                                    android:textColor="@color/poll_option_text"
+                                    android:textSize="@dimen/_13sdp"
+                                    android:fontFamily="@font/roboto_bold"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"/>
+                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            <!-- No (selected) -->
+                            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                android:id="@+id/neomorphFrameLayoutNoSelected"
+                                android:visibility="gone"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:background="@android:color/transparent"
+                                app:neomorph_shadow_type="outer"
+                                app:neomorph_layer_type="hardware"
+                                app:neomorph_background_color="@color/poll_option_surface"
+                                app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+                                app:neomorph_elevation="@dimen/neomorph_view_elevation"
+                                app:neomorph_view_type="rectangular"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
+                                app:neomorph_highlight_color="@color/neomorph_highlight_color">
+                                <TextView
+                                    android:id="@+id/tv_answer_no_selected"
+                                    android:text=""
+                                    android:gravity="center"
+                                    android:layout_margin="@dimen/_3sdp"
+                                    android:textColor="@color/poll_option_selected_text"
+                                    android:background="@android:color/transparent"
+                                    android:textSize="@dimen/_13sdp"
+                                    android:fontFamily="@font/roboto_bold"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"/>
+                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                        </LinearLayout>
+
+                        <!-- Percentages after vote: stacked below like options -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:id="@+id/ll_percent_layout"
+                            android:orientation="vertical"
+                            android:layout_marginStart="@dimen/_10sdp"
+                            android:layout_marginEnd="@dimen/_10sdp"
+                            android:layout_marginBottom="@dimen/_8sdp"
+                            android:visibility="gone"
+                            android:weightSum="2">
+
+                            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                android:id="@+id/neomorphFrameLayoutYesPercent"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:background="@android:color/transparent"
+                                app:neomorph_shadow_type="outer"
+                                app:neomorph_layer_type="hardware"
+                                app:neomorph_background_color="@color/poll_option_surface"
+                                app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+                                app:neomorph_elevation="@dimen/neomorph_view_elevation"
+                                app:neomorph_view_type="rectangular"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
+                                app:neomorph_highlight_color="@color/neomorph_highlight_color">
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/yes_percent_fill"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+                                    <TextView
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:text=""
+                                        android:id="@+id/tv_yes_percent"
+                                        android:textSize="@dimen/_13sdp"
+                                        android:gravity="center"
+                                        android:textColor="@color/poll_option_selected_text"
+                                        android:fontFamily="@font/roboto_bold"/>
+                                </FrameLayout>
+                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+
+                            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                                android:id="@+id/neomorphFrameLayoutNoPercent"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:background="@android:color/transparent"
+                                app:neomorph_shadow_type="outer"
+                                app:neomorph_layer_type="hardware"
+                                app:neomorph_background_color="@color/poll_option_surface"
+                                app:neomorph_corner_radius="@dimen/neomorph_view_corner_radius"
+                                app:neomorph_elevation="@dimen/neomorph_view_elevation"
+                                app:neomorph_view_type="rectangular"
+                                app:neomorph_shadow_color="@color/neomorph_shadow_color"
+                                app:neomorph_highlight_color="@color/neomorph_highlight_color">
+                                <FrameLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:clipChildren="true">
+                                    <View
+                                        android:id="@+id/no_percent_fill"
+                                        android:layout_width="0dp"
+                                        android:layout_height="match_parent"
+                                        android:layout_gravity="start"
+                                        android:background="@drawable/bg_poll_option_fill"
+                                        android:visibility="gone"/>
+                                    <TextView
+                                        android:layout_width="match_parent"
+                                        android:layout_height="match_parent"
+                                        android:text=""
+                                        android:id="@+id/tv_no_percent"
+                                        android:textSize="@dimen/_13sdp"
+                                        android:gravity="center"
+                                        android:textColor="@color/poll_option_selected_text"
+                                        android:fontFamily="@font/roboto_bold"/>
+                                </FrameLayout>
+                            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+        </LinearLayout>
+    </RelativeLayout>
 </RelativeLayout>

@@ -142,6 +142,10 @@ public class EncreptionRequest {
     @Expose
     private String theme_color;
 
+    @SerializedName("poll_survey_colors")
+    @Expose
+    private PollSurveyColorsConfig poll_survey_colors;
+
     @SerializedName("allow_screen_capture")
     @Expose
     private boolean allow_screen_capture = false;
@@ -252,6 +256,14 @@ public class EncreptionRequest {
 
     public void setTheme_color(String theme_color) {
         this.theme_color = theme_color;
+    }
+
+    public PollSurveyColorsConfig getPoll_survey_colors() {
+        return poll_survey_colors;
+    }
+
+    public void setPoll_survey_colors(PollSurveyColorsConfig poll_survey_colors) {
+        this.poll_survey_colors = poll_survey_colors;
     }
 
     public Integer getUpdateMenuStatus() {

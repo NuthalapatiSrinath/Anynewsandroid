@@ -204,6 +204,10 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private FullVideoShareCardConfig fullVideoShareCard;
 
+        @SerializedName("poll_survey_colors")
+        @Expose
+        private PollSurveyColorsConfig pollSurveyColors;
+
         @SerializedName("cricket_mini_player_position")
         @Expose
         private CricketMiniPlayerPosition cricketMiniPlayerPosition;
@@ -240,6 +244,10 @@ public class StartActivityReqModel implements Serializable {
 
         public FullVideoShareCardConfig getFullVideoShareCard() {
             return fullVideoShareCard;
+        }
+
+        public PollSurveyColorsConfig getPollSurveyColors() {
+            return pollSurveyColors;
         }
 
         public CricketMiniPlayerPosition getCricketMiniPlayerPosition() {

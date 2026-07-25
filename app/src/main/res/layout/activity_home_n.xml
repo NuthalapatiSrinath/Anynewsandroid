@@ -235,7 +235,7 @@
                         android:paddingRight="10dp"
                         android:paddingBottom="2dp"
                         android:text=""
-                        android:textColor="#5d5d5d"
+                        android:textColor="@color/content_desc_color"
                         android:textSize="@dimen/_12sdp"
                         android:visibility="gone"
                         app:autoSizeMaxTextSize="@dimen/_12sdp"
@@ -281,7 +281,7 @@
                         android:paddingRight="10dp"
                         android:paddingBottom="2dp"
                         android:text=""
-                        android:textColor="#5d5d5d"
+                        android:textColor="@color/content_desc_color"
                         android:textSize="@dimen/_13sdp"
                         android:textStyle="normal"
                         app:autoSizeMaxTextSize="@dimen/_13sdp"
@@ -475,7 +475,7 @@
     <!--<View
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
-        android:background="#EAE8EC">
+        android:background="@color/soft_divider">
 
     </View>-->
 </LinearLayout>
