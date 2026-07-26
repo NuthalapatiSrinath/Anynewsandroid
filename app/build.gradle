@@ -163,6 +163,8 @@ android {
 
 dependencies {
     implementation 'com.android.installreferrer:installreferrer:2.2'
+    // Google Play In-App Updates (flexible / incremental via Play — not full APK from our server)
+    implementation 'com.google.android.play:app-update:2.1.0'
     implementation 'com.google.android.gms:play-services-analytics-impl:18.2.0'
     implementation 'androidx.core:core-ktx:1.15.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.2.0'

@@ -50,6 +50,11 @@
     <string name="cancel">Cancel</string>
     <string name="update_now">Update</string>
     <string name="update_message">New Update is Available in Playstore Update</string>
+    <string name="app_update_available_title">App update available</string>
+    <string name="app_update_available_subtitle">Please install the new app to continue</string>
+    <string name="app_update_install">Install</string>
+    <string name="app_update_update">Update</string>
+    <string name="app_update_downloading">Downloading…</string>
     <string name="Home">Home</string>
     <string name="Category">Category</string>
     <string name="Profile">Profile</string>
@@ -98,4 +103,6 @@
     <string name="full_video_option_download">Download Video</string>
     <string name="full_video_option_share">Share</string>
     <string name="full_video_option_dismiss">Dismiss</string>
+    <string name="vote_now">Vote Now</string>
+    <string name="poll_select_option">Please select an option</string>
 </resources>

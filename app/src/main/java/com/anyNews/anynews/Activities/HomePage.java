@@ -144,6 +144,7 @@ import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
+import com.anyNews.anynews.Utils.PlayInAppUpdateHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
 import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.Logone;
@@ -254,6 +255,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private TextView tvCricketFooter;
     private ObjectAnimator cricketFooterBlinkAnimator;
     private com.anyNews.anynews.Pojo.ActiveMatch cricketFooterActiveMatch;
+    // Sticky bottom update banner (Play flexible in-app update). Soft = dismissible; force = Install only.
+    private View layoutAppUpdateBanner;
+    private TextView tvAppUpdateTitle;
+    private TextView tvAppUpdateSubtitle;
+    private TextView btnAppUpdateAction;
+    private ImageView btnAppUpdateDismiss;
+    private PlayInAppUpdateHelper playInAppUpdateHelper;
+    private boolean appUpdateForceMode = false;
+    private boolean appUpdateDownloaded = false;
+    private boolean appUpdateDownloading = false;
     boolean isOpen = false;
 
     /* flipView Detailes*/
@@ -567,6 +578,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         layoutCricketFooter = findViewById(R.id.layoutCricketFooter);
         ivCricketFooter = findViewById(R.id.ivCricketFooter);
         tvCricketFooter = findViewById(R.id.tvCricketFooter);
+        bindAppUpdateBanner();
         if (cricketMiniPlayerManager != null) {
             cricketMiniPlayerManager.setPollListener(
                     (match, footerEnabled) -> updateCricketFooterTab(match, footerEnabled));
@@ -2005,6 +2017,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                 }
             });
+
+    /** Play Core flexible update confirmation sheet result. */
+    private final ActivityResultLauncher<androidx.activity.result.IntentSenderRequest> playAppUpdateLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.StartIntentSenderForResult(),
+                    result -> {
+                        if (result.getResultCode() != Activity.RESULT_OK) {
+                            showLog("Play flexible update flow canceled or failed: " + result.getResultCode());
+                            appUpdateDownloading = false;
+                            refreshAppUpdateActionLabel();
+                        }
+                    });
+
     ActivityResultLauncher<Intent> someActivityResultLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             new ActivityResultCallback<ActivityResult>() {
@@ -3479,6 +3504,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // refreshDetails / loadAds / FLAG_SECURE / gallery — after scroller finished.
         runDeferredFlipSettleWork();
         flushPendingFlipTracking();
+        // Durable theme-recreate checkpoint — after settle so mid-flip stays light.
+        try {
+            long pid = resolvePostIdForFlipIndex(positionx);
+            persistFlipRestoreCheckpoint(positionx, pid, positionx > 0 || pid > 0);
+        } catch (Exception ignored) {
+        }
         if (adapter != null) {
             adapter.setCurrentFlipPage(positionx);
             adapter.bindPendingNativeAdMediaForPage(positionx);
@@ -4034,11 +4065,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 ModelClass validateUserOtp = gsonObj.fromJson(encrpt_data, ModelClass.class);
                 if (Boolean.TRUE.equals(validateUserOtp.getSuccess())) {
                    if (encreptionRequest.getUpdateMenuStatus() != null && encreptionRequest.getUpdateMenuStatus()==3){
-                       finish();
-                        movetoappStore();
-                    }
-                    if (encreptionRequest.getUpdateMenuStatus() != null && encreptionRequest.getUpdateMenuStatus()==2 ){
-                        PlaystoreUpdateDialog();
+                        showAppUpdateBanner(true);
+                    } else if (encreptionRequest.getUpdateMenuStatus() != null && encreptionRequest.getUpdateMenuStatus()==2 ){
+                        showAppUpdateBanner(false);
+                    } else {
+                        hideAppUpdateBanner();
                     }
                     if(encreptionRequest.isCallAppEvents()){
                         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
@@ -4158,6 +4189,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                            mFlipView.setOnOverFlipListener(this);
                            mFlipView.setOnFlipAppear(this);
                        }
+                        // Theme recreate can leave adapter null if inlist skipped creation
+                        // (e.g. translator prefs not ready yet). Ensure adapter exists so
+                        // flip restore can run for light↔dark.
+                        if (adapter == null && mFlipView != null) {
+                            showLog("adapter null after articles — creating for flip restore");
+                            if (type == null || type.isEmpty()) {
+                                type = String.valueOf(SharedPrefsData.getString(
+                                        HomePage.this, Constants.Selected_Distric_Name1, Constants.PREF_NAME));
+                            }
+                            adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());
+                            adapter.setCallback(this);
+                            adapter.setCurrentFlipPage(positionx);
+                            mFlipView.setAdapter(adapter);
+                            mFlipView.setOnFlipListener(this);
+                            mFlipView.setOnFlipCompleteListener(this);
+                            mFlipView.setOverFlipMode(OverFlipMode.GLOW);
+                            mFlipView.peakNext(false);
+                            mFlipView.setOnOverFlipListener(this);
+                            mFlipView.setOnFlipAppear(this);
+                        }
                         if (adapter == null) {
                             showLog("adapter null after articles response");
                         } else {
@@ -4253,9 +4304,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             home_page_navigation.setVisibility(View.VISIBLE);
             isApiRequested=false;
 
-        } catch (NullPointerException e) {
+        } catch (Exception e) {
+            // Gson JsonSyntaxException (e.g. survey options as plain strings) must not crash open.
             e.printStackTrace();
-
+            showLog("convertListOfArticles parse error: " + e.getMessage());
         }
 
     }
@@ -4629,6 +4681,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         currentView = view;
         initialCall = true;
         positionx = position;
+        // Flip restore prefs are written in OnFlipCompletedListener (not mid-flip)
+        // to avoid SharedPreferences editor work during the animation.
         post_type = list.get(position).getPostType();
         if (post_type == null) {
             post_type = "";
@@ -4759,20 +4813,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt(STATE_FLIP_INDEX, positionx);
-        long postId = -1L;
-        try {
-            if (list != null && positionx >= 0 && positionx < list.size()) {
-                Long id = list.get(positionx).getPostId();
-                if (id != null) {
-                    postId = id;
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        int flipIndex = resolveCurrentFlipIndexForSave();
+        long postId = resolvePostIdForFlipIndex(flipIndex);
+        outState.putInt(STATE_FLIP_INDEX, flipIndex);
         outState.putLong(STATE_FLIP_POST_ID, postId);
-        showLog("onSaveInstanceState flip index=" + positionx + " postId=" + postId);
+        // Mirror to prefs so light↔dark restore works even if bundle is dropped
+        // (e.g. CLEAR_TASK relaunch during uiMode) or read after a delayed recreate.
+        persistFlipRestoreCheckpoint(flipIndex, postId, flipIndex > 0 || postId > 0);
+        showLog("onSaveInstanceState flip index=" + flipIndex + " postId=" + postId);
     }
 
     @Override
@@ -4785,28 +4833,134 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void readPendingFlipRestoreState(Bundle savedInstanceState) {
-        if (savedInstanceState == null) {
-            return;
+        int bundleIndex = 0;
+        long bundlePostId = -1L;
+        if (savedInstanceState != null) {
+            bundleIndex = savedInstanceState.getInt(STATE_FLIP_INDEX, 0);
+            bundlePostId = savedInstanceState.getLong(STATE_FLIP_POST_ID, -1L);
         }
-        pendingRestoreFlipIndex = savedInstanceState.getInt(STATE_FLIP_INDEX, 0);
-        pendingRestorePostId = savedInstanceState.getLong(STATE_FLIP_POST_ID, -1L);
-        // Cold start has null bundle. Recreate always has a bundle; restore only if we
-        // actually had a mid-feed position or a known postId.
+
+        // Prefs backup: covers dark→light (and light→dark) when bundle is empty/stale.
+        // Only honor prefs written recently (theme recreate is near-instant).
+        // StartingActivity clears these on splash cold launch so Recents kill→reopen
+        // cannot restore mid-feed via a still-fresh TTL checkpoint.
+        boolean prefsPending = SharedPrefsData.getBool(
+                this, Constants.FLIP_RESTORE_PENDING, Constants.PREF_NAME);
+        long prefsAt = 0L;
+        try {
+            String atRaw = SharedPrefsData.getString(
+                    this, Constants.FLIP_RESTORE_AT, Constants.PREF_NAME);
+            if (atRaw != null && !atRaw.isEmpty()) {
+                prefsAt = Long.parseLong(atRaw.trim());
+            }
+        } catch (Exception ignored) {
+        }
+        final long PREFS_TTL_MS = 120_000L;
+        boolean prefsFresh = prefsPending
+                && prefsAt > 0
+                && (System.currentTimeMillis() - prefsAt) <= PREFS_TTL_MS;
+        int prefsIndex = SharedPrefsData.getInt(
+                this, Constants.FLIP_RESTORE_INDEX, Constants.PREF_NAME);
+        long prefsPostId = -1L;
+        try {
+            String raw = SharedPrefsData.getString(
+                    this, Constants.FLIP_RESTORE_POST_ID, Constants.PREF_NAME);
+            if (raw != null && !raw.isEmpty()) {
+                prefsPostId = Long.parseLong(raw.trim());
+            }
+        } catch (Exception ignored) {
+        }
+
+        // Prefer the richer of bundle vs prefs (postId match is most reliable).
+        if (bundlePostId > 0) {
+            pendingRestoreFlipIndex = bundleIndex;
+            pendingRestorePostId = bundlePostId;
+        } else if (prefsFresh && prefsPostId > 0) {
+            pendingRestoreFlipIndex = prefsIndex;
+            pendingRestorePostId = prefsPostId;
+        } else if (bundleIndex > 0) {
+            pendingRestoreFlipIndex = bundleIndex;
+            pendingRestorePostId = bundlePostId;
+        } else if (prefsFresh && prefsIndex > 0) {
+            pendingRestoreFlipIndex = prefsIndex;
+            pendingRestorePostId = prefsPostId;
+        } else {
+            pendingRestoreFlipIndex = 0;
+            pendingRestorePostId = -1L;
+            if (prefsPending && !prefsFresh) {
+                persistFlipRestoreCheckpoint(0, -1L, false);
+            }
+        }
+
+        // Cold start: no bundle and no pending prefs → stay at article 0.
         pendingFlipRestore = pendingRestoreFlipIndex > 0 || pendingRestorePostId > 0;
         showLog("pending flip restore index=" + pendingRestoreFlipIndex
                 + " postId=" + pendingRestorePostId
-                + " active=" + pendingFlipRestore);
+                + " active=" + pendingFlipRestore
+                + " bundle=" + (savedInstanceState != null)
+                + " prefsPending=" + prefsPending);
     }
 
+    /** Keep a durable checkpoint while the user flips so theme recreate can restore. */
+    private void persistFlipRestoreCheckpoint(int flipIndex, long postId, boolean pending) {
+        try {
+            // Single editor.apply() — avoids 4 separate SharedPreferences transactions.
+            android.content.SharedPreferences.Editor editor =
+                    getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE).edit();
+            editor.putInt(Constants.FLIP_RESTORE_INDEX, flipIndex);
+            editor.putString(Constants.FLIP_RESTORE_POST_ID, String.valueOf(postId));
+            editor.putBoolean(Constants.FLIP_RESTORE_PENDING, pending);
+            editor.putString(
+                    Constants.FLIP_RESTORE_AT,
+                    pending ? String.valueOf(System.currentTimeMillis()) : "0");
+            editor.apply();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private int resolveCurrentFlipIndexForSave() {
+        int flipIndex = positionx;
+        try {
+            if (mFlipView != null) {
+                int cur = mFlipView.getCurrentPage();
+                if (cur >= 0) {
+                    flipIndex = cur;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (flipIndex < 0) {
+            flipIndex = 0;
+        }
+        return flipIndex;
+    }
+
+    private long resolvePostIdForFlipIndex(int flipIndex) {
+        try {
+            if (list != null && flipIndex >= 0 && flipIndex < list.size()) {
+                Long id = list.get(flipIndex).getPostId();
+                if (id != null) {
+                    return id;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return -1L;
+    }
+
+    /** Call on intentional feed resets (local/my-feed switch) — not on theme recreate. */
     private void clearPendingFlipRestore() {
         pendingFlipRestore = false;
         pendingRestoreFlipIndex = 0;
         pendingRestorePostId = -1L;
+        persistFlipRestoreCheckpoint(0, -1L, false);
     }
 
     /**
      * After articles load (setData / append), restore the flip page that was showing
-     * before a DayNight recreate (e.g. battery saver → dark mode).
+     * before a DayNight recreate (battery saver ↔ light/dark, either direction).
      * <p>
      * Behavior:
      * <ul>
@@ -4843,12 +4997,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         if (target < 0) {
             // Post not in the loaded batch and index past end — stay at 0.
-            // We do not auto-fetch extra pages solely for restore (best effort).
             clearPendingFlipRestore();
             showLog("flip restore: target not found in loaded list, staying at 0");
             return;
         }
 
+        // Clear pending before flip so a later intentional reset does not re-jump.
         clearPendingFlipRestore();
         if (target <= 0) {
             return;
@@ -4857,28 +5011,44 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             positionx = target;
             adapter.setCurrentFlipPage(target);
             final int page = target;
-            // Post so FlipView finishes setData/dataSetChanged (which flips to 0) first.
+            // Double-post: FlipView setData/dataSetChanged flips to 0 first; a second
+            // frame covers any delayed observer / peakNext that would reset again.
             mFlipView.post(new Runnable() {
                 @Override
                 public void run() {
-                    try {
-                        if (mFlipView == null || adapter == null) {
-                            return;
-                        }
-                        int pageCount = mFlipView.getPageCount();
-                        if (pageCount <= 0) {
-                            return;
-                        }
-                        int safePage = Math.min(page, pageCount - 1);
-                        positionx = safePage;
-                        adapter.setCurrentFlipPage(safePage);
-                        mFlipView.flipTo(safePage);
-                        showLog("flip restore: flipped to page " + safePage);
-                    } catch (Exception e) {
-                        e.printStackTrace();
+                    flipToRestoredPage(page);
+                    if (mFlipView != null) {
+                        mFlipView.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                flipToRestoredPage(page);
+                            }
+                        });
                     }
                 }
             });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void flipToRestoredPage(int page) {
+        try {
+            if (mFlipView == null || adapter == null) {
+                return;
+            }
+            int pageCount = mFlipView.getPageCount();
+            if (pageCount <= 0) {
+                return;
+            }
+            int safePage = Math.min(page, pageCount - 1);
+            if (safePage < 0) {
+                return;
+            }
+            positionx = safePage;
+            adapter.setCurrentFlipPage(safePage);
+            mFlipView.flipTo(safePage);
+            showLog("flip restore: flipped to page " + safePage);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -4889,6 +5059,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             PostDwellTracker.get().flush(this);
         } catch (Exception ignored) {
+        }
+        if (playInAppUpdateHelper != null) {
+            playInAppUpdateHelper.unregister();
+            playInAppUpdateHelper = null;
         }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onDestroy();
         adapter = null;
@@ -4928,6 +5102,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             PostDwellTracker.get().onResumed(this);
         } catch (Exception ignored) {
+        }
+        if (playInAppUpdateHelper != null
+                && layoutAppUpdateBanner != null
+                && layoutAppUpdateBanner.getVisibility() == View.VISIBLE) {
+            playInAppUpdateHelper.resumeIfDownloaded();
         }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onResume();
         updateSpecialTabBlinkIndicator();
@@ -6135,54 +6314,169 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void PlaystoreUpdateDialog() {
-
-        androidx.appcompat.app.AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);
-        alertDialogBuilder.setTitle(this.getString(R.string.app_name));
-        alertDialogBuilder.setMessage(this.getString(R.string.update_message));
-        alertDialogBuilder.setCancelable(false);
-        alertDialogBuilder.setPositiveButton(R.string.update_now, new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int id) {
-                final String appPackageName = getPackageName();   // getPackageName() from Context or Activity object
-                try {
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + appPackageName)));
-                    }
-
-                } catch (android.content.ActivityNotFoundException anfe) {
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + appPackageName)));
-                    }
-
-                }
-            }
-        });
-        alertDialogBuilder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-
-                dialog.dismiss();
-            }
-        });
-        if (!isFinishing()){
-            alertDialogBuilder.show();
-        }
-        //alertDialogBuilder.show();
-
-
+        showAppUpdateBanner(false);
     }
-    private void movetoappStore() {
 
-        final String appPackageName = getPackageName(); // getPackageName() from Context or Activity object
-        try {
-            if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + appPackageName)));
-            }
+    /**
+     * Soft: bottom banner with Install + dismiss (X silences via disable_update_menu).
+     * Force: Install-only banner (no dismiss). Uses Play flexible in-app update.
+     */
+    private void PlaystoreUpdateDialog(boolean force) {
+        showAppUpdateBanner(force);
+    }
 
-        } catch (android.content.ActivityNotFoundException anfe) {
-            if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + appPackageName)));
-            }
+    private void bindAppUpdateBanner() {
+        View include = findViewById(R.id.includeAppUpdateBanner);
+        if (include == null) {
+            return;
         }
+        layoutAppUpdateBanner = include;
+        tvAppUpdateTitle = include.findViewById(R.id.tvAppUpdateTitle);
+        tvAppUpdateSubtitle = include.findViewById(R.id.tvAppUpdateSubtitle);
+        btnAppUpdateAction = include.findViewById(R.id.btnAppUpdateAction);
+        btnAppUpdateDismiss = include.findViewById(R.id.btnAppUpdateDismiss);
+
+        if (btnAppUpdateAction != null) {
+            try {
+                btnAppUpdateAction.getBackground().setColorFilter(
+                        ThemeColorHelper.getThemeColor(this),
+                        android.graphics.PorterDuff.Mode.SRC_IN);
+            } catch (Exception ignored) {
+            }
+            btnAppUpdateAction.setOnClickListener(v -> onAppUpdateActionClicked());
+        }
+        if (btnAppUpdateDismiss != null) {
+            btnAppUpdateDismiss.setOnClickListener(v -> dismissSoftAppUpdateBanner());
+        }
+
+        playInAppUpdateHelper = new PlayInAppUpdateHelper(this);
+        playInAppUpdateHelper.setUpdateLauncher(playAppUpdateLauncher);
+        playInAppUpdateHelper.setListener(new PlayInAppUpdateHelper.Listener() {
+            @Override
+            public void onFlexibleUpdateDownloaded() {
+                runOnUiThread(() -> {
+                    appUpdateDownloaded = true;
+                    appUpdateDownloading = false;
+                    refreshAppUpdateActionLabel();
+                });
+            }
+
+            @Override
+            public void onFlexibleUpdateProgress(int percent) {
+                runOnUiThread(() -> {
+                    appUpdateDownloading = true;
+                    if (btnAppUpdateAction != null) {
+                        btnAppUpdateAction.setText(getString(R.string.app_update_downloading));
+                    }
+                });
+            }
+
+            @Override
+            public void onFlexibleUpdateUnavailable(@Nullable Exception error) {
+                runOnUiThread(() -> {
+                    appUpdateDownloading = false;
+                    refreshAppUpdateActionLabel();
+                    PlayInAppUpdateHelper.openPlayStoreListing(HomePage.this);
+                });
+            }
+        });
+    }
+
+    private void showAppUpdateBanner(boolean force) {
+        appUpdateForceMode = force;
+        if (layoutAppUpdateBanner == null) {
+            bindAppUpdateBanner();
+        }
+        if (layoutAppUpdateBanner == null) {
+            return;
+        }
+        layoutAppUpdateBanner.setVisibility(View.VISIBLE);
+        if (btnAppUpdateDismiss != null) {
+            btnAppUpdateDismiss.setVisibility(force ? View.GONE : View.VISIBLE);
+        }
+        if (tvAppUpdateSubtitle != null) {
+            tvAppUpdateSubtitle.setText(R.string.app_update_available_subtitle);
+        }
+        refreshAppUpdateActionLabel();
+        if (playInAppUpdateHelper != null) {
+            playInAppUpdateHelper.resumeIfDownloaded();
+        }
+    }
+
+    private void hideAppUpdateBanner() {
+        if (layoutAppUpdateBanner != null) {
+            layoutAppUpdateBanner.setVisibility(View.GONE);
+        }
+        appUpdateForceMode = false;
+        appUpdateDownloaded = false;
+        appUpdateDownloading = false;
+    }
+
+    private void refreshAppUpdateActionLabel() {
+        if (btnAppUpdateAction == null) {
+            return;
+        }
+        if (appUpdateDownloading && !appUpdateDownloaded) {
+            btnAppUpdateAction.setText(R.string.app_update_downloading);
+        } else {
+            // Uber-style primary CTA: Install starts Play flexible update, or completes when ready.
+            btnAppUpdateAction.setText(R.string.app_update_install);
+        }
+    }
+
+    private void onAppUpdateActionClicked() {
+        if (playInAppUpdateHelper == null) {
+            PlayInAppUpdateHelper.openPlayStoreListing(this);
+            return;
+        }
+        if (appUpdateDownloaded) {
+            playInAppUpdateHelper.completeFlexibleUpdate();
+            return;
+        }
+        if (appUpdateDownloading) {
+            return;
+        }
+        appUpdateDownloading = true;
+        refreshAppUpdateActionLabel();
+        playInAppUpdateHelper.startFlexibleUpdate();
+    }
+
+    private void dismissSoftAppUpdateBanner() {
+        if (appUpdateForceMode) {
+            return;
+        }
+        hideAppUpdateBanner();
+        silenceAppUpdatePrompt();
+    }
+
+    /** Soft dismiss: silence forever for this device draft (update_menu_status = 0). */
+    private void silenceAppUpdatePrompt() {
+        try {
+            LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
+            requestModel.setDraftId(SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+            String encrpt_data = encrypt(new com.google.gson.Gson().toJson(requestModel));
+            EncritonRequestData encritonRequest = new EncritonRequestData();
+            encritonRequest.setData(encrpt_data);
+            JsonObject body = new com.google.gson.Gson().toJsonTree(encritonRequest).getAsJsonObject();
+            APIService apiService = RestApiClient.getClient().create(APIService.class);
+            apiService.disable_update_menu("v3", body).enqueue(new Callback<EncreptionRequest>() {
+                @Override
+                public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                    showLog("disable_update_menu soft silence: " + response.isSuccessful());
+                }
+
+                @Override
+                public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                    showLog("disable_update_menu failed: " + t);
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void movetoappStore() {
+        PlayInAppUpdateHelper.openPlayStoreListing(this);
     }
     private JsonObject SetUpdateLanguage(int language_id) {
 

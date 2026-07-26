@@ -114,7 +114,6 @@ public class StartingActivity extends AppCompatActivity {
 
     CountDownTimer countDownTimer;
     JsonObject splash;
-    boolean isForceUpdate = true;
 
 
     private static final String LOG_TAG = "CheckNetworkStatus";
@@ -177,6 +176,18 @@ public class StartingActivity extends AppCompatActivity {
         // Clear any stale pending share post before parsing this launch's intent;
         // extractData() re-sets it only when this launch is an actual share link.
         SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
+        // Cold start via splash (incl. Recents swipe-away → reopen): do NOT restore
+        // mid-feed from HomePage's theme-recreate flip checkpoint. Theme/uiMode
+        // recreate never goes through StartingActivity, so that path still works.
+        try {
+            getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE).edit()
+                    .putInt(Constants.FLIP_RESTORE_INDEX, 0)
+                    .putString(Constants.FLIP_RESTORE_POST_ID, "-1")
+                    .putBoolean(Constants.FLIP_RESTORE_PENDING, false)
+                    .putString(Constants.FLIP_RESTORE_AT, "0")
+                    .apply();
+        } catch (Exception ignored) {
+        }
 
         OBJECT = "" + intent.getStringExtra("OBJECT");
         TITLE_REWARDS = "" +intent.getStringExtra("TITLE_REWARDS");
@@ -1095,7 +1106,12 @@ public class StartingActivity extends AppCompatActivity {
                         }
 
 
-                        if (startActivityReqModel.getData().getUpdateMenuStatus() == 1 || startActivityReqModel.getData().getUpdateMenuStatus() == 0) {
+                        // 0=silenced, 1=up-to-date/disabled, 2=soft, 3=force.
+                        // Soft/force no longer block splash with a center dialog — proceed to
+                        // onboarding/Home; Home shows the sticky bottom update banner.
+                        int updateMenuStatus = startActivityReqModel.getData().getUpdateMenuStatus();
+                        if (updateMenuStatus == 1 || updateMenuStatus == 0
+                                || updateMenuStatus == 2 || updateMenuStatus == 3) {
 
                             int static_data_value = SharedPrefsData.getInt(getApplicationContext(), Constants.StaticDataApi, Constants.PREF_NAME);
                             int language_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
@@ -1252,15 +1268,6 @@ public class StartingActivity extends AppCompatActivity {
                             }
 
 
-                        } else {
-                            if (startActivityReqModel.getData().getUpdateMenuStatus() == 2) {
-
-                                PlaystoreUpdateDialog();
-
-                            } else if (startActivityReqModel.getData().getUpdateMenuStatus() == 3) {
-                                movetoappStore();
-                            }
-                            //
                         }
 
                     } else {
@@ -1410,63 +1417,6 @@ public class StartingActivity extends AppCompatActivity {
             finish();
         }
     }
-
-    private void movetoappStore() {
-
-        final String appPackageName = getPackageName(); // getPackageName() from Context or Activity object
-        try {
-            if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + appPackageName)));
-            }
-
-        } catch (android.content.ActivityNotFoundException anfe) {
-            if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + appPackageName)));
-            }
-        }
-    }
-
-    private void PlaystoreUpdateDialog() {
-
-        AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(StartingActivity.this);
-        alertDialogBuilder.setTitle(StartingActivity.this.getString(R.string.app_name));
-        alertDialogBuilder.setMessage(StartingActivity.this.getString(R.string.update_message));
-        alertDialogBuilder.setCancelable(false);
-        alertDialogBuilder.setPositiveButton(R.string.update_now, new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int id) {
-                final String appPackageName = getPackageName();   // getPackageName() from Context or Activity object
-                try {
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + appPackageName)));
-                    }
-
-                } catch (android.content.ActivityNotFoundException anfe) {
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + appPackageName)));
-                    }
-
-                }
-            }
-        });
-        alertDialogBuilder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-
-                if (isForceUpdate) {
-
-                    ForeUpdateCencel();
-                }
-                dialog.dismiss();
-            }
-        });
-        if (!isFinishing()){
-            alertDialogBuilder.show();
-        }
-        //alertDialogBuilder.show();
-
-
-    }
-
 
     private JsonObject set_static_data() {
 

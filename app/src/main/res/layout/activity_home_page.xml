@@ -450,6 +450,13 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- App update banner (admin soft/force). Above bottom nav; does not block flip. -->
+                <include
+                    android:id="@+id/includeAppUpdateBanner"
+                    layout="@layout/layout_app_update_banner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
                 <!--  Bottom Menu — fixed 50dp so magazine Share overlay cannot grow the bar -->
                 <androidx.coordinatorlayout.widget.CoordinatorLayout
                     android:id="@+id/home_page_navigation"
