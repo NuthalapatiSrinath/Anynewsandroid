@@ -155,6 +155,7 @@ import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
+import com.anyNews.anynews.Utils.DeviceLocationHelper;
 import com.anyNews.anynews.flipview.FlipView;
 import com.anyNews.anynews.flipview.OverFlipMode;
 import com.anyNews.anynews.fragments.CommentsBottomSheetDialog;
@@ -2051,6 +2052,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             showLog("Play flexible update flow canceled or failed: " + result.getResultCode());
                             appUpdateDownloading = false;
                             refreshAppUpdateActionLabel();
+                        }
+                    });
+
+    /**
+     * Soft LOCATION prompt once per install so guest/reader drafts get lat/lng.
+     * Create-post flows already request permission; splash/session previously did not.
+     */
+    private final ActivityResultLauncher<String[]> draftGpsPermissionLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.RequestMultiplePermissions(),
+                    result -> {
+                        DeviceLocationHelper.markSoftAsked(HomePage.this);
+                        boolean granted = Boolean.TRUE.equals(result.get(Manifest.permission.ACCESS_FINE_LOCATION))
+                                || Boolean.TRUE.equals(result.get(Manifest.permission.ACCESS_COARSE_LOCATION));
+                        if (granted) {
+                            try {
+                                SessionAnalyticsTracker.get().forceRefreshDeviceLocation(HomePage.this);
+                            } catch (Exception ignored) {
+                            }
                         }
                     });
 
@@ -5275,6 +5295,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             SessionAnalyticsTracker.get().maybeRefreshDeviceLocation(this);
         } catch (Exception ignored) {
         }
+        try {
+            maybeSoftRequestDraftGpsPermission();
+        } catch (Exception ignored) {
+        }
         if (playInAppUpdateHelper != null
                 && layoutAppUpdateBanner != null
                 && layoutAppUpdateBanner.getVisibility() == View.VISIBLE) {
@@ -5459,6 +5483,36 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         super.onUserLeaveHint();
+    }
+
+    /**
+     * Soft-request LOCATION once on first Home so draft GPS works for guests/readers
+     * who never open create-post. Does not re-prompt after deny / prior ask.
+     */
+    private void maybeSoftRequestDraftGpsPermission() {
+        if (draftGpsPermissionLauncher == null) return;
+        if (!DeviceLocationHelper.shouldSoftRequestOnce(this)) return;
+        // Mark before launch so rotation / multi-resume does not stack dialogs.
+        DeviceLocationHelper.markSoftAsked(this);
+        // Slight delay so Home UI settles before the system dialog.
+        getWindow().getDecorView().postDelayed(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (DeviceLocationHelper.hasLocationPermission(this)) {
+                try {
+                    SessionAnalyticsTracker.get().forceRefreshDeviceLocation(this);
+                } catch (Exception ignored) {
+                }
+                return;
+            }
+            try {
+                draftGpsPermissionLauncher.launch(new String[]{
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                });
+            } catch (Exception e) {
+                showLog("draft GPS soft request failed: " + e.getMessage());
+            }
+        }, 800L);
     }
 
     @Override

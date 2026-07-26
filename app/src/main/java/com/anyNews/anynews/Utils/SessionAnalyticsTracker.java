@@ -337,23 +337,46 @@ public final class SessionAnalyticsTracker {
      * POST a heartbeat with last-known lat/lng (non-blocking).
      */
     public void maybeRefreshDeviceLocation(Context context) {
+        refreshDeviceLocation(context, false);
+    }
+
+    /**
+     * After soft LOCATION grant: bypass heartbeat throttle and send lat/lng ASAP.
+     * Also schedules short retries — last-known can be empty right after the prompt.
+     */
+    public void forceRefreshDeviceLocation(Context context) {
+        if (context == null) return;
+        final Context appCtx = context.getApplicationContext();
+        refreshDeviceLocation(appCtx, true);
+        // Cold cache after first grant — retry a few times without prompting again.
+        final long[] delaysMs = {2_000L, 6_000L, 15_000L};
+        for (long delayMs : delaysMs) {
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                    () -> refreshDeviceLocation(appCtx, true),
+                    delayMs);
+        }
+    }
+
+    private void refreshDeviceLocation(Context context, boolean force) {
         if (context == null) return;
         final Context appCtx = context.getApplicationContext();
         final String sid;
         final long opened;
         synchronized (this) {
             if (!sessionOpen || sessionId == null) return;
-            if (!DeviceLocationHelper.shouldAttachGpsOnHeartbeat(appCtx)) return;
+            if (!force && !DeviceLocationHelper.shouldAttachGpsOnHeartbeat(appCtx)) return;
             sid = sessionId;
             opened = openAtMs;
         }
         NET_EXEC.execute(() -> {
-            // Force-include GPS by using "open"-style attach via a heartbeat that
-            // bypasses throttle only when shouldAttachGpsOnHeartbeat already passed.
-            JSONObject body = buildSessionBody(appCtx, "heartbeat", sid, opened, 0L, 0L);
-            if (body != null && body.has("latitude")) {
-                executeSessionCall(appCtx, body, false, false);
+            // Use "open" attach rules when forcing (bypass heartbeat GPS throttle).
+            JSONObject body = buildSessionBody(appCtx, force ? "open" : "heartbeat", sid, opened, 0L, 0L);
+            if (body == null || !body.has("latitude")) return;
+            try {
+                body.put("action", "heartbeat");
+            } catch (Exception ignored) {
             }
+            executeSessionCall(appCtx, body, false, false);
         });
     }
 
