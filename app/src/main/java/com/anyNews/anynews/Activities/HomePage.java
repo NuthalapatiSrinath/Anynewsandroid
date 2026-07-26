@@ -5270,6 +5270,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             PostDwellTracker.get().onResumed(this);
         } catch (Exception ignored) {
         }
+        try {
+            // Quiet GPS refresh for admin "last device location" (throttled; no permission prompt).
+            SessionAnalyticsTracker.get().maybeRefreshDeviceLocation(this);
+        } catch (Exception ignored) {
+        }
         if (playInAppUpdateHelper != null
                 && layoutAppUpdateBanner != null
                 && layoutAppUpdateBanner.getVisibility() == View.VISIBLE) {

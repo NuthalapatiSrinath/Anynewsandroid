@@ -126,6 +126,18 @@ public class StartingAppRequest implements Serializable {
     @Expose
     private String app_version_number;
 
+    @SerializedName("fb_ref_key")
+    @Expose
+    private String fb_ref_key;
+
+    @SerializedName("latitude")
+    @Expose
+    private String latitude;
+
+    @SerializedName("longitude")
+    @Expose
+    private String longitude;
+
     public String getFb_ref_key() {
         return fb_ref_key;
     }
@@ -134,9 +146,21 @@ public class StartingAppRequest implements Serializable {
         this.fb_ref_key = fb_ref_key;
     }
 
-    @SerializedName("fb_ref_key")
-    @Expose
-    private String fb_ref_key;
+    public String getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(String latitude) {
+        this.latitude = latitude;
+    }
+
+    public String getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(String longitude) {
+        this.longitude = longitude;
+    }
 
 
     private final static long serialVersionUID = 6613519385545259750L;

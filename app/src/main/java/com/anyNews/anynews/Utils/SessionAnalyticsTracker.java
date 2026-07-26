@@ -332,6 +332,31 @@ public final class SessionAnalyticsTracker {
         evaluateTracking(context.getApplicationContext(), false);
     }
 
+    /**
+     * Home resume / foreground nudge: if a session is open and GPS throttle allows,
+     * POST a heartbeat with last-known lat/lng (non-blocking).
+     */
+    public void maybeRefreshDeviceLocation(Context context) {
+        if (context == null) return;
+        final Context appCtx = context.getApplicationContext();
+        final String sid;
+        final long opened;
+        synchronized (this) {
+            if (!sessionOpen || sessionId == null) return;
+            if (!DeviceLocationHelper.shouldAttachGpsOnHeartbeat(appCtx)) return;
+            sid = sessionId;
+            opened = openAtMs;
+        }
+        NET_EXEC.execute(() -> {
+            // Force-include GPS by using "open"-style attach via a heartbeat that
+            // bypasses throttle only when shouldAttachGpsOnHeartbeat already passed.
+            JSONObject body = buildSessionBody(appCtx, "heartbeat", sid, opened, 0L, 0L);
+            if (body != null && body.has("latitude")) {
+                executeSessionCall(appCtx, body, false, false);
+            }
+        });
+    }
+
     /** Flush dwell + session when process is about to die. */
     public synchronized void onAppTerminate(Context context) {
         cancelActivityClose();
@@ -555,10 +580,30 @@ public final class SessionAnalyticsTracker {
             } else if (durationMs > 0) {
                 body.put("duration_ms", durationMs);
             }
+            attachDeviceGps(context, body, action);
             return body;
         } catch (Exception e) {
             e.printStackTrace();
             return null;
+        }
+    }
+
+    /**
+     * Attach quiet last-known GPS for device_drafts.
+     * Always on open/close; throttled on heartbeat (~3 min).
+     */
+    private void attachDeviceGps(Context context, JSONObject body, String action) {
+        try {
+            boolean always = "open".equals(action) || "close".equals(action);
+            if (!always && !DeviceLocationHelper.shouldAttachGpsOnHeartbeat(context)) {
+                return;
+            }
+            DeviceLocationHelper.Coords coords = DeviceLocationHelper.readIfPermitted(context);
+            if (coords == null) return;
+            body.put("latitude", String.valueOf(coords.latitude));
+            body.put("longitude", String.valueOf(coords.longitude));
+            DeviceLocationHelper.markGpsSent(context);
+        } catch (Exception ignored) {
         }
     }
 

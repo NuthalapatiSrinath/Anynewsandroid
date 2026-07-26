@@ -48,6 +48,7 @@ import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketMiniPlayerPositionHelper;
 import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
+import com.anyNews.anynews.Utils.DeviceLocationHelper;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
@@ -1332,6 +1333,7 @@ public class StartingActivity extends AppCompatActivity {
         requestModel.setApp_version_name(""+BuildConfig.VERSION_NAME);
         requestModel.setApp_version_number(""+BuildConfig.VERSION_CODE);
         requestModel.setFb_ref_key(""+facebookReferrelKey);
+        attachDeviceGpsIfAvailable(requestModel);
        /* requestModel.setSERIAL(Build.SERIAL);
         requestModel.setMODEL(Build.MODEL);
         requestModel.setID(Build.ID);
@@ -1381,6 +1383,7 @@ public class StartingActivity extends AppCompatActivity {
         requestModel.setApp_version_name(""+BuildConfig.VERSION_NAME);
         requestModel.setApp_version_number(""+BuildConfig.VERSION_CODE);
         requestModel.setFb_ref_key(""+facebookReferrelKey);
+        attachDeviceGpsIfAvailable(requestModel);
 
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
@@ -1395,6 +1398,18 @@ public class StartingActivity extends AppCompatActivity {
         Encriton_Request.setData(encrpt_data);
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
 
+    }
+
+    /** Quiet last-known GPS for device_drafts — no permission prompts / no UI block. */
+    private void attachDeviceGpsIfAvailable(StartingAppRequest requestModel) {
+        try {
+            DeviceLocationHelper.Coords coords = DeviceLocationHelper.readIfPermitted(getApplicationContext());
+            if (coords == null) return;
+            requestModel.setLatitude(String.valueOf(coords.latitude));
+            requestModel.setLongitude(String.valueOf(coords.longitude));
+            DeviceLocationHelper.markGpsSent(getApplicationContext());
+        } catch (Exception ignored) {
+        }
     }
 
     private void markOnboardingCompleteIfNeeded(String nextScreen) {
