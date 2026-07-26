@@ -389,6 +389,10 @@ public interface APIService {
     @POST("app/{version}/views")
     Call<JsonObject> get_views(@Path("version") String version, @Body JsonObject pincode);
 
+    /** Batched view opens + dwell segments (Android ViewsBatchTracker). */
+    @POST("app/{version}/views/batch")
+    Call<JsonObject> post_views_batch(@Path("version") String version, @Body JsonObject payload);
+
     @POST("app/{version}/session")
     Call<JsonObject> post_session(@Path("version") String version, @Body JsonObject session);
 

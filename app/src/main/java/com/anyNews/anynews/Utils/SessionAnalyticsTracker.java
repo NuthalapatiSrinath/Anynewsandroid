@@ -271,6 +271,10 @@ public final class SessionAnalyticsTracker {
                     PostDwellTracker.get().onScreenOff(appCtx);
                 } catch (Exception ignored) {
                 }
+                try {
+                    ViewsBatchTracker.get().flush(appCtx, true);
+                } catch (Exception ignored) {
+                }
                 closeSession(appCtx, false);
             }
         }
@@ -336,6 +340,10 @@ public final class SessionAnalyticsTracker {
             PostDwellTracker.get().flush(context.getApplicationContext());
         } catch (Exception ignored) {
         }
+        try {
+            ViewsBatchTracker.get().flush(context.getApplicationContext(), true);
+        } catch (Exception ignored) {
+        }
         if (sessionOpen) {
             closeSession(context.getApplicationContext(), true);
         }
@@ -357,6 +365,10 @@ public final class SessionAnalyticsTracker {
             if (sessionOpen) {
                 try {
                     PostDwellTracker.get().onScreenOff(context);
+                } catch (Exception ignored) {
+                }
+                try {
+                    ViewsBatchTracker.get().flush(context, true);
                 } catch (Exception ignored) {
                 }
                 closeSession(context, awaitCloseFlush);

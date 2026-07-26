@@ -34,8 +34,10 @@ import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.ImageLoaderInit;
 import com.anyNews.anynews.Utils.Logone;
+import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
+import com.anyNews.anynews.Utils.ViewsBatchTracker;
 import com.facebook.ads.AdSettings;
 import com.facebook.ads.AudienceNetworkAds;
 import com.google.android.gms.ads.MobileAds;
@@ -86,6 +88,8 @@ public class AppController extends MultiDexApplication {
 
         // Session time: ProcessLifecycle + screen off/on + activity callbacks.
         SessionAnalyticsTracker.get().init(this);
+        // Batched views/dwell — flip settle enqueues; flush ~60s or on background.
+        ViewsBatchTracker.get().init(this);
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
@@ -140,7 +144,26 @@ public class AppController extends MultiDexApplication {
             SessionAnalyticsTracker.get().onAppTerminate(this);
         } catch (Exception ignored) {
         }
+        try {
+            ViewsBatchTracker.get().flush(this, true);
+        } catch (Exception ignored) {
+        }
         super.onTerminate();
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_UI_HIDDEN) {
+            try {
+                PostDwellTracker.get().flush(this, true);
+            } catch (Exception ignored) {
+            }
+            try {
+                ViewsBatchTracker.get().flush(this, true);
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     class adsLoadingInit implements OnInitializationCompleteListener {

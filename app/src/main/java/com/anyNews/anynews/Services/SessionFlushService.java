@@ -7,12 +7,14 @@ import android.os.IBinder;
 
 import androidx.annotation.Nullable;
 
+import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
+import com.anyNews.anynews.Utils.ViewsBatchTracker;
 
 /**
  * Stays alive while a session is open so {@link #onTaskRemoved} fires when the user
  * swipes the app away from Recents — giving us a last chance to POST /session/close
- * before the process is killed.
+ * and flush batched views before the process is killed.
  */
 public class SessionFlushService extends Service {
 
@@ -48,6 +50,14 @@ public class SessionFlushService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
         if (ACTION_FLUSH.equals(action)) {
+            try {
+                PostDwellTracker.get().flush(getApplicationContext(), true);
+            } catch (Exception ignored) {
+            }
+            try {
+                ViewsBatchTracker.get().flush(getApplicationContext(), true);
+            } catch (Exception ignored) {
+            }
             SessionAnalyticsTracker.get().flushPendingCloseFromService(getApplicationContext(), () -> {
                 stopSelf(startId);
             });

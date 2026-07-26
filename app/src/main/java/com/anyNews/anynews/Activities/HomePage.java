@@ -45,6 +45,7 @@ import android.os.CountDownTimer;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.MessageQueue;
 import android.os.StrictMode;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -152,6 +153,7 @@ import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.MovementMethodTV;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.PostDwellTracker;
+import com.anyNews.anynews.Utils.ViewsBatchTracker;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.flipview.FlipView;
 import com.anyNews.anynews.flipview.OverFlipMode;
@@ -275,10 +277,30 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     // WindowManager (which forces a window relayout) when the value actually changes,
     // instead of on every flip. null = not yet applied.
     private Boolean appliedSecureFlag = null;
-    // Non-visual flip analytics deferred until OnFlipCompleted (avoids mid-animation jank).
+    /** Cached remote capture gate — avoid SharedPreferences reads on every flip settle. */
+    private boolean cachedCaptureAllowed = false;
+    // Non-visual flip analytics deferred until after settle paint (avoids mid-animation jank).
     private int pendingFlipTrackingPos = -1;
     // Heavy settle work (refreshDetails/loadAds/FLAG_SECURE/UI) runs after scroller finishes.
     private boolean pendingFlipSettleWork = false;
+    /** Skip redundant settle when complete fires for the same page again. */
+    private int lastSettledFlipIndex = -1;
+    /** Debounce views+dwell when rapid flips land on the same post. */
+    private long lastTrackedFlipPostId = -1L;
+    private long lastTrackedFlipAtMs = 0L;
+    private static final long VIEWS_DWELL_DEBOUNCE_MS = 400L;
+    /** Leave dispatchDraw / first settle frames free before non-visual work (Narzo). */
+    private static final long FLIP_VISUAL_SETTLE_MS = 16L;
+    private static final long FLIP_VIDEO_TEARDOWN_MS = 48L;
+    private static final long FLIP_TRACKING_DEFER_MS = 72L;
+    private static final long FLIP_RESTORE_DEFER_MS = 160L;
+    private final Handler flipSettleHandler = new Handler(Looper.getMainLooper());
+    private Runnable flipVisualSettleRunnable;
+    private Runnable flipHeavySettleRunnable;
+    private Runnable flipVideoTeardownRunnable;
+    private Runnable flipTrackingRunnable;
+    private Runnable flipRestoreRunnable;
+    private MessageQueue.IdleHandler flipTrackingIdleHandler;
     ArrayList<ModelClass.Datum> list;
     ArrayList<ModelClass.Datum> dummylist=new ArrayList<>();
     Response<EncreptionRequest> dummyResponse;
@@ -519,7 +541,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         readPendingFlipRestoreState(savedInstanceState);
         // Secure by default (blocks screenshots/recording); cleared only when the
         // remote allow_screen_capture flag is ON. Falls back to secure if unset.
+        cachedCaptureAllowed = ScreenCaptureHelper.isCaptureAllowed(this);
         ScreenCaptureHelper.applySecureFlag(this);
+        appliedSecureFlag = !cachedCaptureAllowed;
         this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         AdMobInitializer.initializeFromManifestIfNeeded(this);
@@ -3495,24 +3519,137 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (cricketMiniPlayerManager != null) {
             cricketMiniPlayerManager.setHiddenForFlipGesture(false);
         }
-        teardownFlipVideoPlayers();
-        try {
-            updateCenterFab();
-        } catch (Exception fabEx) {
-            fabEx.printStackTrace();
+        // OnFlipCompleted is invoked from FlipView.dispatchDraw — never run heavy
+        // settle work here or the first landed frame hitches (Narzo / low-RAM).
+        schedulePostFlipSettleWork();
+    }
+
+    /** Cancel queued settle batches when a newer flip supersedes them. */
+    private void cancelPendingFlipSettleCallbacks() {
+        if (flipVisualSettleRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipVisualSettleRunnable);
+            if (mFlipView != null) {
+                mFlipView.removeCallbacks(flipVisualSettleRunnable);
+            }
+            flipVisualSettleRunnable = null;
         }
-        // refreshDetails / loadAds / FLAG_SECURE / gallery — after scroller finished.
-        runDeferredFlipSettleWork();
-        flushPendingFlipTracking();
-        // Durable theme-recreate checkpoint — after settle so mid-flip stays light.
-        try {
-            long pid = resolvePostIdForFlipIndex(positionx);
-            persistFlipRestoreCheckpoint(positionx, pid, positionx > 0 || pid > 0);
-        } catch (Exception ignored) {
+        if (flipHeavySettleRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipHeavySettleRunnable);
+            flipHeavySettleRunnable = null;
         }
-        if (adapter != null) {
-            adapter.setCurrentFlipPage(positionx);
-            adapter.bindPendingNativeAdMediaForPage(positionx);
+        if (flipVideoTeardownRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipVideoTeardownRunnable);
+            flipVideoTeardownRunnable = null;
+        }
+        if (flipTrackingRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipTrackingRunnable);
+            flipTrackingRunnable = null;
+        }
+        if (flipRestoreRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipRestoreRunnable);
+            flipRestoreRunnable = null;
+        }
+        if (flipTrackingIdleHandler != null) {
+            try {
+                Looper.myQueue().removeIdleHandler(flipTrackingIdleHandler);
+            } catch (Exception ignored) {
+            }
+            flipTrackingIdleHandler = null;
+        }
+    }
+
+    /**
+     * Staged settle: paint first → light UI → heavy UI → video teardown →
+     * tracking/prefs. Keeps features; moves cost off the flip animation frames.
+     */
+    private void schedulePostFlipSettleWork() {
+        final int settlePos = positionx;
+        // Same-index re-entry (completeCheck / bounce): skip redundant batch.
+        // Do not cancel in-flight restore/tracking from the prior settle of this page.
+        if (settlePos == lastSettledFlipIndex && !pendingFlipSettleWork
+                && pendingFlipTrackingPos < 0) {
+            showLog("schedulePostFlipSettleWork skip same index=" + settlePos);
+            return;
+        }
+        cancelPendingFlipSettleCallbacks();
+        flipVisualSettleRunnable = () -> {
+            flipVisualSettleRunnable = null;
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            if (settlePos != positionx) {
+                return;
+            }
+            try {
+                updateCenterFab();
+            } catch (Exception fabEx) {
+                fabEx.printStackTrace();
+            }
+            flipHeavySettleRunnable = () -> {
+                flipHeavySettleRunnable = null;
+                if (isFinishing() || isDestroyed() || settlePos != positionx) {
+                    return;
+                }
+                runDeferredFlipSettleWork();
+                if (adapter != null) {
+                    adapter.setCurrentFlipPage(positionx);
+                    adapter.bindPendingNativeAdMediaForPage(positionx);
+                }
+                lastSettledFlipIndex = positionx;
+            };
+            // One more frame so FAB layout does not stack with FLAG_SECURE / ads.
+            flipSettleHandler.post(flipHeavySettleRunnable);
+
+            flipVideoTeardownRunnable = () -> {
+                flipVideoTeardownRunnable = null;
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                teardownFlipVideoPlayers();
+            };
+            flipSettleHandler.postDelayed(flipVideoTeardownRunnable, FLIP_VIDEO_TEARDOWN_MS);
+
+            flipTrackingRunnable = () -> {
+                flipTrackingRunnable = null;
+                flipTrackingIdleHandler = null;
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                flushPendingFlipTracking();
+            };
+            // Prefer idle after settle frames; fallback delay if queue stays busy.
+            flipTrackingIdleHandler = () -> {
+                flipTrackingIdleHandler = null;
+                if (flipTrackingRunnable != null) {
+                    flipSettleHandler.removeCallbacks(flipTrackingRunnable);
+                    flipTrackingRunnable.run();
+                }
+                return false;
+            };
+            try {
+                Looper.myQueue().addIdleHandler(flipTrackingIdleHandler);
+            } catch (Exception ignored) {
+            }
+            flipSettleHandler.postDelayed(flipTrackingRunnable, FLIP_TRACKING_DEFER_MS);
+
+            flipRestoreRunnable = () -> {
+                flipRestoreRunnable = null;
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                try {
+                    long pid = resolvePostIdForFlipIndex(positionx);
+                    persistFlipRestoreCheckpoint(positionx, pid, positionx > 0 || pid > 0);
+                } catch (Exception ignored) {
+                }
+            };
+            flipSettleHandler.postDelayed(flipRestoreRunnable, FLIP_RESTORE_DEFER_MS);
+        };
+        // Exit dispatchDraw before any settle work (critical for low-end smoothness).
+        if (mFlipView != null) {
+            mFlipView.post(flipVisualSettleRunnable);
+        } else {
+            flipSettleHandler.postDelayed(flipVisualSettleRunnable, FLIP_VISUAL_SETTLE_MS);
         }
     }
 
@@ -3532,11 +3669,36 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (type == null) {
                 type = "";
             }
+            long postId = 0L;
+            if (datum != null && datum.getPostId() != null) {
+                postId = datum.getPostId();
+            }
+            long now = System.currentTimeMillis();
+            boolean samePostDebounced = postId > 0
+                    && postId == lastTrackedFlipPostId
+                    && (now - lastTrackedFlipAtMs) < VIEWS_DWELL_DEBOUNCE_MS;
+            if (samePostDebounced) {
+                showLog("flushPendingFlipTracking debounced postId=" + postId);
+                // Keep dwell timer aligned without re-firing views/GCM.
+                try {
+                    if (!type.equalsIgnoreCase("ad")
+                            && !type.equalsIgnoreCase("share_app")
+                            && !type.equalsIgnoreCase("ratings")
+                            && !type.equalsIgnoreCase("web_ads")
+                            && !type.equalsIgnoreCase("web")) {
+                        PostDwellTracker.get().onPostShown(this, postId, type);
+                    }
+                } catch (Exception ignored) {
+                }
+                return;
+            }
+            lastTrackedFlipPostId = postId;
+            lastTrackedFlipAtMs = now;
             if (datum != null && datum.getPostType() != null) {
                 trackingEvents.FireBase("post_type", datum.getPostType() + "_pos_" + pos);
             }
             BundleDataToGcmPush(pos);
-            // REST view + dwell were previously in onFlippedToPage1 (+60ms mid/settle).
+            // View open + dwell: local queue only (ViewsBatchTracker flushes ~60s / background).
             if (!type.equalsIgnoreCase("ad")
                     && !type.equalsIgnoreCase("share_app")
                     && !type.equalsIgnoreCase("ratings")
@@ -4116,8 +4278,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     // Admin-controlled content-block vertical offset (dp). Same live path.
                     applyContentBlockOffsetConfig(encreptionRequest.getContent_block_offset_dp());
                     ScreenCaptureHelper.saveAllowed(HomePage.this, encreptionRequest.isAllow_screen_capture());
+                    cachedCaptureAllowed = encreptionRequest.isAllow_screen_capture();
                     // Re-apply so a toggle change takes effect on this screen without restart.
                     ScreenCaptureHelper.applySecureFlag(HomePage.this);
+                    appliedSecureFlag = !cachedCaptureAllowed;
                     // Cricket Live Mini Player: apply feed config immediately, then
                     // kick a dedicated poll so admin ON/OFF is not stuck on a stale
                     // feed payload until the next resume cycle.
@@ -4672,16 +4836,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onFlippedToPage(FlipView view, int position, long id) {
         // Mid-flip: minimal index tracking + light pause only.
         // Heavy work (refreshDetails/loadAds/FLAG_SECURE/dwell/views) waits for OnFlipCompleted.
-        pendingFlipTrackingPos = position;
         if (list == null || position < 0 || position >= list.size()) {
             return;
         }
+        // Same destination as already settled — skip pause/settle/tracking churn.
+        if (position == lastSettledFlipIndex
+                && position == positionx
+                && !pendingFlipSettleWork
+                && mFlipView != null
+                && !mFlipView.mIsFlipping) {
+            showLog("onFlippedToPage skip same index=" + position);
+            return;
+        }
+        pendingFlipTrackingPos = position;
         showLog("onFlippedToPage:::POS::" + position + "....post_type.." + list.get(position).getPostType());
         isPlayingVideoInFullScreen = false;
         currentView = view;
         initialCall = true;
         positionx = position;
-        // Flip restore prefs are written in OnFlipCompletedListener (not mid-flip)
+        // Flip restore prefs are written after settle paint (not mid-flip / not at settle start)
         // to avoid SharedPreferences editor work during the animation.
         post_type = list.get(position).getPostType();
         if (post_type == null) {
@@ -4705,16 +4878,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         pauseVideoLight();
         pendingFlipSettleWork = true;
-        // No active flip gesture (programmatic / already settled): run settle now.
+        // No active flip gesture (programmatic / already settled): same staged settle path.
         if (mFlipView != null && !mFlipView.mIsFlipping) {
             if (cricketMiniPlayerManager != null) {
                 cricketMiniPlayerManager.setHiddenForFlipGesture(false);
             }
-            runDeferredFlipSettleWork();
-            flushPendingFlipTracking();
-            if (adapter != null) {
-                adapter.bindPendingNativeAdMediaForPage(position);
-            }
+            schedulePostFlipSettleWork();
         }
     }
 
@@ -4743,14 +4912,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (NullPointerException e) {
             e.printStackTrace();
         }
-        try {
-            firbaseJSONObj = firebaseJSON();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        // firbaseJSONObj was write-only (never read) — skip Gson build on settle.
         // Whether this post is allowed to be captured (screenshots): ad/web surfaces
         // and admin-allowed capture clear FLAG_SECURE; everything else keeps it set.
-        boolean captureAllowed = ScreenCaptureHelper.isCaptureAllowed(this)
+        // Use cachedCaptureAllowed — do not hit SharedPreferences on settle.
+        boolean captureAllowed = cachedCaptureAllowed
                 || post_type.equalsIgnoreCase("ad")
                 || post_type.equalsIgnoreCase("web_ads")
                 || post_type.equalsIgnoreCase("web");
@@ -5056,6 +5222,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void onDestroy() {
+        cancelPendingFlipSettleCallbacks();
         try {
             PostDwellTracker.get().flush(this);
         } catch (Exception ignored) {
@@ -5694,47 +5861,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     public void setViewsApi() {
-
+        // Enqueue only — ViewsBatchTracker flushes ~60s or on background (no per-flip POST).
         try {
             final int postId = updated_post_id_firebase;
-            final int draftId = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+            final int draftId = draft_id_firebase > 0
+                    ? draft_id_firebase
+                    : SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
             final String analyticsSession = SessionAnalyticsTracker.get().getActiveSessionId();
-            // AES encrypt off the UI thread — was a visible hitch on Narzo after each flip.
-            new Thread(() -> {
-                try {
-                    ListOfUserArticlesRequest requestModel = new ListOfUserArticlesRequest();
-                    requestModel.setPostId((long) postId);
-                    requestModel.setDraftId(draftId);
-                    if (analyticsSession != null) {
-                        requestModel.setAnalyticsSessionId(analyticsSession);
-                    }
-                    String jsonString = new com.google.gson.Gson().toJson(requestModel);
-                    String encrpt_data = encrypt(jsonString);
-                    EncritonRequestData Encriton_Request = new EncritonRequestData();
-                    Encriton_Request.setData(encrpt_data);
-                    JsonObject otp = new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
-
-                    APIService apiService = RestApiClient.getClient().create(APIService.class);
-                    Call<JsonObject> apiResponse = apiService.get_views("v3", otp);
-                    apiResponse.enqueue(new Callback<JsonObject>() {
-                        @Override
-                        public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
-                            JsonObject encreptionRequest = response.body();
-                        }
-
-                        @Override
-                        public void onFailure(Call<JsonObject> call, Throwable t) {
-                        }
-                    });
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }, "views-api").start();
-
+            ViewsBatchTracker.get().enqueueImpression(
+                    getApplicationContext(), postId, draftId, analyticsSession, null);
         } catch (Exception e) {
             e.printStackTrace();
         }
-
     }
 
     private JsonObject jsonObjectRequest_Views() {
@@ -6186,7 +6324,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             flipItems.setVERSION_NAME(BuildConfig.VERSION_NAME);
             flipItems.setPLATFORM("ANDROID");
             flipItems.setEVENT_NAME("onFlip");
-            flipItems.setDraft_id(SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME));
+            flipItems.setDraft_id(draft_id_firebase > 0
+                    ? draft_id_firebase
+                    : SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME));
 
             trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"POST_TYPE_"+list.get(pos).getPostType());
             trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"POSTID_"+list.get(pos).getPostId());
@@ -6195,7 +6335,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"VERSION_NAME_"+BuildConfig.VERSION_NAME.replace(".","_"));
             trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"EVENT_NAME_onFlip");
             trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"PLATFORM_ANDROID");
-            data.put("DRAFTID", ""+SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
+            data.put("DRAFTID", ""+(draft_id_firebase > 0
+                    ? draft_id_firebase
+                    : SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME)));
             if(list!=null && positionx >= 0 && positionx < list.size()){
                 String pt = list.get(positionx).getPostType();
                 if(pt != null && pt.equalsIgnoreCase("ad")){

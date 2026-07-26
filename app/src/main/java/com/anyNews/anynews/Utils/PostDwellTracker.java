@@ -4,36 +4,16 @@ import android.content.Context;
 
 import androidx.annotation.Nullable;
 
-import com.anyNews.anynews.Pojo.EncritonRequestData;
-import com.anyNews.anynews.Services.APIService;
-import com.anyNews.anynews.Services.RestApiClient;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-
-import org.json.JSONObject;
-
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-
 /**
- * Per-post dwell timer. Start when an article is shown; flush seconds when
- * leaving (flip away / pause / background). Sends duration via POST /app/v3/views.
+ * Per-post dwell timer. Start when an article is shown; enqueue seconds when
+ * leaving (flip away / pause / background) via {@link ViewsBatchTracker}.
  *
- * Background flushes use a blocking call on a worker thread so the request is
- * not dropped when the process is paused after fire-and-forget enqueue.
+ * Critical paths ({@code critical=true}) also flush the batch immediately so
+ * admin analytics stay current on background / screen-off / process death.
  */
 public final class PostDwellTracker {
 
     private static final PostDwellTracker INSTANCE = new PostDwellTracker();
-    private static final ExecutorService NET_EXEC = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "post-dwell-net");
-        t.setPriority(Thread.NORM_PRIORITY);
-        return t;
-    });
 
     private long postId = 0L;
     private long startedAtMs = 0L;
@@ -46,8 +26,7 @@ public final class PostDwellTracker {
     }
 
     public synchronized void onPostShown(Context context, long newPostId, @Nullable String type) {
-        if (newPostId <= 0) return;
-        // Skip non-article surfaces
+        // Skip non-article surfaces first so ad/web landings still flush prior dwell.
         if (type != null) {
             String t = type.toLowerCase();
             if (t.equals("ad") || t.equals("share_app") || t.equals("ratings")
@@ -59,6 +38,7 @@ public final class PostDwellTracker {
                 return;
             }
         }
+        if (newPostId <= 0) return;
         if (postId > 0 && postId != newPostId) {
             flush(context, false);
         }
@@ -70,12 +50,14 @@ public final class PostDwellTracker {
     }
 
     public synchronized void onPaused(Context context) {
-        flush(context, true);
+        // Enqueue only — activity pauses mid-app should not force a network flush.
+        // Background / screen-off / trim flush the batch via ViewsBatchTracker.
+        flush(context, false);
         // Keep postId so resume can restart the same article timer
         startedAtMs = 0L;
     }
 
-    /** Screen off / session close — flush critical and pause timer (same as pause). */
+    /** Screen off / session close — flush dwell + batch immediately. */
     public synchronized void onScreenOff(Context context) {
         flush(context, true);
         startedAtMs = 0L;
@@ -94,57 +76,33 @@ public final class PostDwellTracker {
     }
 
     public synchronized void flush(Context context, boolean critical) {
-        if (postId <= 0 || startedAtMs <= 0) return;
+        if (postId <= 0 || startedAtMs <= 0) {
+            if (critical) {
+                ViewsBatchTracker.get().flush(context, true);
+            }
+            return;
+        }
         long elapsedSec = Math.max(0L, (System.currentTimeMillis() - startedAtMs) / 1000L);
         long pid = postId;
         String type = postType;
         startedAtMs = 0L;
         // Minimum 1s if they actually saw it briefly (avoids noise of 0)
         if (elapsedSec < 1) elapsedSec = 1;
-        sendDwell(context.getApplicationContext(), pid, elapsedSec, type, critical);
+        enqueueDwell(context.getApplicationContext(), pid, elapsedSec, type);
+        if (critical) {
+            ViewsBatchTracker.get().flush(context.getApplicationContext(), true);
+        }
     }
 
-    private void sendDwell(
-            Context context, long pid, long durationSeconds, @Nullable String type, boolean critical) {
+    private void enqueueDwell(
+            Context context, long pid, long durationSeconds, @Nullable String type) {
         try {
-            int draftId = SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME);
+            Context appCtx = context.getApplicationContext();
+            int draftId = SharedPrefsData.getInt(appCtx, Constants.DraftID, Constants.PREF_NAME);
             if (draftId <= 0) return;
-
-            JSONObject body = new JSONObject();
-            body.put("draft_id", draftId);
-            body.put("post_id", pid);
-            body.put("duration_seconds", durationSeconds);
-            if (type != null) body.put("post_type", type);
             String sessionId = SessionAnalyticsTracker.get().getActiveSessionId();
-            if (sessionId != null) body.put("session_id", sessionId);
-
-            final String bodyStr = body.toString();
-            final boolean runCritical = critical;
-            // Encrypt + network off caller thread (often main / flip-settle).
-            NET_EXEC.execute(() -> {
-                try {
-                    String encrypted = MyUtils.encrypt(bodyStr);
-                    EncritonRequestData enc = new EncritonRequestData();
-                    enc.setData(encrypted);
-                    JsonObject payload = new Gson().toJsonTree(enc).getAsJsonObject();
-
-                    APIService api = RestApiClient.getClient().create(APIService.class);
-                    Call<JsonObject> call = api.get_views("v3", payload);
-                    if (runCritical) {
-                        call.execute();
-                    } else {
-                        call.enqueue(new Callback<JsonObject>() {
-                            @Override
-                            public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {}
-
-                            @Override
-                            public void onFailure(Call<JsonObject> call, Throwable t) {}
-                        });
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            });
+            ViewsBatchTracker.get().enqueueDwell(
+                    appCtx, pid, durationSeconds, draftId, sessionId, type);
         } catch (Exception e) {
             e.printStackTrace();
         }
