@@ -147,6 +147,12 @@ public class Constants {
     public static String FULL_VIDEO_SHARE_CARD = "full_video_share_card";
     /** JSON of {@link com.anyNews.anynews.Pojo.PollSurveyColorsConfig} from splash. */
     public static String POLL_SURVEY_COLORS = "poll_survey_colors";
+    /** Flip feed position across DayNight / battery-saver recreates (light↔dark). */
+    public static String FLIP_RESTORE_INDEX = "flip_restore_index";
+    public static String FLIP_RESTORE_POST_ID = "flip_restore_post_id";
+    public static String FLIP_RESTORE_PENDING = "flip_restore_pending";
+    /** epoch ms when flip checkpoint was written (theme recreate TTL). */
+    public static String FLIP_RESTORE_AT = "flip_restore_at";
     /** JSON of {@link com.anyNews.anynews.Pojo.CricketMiniPlayerPosition} from splash / poll. */
     public static String CRICKET_MINI_PLAYER_POSITION = "cricket_mini_player_position";
     /** "true"/"false" admin toggle for the floating cricket mini player (default true). */
