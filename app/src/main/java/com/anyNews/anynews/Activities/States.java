@@ -188,6 +188,7 @@ public class States extends AppCompatActivity {
                             if (isFinishing() || isDestroyed()) {
                                 return;
                             }
+                            applyStateGridLayout(arrayList.size());
                             statesAdopter = new StatesAdopter(States.this, arrayList);
                             recycleLayoutManager.setAdapter(statesAdopter);
                             layout_with_data.setVisibility(View.VISIBLE);
@@ -213,6 +214,34 @@ public class States extends AppCompatActivity {
             }
         });
 
+    }
+
+    /**
+     * Multi-state: 2-column grid (unchanged). Single state: 1-column with side padding
+     * so the card keeps half-width and sits centered instead of left-aligned.
+     */
+    private void applyStateGridLayout(int stateCount) {
+        if (recycleLayoutManager == null) {
+            return;
+        }
+        int sidePad = 0;
+        int span = 2;
+        if (stateCount == 1) {
+            span = 1;
+            int width = recycleLayoutManager.getWidth();
+            if (width <= 0) {
+                width = getResources().getDisplayMetrics().widthPixels;
+            }
+            // Match one cell of the 2-column grid: 25% pad each side → 50% card width.
+            sidePad = Math.max(0, width / 4);
+        }
+        recycleLayoutManager.setPadding(sidePad, recycleLayoutManager.getPaddingTop(),
+                sidePad, recycleLayoutManager.getPaddingBottom());
+        recycleLayoutManager.setClipToPadding(false);
+        if (linearLayoutManager == null || linearLayoutManager.getSpanCount() != span) {
+            linearLayoutManager = new GridLayoutManager(States.this, span, GridLayoutManager.VERTICAL, false);
+            recycleLayoutManager.setLayoutManager(linearLayoutManager);
+        }
     }
 
     private void recoverToLanguagePicker(String message) {

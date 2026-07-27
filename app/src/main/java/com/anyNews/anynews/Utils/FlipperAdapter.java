@@ -6807,22 +6807,45 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             bindSurveyPollEngagementActions(convertView, position);
         } catch (Exception e) {
             e.printStackTrace();
+            try {
+                bindSurveyPollEngagementActions(convertView, position);
+            } catch (Exception ignored) {
+            }
         }
     }
 
     /**
      * Wire like / comment / share / flag on survey + survey_poll flip pages.
      * Uses the same view ids as half-image posts ({@code include_half_engagement_row}).
+     * <p>
+     * Row lives under the poll options (dark card), not overlaid on the hero image.
+     * Overlay placement was clipped by the image FrameLayout and looked like "missing"
+     * icons in the empty space under options.
      */
     private void bindSurveyPollEngagementActions(View convertView, final int position) {
         if (convertView == null || list == null || position < 0 || position >= list.size()) {
             return;
         }
-        if (convertView.findViewById(R.id.half_image_like) == null) {
+        final View engagementRow = convertView.findViewById(R.id.with_out_strips_layout);
+        if (convertView.findViewById(R.id.half_image_like) == null && engagementRow == null) {
             return;
         }
 
-        bindHalfPostEngagementCounts(convertView, position);
+        // Counts + circle/glyph sizing. Skip half-post row offset — survey row is under
+        // options and must stay put (offset was designed for half-image content strip).
+        bindHalfActionCount(convertView.findViewById(R.id.half_like_count), list.get(position).getLikes());
+        bindHalfActionCount(convertView.findViewById(R.id.half_comment_count), list.get(position).getComments());
+        bindHalfActionCount(convertView.findViewById(R.id.half_share_count), list.get(position).getShares());
+        tintHalfActionIcons(convertView);
+        applyHalfActionIconSizes(context, convertView);
+
+        if (engagementRow != null) {
+            engagementRow.setVisibility(View.VISIBLE);
+            engagementRow.setTranslationY(0f);
+            engagementRow.setAlpha(1f);
+            engagementRow.setElevation(8f * context.getResources().getDisplayMetrics().density);
+            engagementRow.bringToFront();
+        }
 
         final ImageView likeIcon = convertView.findViewById(R.id.half_image_like);
         final ImageView commentIcon = convertView.findViewById(R.id.half_comment_icon);
@@ -6834,17 +6857,30 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         final LinearLayout reportSlot = convertView.findViewById(R.id.report);
         final TextView likeCountView = convertView.findViewById(R.id.half_like_count);
 
+        // Force every chip visible — recycled flip pages / prior GONE must not stick.
+        View[] slots = {likeSlot, commentSlot, shareSlot, reportSlot, likeIcon, commentIcon, shareIcon, reportIcon};
+        for (View slot : slots) {
+            if (slot != null) {
+                slot.setVisibility(View.VISIBLE);
+                slot.setAlpha(1f);
+            }
+        }
+
         if (commentIcon != null) {
             commentIcon.setImageResource(R.drawable.ic_action_comment);
+            commentIcon.setBackgroundResource(R.drawable.white_oval);
         }
         if (shareIcon != null) {
             shareIcon.setImageResource(R.drawable.ic_action_share);
+            shareIcon.setBackgroundResource(R.drawable.white_oval);
         }
         if (reportIcon != null) {
             reportIcon.setImageResource(R.drawable.ic_action_report);
+            reportIcon.setBackgroundResource(R.drawable.white_oval);
         }
 
         bindHalfLikeIcon(likeIcon, list.get(position).getLikeStatus());
+        tintHalfActionIcons(convertView);
         if (likeIcon != null) {
             likeIcon.setTag(position);
             likeIcon.setOnClickListener(view -> {

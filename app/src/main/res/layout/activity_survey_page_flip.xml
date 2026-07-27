@@ -31,14 +31,6 @@
                 android:contentDescription="@null"
                 android:scaleType="fitXY"
                 android:src="@drawable/md_btn_selector_ripple_dark" />
-
-            <!-- Like / comment / share / flag — same row as half articles -->
-            <include
-                layout="@layout/include_half_engagement_row"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom"
-                android:layout_marginBottom="2dp" />
         </FrameLayout>
 
         <!-- Dark poll card -->
@@ -334,6 +326,13 @@
                         </FrameLayout>
                     </LinearLayout>
                 </LinearLayout>
+
+                <!-- Like / comment / share / flag under options (not over hero — that was clipped / easy to miss) -->
+                <include
+                    layout="@layout/include_half_engagement_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp" />
 
                 <!-- Legacy stubs kept so old findViewById calls don't NPE during transition -->
                 <View android:id="@+id/neomorphFrameLayoutYes" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
