@@ -33,7 +33,7 @@
             android:paddingRight="18dp"
             android:text="Nilesh"
             android:textColor="@color/chip_text_color"
-            android:textSize="@dimen/_16sdp"
+            android:textSize="@dimen/_14sdp"
             android:textStyle="normal" />
 
 
@@ -70,7 +70,7 @@
             android:text="Nilesh"
             android:drawableLeft="@drawable/ic_white_icon"
             android:textColor="@color/on_brand_text"
-            android:textSize="@dimen/_16sdp"
+            android:textSize="@dimen/_14sdp"
             android:textStyle="normal" />
 
 
