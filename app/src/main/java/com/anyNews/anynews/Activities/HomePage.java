@@ -151,6 +151,7 @@ import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.MovementMethodTV;
+import com.anyNews.anynews.Utils.MyUtils;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
@@ -3749,43 +3750,89 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         @Override
         public void onReceive(final Context context, final Intent intent) {
             Logone.v(LOG_TAG, "Receieved notification about network status");
-            isNetworkAvailable(context);
+            // Always re-sync UI; CONNECTIVITY_ACTION can be delayed/missed while
+            // screen is off, so do not rely only on edge transitions.
+            syncNetworkOverlay(false);
         }
+    }
 
-
-        private boolean isNetworkAvailable(Context context) {
+    /**
+     * True when the device reports an active connected network.
+     * Prefer activeNetwork + capabilities on modern APIs; fall back to legacy scan.
+     */
+    private boolean isDeviceOnline() {
+        try {
             ConnectivityManager connectivity = (ConnectivityManager)
-                    context.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (connectivity != null) {
-                NetworkInfo[] info = connectivity.getAllNetworkInfo();
-                if (info != null) {
-                    for (int i = 0; i < info.length; i++) {
-                        if (info[i].getState() == NetworkInfo.State.CONNECTED) {
-                            if (!isConnected) {
-                                Logone.v(LOG_TAG, "Now you are connected to Internet!");
-                                //    networkStatus.setText("Now you are connected to Internet!");
-                                yes_internet.setVisibility(View.VISIBLE);
-                                no_internet.setVisibility(View.GONE);
+                    getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (connectivity == null) {
+                return false;
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                android.net.Network network = connectivity.getActiveNetwork();
+                if (network == null) {
+                    return false;
+                }
+                android.net.NetworkCapabilities caps = connectivity.getNetworkCapabilities(network);
+                return caps != null
+                        && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        && (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                        || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+                        || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+                        || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN));
+            }
+            NetworkInfo active = connectivity.getActiveNetworkInfo();
+            if (active != null && active.isConnected()) {
+                return true;
+            }
+            return MyUtils.isNetworkAvailable(this);
+        } catch (Exception e) {
+            try {
+                return MyUtils.isNetworkAvailable(this);
+            } catch (Exception ignored) {
+                return false;
+            }
+        }
+    }
 
-                                isConnected = true;
-                                //do your processing here ---
-                                //if you need to post any data to the server or get status
-                                //update from the server
-                            }
-                            return true;
-                        }
+    /**
+     * Show or hide the full-screen no-internet overlay to match current connectivity.
+     * When recovering from offline (especially on resume after lock/unlock), restore
+     * the main feed UI and reload if the list never loaded.
+     *
+     * @param fromLifecycle true when called from onResume / foreground; enables reload
+     */
+    private void syncNetworkOverlay(boolean fromLifecycle) {
+        try {
+            if (no_internet == null || yes_internet == null) {
+                return;
+            }
+            boolean online = isDeviceOnline();
+            if (online) {
+                boolean overlayWasShowing = no_internet.getVisibility() == View.VISIBLE;
+                boolean recovering = !isConnected || overlayWasShowing;
+                Logone.v(LOG_TAG, "Now you are connected to Internet! recovering=" + recovering
+                        + " overlayWasShowing=" + overlayWasShowing
+                        + " fromLifecycle=" + fromLifecycle);
+                yes_internet.setVisibility(View.VISIBLE);
+                no_internet.setVisibility(View.GONE);
+                isConnected = true;
+                // Only reload when the offline screen was actually up (not on cold-start
+                // sticky CONNECTIVITY_ACTION, which would double-fetch the feed).
+                if (overlayWasShowing && (list == null || list.isEmpty())) {
+                    try {
+                        inlist(category_id);
+                    } catch (Exception reloadEx) {
+                        reloadEx.printStackTrace();
                     }
                 }
+            } else {
+                Logone.v(LOG_TAG, "You are not connected to Internet!");
+                yes_internet.setVisibility(View.GONE);
+                no_internet.setVisibility(View.VISIBLE);
+                isConnected = false;
             }
-
-
-            Logone.v(LOG_TAG, "You are not connected to Internet!");
-            yes_internet.setVisibility(View.GONE);
-            no_internet.setVisibility(View.VISIBLE);
-
-            //   one.setText("You are not connected to Internet!");
-            isConnected = false;
-            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -4638,7 +4685,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /*   check internet connection */
     public static void dialog(boolean value) {
-
+        if (yes_internet == null || no_internet == null) {
+            return;
+        }
         if (value) {
             yes_internet.setVisibility(View.VISIBLE);
             no_internet.setVisibility(View.GONE);
@@ -4647,8 +4696,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             Runnable delayrunnable = new Runnable() {
                 @Override
                 public void run() {
-                    yes_internet.setVisibility(View.VISIBLE);
-                    no_internet.setVisibility(View.GONE);
+                    if (yes_internet != null) {
+                        yes_internet.setVisibility(View.VISIBLE);
+                    }
+                    if (no_internet != null) {
+                        no_internet.setVisibility(View.GONE);
+                    }
                 }
             };
             handler.postDelayed(delayrunnable, 500);
@@ -5286,6 +5339,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void onResume() {
         super.onResume();
+        // Lock/unlock (and Doze) often miss CONNECTIVITY_ACTION while backgrounded.
+        // Re-check on foreground so "No internet!" clears when network is back.
+        syncNetworkOverlay(true);
         try {
             PostDwellTracker.get().onResumed(this);
         } catch (Exception ignored) {

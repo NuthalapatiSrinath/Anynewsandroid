@@ -658,6 +658,21 @@ public class StartingActivity extends AppCompatActivity {
 
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Power-button lock can leave splash on "no network" even after internet returns.
+        // Re-check on foreground and continue startup if we recovered.
+        try {
+            if (net_avilable != null && net_not_avilable != null
+                    && net_not_avilable.getVisibility() == View.VISIBLE) {
+                isNetworkAvailable(StartingActivity.this);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public class NetworkChangeReceiver extends BroadcastReceiver {
 
         @Override
@@ -678,7 +693,10 @@ public class StartingActivity extends AppCompatActivity {
             if (info != null) {
                 for (int i = 0; i < info.length; i++) {
                     if (info[i].getState() == NetworkInfo.State.CONNECTED) {
-                        if (!isConnected) {
+                        boolean recovering = !isConnected
+                                || (net_not_avilable != null
+                                && net_not_avilable.getVisibility() == View.VISIBLE);
+                        if (recovering) {
                             Logone.v(LOG_TAG, "Now you are connected to Internet!");
                             //    networkStatus.setText("Now you are connected to Internet!");
                             new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
@@ -690,8 +708,12 @@ public class StartingActivity extends AppCompatActivity {
                                 }
                             }, 1000);
 
-                            net_avilable.setVisibility(View.VISIBLE);
-                            net_not_avilable.setVisibility(View.GONE);
+                            if (net_avilable != null) {
+                                net_avilable.setVisibility(View.VISIBLE);
+                            }
+                            if (net_not_avilable != null) {
+                                net_not_avilable.setVisibility(View.GONE);
+                            }
                             isConnected = true;
                             //do your processing here ---
                             //if you need to post any data to the server or get status
@@ -703,8 +725,12 @@ public class StartingActivity extends AppCompatActivity {
             }
         }
         Logone.v(LOG_TAG, "You are not connected to Internet!");
-        net_avilable.setVisibility(View.GONE);
-        net_not_avilable.setVisibility(View.VISIBLE);
+        if (net_avilable != null) {
+            net_avilable.setVisibility(View.GONE);
+        }
+        if (net_not_avilable != null) {
+            net_not_avilable.setVisibility(View.VISIBLE);
+        }
 
         //   one.setText("You are not connected to Internet!");
         isConnected = false;
