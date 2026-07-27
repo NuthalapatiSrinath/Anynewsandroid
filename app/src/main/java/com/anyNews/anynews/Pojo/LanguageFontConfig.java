@@ -51,6 +51,10 @@ public class LanguageFontConfig implements Serializable {
     @Expose
     private Float districtSelectionFontSize;
 
+    @SerializedName("district_selection_box_height")
+    @Expose
+    private Float districtSelectionBoxHeight;
+
     @SerializedName("area_selection_font_size")
     @Expose
     private Float areaSelectionFontSize;
@@ -171,6 +175,20 @@ public class LanguageFontConfig implements Serializable {
         return districtSelectionFontSize != null ? districtSelectionFontSize : 16f;
     }
 
+    /**
+     * District picker chip height in true dp (matches XML default 85dp).
+     * Clamped to 48–120; missing/invalid values fall back to 85.
+     */
+    public float getDistrictSelectionBoxHeight() {
+        if (districtSelectionBoxHeight == null || districtSelectionBoxHeight <= 0f) {
+            return 85f;
+        }
+        float h = districtSelectionBoxHeight;
+        if (h < 48f) return 48f;
+        if (h > 120f) return 120f;
+        return h;
+    }
+
     public float getAreaSelectionFontSize() {
         return areaSelectionFontSize != null ? areaSelectionFontSize : 16f;
     }
@@ -231,6 +249,7 @@ public class LanguageFontConfig implements Serializable {
         if (cfg.districtSelectionFontSize == null) {
             cfg.districtSelectionFontSize = 16f;
         }
+        cfg.districtSelectionBoxHeight = 85f;
         cfg.areaSelectionFontSize = 16f;
         cfg.languageSelectionFontSize = 16f;
         cfg.selectionHeaderFontSize = 20f;

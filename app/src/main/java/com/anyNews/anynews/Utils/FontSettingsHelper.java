@@ -8,6 +8,7 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.core.content.res.ResourcesCompat;
@@ -146,6 +147,31 @@ public final class FontSettingsHelper {
 
     public static void applyDistrictSelectionTypography(Context context, int languageId, TextView... labels) {
         applySelectionTypography(context, languageId, getForLanguage(context, languageId).getDistrictSelectionFontSize(), labels);
+    }
+
+    /**
+     * Sets district chip frame height from admin {@code district_selection_box_height} (dp).
+     * Falls back to 85dp when unset. Applies LayoutParams on both unselected/selected frames.
+     */
+    public static void applyDistrictSelectionBoxHeight(Context context, int languageId, View... frames) {
+        if (context == null || frames == null) {
+            return;
+        }
+        float heightDp = getForLanguage(context, languageId).getDistrictSelectionBoxHeight();
+        float density = context.getResources().getDisplayMetrics().density;
+        int heightPx = Math.round(heightDp * density);
+        for (View frame : frames) {
+            if (frame == null) {
+                continue;
+            }
+            ViewGroup.LayoutParams lp = frame.getLayoutParams();
+            if (lp == null) {
+                lp = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, heightPx);
+            } else {
+                lp.height = heightPx;
+            }
+            frame.setLayoutParams(lp);
+        }
     }
 
     public static void applyAreaSelectionTypography(Context context, int languageId, TextView... labels) {

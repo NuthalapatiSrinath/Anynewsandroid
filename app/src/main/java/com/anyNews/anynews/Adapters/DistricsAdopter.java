@@ -77,6 +77,12 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
                 holder.distric_name,
                 holder.second_distics_name
         );
+        FontSettingsHelper.applyDistrictSelectionBoxHeight(
+                context,
+                languageId,
+                holder.districs_neomorphFrameLayout,
+                holder.second_districs_neomorphFrameLayout
+        );
         ThemeColorHelper.applySelectedNeomorphTree(context, holder.second_districs_neomorphFrameLayout);
         ThemeColorHelper.applySelectedChip(context, holder.second_districs_neomorphFrameLayout, holder.second_distics_name);
 
