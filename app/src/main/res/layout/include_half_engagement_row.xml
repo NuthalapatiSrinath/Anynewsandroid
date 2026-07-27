@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared like / comment / share / flag row used by half articles, survey, and polling. -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/with_out_strips_layout"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:gravity="center_vertical|end"
+    android:minHeight="44dp"
+    android:orientation="horizontal"
+    android:paddingEnd="8dp"
+    android:paddingBottom="4dp"
+    android:visibility="visible">
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:id="@+id/half_image_like_icon"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginEnd="8dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <ImageView
+                android:id="@+id/half_image_like"
+                android:layout_width="35dp"
+                android:layout_height="35dp"
+                android:layout_gravity="center"
+                android:background="@drawable/white_oval"
+                android:contentDescription="@string/like_image"
+                android:padding="7dp"
+                android:src="@drawable/ic_action_like" />
+
+            <TextView
+                android:id="@+id/half_like_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="-3dp"
+                android:layout_marginBottom="-3dp"
+                android:background="@drawable/bg_engagement_count_badge"
+                android:elevation="4dp"
+                android:fontFamily="@font/roboto_medium"
+                android:gravity="center"
+                android:minWidth="14dp"
+                android:minHeight="14dp"
+                android:paddingStart="2dp"
+                android:paddingEnd="2dp"
+                android:textColor="@color/engagement_badge_text"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/half_comment"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginEnd="8dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <ImageView
+                android:id="@+id/half_comment_icon"
+                android:layout_width="35dp"
+                android:layout_height="35dp"
+                android:layout_gravity="center"
+                android:background="@drawable/white_oval"
+                android:contentDescription="@string/comment_image"
+                android:padding="7dp"
+                android:src="@drawable/ic_action_comment" />
+
+            <TextView
+                android:id="@+id/half_comment_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="-3dp"
+                android:layout_marginBottom="-3dp"
+                android:background="@drawable/bg_engagement_count_badge"
+                android:elevation="4dp"
+                android:fontFamily="@font/roboto_medium"
+                android:gravity="center"
+                android:minWidth="14dp"
+                android:minHeight="14dp"
+                android:paddingStart="2dp"
+                android:paddingEnd="2dp"
+                android:textColor="@color/engagement_badge_text"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/half_share"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginEnd="8dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <ImageView
+                android:id="@+id/half_share_icon"
+                android:layout_width="35dp"
+                android:layout_height="35dp"
+                android:layout_gravity="center"
+                android:background="@drawable/white_oval"
+                android:contentDescription="@string/share_image"
+                android:padding="7dp"
+                android:src="@drawable/ic_action_share" />
+
+            <TextView
+                android:id="@+id/half_share_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_marginEnd="-3dp"
+                android:layout_marginBottom="-3dp"
+                android:background="@drawable/bg_engagement_count_badge"
+                android:elevation="4dp"
+                android:fontFamily="@font/roboto_medium"
+                android:gravity="center"
+                android:minWidth="14dp"
+                android:minHeight="14dp"
+                android:paddingStart="2dp"
+                android:paddingEnd="2dp"
+                android:textColor="@color/engagement_badge_text"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/report"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginEnd="4dp"
+        android:gravity="center">
+
+        <ImageView
+            android:id="@+id/report_icon"
+            android:layout_width="35dp"
+            android:layout_height="35dp"
+            android:background="@drawable/white_oval"
+            android:contentDescription="@null"
+            android:padding="7dp"
+            android:src="@drawable/ic_action_report" />
+    </LinearLayout>
+</LinearLayout>

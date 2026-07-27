@@ -171,7 +171,7 @@
     <!-- Always-white text on brand orange buttons (never remapped in night). -->
     <color name="on_brand_text">#FFFFFF</color>
 
-    <!-- Poll / survey option cards (day). Night overrides in values-night. -->
+    <!-- Poll / survey option cards (legacy neumorph; kept for any leftover refs). -->
     <color name="poll_option_surface">#FFFFFF</color>
     <color name="poll_option_text">#525252</color>
     <color name="poll_option_shadow">#D0D2D5</color>
@@ -179,6 +179,21 @@
     <color name="poll_option_selected_text">#FFFFFF</color>
     <color name="poll_option_selected_shadow">#70CF79</color>
     <color name="poll_option_selected_highlight">#6BCF75</color>
+
+    <!-- Dark polished poll/survey card UI (same look in light + dark themes). -->
+    <color name="poll_card_bg">#141414</color>
+    <color name="poll_card_question">#FFFFFF</color>
+    <color name="poll_vote_now_bg">#FF6A00</color>
+    <color name="poll_vote_now_text">#FFFFFF</color>
+    <color name="poll_progress_track">#33FFFFFF</color>
+    <color name="poll_accent_green">#22C55E</color>
+    <color name="poll_accent_green_dark">#0A2F1A</color>
+    <color name="poll_accent_red">#EF4444</color>
+    <color name="poll_accent_red_dark">#3B1010</color>
+    <color name="poll_accent_blue">#3B82F6</color>
+    <color name="poll_accent_blue_dark">#0C1F3D</color>
+    <color name="poll_accent_orange">#F97316</color>
+    <color name="poll_accent_orange_dark">#3B1F0A</color>
     <!-- Form surfaces: light in day, dark in night (see values-night). -->
     <color name="form_surface">#F5F7FB</color>
     <color name="form_surface_elevated">#FFFFFF</color>

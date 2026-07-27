@@ -131,7 +131,6 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Services.ShadowTransformer;
-import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.anyNews.anynews.interfaces.CallBackListener;
 import com.anyNews.anynews.interfaces.CustomPlayerUiController;
 import com.anyNews.anynews.interfaces.LoaderCommonOption;
@@ -174,6 +173,8 @@ import com.google.android.gms.ads.nativead.NativeAdView;
 import com.google.android.youtube.player.YouTubeInitializationResult;
 import com.google.android.youtube.player.YouTubePlayer;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.nostra13.universalimageloader.core.ImageLoader;
 import com.nostra13.universalimageloader.core.ImageLoaderConfiguration;
@@ -1831,381 +1832,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         pauseVideo();
                         surveyViewHolder = new SurveyViewHolder();
                         convertView = inflater.inflate(R.layout.activity_survey_page_flip, parent, false);
-
-                        surveyViewHolder.relativeLayoutSurveyMain = convertView.findViewById(R.id.rl_survay_main);
-                        surveyViewHolder.survey_half_image = convertView.findViewById(R.id.survey_half_image);
-                        surveyViewHolder.tvSurveyQuestionEnglish = convertView.findViewById(R.id.tv_survey_question_english);
-                        surveyViewHolder.neomorphFrameLayoutYes = convertView.findViewById(R.id.neomorphFrameLayoutYes);
-                        surveyViewHolder.neomorphFrameLayoutYesSelected = convertView.findViewById(R.id.neomorphFrameLayoutYesSelected);
-                        surveyViewHolder.neomorphFrameLayoutNo = convertView.findViewById(R.id.neomorphFrameLayoutNo);
-                        surveyViewHolder.neomorphFrameLayoutNoSelected = convertView.findViewById(R.id.neomorphFrameLayoutNoSelected);
-                        surveyViewHolder.neomorphFrameLayoutYesPercent = convertView.findViewById(R.id.neomorphFrameLayoutYesPercent);
-                        surveyViewHolder.neomorphFrameLayoutNoPercent = convertView.findViewById(R.id.neomorphFrameLayoutNoPercent);
-                        surveyViewHolder.yesPercentFill = convertView.findViewById(R.id.yes_percent_fill);
-                        surveyViewHolder.noPercentFill = convertView.findViewById(R.id.no_percent_fill);
-                        surveyViewHolder.tvAnswerYes = convertView.findViewById(R.id.tv_answer_yes);
-                        surveyViewHolder.tvAnswerNo = convertView.findViewById(R.id.tv_answer_no);
-                        surveyViewHolder.llOptionsLayout = convertView.findViewById(R.id.ll_options_layout);
-                        surveyViewHolder.llPercentLayout = convertView.findViewById(R.id.ll_percent_layout);
-                        surveyViewHolder.tvYesPercent = convertView.findViewById(R.id.tv_yes_percent);
-                        surveyViewHolder.tvNoPercent = convertView.findViewById(R.id.tv_no_percent);
-
-                        try {
-                            // Image sits ABOVE options (survey_poll pattern) — not as a full-bleed overlay bg.
-                            imageBackgroundURL = list.get(position).getBackgroundImage();
-                            if (surveyViewHolder.survey_half_image != null) {
-                                Glide.with(getApplicationContext())
-                                        .load(imageBackgroundURL)
-                                        .apply(flipGlideDecodeOptions())
-                                        .into(surveyViewHolder.survey_half_image);
-                            }
-
-                            surveyViewHolder.tvSurveyQuestionEnglish.setText("" + list.get(position).getTitle());
-                            surveyViewHolder.tvAnswerYes.setText("" + list.get(position).getYes_option());
-                            surveyViewHolder.tvAnswerNo.setText("" + list.get(position).getNo_option());
-
-
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-
-
-                        if (list.get(position).getSurveyStatus() == 0) {
-
-                            if (surveyViewHolder.llOptionsLayout != null) {
-                                surveyViewHolder.llOptionsLayout.setVisibility(View.VISIBLE);
-                            }
-                            surveyViewHolder.llPercentLayout.setVisibility(View.GONE);
-                            surveyViewHolder.neomorphFrameLayoutYes.setVisibility(View.VISIBLE);
-                            surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.VISIBLE);
-                            surveyViewHolder.neomorphFrameLayoutYesSelected.setVisibility(View.GONE);
-                            surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.GONE);
-                            applySurveyPercentFills(surveyViewHolder, 0f, 0f, false);
-
-                        } else {
-
-                            if (surveyViewHolder.llOptionsLayout != null) {
-                                surveyViewHolder.llOptionsLayout.setVisibility(View.GONE);
-                            }
-                            surveyViewHolder.llPercentLayout.setVisibility(View.VISIBLE);
-
-                            float yesPct = parsePercent(list.get(position).getYes_percent());
-                            float noPct = parsePercent(list.get(position).getNo_percent());
-                            surveyViewHolder.tvYesPercent.setText(" " + list.get(position).getYes_percent() + "%");
-                            surveyViewHolder.tvNoPercent.setText(" " + list.get(position).getNo_percent() + "%");
-
-
-                            surveyViewHolder.neomorphFrameLayoutYes.setVisibility(View.GONE);
-                            surveyViewHolder.neomorphFrameLayoutYesSelected.setVisibility(View.GONE);
-
-                            surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.GONE);
-                            surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.GONE);
-                            applySurveyPercentFills(surveyViewHolder, yesPct, noPct, true);
-                        }
-
-                        surveyViewHolder.neomorphFrameLayoutYes.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-
-                                // GONE (not INVISIBLE) so vertical stack collapses cleanly under the image.
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setVisibility(View.GONE);
-                                surveyViewHolder.neomorphFrameLayoutYes.setVisibility(View.GONE);
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.GONE);
-                                surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.GONE);
-                                if (surveyViewHolder.llOptionsLayout != null) {
-                                    surveyViewHolder.llOptionsLayout.setVisibility(View.GONE);
-                                }
-                                surveyViewHolder.llPercentLayout.setVisibility(View.VISIBLE);
-
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setEnabled(false);
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setShadowInner();
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setClickable(false);
-
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setEnabled(false);
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setClickable(false);
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setShadowInner();
-
-                                surveyViewHolder.neomorphFrameLayoutNo.setEnabled(false);
-                                surveyViewHolder.neomorphFrameLayoutYes.setEnabled(false);
-
-                                SurveyResponse("" + list.get(position).getYes_option(), list.get(position).getPostId(), position);
-
-                            }
-                        });
-
-                        surveyViewHolder.neomorphFrameLayoutNo.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setVisibility(View.GONE);
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setVisibility(View.GONE);
-                                surveyViewHolder.neomorphFrameLayoutNo.setVisibility(View.GONE);
-                                surveyViewHolder.neomorphFrameLayoutYes.setVisibility(View.GONE);
-                                if (surveyViewHolder.llOptionsLayout != null) {
-                                    surveyViewHolder.llOptionsLayout.setVisibility(View.GONE);
-                                }
-                                surveyViewHolder.llPercentLayout.setVisibility(View.VISIBLE);
-
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setEnabled(false);
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setShadowInner();
-                                surveyViewHolder.neomorphFrameLayoutYesSelected.setClickable(false);
-
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setEnabled(false);
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setClickable(false);
-                                surveyViewHolder.neomorphFrameLayoutNoSelected.setShadowInner();
-
-                                surveyViewHolder.neomorphFrameLayoutNo.setEnabled(false);
-                                surveyViewHolder.neomorphFrameLayoutYes.setEnabled(false);
-
-                                SurveyResponse("" + list.get(position).getNo_option(), list.get(position).getPostId(), position);
-
-                            }
-                        });
-
+                        bindSurveyPollTwoOption(surveyViewHolder, convertView, position);
                         break;
+
                     case "survey_poll":
                         pauseVideo();
                         pollingViewHolder = new PollingViewHolder();
                         convertView = inflater.inflate(R.layout.activity_polling_page_flip, parent, false);
-                        pollingViewHolder.relativeLayoutSurveyMain = convertView.findViewById(R.id.rl_survay_main);
-/*
-
-
-
-                        pollingViewHolder.llPercentLayout = convertView.findViewById(R.id.ll_percent_layout);
-
-
-
-
-                        pollingViewHolder.llPercentLayout.setVisibility(View.GONE);*/
-
-                        pollingViewHolder.tv_polling_question = convertView.findViewById(R.id.tv_polling_question);
-                        pollingViewHolder.polling_half_image = convertView.findViewById(R.id.polling_half_image);
-
-
-                        pollingViewHolder.tv_answer_A = convertView.findViewById(R.id.tv_answer_A);
-                        pollingViewHolder.tv_answer_B = convertView.findViewById(R.id.tv_answer_B);
-                        pollingViewHolder.tv_answer_C = convertView.findViewById(R.id.tv_answer_C);
-                        pollingViewHolder.tv_answer_D = convertView.findViewById(R.id.tv_answer_D);
-
-                        pollingViewHolder.polling_A = convertView.findViewById(R.id.polling_A);
-                        pollingViewHolder.polling_B = convertView.findViewById(R.id.polling_B);
-                        pollingViewHolder.polling_C = convertView.findViewById(R.id.polling_C);
-                        pollingViewHolder.polling_D = convertView.findViewById(R.id.polling_D);
-
-                        pollingViewHolder.select_tv_answer_A = convertView.findViewById(R.id.select_tv_answer_A);
-                        pollingViewHolder.select_tv_answer_B = convertView.findViewById(R.id.select_tv_answer_B);
-                        pollingViewHolder.select_tv_answer_C = convertView.findViewById(R.id.select_tv_answer_C);
-                        pollingViewHolder.select_tv_answer_D = convertView.findViewById(R.id.select_tv_answer_D);
-
-                        pollingViewHolder.select_polling_A = convertView.findViewById(R.id.select_polling_A);
-                        pollingViewHolder.select_polling_B = convertView.findViewById(R.id.select_polling_B);
-                        pollingViewHolder.select_polling_C = convertView.findViewById(R.id.select_polling_C);
-                        pollingViewHolder.select_polling_D = convertView.findViewById(R.id.select_polling_D);
-
-
-                        pollingViewHolder.neomorphFrameLayoutA = convertView.findViewById(R.id.neomorphFrameLayoutA);
-                        pollingViewHolder.neomorphFrameLayoutB = convertView.findViewById(R.id.neomorphFrameLayoutB);
-                        pollingViewHolder.neomorphFrameLayoutC = convertView.findViewById(R.id.neomorphFrameLayoutC);
-                        pollingViewHolder.neomorphFrameLayoutD = convertView.findViewById(R.id.neomorphFrameLayoutD);
-
-                        pollingViewHolder.select_neomorphFrameLayoutA = convertView.findViewById(R.id.select_neomorphFrameLayoutA);
-                        pollingViewHolder.select_neomorphFrameLayoutB = convertView.findViewById(R.id.select_neomorphFrameLayoutB);
-                        pollingViewHolder.select_neomorphFrameLayoutC = convertView.findViewById(R.id.select_neomorphFrameLayoutC);
-                        pollingViewHolder.select_neomorphFrameLayoutD = convertView.findViewById(R.id.select_neomorphFrameLayoutD);
-                        pollingViewHolder.optionFillA = convertView.findViewById(R.id.option_fill_A);
-                        pollingViewHolder.optionFillB = convertView.findViewById(R.id.option_fill_B);
-                        pollingViewHolder.optionFillC = convertView.findViewById(R.id.option_fill_C);
-                        pollingViewHolder.optionFillD = convertView.findViewById(R.id.option_fill_D);
-                        pollingViewHolder.selectOptionFillA = convertView.findViewById(R.id.select_option_fill_A);
-                        pollingViewHolder.selectOptionFillB = convertView.findViewById(R.id.select_option_fill_B);
-                        pollingViewHolder.selectOptionFillC = convertView.findViewById(R.id.select_option_fill_C);
-                        pollingViewHolder.selectOptionFillD = convertView.findViewById(R.id.select_option_fill_D);
-
-
-                        pollingViewHolder.tv_polling_question.setText(list.get(position).getTitle());
-                        if (pollingViewHolder.polling_half_image.getTag() == null ||
-                                !pollingViewHolder.polling_half_image.getTag().equals(list.get(position).getBackgroundImage())) {
-
-                            // below method will display image inside our image view..
-                            imageLoader.displayImage(list.get(position).getBackgroundImage(), pollingViewHolder.polling_half_image, options, null);
-
-                        }
-
-
-                        if (list.get(position).getSelected_option() == 1) {
-                            pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.GONE);
-                            pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.VISIBLE);
-
-                            pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                            pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                            pollingViewHolder.select_polling_A.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_C.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_D.setVisibility(View.VISIBLE);
-
-
-                        } else if (list.get(position).getSelected_option() == 2) {
-                            pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.GONE);
-                            pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.VISIBLE);
-
-                            pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                            pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                            pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                            pollingViewHolder.select_polling_B.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_C.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_D.setVisibility(View.VISIBLE);
-
-                        } else if (list.get(position).getSelected_option() == 3) {
-
-                            pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.GONE);
-                            pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.VISIBLE);
-
-                            pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                            pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                            pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-                            pollingViewHolder.select_polling_C.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_D.setVisibility(View.VISIBLE);
-                        } else if (list.get(position).getSelected_option() == 4) {
-                            pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                            pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                            pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.VISIBLE);
-
-                            pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-                            pollingViewHolder.polling_C.setVisibility(View.VISIBLE);
-                            pollingViewHolder.select_polling_D.setVisibility(View.VISIBLE);
-
-                        }
-
-
-                        if (list.get(position).getSurveyOptions() != null) {
-                        if (list.get(position).getSurveyOptions().size() == 2) {
-                            pollingViewHolder.select_tv_answer_A.setText(list.get(position).getSurveyOptions().get(0).getSurveyOptionsName());
-                            pollingViewHolder.select_tv_answer_B.setText(list.get(position).getSurveyOptions().get(1).getSurveyOptionsName());
-
-                            pollingViewHolder.select_polling_A.setText("" + list.get(position).getSurveyOptions().get(0).getPercent() + "%");
-                            pollingViewHolder.select_polling_B.setText("" + list.get(position).getSurveyOptions().get(1).getPercent() + "%");
-
-                            pollingViewHolder.tv_answer_A.setText(list.get(position).getSurveyOptions().get(0).getSurveyOptionsName());
-                            pollingViewHolder.tv_answer_B.setText(list.get(position).getSurveyOptions().get(1).getSurveyOptionsName());
-
-                            pollingViewHolder.polling_A.setText("" + list.get(position).getSurveyOptions().get(0).getPercent() + "%");
-                            pollingViewHolder.polling_B.setText("" + list.get(position).getSurveyOptions().get(1).getPercent() + "%");
-
-                            pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                            pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-                            pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.GONE);
-                            pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                        } else if (list.get(position).getSurveyOptions().size() == 3) {
-                            pollingViewHolder.select_tv_answer_A.setText(list.get(position).getSurveyOptions().get(0).getSurveyOptionsName());
-                            pollingViewHolder.select_tv_answer_B.setText(list.get(position).getSurveyOptions().get(1).getSurveyOptionsName());
-                            pollingViewHolder.select_tv_answer_C.setText(list.get(position).getSurveyOptions().get(2).getSurveyOptionsName());
-
-                            pollingViewHolder.select_polling_A.setText("" + list.get(position).getSurveyOptions().get(0).getPercent() + "%");
-                            pollingViewHolder.select_polling_B.setText("" + list.get(position).getSurveyOptions().get(1).getPercent() + "%");
-                            pollingViewHolder.select_polling_C.setText("" + list.get(position).getSurveyOptions().get(2).getPercent() + "%");
-
-                            pollingViewHolder.tv_answer_A.setText(list.get(position).getSurveyOptions().get(0).getSurveyOptionsName());
-                            pollingViewHolder.tv_answer_B.setText(list.get(position).getSurveyOptions().get(1).getSurveyOptionsName());
-                            pollingViewHolder.tv_answer_C.setText(list.get(position).getSurveyOptions().get(2).getSurveyOptionsName());
-
-                            pollingViewHolder.polling_A.setText("" + list.get(position).getSurveyOptions().get(0).getPercent() + "%");
-                            pollingViewHolder.polling_B.setText("" + list.get(position).getSurveyOptions().get(1).getPercent() + "%");
-                            pollingViewHolder.polling_C.setText("" + list.get(position).getSurveyOptions().get(2).getPercent() + "%");
-
-                            pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-                            pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                        } else {
-                            pollingViewHolder.select_tv_answer_A.setText("" + list.get(position).getSurveyOptions().get(0).getSurveyOptionsName());
-                            pollingViewHolder.select_tv_answer_B.setText("" + list.get(position).getSurveyOptions().get(1).getSurveyOptionsName());
-                            pollingViewHolder.select_tv_answer_C.setText("" + list.get(position).getSurveyOptions().get(2).getSurveyOptionsName());
-                            pollingViewHolder.select_tv_answer_D.setText("" + list.get(position).getSurveyOptions().get(3).getSurveyOptionsName());
-
-                            pollingViewHolder.select_polling_A.setText("" + list.get(position).getSurveyOptions().get(0).getPercent() + "%");
-                            pollingViewHolder.select_polling_B.setText("" + list.get(position).getSurveyOptions().get(1).getPercent() + "%");
-                            pollingViewHolder.select_polling_C.setText("" + list.get(position).getSurveyOptions().get(2).getPercent() + "%");
-                            pollingViewHolder.select_polling_D.setText("" + list.get(position).getSurveyOptions().get(3).getPercent() + "%");
-
-                            pollingViewHolder.tv_answer_A.setText("" + list.get(position).getSurveyOptions().get(0).getSurveyOptionsName());
-                            pollingViewHolder.tv_answer_B.setText("" + list.get(position).getSurveyOptions().get(1).getSurveyOptionsName());
-                            pollingViewHolder.tv_answer_C.setText("" + list.get(position).getSurveyOptions().get(2).getSurveyOptionsName());
-                            pollingViewHolder.tv_answer_D.setText("" + list.get(position).getSurveyOptions().get(3).getSurveyOptionsName());
-
-                            pollingViewHolder.polling_A.setText("" + list.get(position).getSurveyOptions().get(0).getPercent() + "%");
-                            pollingViewHolder.polling_B.setText("" + list.get(position).getSurveyOptions().get(1).getPercent() + "%");
-                            pollingViewHolder.polling_C.setText("" + list.get(position).getSurveyOptions().get(2).getPercent() + "%");
-                            pollingViewHolder.polling_D.setText("" + list.get(position).getSurveyOptions().get(3).getPercent() + "%");
-
-                        }
-
-                        applyPollingPercentFills(pollingViewHolder, list.get(position));
-
-                        pollingViewHolder.neomorphFrameLayoutA.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-
-
-                                updatearraylist(list.get(position).getSurveyOptions().get(0).getId(), position);
-                                showPollingResuilt("A", position, list.get(position).getSurveyOptions().size(), list.get(position).getPostId(), list.get(position).getSurveyOptions().get(0).getId());
-
-                            }
-                        });
-                        pollingViewHolder.neomorphFrameLayoutB.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                updatearraylist(list.get(position).getSurveyOptions().get(1).getId(), position);
-                                showPollingResuilt("B", position, list.get(position).getSurveyOptions().size(), list.get(position).getPostId(), list.get(position).getSurveyOptions().get(1).getId());
-
-                            }
-                        });
-                        pollingViewHolder.neomorphFrameLayoutC.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                updatearraylist(list.get(position).getSurveyOptions().get(2).getId(), position);
-                                showPollingResuilt("C", position, list.get(position).getSurveyOptions().size(), list.get(position).getPostId(), list.get(position).getSurveyOptions().get(2).getId());
-                            }
-                        });
-                        pollingViewHolder.neomorphFrameLayoutD.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                updatearraylist(list.get(position).getSurveyOptions().get(3).getId(), position);
-                                showPollingResuilt("D", position, list.get(position).getSurveyOptions().size(), list.get(position).getPostId(), list.get(position).getSurveyOptions().get(3).getId());
-                            }
-                        });
-
-                        }
-
+                        bindSurveyPollMultiOption(pollingViewHolder, convertView, position);
                         break;
 
                 }
             }
 
-        } catch (NullPointerException e) {
+        } catch (Exception e) {
+            // Inflate / ClassCast / NPE on survey-poll bind must not kill the feed.
             e.printStackTrace();
+            if (convertView == null && parent != null) {
+                convertView = new View(parent.getContext());
+            }
         }
 
         return convertView;
@@ -6126,179 +5771,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void showPollingResuilt(String option, int position, int size, long postID, int optionID) {
-        if (size == 2) {
-            if (option.equals("A")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-
-                pollingViewHolder.select_polling_C.setVisibility(View.GONE);
-                pollingViewHolder.select_polling_D.setVisibility(View.GONE);
-
-                set_servey_answer_submit(postID, optionID, position);
-
-            } else if (option.equals("B")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.GONE);
-
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_B.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_C.setVisibility(View.GONE);
-                pollingViewHolder.select_polling_D.setVisibility(View.GONE);
-                set_servey_answer_submit(postID, optionID, position);
-            }
-        } else if (size == 3) {
-            if (option.equals("A")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_C.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_D.setVisibility(View.GONE);
-                set_servey_answer_submit(postID, optionID, position);
-
-            } else if (option.equals("B")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_B.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_C.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_D.setVisibility(View.GONE);
-                set_servey_answer_submit(postID, optionID, position);
-            } else if (option.equals("C")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_C.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_D.setVisibility(View.GONE);
-                set_servey_answer_submit(postID, optionID, position);
-            }
-        } else if (size == 4) {
-
-            if (option.equals("A")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.VISIBLE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_C.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_D.setVisibility(View.VISIBLE);
-                set_servey_answer_submit(postID, optionID, position);
-
-            } else if (option.equals("B")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.VISIBLE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_B.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_C.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_D.setVisibility(View.VISIBLE);
-                set_servey_answer_submit(postID, optionID, position);
-            } else if (option.equals("C")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.VISIBLE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_C.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_D.setVisibility(View.VISIBLE);
-                set_servey_answer_submit(postID, optionID, position);
-            } else if (option.equals("D")) {
-
-                pollingViewHolder.neomorphFrameLayoutA.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutB.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutC.setVisibility(View.VISIBLE);
-                pollingViewHolder.neomorphFrameLayoutD.setVisibility(View.GONE);
-
-                pollingViewHolder.select_neomorphFrameLayoutA.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutB.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutC.setVisibility(View.GONE);
-                pollingViewHolder.select_neomorphFrameLayoutD.setVisibility(View.VISIBLE);
-
-                pollingViewHolder.polling_A.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_B.setVisibility(View.VISIBLE);
-                pollingViewHolder.polling_C.setVisibility(View.VISIBLE);
-                pollingViewHolder.select_polling_D.setVisibility(View.VISIBLE);
-                set_servey_answer_submit(postID, optionID, position);
-
-            }
-        }
+        // Legacy entry point — submit vote and show multi-option results UI.
         if (pollingViewHolder != null && position >= 0 && position < list.size()) {
-            applyPollingPercentFills(pollingViewHolder, list.get(position));
+            updatearraylist(optionID, position);
+            showPollingResultsUi(pollingViewHolder, list.get(position));
         }
+        set_servey_answer_submit(postID, optionID, position);
     }
 
 
@@ -6331,7 +5809,47 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
 
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
-
+                if (!response.isSuccessful() || response.body() == null) {
+                    return;
+                }
+                try {
+                    JsonObject body = response.body();
+                    if (!body.has("data") || body.get("data") == null || !body.get("data").isJsonArray()) {
+                        return;
+                    }
+                    JsonArray data = body.getAsJsonArray("data");
+                    if (position < 0 || position >= list.size()) {
+                        return;
+                    }
+                    ModelClass.Datum datum = list.get(position);
+                    if (datum.getSurveyOptions() == null) {
+                        return;
+                    }
+                    for (int i = 0; i < data.size() && i < datum.getSurveyOptions().size(); i++) {
+                        JsonElement el = data.get(i);
+                        if (el == null || !el.isJsonObject()) continue;
+                        JsonObject opt = el.getAsJsonObject();
+                        ModelClass.SurveyOptions local = datum.getSurveyOptions().get(i);
+                        if (local == null) continue;
+                        if (opt.has("percent") && !opt.get("percent").isJsonNull()) {
+                            local.setPercent((int) Math.round(opt.get("percent").getAsDouble()));
+                        }
+                        if (opt.has("count") && !opt.get("count").isJsonNull()) {
+                            local.setCount((int) Math.round(opt.get("count").getAsDouble()));
+                        }
+                    }
+                    if (body.has("selected_option") && !body.get("selected_option").isJsonNull()) {
+                        datum.setSelected_option(body.get("selected_option").getAsInt());
+                    } else {
+                        datum.setSelected_option(optionID);
+                    }
+                    list.set(position, datum);
+                    if (pollingViewHolder != null) {
+                        showPollingResultsUi(pollingViewHolder, datum);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
 
             @Override
@@ -6829,31 +6347,37 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public static class SurveyViewHolder {
-
         LinearLayout llPercentLayout;
         LinearLayout llOptionsLayout;
-        NeomorphFrameLayout neomorphFrameLayoutYes, neomorphFrameLayoutNo, neomorphFrameLayoutYesSelected,
-                neomorphFrameLayoutNoSelected, neomorphFrameLayoutYesPercent, neomorphFrameLayoutNoPercent;
+        LinearLayout optionRowYes, optionRowNo, resultRowYes, resultRowNo;
         RelativeLayout relativeLayoutSurveyMain;
         ImageView survey_half_image;
-        View yesPercentFill, noPercentFill;
-
-        private TextView tvSurveyQuestionEnglish, tvAnswerYes, tvAnswerNo, tvYesPercent, tvNoPercent;
+        View yesPercentFill, noPercentFill, radioYes, radioNo;
+        TextView btnVoteNow;
+        TextView badgeYes, badgeNo, tvYesLabel, tvNoLabel;
+        TextView tvSurveyQuestionEnglish, tvAnswerYes, tvAnswerNo, tvYesPercent, tvNoPercent;
+        /** Pending selection before Vote Now: 0=yes, 1=no, -1=none. */
+        int pendingChoice = -1;
     }
 
     public static class PollingViewHolder {
         LinearLayout llPercentLayout;
+        LinearLayout llOptionsLayout;
+        LinearLayout optionRowA, optionRowB, optionRowC, optionRowD;
+        LinearLayout resultRowA, resultRowB, resultRowC, resultRowD;
         RelativeLayout relativeLayoutSurveyMain;
         TextView tv_polling_question;
-        TextView polling_A, polling_B, polling_C, polling_D, tv_answer_A, tv_answer_B, tv_answer_C, tv_answer_D;
-        TextView select_polling_A, select_polling_B, select_polling_C, select_polling_D, select_tv_answer_A, select_tv_answer_B, select_tv_answer_C, select_tv_answer_D;
+        TextView polling_A, polling_B, polling_C, polling_D;
+        TextView tv_answer_A, tv_answer_B, tv_answer_C, tv_answer_D;
+        TextView tv_result_label_A, tv_result_label_B, tv_result_label_C, tv_result_label_D;
+        TextView badge_A, badge_B, badge_C, badge_D;
+        TextView btnVoteNow;
         ImageView polling_half_image;
-        NeomorphFrameLayout neomorphFrameLayoutA, neomorphFrameLayoutB, neomorphFrameLayoutC,
-                neomorphFrameLayoutD;
-        NeomorphFrameLayout select_neomorphFrameLayoutA, select_neomorphFrameLayoutB, select_neomorphFrameLayoutC,
-                select_neomorphFrameLayoutD;
+        View radio_A, radio_B, radio_C, radio_D;
         View optionFillA, optionFillB, optionFillC, optionFillD;
-        View selectOptionFillA, selectOptionFillB, selectOptionFillC, selectOptionFillD;
+        /** Pending selection index 0–3 before Vote Now; -1 = none. */
+        int pendingIndex = -1;
+        int pendingOptionId = 0;
     }
 
     public static class VideosliderHolder {
@@ -6941,14 +6465,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         percentageYes = " " + surveyFeedbackResponse.getData().get(0).getPercent();
                         percentageNo = " " + surveyFeedbackResponse.getData().get(1).getPercent();
 
-                        surveyViewHolder.tvYesPercent.setText(" " + surveyFeedbackResponse.getData().get(0).getPercent() + "%");
-                        surveyViewHolder.tvNoPercent.setText(" " + surveyFeedbackResponse.getData().get(1).getPercent() + "%");
-                        applySurveyPercentFills(
-                                surveyViewHolder,
-                                parsePercent(surveyFeedbackResponse.getData().get(0).getPercent()),
-                                parsePercent(surveyFeedbackResponse.getData().get(1).getPercent()),
-                                true
-                        );
+                        if (surveyViewHolder != null) {
+                            showSurveyResultsUi(
+                                    surveyViewHolder,
+                                    datum,
+                                    parsePercent(surveyFeedbackResponse.getData().get(0).getPercent()),
+                                    parsePercent(surveyFeedbackResponse.getData().get(1).getPercent())
+                            );
+                        }
 
                     }
 
@@ -6967,103 +6491,550 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private static float parsePercent(Object raw) {
-        if (raw == null) {
-            return 0f;
+        return PollOptionStyleHelper.parsePercent(raw);
+    }
+
+    /** True when payload has 3+ choices — use multi-option survey UI even if post_type is "survey". */
+    private static boolean shouldUseMultiOptionSurveyUi(ModelClass.Datum datum) {
+        if (datum == null || datum.getSurveyOptions() == null) {
+            return false;
         }
-        try {
-            String s = String.valueOf(raw).replace("%", "").trim();
-            if (s.isEmpty()) {
-                return 0f;
+        int named = 0;
+        for (ModelClass.SurveyOptions opt : datum.getSurveyOptions()) {
+            if (opt == null) continue;
+            String n = opt.getSurveyOptionsName();
+            if (n != null && !n.trim().isEmpty()) {
+                named++;
             }
-            return Float.parseFloat(s);
-        } catch (Exception e) {
-            return 0f;
+        }
+        return named > 2;
+    }
+
+    /** Ensure each option has a stable 1-based id for survey_poll votes. */
+    private static void ensureSurveyOptionIds(ModelClass.Datum datum) {
+        if (datum == null || datum.getSurveyOptions() == null) {
+            return;
+        }
+        for (int i = 0; i < datum.getSurveyOptions().size(); i++) {
+            ModelClass.SurveyOptions opt = datum.getSurveyOptions().get(i);
+            if (opt != null && opt.getId() == 0) {
+                opt.setId(i + 1);
+            }
         }
     }
 
-    private void applySurveyPercentFills(SurveyViewHolder holder, float yesPct, float noPct, boolean show) {
-        if (holder == null) {
+    private static String surveyOptionLabel(ModelClass.Datum datum, int index, String fallback) {
+        if (datum != null && datum.getSurveyOptions() != null
+                && index >= 0 && index < datum.getSurveyOptions().size()) {
+            ModelClass.SurveyOptions opt = datum.getSurveyOptions().get(index);
+            if (opt != null && opt.getSurveyOptionsName() != null
+                    && !opt.getSurveyOptionsName().trim().isEmpty()) {
+                return opt.getSurveyOptionsName().trim();
+            }
+        }
+        return fallback != null ? fallback : "";
+    }
+
+    /** Polling = post_type "survey" (Yes/No). Image on top, dark card below. */
+    private void bindSurveyPollTwoOption(SurveyViewHolder holder, View convertView, final int position) {
+        if (holder == null || convertView == null || list == null
+                || position < 0 || position >= list.size()) {
             return;
         }
-        PollOptionStyleHelper.styleResultNeomorph(context, holder.neomorphFrameLayoutYesPercent);
-        PollOptionStyleHelper.styleResultNeomorph(context, holder.neomorphFrameLayoutNoPercent);
-        PollOptionStyleHelper.applyPercentFill(
-                context, null, holder.yesPercentFill, yesPct, show, holder.tvYesPercent);
-        PollOptionStyleHelper.applyPercentFill(
-                context, null, holder.noPercentFill, noPct, show, holder.tvNoPercent);
+        holder.relativeLayoutSurveyMain = convertView.findViewById(R.id.rl_survay_main);
+        holder.survey_half_image = convertView.findViewById(R.id.survey_half_image);
+        holder.tvSurveyQuestionEnglish = convertView.findViewById(R.id.tv_survey_question_english);
+        holder.llOptionsLayout = convertView.findViewById(R.id.ll_options_layout);
+        holder.llPercentLayout = convertView.findViewById(R.id.ll_percent_layout);
+        holder.optionRowYes = convertView.findViewById(R.id.option_row_yes);
+        holder.optionRowNo = convertView.findViewById(R.id.option_row_no);
+        holder.resultRowYes = convertView.findViewById(R.id.result_row_yes);
+        holder.resultRowNo = convertView.findViewById(R.id.result_row_no);
+        holder.radioYes = convertView.findViewById(R.id.radio_yes);
+        holder.radioNo = convertView.findViewById(R.id.radio_no);
+        holder.tvAnswerYes = convertView.findViewById(R.id.tv_answer_yes);
+        holder.tvAnswerNo = convertView.findViewById(R.id.tv_answer_no);
+        holder.tvYesLabel = convertView.findViewById(R.id.tv_yes_label);
+        holder.tvNoLabel = convertView.findViewById(R.id.tv_no_label);
+        holder.tvYesPercent = convertView.findViewById(R.id.tv_yes_percent);
+        holder.tvNoPercent = convertView.findViewById(R.id.tv_no_percent);
+        holder.yesPercentFill = convertView.findViewById(R.id.yes_percent_fill);
+        holder.noPercentFill = convertView.findViewById(R.id.no_percent_fill);
+        holder.badgeYes = convertView.findViewById(R.id.badge_yes);
+        holder.badgeNo = convertView.findViewById(R.id.badge_no);
+        holder.btnVoteNow = convertView.findViewById(R.id.btn_vote_now_survey);
+        holder.pendingChoice = -1;
+
+        ModelClass.Datum datum = list.get(position);
+        try {
+            imageBackgroundURL = datum.getBackgroundImage();
+            if (holder.survey_half_image != null) {
+                Glide.with(getApplicationContext())
+                        .load(imageBackgroundURL)
+                        .apply(flipGlideDecodeOptions())
+                        .into(holder.survey_half_image);
+            }
+            if (holder.tvSurveyQuestionEnglish != null) {
+                holder.tvSurveyQuestionEnglish.setText(datum.getTitle() != null ? datum.getTitle() : "");
+            }
+            String yesLabel = surveyOptionLabel(datum, 0, datum.getYes_option());
+            String noLabel = surveyOptionLabel(datum, 1, datum.getNo_option());
+            if (yesLabel == null || yesLabel.isEmpty() || "null".equalsIgnoreCase(yesLabel)) {
+                yesLabel = "Yes";
+            }
+            if (noLabel == null || noLabel.isEmpty() || "null".equalsIgnoreCase(noLabel)) {
+                noLabel = "No";
+            }
+            if (holder.tvAnswerYes != null) holder.tvAnswerYes.setText(yesLabel);
+            if (holder.tvAnswerNo != null) holder.tvAnswerNo.setText(noLabel);
+            if (holder.tvYesLabel != null) holder.tvYesLabel.setText(yesLabel);
+            if (holder.tvNoLabel != null) holder.tvNoLabel.setText(noLabel);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        boolean voted = datum.getSurveyStatus() != null && datum.getSurveyStatus() == 1;
+        if (voted) {
+            showSurveyResultsUi(
+                    holder,
+                    datum,
+                    parsePercent(datum.getYes_percent()),
+                    parsePercent(datum.getNo_percent())
+            );
+        } else {
+            showSurveyOptionsUi(holder);
+            updateSurveyRadios(holder, -1);
+            if (holder.optionRowYes != null) {
+                holder.optionRowYes.setOnClickListener(v -> {
+                    holder.pendingChoice = 0;
+                    updateSurveyRadios(holder, 0);
+                });
+            }
+            if (holder.optionRowNo != null) {
+                holder.optionRowNo.setOnClickListener(v -> {
+                    holder.pendingChoice = 1;
+                    updateSurveyRadios(holder, 1);
+                });
+            }
+            if (holder.btnVoteNow != null) {
+                final String yesVote = surveyOptionLabel(datum, 0, datum.getYes_option());
+                final String noVote = surveyOptionLabel(datum, 1, datum.getNo_option());
+                holder.btnVoteNow.setOnClickListener(v -> {
+                    if (holder.pendingChoice < 0) {
+                        Toast.makeText(context, R.string.poll_select_option, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String response = holder.pendingChoice == 0 ? yesVote : noVote;
+                    // Keep options visible until API returns real percents (avoid flashing 0%).
+                    SurveyResponse(response, list.get(position).getPostId(), position);
+                });
+            }
+        }
+        bindSurveyPollEngagementActions(convertView, position);
+    }
+
+    private void showSurveyOptionsUi(SurveyViewHolder holder) {
+        if (holder.llOptionsLayout != null) holder.llOptionsLayout.setVisibility(View.VISIBLE);
+        if (holder.llPercentLayout != null) holder.llPercentLayout.setVisibility(View.GONE);
+    }
+
+    private void updateSurveyRadios(SurveyViewHolder holder, int selected) {
+        PollOptionStyleHelper.applyRadio(holder.radioYes, PollOptionStyleHelper.ACCENT_GREEN, selected == 0);
+        PollOptionStyleHelper.applyRadio(holder.radioNo, PollOptionStyleHelper.ACCENT_RED, selected == 1);
+    }
+
+    /** Percent-only results. Highest % = green, lowest % = red. No vote counts. */
+    private void showSurveyResultsUi(SurveyViewHolder holder, ModelClass.Datum datum, float yesPct, float noPct) {
+        if (holder == null) return;
+        if (holder.llOptionsLayout != null) holder.llOptionsLayout.setVisibility(View.GONE);
+        if (holder.llPercentLayout != null) holder.llPercentLayout.setVisibility(View.VISIBLE);
+
+        String yesLabel = surveyOptionLabel(datum, 0, datum != null ? datum.getYes_option() : null);
+        String noLabel = surveyOptionLabel(datum, 1, datum != null ? datum.getNo_option() : null);
+        if (yesLabel == null || yesLabel.isEmpty() || "null".equalsIgnoreCase(yesLabel)) yesLabel = "Yes";
+        if (noLabel == null || noLabel.isEmpty() || "null".equalsIgnoreCase(noLabel)) noLabel = "No";
+        int[] accents = PollOptionStyleHelper.pollRankAccents(yesPct, noPct);
+
+        PollOptionStyleHelper.applyResultRow(
+                holder.resultRowYes, holder.badgeYes, holder.tvYesLabel, holder.tvYesPercent,
+                holder.yesPercentFill, accents[0], 1, yesLabel, yesPct);
+        PollOptionStyleHelper.applyResultRow(
+                holder.resultRowNo, holder.badgeNo, holder.tvNoLabel, holder.tvNoPercent,
+                holder.noPercentFill, accents[1], 2, noLabel, noPct);
+    }
+
+    /** Survey = post_type "survey_poll" (multi). Image on top, dark card below. */
+    private void bindSurveyPollMultiOption(PollingViewHolder holder, View convertView, final int position) {
+        if (holder == null || convertView == null || list == null
+                || position < 0 || position >= list.size()) {
+            return;
+        }
+        try {
+            holder.relativeLayoutSurveyMain = convertView.findViewById(R.id.rl_survay_main);
+            holder.tv_polling_question = convertView.findViewById(R.id.tv_polling_question);
+            holder.polling_half_image = convertView.findViewById(R.id.polling_half_image);
+            holder.llOptionsLayout = convertView.findViewById(R.id.ll_options_layout);
+            holder.llPercentLayout = convertView.findViewById(R.id.ll_percent_layout);
+            holder.btnVoteNow = convertView.findViewById(R.id.btn_vote_now_polling);
+
+            holder.optionRowA = convertView.findViewById(R.id.option_row_A);
+            holder.optionRowB = convertView.findViewById(R.id.option_row_B);
+            holder.optionRowC = convertView.findViewById(R.id.option_row_C);
+            holder.optionRowD = convertView.findViewById(R.id.option_row_D);
+            holder.resultRowA = convertView.findViewById(R.id.result_row_A);
+            holder.resultRowB = convertView.findViewById(R.id.result_row_B);
+            holder.resultRowC = convertView.findViewById(R.id.result_row_C);
+            holder.resultRowD = convertView.findViewById(R.id.result_row_D);
+
+            holder.radio_A = convertView.findViewById(R.id.radio_A);
+            holder.radio_B = convertView.findViewById(R.id.radio_B);
+            holder.radio_C = convertView.findViewById(R.id.radio_C);
+            holder.radio_D = convertView.findViewById(R.id.radio_D);
+
+            holder.tv_answer_A = convertView.findViewById(R.id.tv_answer_A);
+            holder.tv_answer_B = convertView.findViewById(R.id.tv_answer_B);
+            holder.tv_answer_C = convertView.findViewById(R.id.tv_answer_C);
+            holder.tv_answer_D = convertView.findViewById(R.id.tv_answer_D);
+
+            holder.tv_result_label_A = convertView.findViewById(R.id.tv_result_label_A);
+            holder.tv_result_label_B = convertView.findViewById(R.id.tv_result_label_B);
+            holder.tv_result_label_C = convertView.findViewById(R.id.tv_result_label_C);
+            holder.tv_result_label_D = convertView.findViewById(R.id.tv_result_label_D);
+
+            holder.polling_A = convertView.findViewById(R.id.polling_A);
+            holder.polling_B = convertView.findViewById(R.id.polling_B);
+            holder.polling_C = convertView.findViewById(R.id.polling_C);
+            holder.polling_D = convertView.findViewById(R.id.polling_D);
+
+            holder.optionFillA = convertView.findViewById(R.id.option_fill_A);
+            holder.optionFillB = convertView.findViewById(R.id.option_fill_B);
+            holder.optionFillC = convertView.findViewById(R.id.option_fill_C);
+            holder.optionFillD = convertView.findViewById(R.id.option_fill_D);
+
+            holder.badge_A = convertView.findViewById(R.id.badge_A);
+            holder.badge_B = convertView.findViewById(R.id.badge_B);
+            holder.badge_C = convertView.findViewById(R.id.badge_C);
+            holder.badge_D = convertView.findViewById(R.id.badge_D);
+
+            holder.pendingIndex = -1;
+            holder.pendingOptionId = 0;
+
+            ModelClass.Datum datum = list.get(position);
+            ensureSurveyOptionIds(datum);
+            if (holder.tv_polling_question != null) {
+                holder.tv_polling_question.setText(datum.getTitle() != null ? datum.getTitle() : "");
+            }
+            if (holder.polling_half_image != null) {
+                String bg = datum.getBackgroundImage();
+                Object tag = holder.polling_half_image.getTag();
+                if (tag == null || bg == null || !tag.equals(bg)) {
+                    if (imageLoader != null) {
+                        imageLoader.displayImage(bg, holder.polling_half_image, options, null);
+                    }
+                    holder.polling_half_image.setTag(bg);
+                }
+            }
+
+            if (datum.getSurveyOptions() == null || datum.getSurveyOptions().isEmpty()) {
+                bindSurveyPollEngagementActions(convertView, position);
+                return;
+            }
+
+            int n = Math.min(4, datum.getSurveyOptions().size());
+            LinearLayout[] optionRows = {holder.optionRowA, holder.optionRowB, holder.optionRowC, holder.optionRowD};
+            LinearLayout[] resultRows = {holder.resultRowA, holder.resultRowB, holder.resultRowC, holder.resultRowD};
+            View[] radios = {holder.radio_A, holder.radio_B, holder.radio_C, holder.radio_D};
+            TextView[] answers = {holder.tv_answer_A, holder.tv_answer_B, holder.tv_answer_C, holder.tv_answer_D};
+            TextView[] resultLabels = {
+                    holder.tv_result_label_A, holder.tv_result_label_B,
+                    holder.tv_result_label_C, holder.tv_result_label_D
+            };
+
+            for (int i = 0; i < 4; i++) {
+                boolean on = i < n;
+                if (optionRows[i] != null) optionRows[i].setVisibility(on ? View.VISIBLE : View.GONE);
+                if (resultRows[i] != null) resultRows[i].setVisibility(on ? View.VISIBLE : View.GONE);
+                if (on) {
+                    ModelClass.SurveyOptions opt = datum.getSurveyOptions().get(i);
+                    String name = opt != null ? opt.getSurveyOptionsName() : "";
+                    if (answers[i] != null) answers[i].setText(name != null ? name : "");
+                    if (resultLabels[i] != null) resultLabels[i].setText(name != null ? name : "");
+                    int accent = PollOptionStyleHelper.accentForIndex(i);
+                    if (optionRows[i] != null) {
+                        optionRows[i].setBackgroundResource(PollOptionStyleHelper.optionBg(accent));
+                    }
+                    PollOptionStyleHelper.applyRadio(radios[i], accent, false);
+                }
+            }
+
+            boolean voted = datum.getSelected_option() != 0;
+            if (voted) {
+                showPollingResultsUi(holder, datum);
+            } else {
+                if (holder.llOptionsLayout != null) holder.llOptionsLayout.setVisibility(View.VISIBLE);
+                if (holder.llPercentLayout != null) holder.llPercentLayout.setVisibility(View.GONE);
+                updatePollingRadios(holder, -1, n);
+
+                for (int i = 0; i < n; i++) {
+                    final int idx = i;
+                    ModelClass.SurveyOptions opt = datum.getSurveyOptions().get(i);
+                    final int optionId = opt != null ? opt.getId() : (i + 1);
+                    if (optionRows[i] != null) {
+                        optionRows[i].setOnClickListener(v -> {
+                            holder.pendingIndex = idx;
+                            holder.pendingOptionId = optionId;
+                            updatePollingRadios(holder, idx, n);
+                        });
+                    }
+                }
+
+                if (holder.btnVoteNow != null) {
+                    holder.btnVoteNow.setOnClickListener(v -> {
+                        if (holder.pendingIndex < 0 || holder.pendingOptionId == 0) {
+                            Toast.makeText(context, R.string.poll_select_option, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        updatearraylist(holder.pendingOptionId, position);
+                        showPollingResultsUi(holder, list.get(position));
+                        set_servey_answer_submit(
+                                list.get(position).getPostId(),
+                                holder.pendingOptionId,
+                                position
+                        );
+                    });
+                }
+            }
+            bindSurveyPollEngagementActions(convertView, position);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     /**
-     * After a survey_poll vote (or when rebinding results), paint each visible
-     * option with a left-aligned fill equal to that option's percentage, clipped
-     * inside the rounded neumorph bounds.
+     * Wire like / comment / share / flag on survey + survey_poll flip pages.
+     * Uses the same view ids as half-image posts ({@code include_half_engagement_row}).
      */
-    private void applyPollingPercentFills(PollingViewHolder holder, ModelClass.Datum datum) {
+    private void bindSurveyPollEngagementActions(View convertView, final int position) {
+        if (convertView == null || list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        if (convertView.findViewById(R.id.half_image_like) == null) {
+            return;
+        }
+
+        bindHalfPostEngagementCounts(convertView, position);
+
+        final ImageView likeIcon = convertView.findViewById(R.id.half_image_like);
+        final ImageView commentIcon = convertView.findViewById(R.id.half_comment_icon);
+        final ImageView shareIcon = convertView.findViewById(R.id.half_share_icon);
+        final ImageView reportIcon = convertView.findViewById(R.id.report_icon);
+        final LinearLayout likeSlot = convertView.findViewById(R.id.half_image_like_icon);
+        final LinearLayout commentSlot = convertView.findViewById(R.id.half_comment);
+        final LinearLayout shareSlot = convertView.findViewById(R.id.half_share);
+        final LinearLayout reportSlot = convertView.findViewById(R.id.report);
+        final TextView likeCountView = convertView.findViewById(R.id.half_like_count);
+
+        if (commentIcon != null) {
+            commentIcon.setImageResource(R.drawable.ic_action_comment);
+        }
+        if (shareIcon != null) {
+            shareIcon.setImageResource(R.drawable.ic_action_share);
+        }
+        if (reportIcon != null) {
+            reportIcon.setImageResource(R.drawable.ic_action_report);
+        }
+
+        bindHalfLikeIcon(likeIcon, list.get(position).getLikeStatus());
+        if (likeIcon != null) {
+            likeIcon.setTag(position);
+            likeIcon.setOnClickListener(view -> {
+                Object tag = view.getTag();
+                if (!(tag instanceof Integer)) return;
+                int currPosition = (Integer) tag;
+                int newStatus = applyLikeChange(currPosition, likeCountView);
+                bindHalfLikeIcon(likeIcon, newStatus);
+            });
+        }
+        if (likeSlot != null) {
+            likeSlot.setOnClickListener(v -> {
+                if (likeIcon != null) likeIcon.performClick();
+            });
+        }
+
+        View.OnClickListener openComments = v -> {
+            Intent intent = new Intent("COMMENTS_PAGE");
+            intent.putExtra("message", "click_event");
+            LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
+            try {
+                adapterCallback.OpenComments(
+                        list.get(position).getPostId(),
+                        list.get(position).getSubPostId()
+                );
+            } catch (ClassCastException e) {
+                e.printStackTrace();
+            }
+        };
+        if (commentSlot != null) {
+            commentSlot.setOnClickListener(openComments);
+        } else if (commentIcon != null) {
+            commentIcon.setOnClickListener(openComments);
+        }
+
+        View.OnClickListener shareClick = v -> shareSurveyScreenshot(convertView, position);
+        if (shareSlot != null) {
+            shareSlot.setOnClickListener(shareClick);
+        } else if (shareIcon != null) {
+            shareIcon.setOnClickListener(shareClick);
+        }
+
+        View.OnClickListener reportClick = v -> showHalfReportDialog(position);
+        if (reportSlot != null) {
+            reportSlot.setOnClickListener(reportClick);
+        } else if (reportIcon != null) {
+            reportIcon.setOnClickListener(reportClick);
+        }
+    }
+
+    /** Flag/report dialog used by survey/poll engagement row (same flow as half posts). */
+    private void showHalfReportDialog(final int position) {
+        if (list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        LayoutInflater inflater = LayoutInflater.from(context);
+        View dialogView = inflater.inflate(R.layout.custom_dialog_layout, null);
+        builder.setView(dialogView);
+
+        final RadioButton one = dialogView.findViewById(R.id.one);
+        final RadioButton two = dialogView.findViewById(R.id.two);
+        final RadioButton three = dialogView.findViewById(R.id.three);
+        final RadioButton four = dialogView.findViewById(R.id.four);
+        final TextView report = dialogView.findViewById(R.id.report);
+        final TextView title = dialogView.findViewById(R.id.title);
+        final EditText full_image_edt_news_headlines =
+                dialogView.findViewById(R.id.full_image_edt_news_headlines);
+        final Button yes = dialogView.findViewById(R.id.yes);
+        final ImageView close_dailog = dialogView.findViewById(R.id.close_dailog);
+        final AlertDialog dialog = builder.create();
+
+        if (close_dailog != null) {
+            close_dailog.setOnClickListener(v -> dialog.dismiss());
+        }
+
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        apiService.reportissue(ReportParams()).enqueue(new Callback<GetReportIssueResponce>() {
+            @Override
+            public void onResponse(Call<GetReportIssueResponce> call,
+                                   retrofit2.Response<GetReportIssueResponce> response) {
+                GetReportIssueResponce updateResponce = response.body();
+                if (updateResponce == null || updateResponce.getData() == null
+                        || updateResponce.getData().getOptions() == null
+                        || updateResponce.getData().getOptions().size() < 4) {
+                    return;
+                }
+                if (one != null) one.setText("" + updateResponce.getData().getOptions().get(0));
+                if (two != null) two.setText("" + updateResponce.getData().getOptions().get(1));
+                if (three != null) three.setText("" + updateResponce.getData().getOptions().get(2));
+                if (four != null) four.setText("" + updateResponce.getData().getOptions().get(3));
+                if (report != null) report.setText("" + updateResponce.getData().getTitle());
+                if (title != null) title.setText("" + updateResponce.getData().getOtherReason());
+                if (full_image_edt_news_headlines != null) {
+                    full_image_edt_news_headlines.setHint(
+                            "" + updateResponce.getData().getPlaceholder());
+                }
+                if (yes != null) {
+                    yes.setOnClickListener(view -> {
+                        String reason = "";
+                        if (one != null && one.isChecked()) {
+                            reason = one.getText().toString();
+                        } else if (two != null && two.isChecked()) {
+                            reason = two.getText().toString();
+                        } else if (three != null && three.isChecked()) {
+                            reason = three.getText().toString();
+                        } else if (four != null && four.isChecked()) {
+                            reason = four.getText().toString();
+                        }
+                        String other = full_image_edt_news_headlines != null
+                                ? full_image_edt_news_headlines.getText().toString()
+                                : "";
+                        JsonObject updateparams = DailogRequest(
+                                reason, list.get(position).getPostId(), other);
+                        APIService submitApi = RestApiClient.getClient().create(APIService.class);
+                        submitApi.dailogSend(updateparams).enqueue(new Callback<DailogSendRespouse>() {
+                            @Override
+                            public void onResponse(Call<DailogSendRespouse> call,
+                                                   retrofit2.Response<DailogSendRespouse> response) {
+                                DailogSendRespouse body = response.body();
+                                if (body != null) {
+                                    Toast.makeText(context, "" + body.getMsg(), Toast.LENGTH_SHORT).show();
+                                }
+                                dialog.dismiss();
+                            }
+
+                            @Override
+                            public void onFailure(Call<DailogSendRespouse> call, Throwable t) {
+                                Toast.makeText(context, "" + call, Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    });
+                }
+            }
+
+            @Override
+            public void onFailure(Call<GetReportIssueResponce> call, Throwable t) {
+                Toast.makeText(context, "" + call, Toast.LENGTH_SHORT).show();
+            }
+        });
+        dialog.show();
+    }
+
+    private void updatePollingRadios(PollingViewHolder holder, int selected, int n) {
+        View[] radios = {holder.radio_A, holder.radio_B, holder.radio_C, holder.radio_D};
+        for (int i = 0; i < n && i < radios.length; i++) {
+            PollOptionStyleHelper.applyRadio(
+                    radios[i],
+                    PollOptionStyleHelper.accentForIndex(i),
+                    selected == i
+            );
+        }
+    }
+
+    /**
+     * Survey multi-option results: fixed colors by index (green/red/blue/orange).
+     * Percent only — never vote counts.
+     */
+    private void showPollingResultsUi(PollingViewHolder holder, ModelClass.Datum datum) {
         if (holder == null || datum == null || datum.getSurveyOptions() == null) {
             return;
         }
-        boolean voted = datum.getSelected_option() != 0;
-        // Instant tap path (showPollingResuilt) may not have written selected_option yet;
-        // if any select_* row is visible, treat as results mode.
-        if (!voted) {
-            voted = isVisible(holder.select_neomorphFrameLayoutA)
-                    || isVisible(holder.select_neomorphFrameLayoutB)
-                    || isVisible(holder.select_neomorphFrameLayoutC)
-                    || isVisible(holder.select_neomorphFrameLayoutD);
-        }
+        if (holder.llOptionsLayout != null) holder.llOptionsLayout.setVisibility(View.GONE);
+        if (holder.llPercentLayout != null) holder.llPercentLayout.setVisibility(View.VISIBLE);
 
-        float[] pct = new float[]{0f, 0f, 0f, 0f};
         int n = Math.min(4, datum.getSurveyOptions().size());
-        for (int i = 0; i < n; i++) {
-            pct[i] = parsePercent(datum.getSurveyOptions().get(i).getPercent());
+        LinearLayout[] rows = {holder.resultRowA, holder.resultRowB, holder.resultRowC, holder.resultRowD};
+        TextView[] badges = {holder.badge_A, holder.badge_B, holder.badge_C, holder.badge_D};
+        TextView[] labels = {
+                holder.tv_result_label_A, holder.tv_result_label_B,
+                holder.tv_result_label_C, holder.tv_result_label_D
+        };
+        TextView[] percents = {holder.polling_A, holder.polling_B, holder.polling_C, holder.polling_D};
+        View[] fills = {holder.optionFillA, holder.optionFillB, holder.optionFillC, holder.optionFillD};
+
+        for (int i = 0; i < 4; i++) {
+            if (i >= n) {
+                if (rows[i] != null) rows[i].setVisibility(View.GONE);
+                continue;
+            }
+            float pct = parsePercent(datum.getSurveyOptions().get(i).getPercent());
+            String name = datum.getSurveyOptions().get(i).getSurveyOptionsName();
+            int accent = PollOptionStyleHelper.accentForIndex(i);
+            PollOptionStyleHelper.applyResultRow(
+                    rows[i], badges[i], labels[i], percents[i], fills[i],
+                    accent, i + 1, name, pct
+            );
         }
-
-        applyOnePollingFill(
-                holder.neomorphFrameLayoutA, holder.select_neomorphFrameLayoutA,
-                holder.optionFillA, holder.selectOptionFillA,
-                pct[0], voted,
-                holder.tv_answer_A, holder.polling_A, holder.select_tv_answer_A, holder.select_polling_A);
-        applyOnePollingFill(
-                holder.neomorphFrameLayoutB, holder.select_neomorphFrameLayoutB,
-                holder.optionFillB, holder.selectOptionFillB,
-                pct[1], voted,
-                holder.tv_answer_B, holder.polling_B, holder.select_tv_answer_B, holder.select_polling_B);
-        applyOnePollingFill(
-                holder.neomorphFrameLayoutC, holder.select_neomorphFrameLayoutC,
-                holder.optionFillC, holder.selectOptionFillC,
-                pct[2], voted,
-                holder.tv_answer_C, holder.polling_C, holder.select_tv_answer_C, holder.select_polling_C);
-        applyOnePollingFill(
-                holder.neomorphFrameLayoutD, holder.select_neomorphFrameLayoutD,
-                holder.optionFillD, holder.selectOptionFillD,
-                pct[3], voted,
-                holder.tv_answer_D, holder.polling_D, holder.select_tv_answer_D, holder.select_polling_D);
     }
 
-    private void applyOnePollingFill(
-            NeomorphFrameLayout unselected,
-            NeomorphFrameLayout selected,
-            View unselectedFill,
-            View selectedFill,
-            float percent,
-            boolean voted,
-            TextView... labels
-    ) {
-        PollOptionStyleHelper.styleResultNeomorph(context, unselected);
-        PollOptionStyleHelper.styleResultNeomorph(context, selected);
-
-        boolean showUnselected = voted && isVisible(unselected);
-        boolean showSelected = voted && isVisible(selected);
-
-        PollOptionStyleHelper.applyPercentFill(
-                context, null, unselectedFill, percent, showUnselected, labels);
-        PollOptionStyleHelper.applyPercentFill(
-                context, null, selectedFill, percent, showSelected, labels);
-    }
-
-    private static boolean isVisible(View v) {
-        return v != null && v.getVisibility() == View.VISIBLE;
-    }
 
     private void updatearraylist(int optionID, int positionx) {
         try {
@@ -7085,6 +7056,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 surveyOptionsArrayList.add(surveyOptions);
 
             }
+
+            // Optimistic local tally: bump voted option, recompute % so results UI is not all 0%.
+            boolean matched = false;
+            int totalVotes = 0;
+            for (int i = 0; i < surveyOptionsArrayList.size(); i++) {
+                ModelClass.SurveyOptions o = surveyOptionsArrayList.get(i);
+                if (o == null) continue;
+                if (o.getId() == optionID) {
+                    o.setCount(Math.max(0, o.getCount()) + 1);
+                    matched = true;
+                }
+                totalVotes += Math.max(0, o.getCount());
+            }
+            if (!matched && optionID >= 1 && optionID <= surveyOptionsArrayList.size()) {
+                ModelClass.SurveyOptions o = surveyOptionsArrayList.get(optionID - 1);
+                if (o != null) {
+                    o.setCount(Math.max(0, o.getCount()) + 1);
+                    totalVotes += 1;
+                }
+            }
+            if (totalVotes <= 0) {
+                totalVotes = 1;
+            }
+            for (ModelClass.SurveyOptions o : surveyOptionsArrayList) {
+                if (o == null) continue;
+                o.setPercent((int) Math.floor((Math.max(0, o.getCount()) * 100.0) / totalVotes));
+            }
+
             datum.setSurveyOptions(surveyOptionsArrayList);
             datum.setSelected_option(optionID);
             datum.setLikeStatus(list.get(positionx).getLikeStatus());
@@ -7537,25 +7536,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Full videos ask Download / Share / Dismiss first; every other video type
-     * opens the share sheet straight away as before.
+     * Half and full videos: Download / Share / Dismiss first, then the share sheet.
      */
     private void showVideoShareChooser(int position, VideoShareLayout layout, View convertView) {
-        if (layout == VideoShareLayout.FULL_EXO || layout == VideoShareLayout.FULL_YOUTUBE) {
-            FullVideoOptionsDialog.show(context, new FullVideoOptionsDialog.Listener() {
-                @Override
-                public void onDownloadVideo() {
-                    downloadFullVideo(position);
-                }
+        FullVideoOptionsDialog.show(context, new FullVideoOptionsDialog.Listener() {
+            @Override
+            public void onDownloadVideo() {
+                downloadFullVideo(position);
+            }
 
-                @Override
-                public void onShare() {
-                    showVideoShareSheet(position, layout, convertView);
-                }
-            });
-            return;
-        }
-        showVideoShareSheet(position, layout, convertView);
+            @Override
+            public void onShare() {
+                showVideoShareSheet(position, layout, convertView);
+            }
+        });
     }
 
     private void showVideoShareSheet(int position, VideoShareLayout layout, View convertView) {
@@ -7563,29 +7557,24 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         View sheetView = LayoutInflater.from(context).inflate(R.layout.bottom_sheet_video_share, null);
         bottomSheet.setContentView(sheetView);
 
-        // Full videos: Contact / Other apps only — hide Status (Other apps covers it) and Share Article.
-        boolean isFullVideo = layout == VideoShareLayout.FULL_EXO
-                || layout == VideoShareLayout.FULL_YOUTUBE;
+        // Half + full: Contact / Other apps only — hide Status and Share Article.
         View shareArticleOption = sheetView.findViewById(R.id.option_share_article);
         View whatsappStatusOption = sheetView.findViewById(R.id.option_whatsapp_status);
-        if (isFullVideo) {
-            if (shareArticleOption != null) {
-                shareArticleOption.setVisibility(View.GONE);
-            }
-            if (whatsappStatusOption != null) {
-                whatsappStatusOption.setVisibility(View.GONE);
-            }
+        if (shareArticleOption != null) {
+            shareArticleOption.setVisibility(View.GONE);
+        }
+        if (whatsappStatusOption != null) {
+            whatsappStatusOption.setVisibility(View.GONE);
         }
 
-        // Warm share cache while the sheet is open so Status/Contact feel instant.
+        // Warm share cache while the sheet is open so Contact feels instant.
         if (canShareVideoFile(position)) {
             VideoShareHelper.prefetchVideo(context, resolveVideoShareUrl(position));
         }
 
         View whatsappChatOption = sheetView.findViewById(R.id.option_whatsapp_chat);
-        // Full-video primary card: apply admin title/subtitle/colors/icon/bg (3.40.92+).
-        // Half-video keeps the compiled defaults for Contact (same layout ids are fine).
-        if (isFullVideo && whatsappChatOption != null) {
+        // Primary Contact card: admin title/subtitle/colors/icon/bg (3.40.92+), half + full.
+        if (whatsappChatOption != null) {
             FullVideoShareCardHelper.apply(context, whatsappChatOption);
         }
 
@@ -7596,8 +7585,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (viewId == R.id.option_whatsapp_status) {
                 action = VideoShareAction.WHATSAPP_STATUS;
             } else if (viewId == R.id.option_whatsapp_chat) {
-                // Admin action_url (if set) replaces Send-to-Contact for full-video card.
-                if (isFullVideo && FullVideoShareCardHelper.openActionUrlIfPresent(context)) {
+                // Admin action_url (if set) replaces Send-to-Contact.
+                if (FullVideoShareCardHelper.openActionUrlIfPresent(context)) {
                     return;
                 }
                 action = VideoShareAction.WHATSAPP_CHAT;
