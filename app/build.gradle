@@ -57,7 +57,7 @@ android {
         minSdkVersion 24
         targetSdk 35
         multiDexEnabled true
-        versionCode 149
+        versionCode 150
         versionName "3.40.48"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33

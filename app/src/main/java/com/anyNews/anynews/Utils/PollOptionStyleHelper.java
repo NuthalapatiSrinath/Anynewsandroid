@@ -7,6 +7,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
@@ -226,6 +227,14 @@ public final class PollOptionStyleHelper {
         }
     }
 
+    /**
+     * Size the colored fill as {@code percent%} of its track parent.
+     * <p>
+     * Critical: result rows start as {@code visibility=gone}, so the track parent
+     * often has width 0 on the first bind (Special tab already-voted polls). A single
+     * {@code post()} that bails when width==0 left bars empty forever while % text
+     * still showed. Wait for a real layout measurement before applying width.
+     */
     public static void setProgressWidth(@Nullable View fill, float percent) {
         if (fill == null) {
             return;
@@ -235,17 +244,53 @@ public final class PollOptionStyleHelper {
         if (parent == null) {
             return;
         }
-        parent.post(() -> {
-            int parentW = parent.getWidth();
-            if (parentW <= 0) {
+        // Defer one frame so GONE→VISIBLE has a chance to measure first.
+        parent.post(() -> applyProgressWidthWhenReady(fill, parent, clamped, 0));
+    }
+
+    private static void applyProgressWidthWhenReady(
+            final View fill,
+            final View parent,
+            final float clamped,
+            final int attempt
+    ) {
+        int parentW = parent.getWidth();
+        if (parentW > 0) {
+            ViewGroup.LayoutParams lp = fill.getLayoutParams();
+            if (lp == null) {
                 return;
             }
-            ViewGroup.LayoutParams lp = fill.getLayoutParams();
-            if (lp != null) {
-                lp.width = Math.round(parentW * (clamped / 100f));
+            int target = Math.round(parentW * (clamped / 100f));
+            if (lp.width != target) {
+                lp.width = target;
                 fill.setLayoutParams(lp);
             }
-        });
+            fill.setVisibility(View.VISIBLE);
+            return;
+        }
+        if (attempt >= 12) {
+            return;
+        }
+        // Results panel just became VISIBLE — wait for the next layout pass.
+        ViewTreeObserver observer = parent.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override
+                public void onGlobalLayout() {
+                    ViewTreeObserver obs = parent.getViewTreeObserver();
+                    if (obs.isAlive()) {
+                        obs.removeOnGlobalLayoutListener(this);
+                    }
+                    applyProgressWidthWhenReady(fill, parent, clamped, attempt + 1);
+                }
+            });
+        }
+        parent.requestLayout();
+        // Fallback if global-layout never fires (detached FlipView page).
+        parent.postDelayed(
+                () -> applyProgressWidthWhenReady(fill, parent, clamped, attempt + 1),
+                32L
+        );
     }
 
     /** Format percent for display — never includes vote counts. */

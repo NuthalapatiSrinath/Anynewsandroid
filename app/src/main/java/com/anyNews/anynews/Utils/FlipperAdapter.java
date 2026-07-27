@@ -6647,7 +6647,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void showSurveyResultsUi(SurveyViewHolder holder, ModelClass.Datum datum, float yesPct, float noPct) {
         if (holder == null) return;
         if (holder.llOptionsLayout != null) holder.llOptionsLayout.setVisibility(View.GONE);
-        if (holder.llPercentLayout != null) holder.llPercentLayout.setVisibility(View.VISIBLE);
+        if (holder.llPercentLayout != null) {
+            holder.llPercentLayout.setVisibility(View.VISIBLE);
+            holder.llPercentLayout.requestLayout();
+        }
 
         String yesLabel = surveyOptionLabel(datum, 0, datum != null ? datum.getYes_option() : null);
         String noLabel = surveyOptionLabel(datum, 1, datum != null ? datum.getNo_option() : null);
@@ -6661,6 +6664,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         PollOptionStyleHelper.applyResultRow(
                 holder.resultRowNo, holder.badgeNo, holder.tvNoLabel, holder.tvNoPercent,
                 holder.noPercentFill, accents[1], 2, noLabel, noPct);
+
+        // Re-apply after measure — same GONE→VISIBLE width race as multi-option surveys.
+        if (holder.llPercentLayout != null) {
+            final float y = yesPct;
+            final float n = noPct;
+            holder.llPercentLayout.post(() -> {
+                PollOptionStyleHelper.setProgressWidth(holder.yesPercentFill, y);
+                PollOptionStyleHelper.setProgressWidth(holder.noPercentFill, n);
+            });
+        }
     }
 
     /** Survey = post_type "survey_poll" (multi). Image on top, dark card below. */
@@ -7044,7 +7057,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         if (holder.llOptionsLayout != null) holder.llOptionsLayout.setVisibility(View.GONE);
-        if (holder.llPercentLayout != null) holder.llPercentLayout.setVisibility(View.VISIBLE);
+        if (holder.llPercentLayout != null) {
+            holder.llPercentLayout.setVisibility(View.VISIBLE);
+            // Force a layout pass so progress tracks get a real width before fill sizing
+            // (Special already-voted bind used to run while tracks were still 0px wide).
+            holder.llPercentLayout.requestLayout();
+        }
 
         int n = Math.min(4, datum.getSurveyOptions().size());
         LinearLayout[] rows = {holder.resultRowA, holder.resultRowB, holder.resultRowC, holder.resultRowD};
@@ -7068,6 +7086,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     rows[i], badges[i], labels[i], percents[i], fills[i],
                     accent, i + 1, name, pct
             );
+        }
+
+        // Re-apply fills after the results panel has been measured (Special first paint).
+        if (holder.llPercentLayout != null) {
+            final int optionCount = n;
+            final ModelClass.Datum resultDatum = datum;
+            final View[] fillViews = fills;
+            holder.llPercentLayout.post(() -> {
+                for (int i = 0; i < optionCount; i++) {
+                    if (fillViews[i] == null || resultDatum.getSurveyOptions() == null
+                            || i >= resultDatum.getSurveyOptions().size()) {
+                        continue;
+                    }
+                    float pct = parsePercent(resultDatum.getSurveyOptions().get(i).getPercent());
+                    PollOptionStyleHelper.setProgressWidth(fillViews[i], pct);
+                }
+            });
         }
     }
 
