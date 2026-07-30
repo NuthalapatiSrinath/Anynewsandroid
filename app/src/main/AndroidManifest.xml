@@ -195,10 +195,10 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="anynews.fusionvertexsolutions.com"
+                    android:host="api.anynews.co.in"
                     android:pathPrefix="/p/" />
             </intent-filter>
-            <!-- Future brand apex: DNS/SSL/assetlinks → Coolify; no extra APK if this host is used -->
+            <!-- Brand apex App Links -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

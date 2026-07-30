@@ -58,7 +58,7 @@ android {
         targetSdk 35
         multiDexEnabled true
         versionCode 150
-        versionName "3.40.48"
+        versionName "3.40.50"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true

@@ -131,7 +131,10 @@ public class FlipView extends FrameLayout {
     private OnOverFlipListener mOnOverFlipListener;
     private float mFlipDistance = INVALID_FLIP_DISTANCE;
     private int mCurrentPageIndex = INVALID_PAGE_POSITION;
-    private int mLastDispatchedPageEventIndex = 0;
+    // Must NOT start at 0: page 0 is the first feed/push card. Starting at 0 made
+    // `mLastDispatched == mCurrent` on first draw, so onFlippedToPage never fired for
+    // the landing article — likes worked, Users/Impressions stayed 0.
+    private int mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
     private long mCurrentPageId = 0;
     private OverFlipMode mOverFlipMode;
     private OverFlipper mOverFlipper;
@@ -304,10 +307,13 @@ public class FlipView extends FrameLayout {
             // this will be correctly set in setFlipDistance method
             mCurrentPageIndex = INVALID_PAGE_POSITION;
             mFlipDistance = INVALID_FLIP_DISTANCE;
+            // dataSetChanged often lands back on 0; reset so landing page is tracked.
+            mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
             flipTo(newPosition);
         } else {
             mFlipDistance = INVALID_FLIP_DISTANCE;
             mPageCount = 0;
+            mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
             setFlipDistance(0);
         }
         updateEmptyStatus();
@@ -1567,6 +1573,8 @@ public class FlipView extends FrameLayout {
         // this will be correctly set in setFlipDistance method
         mCurrentPageIndex = INVALID_PAGE_POSITION;
         mFlipDistance = INVALID_FLIP_DISTANCE;
+        // Force first-page (index 0) to dispatch onFlippedToPage after setAdapter.
+        mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
         setFlipDistance(0);
         updateEmptyStatus();
     }
@@ -1726,6 +1734,10 @@ public class FlipView extends FrameLayout {
      */
     public void setOnFlipListener(OnFlipListener onFlipListener) {
         mOnFlipListener = onFlipListener;
+        // setAdapter may draw before the listener is attached; reset so the next
+        // dispatchDraw notifies page 0 (push/share landing card) once listener exists.
+        mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
+        invalidate();
     }
 
     public void setOnFlipCompleteListener(OnFlipCompleteListener onFlipListener) {

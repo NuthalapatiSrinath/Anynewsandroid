@@ -15,9 +15,8 @@ import android.view.WindowManager;
 import com.anyNews.anynews.R;
 
 /**
- * Full-video "Download Video / Share / Dismiss" chooser shown before the share
- * sheet. Only full_video posts reach this; every other post type keeps its
- * existing one-tap share flow.
+ * "Download Video / Share / Dismiss" chooser shown before the share sheet for
+ * half_video (normal_video) and full_video posts.
  *
  * UI mirrors the iOS UIAlertController actionSheet: frosted bottom card,
  * centered title/message, blue text rows with hairline dividers.
