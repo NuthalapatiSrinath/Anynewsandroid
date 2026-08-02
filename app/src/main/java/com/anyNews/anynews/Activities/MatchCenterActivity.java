@@ -153,12 +153,14 @@ public class MatchCenterActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        com.anyNews.anynews.Utils.CricketMiniPlayerManager.setGlobalIsViewing(true);
         handler.removeCallbacks(detailPoll);
         handler.postDelayed(detailPoll, DETAIL_POLL_MS);
     }
 
     @Override
     protected void onPause() {
+        com.anyNews.anynews.Utils.CricketMiniPlayerManager.setGlobalIsViewing(false);
         handler.removeCallbacks(detailPoll);
         super.onPause();
     }

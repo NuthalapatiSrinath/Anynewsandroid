@@ -62,11 +62,11 @@ public final class SessionAnalyticsTracker {
 
     private static final String PREF_APP_SESSION_ID = "app_session_analytics_id";
     private static final String PREF_PENDING_CLOSE = "app_session_pending_close_json";
-    /** Short grace only for activity-to-activity transitions (not screen/process). */
     private static final long ACTIVITY_CLOSE_DELAY_MS = 300L;
-    private static final long HEARTBEAT_INTERVAL_MS = 45_000L;
+    private static long HEARTBEAT_INTERVAL_MS = 45_000L;
     private static final long CLOSE_FLUSH_WAIT_MS = 2_500L;
     private static final long CLOSE_HTTP_TIMEOUT_SEC = 3L;
+    public static final String ACTION_CRICKET_STATE_CHANGED = "com.anyNews.anynews.ACTION_CRICKET_STATE_CHANGED";
 
     private static final SessionAnalyticsTracker INSTANCE = new SessionAnalyticsTracker();
     private static final ExecutorService NET_EXEC = Executors.newSingleThreadExecutor(r -> {
@@ -603,6 +603,19 @@ public final class SessionAnalyticsTracker {
             } else if (durationMs > 0) {
                 body.put("duration_ms", durationMs);
             }
+            try {
+                body.put("cricket_visible", CricketMiniPlayerManager.isCricketVisible());
+                body.put("cricket_viewing", CricketMiniPlayerManager.isCricketViewing());
+                String matchId = CricketMiniPlayerManager.getActiveMatchId();
+                if (matchId != null) {
+                    body.put("cricket_match_id", matchId);
+                }
+                int opens = CricketMiniPlayerManager.getAndResetOpensSinceLastSync();
+                if (opens > 0) {
+                    body.put("cricket_opens_since_last_sync", opens);
+                }
+            } catch (Exception ignored) {
+            }
             attachDeviceGps(context, body, action);
             return body;
         } catch (Exception e) {
@@ -664,8 +677,34 @@ public final class SessionAnalyticsTracker {
             APIService api = sessionApi(fastClose);
             Call<JsonObject> call = api.post_session("v3", payload);
             Response<JsonObject> response = call.execute();
-            if (response.isSuccessful() && clearPendingOnSuccess) {
-                clearPendingClose(context);
+            if (response.isSuccessful()) {
+                if (clearPendingOnSuccess) {
+                    clearPendingClose(context);
+                }
+                JsonObject resBody = response.body();
+                if (resBody != null) {
+                    if (resBody.has("cricket_mini_player_enabled")) {
+                        boolean newVal = resBody.get("cricket_mini_player_enabled").getAsBoolean();
+                        boolean oldVal = CricketSurfaceConfigHelper.isMiniPlayerEnabled(context);
+                        CricketSurfaceConfigHelper.saveMiniPlayerEnabled(context, newVal);
+                        if (!oldVal && newVal) {
+                            androidx.localbroadcastmanager.content.LocalBroadcastManager
+                                    .getInstance(context)
+                                    .sendBroadcast(new Intent(ACTION_CRICKET_STATE_CHANGED));
+                        }
+                    }
+                    if (resBody.has("cricket_mini_player_poll_interval_seconds")) {
+                        CricketSurfaceConfigHelper.savePollIntervalSeconds(context, 
+                                resBody.get("cricket_mini_player_poll_interval_seconds").getAsInt());
+                    }
+                    if (resBody.has("session_heartbeat_interval_seconds")) {
+                        int hb = resBody.get("session_heartbeat_interval_seconds").getAsInt();
+                        if (hb >= 10) {
+                            CricketSurfaceConfigHelper.saveHeartbeatIntervalSeconds(context, hb);
+                            HEARTBEAT_INTERVAL_MS = hb * 1000L;
+                        }
+                    }
+                }
             }
         } catch (Exception e) {
             // Pending close kept in prefs for retry on next open.

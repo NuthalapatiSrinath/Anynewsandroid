@@ -54,6 +54,10 @@ public class CricketMiniPlayerManager {
     /** Fast enough to feel instant after an admin toggle; light on the API. */
     private static final int POLL_MS = 2500;
 
+    private static int opensSinceLastSync = 0;
+    private static boolean globalIsVisible = false;
+    private static boolean globalIsViewing = false;
+
     // Dismissed match ids for this app process (session). Cleared when the
     // admin turns the mini player OFF (null active_match) so turning the same
     // match back ON shows the player again. UNDO also clears the id.
@@ -66,6 +70,22 @@ public class CricketMiniPlayerManager {
 
     private final WeakReference<Activity> activityRef;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    
+    private final android.content.BroadcastReceiver stateReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context context, Intent intent) {
+            if (SessionAnalyticsTracker.ACTION_CRICKET_STATE_CHANGED.equals(intent.getAction())) {
+                Activity a = activityRef.get();
+                if (a != null) {
+                    miniPlayerEnabled = CricketSurfaceConfigHelper.isMiniPlayerEnabled(a);
+                    if (miniPlayerEnabled) {
+                        handler.removeCallbacks(pollRunnable);
+                        handler.post(pollRunnable);
+                    }
+                }
+            }
+        }
+    };
 
     private View miniView;
     private ActiveMatch current;
@@ -107,9 +127,14 @@ public class CricketMiniPlayerManager {
     private final Runnable pollRunnable = new Runnable() {
         @Override
         public void run() {
+            if (!miniPlayerEnabled) {
+                return;
+            }
             refreshFromServer();
             if (pollingEnabled) {
-                handler.postDelayed(this, POLL_MS);
+                Activity a = activityRef.get();
+                int ms = CricketSurfaceConfigHelper.getPollIntervalSeconds(a) * 1000;
+                handler.postDelayed(this, ms);
             }
         }
     };
@@ -138,6 +163,32 @@ public class CricketMiniPlayerManager {
     /** Last active match seen this process (used by a host footer tab tap). */
     public static ActiveMatch getLastKnownActive() {
         return lastKnownActive;
+    }
+
+    public static boolean isCricketVisible() {
+        return globalIsVisible;
+    }
+
+    public static boolean isCricketViewing() {
+        return globalIsViewing;
+    }
+
+    public static String getActiveMatchId() {
+        return lastKnownActive != null ? lastKnownActive.match_id : null;
+    }
+
+    public static int getAndResetOpensSinceLastSync() {
+        int o = opensSinceLastSync;
+        opensSinceLastSync = 0;
+        return o;
+    }
+
+    public static void incrementOpens() {
+        opensSinceLastSync++;
+    }
+
+    public static void setGlobalIsViewing(boolean viewing) {
+        globalIsViewing = viewing;
     }
 
     private void notifyPollListener(ActiveMatch match) {
@@ -171,14 +222,30 @@ public class CricketMiniPlayerManager {
         notifyPollListener(lastKnownActive);
         handler.removeCallbacks(pollRunnable);
         handler.post(pollRunnable);
+        
+        Activity activity = activityRef.get();
+        if (activity != null) {
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(activity)
+                .registerReceiver(stateReceiver, new android.content.IntentFilter(SessionAnalyticsTracker.ACTION_CRICKET_STATE_CHANGED));
+        }
     }
 
     public void onPause() {
         handler.removeCallbacks(pollRunnable);
+        Activity activity = activityRef.get();
+        if (activity != null) {
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(activity)
+                .unregisterReceiver(stateReceiver);
+        }
     }
 
     public void onDestroy() {
         handler.removeCallbacks(pollRunnable);
+        Activity activity = activityRef.get();
+        if (activity != null) {
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(activity)
+                .unregisterReceiver(stateReceiver);
+        }
         detach();
     }
 
@@ -418,6 +485,7 @@ public class CricketMiniPlayerManager {
             miniView.setAlpha(0f);
             miniView.animate().alpha(1f).setDuration(200).start();
         }
+        globalIsVisible = true;
     }
 
     private void hide() {
@@ -425,6 +493,7 @@ public class CricketMiniPlayerManager {
         if (miniView != null) {
             miniView.setVisibility(View.GONE);
         }
+        globalIsVisible = false;
     }
 
     /**
@@ -508,6 +577,7 @@ public class CricketMiniPlayerManager {
     private void openMatchCenter() {
         Activity activity = activityRef.get();
         if (activity == null || current == null) return;
+        incrementOpens();
         Intent intent = new Intent(activity, MatchCenterActivity.class);
         intent.putExtra(MatchCenterActivity.EXTRA_MATCH, current);
         activity.startActivity(intent);

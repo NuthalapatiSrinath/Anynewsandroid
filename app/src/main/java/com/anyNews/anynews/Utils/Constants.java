@@ -157,6 +157,8 @@ public class Constants {
     public static String CRICKET_MINI_PLAYER_POSITION = "cricket_mini_player_position";
     /** "true"/"false" admin toggle for the floating cricket mini player (default true). */
     public static String CRICKET_MINI_PLAYER_ENABLED = "cricket_mini_player_enabled";
+    public static String CRICKET_MINI_PLAYER_POLL_INTERVAL_SECONDS = "cricket_mini_player_poll_interval_seconds";
+    public static String SESSION_HEARTBEAT_INTERVAL_SECONDS = "session_heartbeat_interval_seconds";
     /** "true"/"false" admin toggle for the bottom-footer cricket tab (default false). */
     public static String CRICKET_FOOTER_TAB_ENABLED = "cricket_footer_tab_enabled";
     // One-shot post id parsed from a shared deep link (/p/{id}, anynews://post/{id},
