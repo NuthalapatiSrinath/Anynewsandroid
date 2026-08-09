@@ -48,7 +48,13 @@ import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketMiniPlayerPositionHelper;
 import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
+import com.anyNews.anynews.Utils.OfflineFeedStore;
+import com.anyNews.anynews.Utils.HomeModeChromeConfig;
+import com.anyNews.anynews.Utils.ReadHistoryConfig;
+import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
+import com.anyNews.anynews.Utils.ReadArticleStore;
 import com.anyNews.anynews.Utils.DeviceLocationHelper;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
@@ -58,6 +64,10 @@ import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.FullVideoShareCardHelper;
 import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.Logone;
+import com.anyNews.anynews.Utils.NetworkCallDeduper;
+import com.anyNews.anynews.Utils.OpenPathCache;
+import com.anyNews.anynews.Utils.OpenPathFeedPrefetcher;
+import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.facebook.FacebookSdk;
 import com.facebook.ads.AdSettings;
@@ -138,10 +148,24 @@ public class StartingActivity extends AppCompatActivity {
     private final Executor backgroundExecutor = Executors.newSingleThreadExecutor();
     private final String prefKey = "checkedInstallReferrer";
     private  String facebookReferrelKey="";
+    /** Prevents double Home launches (fast path + splash callback race). */
+    private boolean homeOpenedFromSplash = false;
+    /** One splash network attempt per process open (dedupe + throttle). */
+    private boolean splashNetworkInFlight = false;
+    /** Splash_Screen failures (prevents infinite re-enqueue on offline first install). */
+    private int splashNetworkFailCount = 0;
+    /** Avoid re-running getOSandDeviceId on every CONNECTIVITY_ACTION. */
+    private boolean startupDeviceStarted = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Ensure previous session's viewed cards are committed before Home News loads
+        // (also runs from AppController; once-per-process is a no-op if already done).
+        try {
+            ReadArticleStore.commitSessionViewedToReadOncePerProcess(getApplicationContext());
+        } catch (Exception ignored) {
+        }
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
 //        showLog("android.os.Build.VERSION.SDK_INT::::"+android.os.Build.VERSION.SDK_INT);
 //        showLog("Build.VERSION_CODES.M::::::::"+Build.VERSION_CODES.M);
@@ -207,6 +231,27 @@ public class StartingActivity extends AppCompatActivity {
             maybeResolveLegacyPageLink(data);
         }
 
+        // Instant open for returning users (after intent/deep-link parse so share ids pass through).
+        // Config/FCM soft-refresh continues via getOSandDeviceId on the next tick.
+        try {
+            if (OpenPathCache.canFastOpenHome(getApplicationContext())) {
+                showLog("OpenPath: immediate home after intent parse");
+                // Kick List_All_Articles before Home binds — coalesce with Home page-0.
+                OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
+                openHomeFromSplash();
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    try {
+                        if (!startupDeviceStarted) {
+                            getOSandDeviceId();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                });
+                return;
+            }
+        } catch (Exception e) {
+            showLog("OpenPath: early home skip " + e.getMessage());
+        }
 
         int draft_id_firebase = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
         String device_id_firebase =  Settings.Secure.getString(getApplicationContext().getContentResolver(), Settings.Secure.ANDROID_ID);
@@ -318,7 +363,8 @@ public class StartingActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
 
-                new Handler().postDelayed(new Runnable() {
+                // No artificial 1s splash wait — network/FCM work starts immediately.
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
                         isNetworkAvailable(StartingActivity.this);
@@ -328,7 +374,7 @@ public class StartingActivity extends AppCompatActivity {
                         String uuidAsString = uuid.toString();
                         SharedPrefsData.putString(getApplicationContext(), Constants.USER_SESSION_ID, uuidAsString, Constants.PREF_NAME);
                     }
-                },1000);
+                });
 
 
         try {
@@ -624,6 +670,9 @@ public class StartingActivity extends AppCompatActivity {
                 new Handler(Looper.getMainLooper()).post(() -> {
                     articleId1 = id;
                     TITLE = id;
+                    // Same one-shot as extractData so late FDL/page.link resolve still lands.
+                    SharedPrefsData.putString(getApplicationContext(),
+                            Constants.PENDING_SHARE_POST, id, Constants.PREF_NAME);
                     showLog("CHECK POINT page.link resolved articleId:" + id);
                 });
             }
@@ -699,14 +748,13 @@ public class StartingActivity extends AppCompatActivity {
                         if (recovering) {
                             Logone.v(LOG_TAG, "Now you are connected to Internet!");
                             //    networkStatus.setText("Now you are connected to Internet!");
-                            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                            // Start device/identity immediately (was +1s) to shorten splash.
+                            new Handler(Looper.getMainLooper()).post(new Runnable() {
                                 @Override
                                 public void run() {
-                                    // Your Code
-                                    // articleId1= finalDeepLink.getQueryParameter("articleId");
                                     getOSandDeviceId();
                                 }
-                            }, 1000);
+                            });
 
                             if (net_avilable != null) {
                                 net_avilable.setVisibility(View.VISIBLE);
@@ -725,6 +773,22 @@ public class StartingActivity extends AppCompatActivity {
             }
         }
         Logone.v(LOG_TAG, "You are not connected to Internet!");
+        // Offline with local identity + OfflineFeedStore / OpenPath / translator:
+        // open Home on the same path as “saved for offline” — do not trap the user
+        // on splash full-screen “No internet!”.
+        if (OpenPathCache.canFastOpenHome(context)) {
+            showLog("OpenPath: offline fast home from local cache");
+            if (net_avilable != null) {
+                net_avilable.setVisibility(View.VISIBLE);
+            }
+            if (net_not_avilable != null) {
+                net_not_avilable.setVisibility(View.GONE);
+            }
+            isConnected = false;
+            openHomeFromSplash();
+            return false;
+        }
+
         if (net_avilable != null) {
             net_avilable.setVisibility(View.GONE);
         }
@@ -738,6 +802,11 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     private void getOSandDeviceId() {
+        if (startupDeviceStarted) {
+            showLog("OpenPath: getOSandDeviceId already started");
+            return;
+        }
+        startupDeviceStarted = true;
         showLog("CHECK POINT 4");
         PackageManager manager = getApplicationContext().getPackageManager();
         try {
@@ -774,59 +843,124 @@ public class StartingActivity extends AppCompatActivity {
         String token = SharedPrefsData.getString(getApplicationContext(), Constants.FCM_TOKEN, Constants.PREF_NAME);
         showLog("CHECK POINT 11::" + token);
 
-        /* Always refresh FCM token on splash — cached tokens go stale after
-           reinstall, clear-data, or Firebase rotation and inflate push Failed %. */
-        FirebaseMessaging.getInstance().getToken().addOnCompleteListener(new OnCompleteListener<String>() {
-            @Override
-            public void onComplete(@NonNull Task<String> task) {
-                String resolvedToken = token;
-                if (task.isSuccessful() && task.getResult() != null && !task.getResult().isEmpty()) {
-                    resolvedToken = task.getResult();
-                    SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, resolvedToken, Constants.PREF_NAME);
-                } else if (resolvedToken == null || resolvedToken.equalsIgnoreCase("")) {
-                    Logone.w("FCM Token", "getToken failed", task.getException());
-                    if (BuildConfig.DEBUG) {
-                        resolvedToken = "debug-" + DeviceID;
-                        SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, resolvedToken, Constants.PREF_NAME);
-                    } else {
-                        return;
-                    }
-                }
-                showLog("CHECK POINT token :::" + resolvedToken);
-                sendDeviceDetails(resolvedToken);
-                int draft_id = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
-                String device_id = SharedPrefsData.getString(getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
-                int lang_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-                if (draft_id != 0 && !TITLE.equals("null")) {
-                    writePushOpen("User", type_firebase, TITLE, draft_id, System.currentTimeMillis(), lang_id, device_id);
-                }
-                Logone.d("FCM MSg", resolvedToken);
-            }
-        });
+        int draftForPush = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+        String device_id = SharedPrefsData.getString(getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
+        int lang_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        if (draftForPush != 0 && TITLE != null && !TITLE.equals("null") && !TITLE.isEmpty() && !TITLE.equals("0")) {
+            writePushOpen("User", type_firebase, TITLE, draftForPush, System.currentTimeMillis(), lang_id, device_id);
+        }
 
-        FirebaseDynamicLinks.getInstance()
-                .getDynamicLink(getIntent())
-                .addOnSuccessListener(this, new OnSuccessListener<PendingDynamicLinkData>() {
-                    @Override
-                    public void onSuccess(PendingDynamicLinkData pendingDynamicLinkData) {
-                        Uri deepLink = null;
-                        if (pendingDynamicLinkData != null) {
-                            deepLink = pendingDynamicLinkData.getLink();
-                            articleId = deepLink.getQueryParameter("articleId");
-                            if (articleId != null) {
-                                Logone.v("NUmber", articleId);
-                                showLog("CHECK POINT SECOND REQUEST::" + articleId);
-                                int draft_id_firebase_share = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
-                                long current_time_firebase_share = System.currentTimeMillis();
-                                writeShareOpen("User", type_firebase_share, articleId, draft_id_firebase_share, current_time_firebase_share);
-                            } else {
-                                Logone.v("NUmber", "Empty VAlue");
+        /*
+         * Open-path optimization:
+         * - Returning users with draft+language+translator: leave splash immediately (local),
+         *   refresh splash in background only when TTL expired (does not re-block UI).
+         * - Never block splash on FirebaseMessaging.getToken() — on emulators / broken Play
+         *   Services the Task can hang indefinitely (release users saw an infinite splash).
+         * - Use cached token, else a stable ANDROID_ID placeholder; refresh real FCM in bg.
+         */
+        if (OpenPathCache.canFastOpenHome(getApplicationContext())) {
+            showLog("OpenPath: fast home (identity+translator local)");
+            OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
+            openHomeFromSplash();
+            final String cachedToken = ensureSplashFcmToken(token);
+            refreshFcmTokenInBackground(cachedToken);
+            // Identity/config soft refresh only if splash TTL expired.
+            if (OpenPathCache.shouldBlockOnSplash(getApplicationContext())) {
+                sendDeviceDetailsBackground(cachedToken);
+            }
+        } else {
+            String resolvedToken = ensureSplashFcmToken(token);
+            showLog("OpenPath: splash with token (non-blocking FCM)::" + resolvedToken);
+            sendDeviceDetails(resolvedToken);
+            refreshFcmTokenInBackground(resolvedToken);
+        }
+
+        try {
+            FirebaseDynamicLinks.getInstance()
+                    .getDynamicLink(getIntent())
+                    .addOnSuccessListener(this, new OnSuccessListener<PendingDynamicLinkData>() {
+                        @Override
+                        public void onSuccess(PendingDynamicLinkData pendingDynamicLinkData) {
+                            Uri deepLink = null;
+                            if (pendingDynamicLinkData != null) {
+                                deepLink = pendingDynamicLinkData.getLink();
+                                if (deepLink == null) return;
+                                articleId = deepLink.getQueryParameter("articleId");
+                                if (articleId != null) {
+                                    Logone.v("NUmber", articleId);
+                                    showLog("CHECK POINT SECOND REQUEST::" + articleId);
+                                    int draft_id_firebase_share = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+                                    long current_time_firebase_share = System.currentTimeMillis();
+                                    writeShareOpen("User", type_firebase_share, articleId, draft_id_firebase_share, current_time_firebase_share);
+                                } else {
+                                    Logone.v("NUmber", "Empty VAlue");
+                                }
                             }
                         }
-                    }
-                });
+                    });
+        } catch (Exception ignored) {
+        }
 
+    }
 
+    private String resolveFcmToken(Task<String> task, String fallback) {
+        if (task != null && task.isSuccessful() && task.getResult() != null && !task.getResult().isEmpty()) {
+            String resolved = task.getResult();
+            SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, resolved, Constants.PREF_NAME);
+            return resolved;
+        }
+        return fallback != null ? fallback : "";
+    }
+
+    /**
+     * Token for splash/device registration without blocking the UI thread on FCM.
+     * Prefer cached value; otherwise a stable ANDROID_ID placeholder so first open
+     * can call Splash_Screen even when Play Services / getToken hangs or fails.
+     */
+    private String ensureSplashFcmToken(String cachedToken) {
+        if (cachedToken != null && !cachedToken.isEmpty() && !"null".equalsIgnoreCase(cachedToken)) {
+            return cachedToken;
+        }
+        String existing = SharedPrefsData.getString(getApplicationContext(), Constants.FCM_TOKEN, Constants.PREF_NAME);
+        if (existing != null && !existing.isEmpty() && !"null".equalsIgnoreCase(existing)) {
+            return existing;
+        }
+        String id = DeviceID != null && !DeviceID.isEmpty()
+                ? DeviceID
+                : UUID.randomUUID().toString();
+        String placeholder = (BuildConfig.DEBUG ? "debug-" : "pending-") + id;
+        SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, placeholder, Constants.PREF_NAME);
+        Logone.w("FCM token missing; using placeholder for splash device registration");
+        return placeholder;
+    }
+
+    private void refreshFcmTokenInBackground(final String currentToken) {
+        try {
+            FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
+                String resolved = resolveFcmToken(task, currentToken);
+                if (resolved != null && !resolved.isEmpty()
+                        && (currentToken == null || !resolved.equals(currentToken))) {
+                    showLog("OpenPath: FCM token updated in background");
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** Splash for config only — home already open; never blocks UI. */
+    private void sendDeviceDetailsBackground(final String token) {
+        showLog("OpenPath: background splash refresh");
+        if (token != null && !token.isEmpty()) {
+            SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, token, Constants.PREF_NAME);
+        }
+        String DRAFT_ID = "" + SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+        if (DRAFT_ID.equals("") || DRAFT_ID.equals("null") || DRAFT_ID.equals("0")) {
+            splash = Splash_Scrren_First_Time(token != null ? token : "");
+        } else {
+            splash = Splash_Scrren_Second_Time();
+        }
+        callSplashRequest(true);
     }
 
 
@@ -859,9 +993,9 @@ public class StartingActivity extends AppCompatActivity {
         showLog("CHECK POINT 11::"+token);
         showLog("languageId:"+languageId);
         showLog("stored link:"+SharedPrefsData.getString(getApplicationContext(), Constants.REFERRER_POST,  Constants.PREF_NAME));
-        // Always call splash so remote config (typography, ads, engagement color) stays fresh.
-        // Returning users previously skipped this and never picked up admin font changes.
-        callSplashRequest();
+        // Fresh splash for first install / missing translator. Returning path may
+        // already have opened home (background=true).
+        callSplashRequest(false);
     }
 
     private void routeReturningUser() {
@@ -897,24 +1031,59 @@ public class StartingActivity extends AppCompatActivity {
             return;
         }
 
-        // Unknown local state — ask server where this device should go.
-        callSplashRequest();
+        // Unknown local state: one recovery splash only. Never re-enqueue forever —
+        // dead/fake network + empty first-run prefs used to leave the logo splash stuck.
+        if (!splashNetworkInFlight && splashNetworkFailCount == 0) {
+            callSplashRequest(false);
+            return;
+        }
+        showLog("OpenPath: no cached route after splash failure → Language");
+        try {
+            startActivity(new Intent(StartingActivity.this, LanguageActivity.class));
+            finish();
+        } catch (Exception e) {
+            openHomeFromSplash();
+        }
     }
-    public void callSplashRequest(){
+    public void callSplashRequest() {
+        callSplashRequest(false);
+    }
+
+    /**
+     * @param configOnly when true (home already shown), apply splash prefs only —
+     *                   never re-open Home / onboarding screens unless force-critical.
+     */
+    public void callSplashRequest(final boolean configOnly){
+        if (splashNetworkInFlight) {
+            showLog("OpenPath: splash already in flight");
+            return;
+        }
+        if (splash == null) {
+            String token = SharedPrefsData.getString(getApplicationContext(), Constants.FCM_TOKEN, Constants.PREF_NAME);
+            String DRAFT_ID = "" + SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+            if (DRAFT_ID.equals("") || DRAFT_ID.equals("null") || DRAFT_ID.equals("0")) {
+                splash = Splash_Scrren_First_Time(token != null ? token : "");
+            } else {
+                splash = Splash_Scrren_Second_Time();
+            }
+        }
+        splashNetworkInFlight = true;
         APIService apiService = RestApiClient.getClient().create(APIService.class);
         Call<EncreptionRequest> apiResponse = apiService.Splash_Screen("v3", splash);
-        showLog("CHECK POINT SPLASH REQUEST::");
-        apiResponse.enqueue(new Callback<EncreptionRequest>() {
+        showLog("CHECK POINT SPLASH REQUEST:: configOnly=" + configOnly);
+        NetworkCallDeduper.enqueueUnique("splash_v3", apiResponse, new Callback<EncreptionRequest>() {
             //@RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-
+                splashNetworkInFlight = false;
                 if (response.isSuccessful()) {
                     showLog("CHECK POINT 14 REQUEST SUCCESS::");
                     try {
                     EncreptionRequest encreptionRequest = response.body();
                     if (encreptionRequest == null || encreptionRequest.getData() == null) {
-                        Toast.makeText(StartingActivity.this, "Unable to start app. Please try again.", Toast.LENGTH_LONG).show();
+                        if (!configOnly) {
+                            Toast.makeText(StartingActivity.this, "Unable to start app. Please try again.", Toast.LENGTH_LONG).show();
+                        }
                         return;
                     }
                     String encrpt_data = decrypt(encreptionRequest.getData());
@@ -933,18 +1102,34 @@ public class StartingActivity extends AppCompatActivity {
                         // if getting null then uninstall app
 
                         SharedPrefsData.putInt(getApplicationContext(), Constants.DraftID, startActivityReqModel.getData().getDraftId(), Constants.PREF_NAME);
-                        SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID, startActivityReqModel.getData().getLanguageId(), Constants.PREF_NAME);
+                        int splashLangId = startActivityReqModel.getData().getLanguageId() != null
+                                ? startActivityReqModel.getData().getLanguageId()
+                                : 0;
+                        SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID, splashLangId, Constants.PREF_NAME);
                         SessionAnalyticsTracker.get().onIdentityReady(getApplicationContext());
                         SharedPrefsData.putInt(getApplicationContext(), Constants.Show_Animation, startActivityReqModel.getData().getShowAnimation(), Constants.PREF_NAME);
                         SharedPrefsData.putInt(getApplicationContext(), Constants.StaticDataApi, startActivityReqModel.getData().getStaticDataApi(), Constants.PREF_NAME);
                         SharedPrefsData.putInt(getApplicationContext(), Constants.StaticDataApi, startActivityReqModel.getData().getStaticDataApi(), Constants.PREF_NAME);
 
-                        SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Distric_Name, startActivityReqModel.getData().getDistName(), Constants.PREF_NAME);
-                        SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Distric_Name1, startActivityReqModel.getData().getDistName(), Constants.PREF_NAME);
+                        int splashDistId = 0;
+                        try {
+                            if (startActivityReqModel.getData().getDistId() != null) {
+                                splashDistId = startActivityReqModel.getData().getDistId();
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        DistrictLabelHelper.saveFromServer(
+                                getApplicationContext(),
+                                splashLangId,
+                                splashDistId,
+                                startActivityReqModel.getData().getDistName());
                         SharedPrefsData.putString(getApplicationContext(), Constants.MOVE_NEXT_SCREEN, startActivityReqModel.getData().getNextScreen(), Constants.PREF_NAME);
                         markOnboardingCompleteIfNeeded(startActivityReqModel.getData().getNextScreen());
 
-                        SharedPrefsData.putBool(getApplicationContext(), Constants.is_login, startActivityReqModel.getData().getIsLogin(), Constants.PREF_NAME);
+                        SharedPrefsData.putBool(getApplicationContext(), Constants.is_login,
+                                !SharedPrefsData.getBool(getApplicationContext(), Constants.FORCE_LOGGED_OUT, Constants.PREF_NAME)
+                                        && Boolean.TRUE.equals(startActivityReqModel.getData().getIsLogin()),
+                                Constants.PREF_NAME);
 
                         SharedPrefsData.putBool(getApplicationContext(), Constants.Event_Status, startActivityReqModel.getData().getEventStatus(), Constants.PREF_NAME);
 
@@ -1026,6 +1211,65 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
+                        // Admin push tray appearance (logo / small image / text-only / sizes).
+                        if (startActivityReqModel.getData().getPnShowArticleImage() != null) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.PN_SHOW_ARTICLE_IMAGE,
+                                    startActivityReqModel.getData().getPnShowArticleImage(),
+                                    Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getPnStyleMode() != null
+                                && !startActivityReqModel.getData().getPnStyleMode().isEmpty()) {
+                            SharedPrefsData.putString(
+                                    getApplicationContext(),
+                                    Constants.PN_STYLE_MODE,
+                                    startActivityReqModel.getData().getPnStyleMode(),
+                                    Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getPnLargeIconUrl() != null) {
+                            SharedPrefsData.putString(
+                                    getApplicationContext(),
+                                    Constants.PN_LARGE_ICON_URL,
+                                    startActivityReqModel.getData().getPnLargeIconUrl(),
+                                    Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getPushIncludeLogoDefault() != null) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.PN_INCLUDE_LOGO_DEFAULT,
+                                    startActivityReqModel.getData().getPushIncludeLogoDefault(),
+                                    Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getPnLeftIconSizeDp() != null) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.PN_LEFT_ICON_SIZE_DP,
+                                    startActivityReqModel.getData().getPnLeftIconSizeDp(),
+                                    Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getPnThumbSizeDp() != null) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.PN_THUMB_SIZE_DP,
+                                    startActivityReqModel.getData().getPnThumbSizeDp(),
+                                    Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getPnTitleSizeSp() != null) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.PN_TITLE_SIZE_SP,
+                                    startActivityReqModel.getData().getPnTitleSizeSp(),
+                                    Constants.PREF_NAME
+                            );
+                        }
+
                         // Admin-controlled footer + writer-strip styling. Cached as JSON and
                         // applied at render time; unset → current hardcoded look.
                         if (startActivityReqModel.getData().getFooterStyle() != null) {
@@ -1065,7 +1309,20 @@ public class StartingActivity extends AppCompatActivity {
                         }
 
                         // Independent cricket surface toggles (null flags are left
-                        // untouched → defaults: mini player ON, footer tab OFF).
+                        // untouched → defaults: mini player OFF until server ON,
+                        // footer tab OFF).
+                        Boolean prevMini = null;
+                        try {
+                            // Detect flip so Home can stop/start cricket HTTP without reopen.
+                            String raw = SharedPrefsData.getString(
+                                    getApplicationContext(),
+                                    Constants.CRICKET_MINI_PLAYER_ENABLED,
+                                    Constants.PREF_NAME);
+                            if (raw != null && !raw.isEmpty()) {
+                                prevMini = "true".equalsIgnoreCase(raw.trim());
+                            }
+                        } catch (Exception ignored) {
+                        }
                         CricketSurfaceConfigHelper.saveMiniPlayerEnabled(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getCricketMiniPlayerEnabled()
@@ -1074,6 +1331,166 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getCricketFooterTabEnabled()
                         );
+                        // Profile hub / More + home footer slot flags (null = leave cache / defaults).
+                        ProfileHubConfigHelper.saveFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getCategoriesInFooter(),
+                                startActivityReqModel.getData().getShowHeaderProfileIcon(),
+                                startActivityReqModel.getData().getEnableStatusVideos(),
+                                startActivityReqModel.getData().getProfileShowBookmarks(),
+                                startActivityReqModel.getData().getProfileShowReferral(),
+                                startActivityReqModel.getData().getProfileShowSettingsRow(),
+                                startActivityReqModel.getData().getProfileHeaderIconSizeDp(),
+                                startActivityReqModel.getData().getProfileCategoryIconSizeDp(),
+                                startActivityReqModel.getData().getProfileMenuTextSizeSp(),
+                                startActivityReqModel.getData().getFooterPlusIconSizeDp(),
+                                startActivityReqModel.getData().getFooterShowReload(),
+                                startActivityReqModel.getData().getFooterShowSpecial(),
+                                startActivityReqModel.getData().getFooterShowPlus(),
+                                startActivityReqModel.getData().getFooterShowProfile(),
+                                startActivityReqModel.getData().getFooterShowBookmarks(),
+                                startActivityReqModel.getData().getSettingsShowNotifications(),
+                                startActivityReqModel.getData().getSettingsShowVideoAutoplay(),
+                                startActivityReqModel.getData().getSettingsShowNightMode(),
+                                startActivityReqModel.getData().getSettingsShowLocalStories()
+                        );
+                        // Contact Us mailto target from Root_Settings (null/blank keeps cache).
+                        ProfileHubConfigHelper.saveContactEmail(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getContactEmail());
+                        ProfileHubConfigHelper.saveFullJatakamWhatsapp(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getFullJatakamWhatsapp());
+                        ProfileHubConfigHelper.saveDefaultRashiId(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getDefaultRashiId());
+                        // Admin notification re-prompt (one OS ask next open when due).
+                        if (startActivityReqModel.getData().getNotificationRepromptEnabled() != null) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.NOTIFICATION_REPROMPT_ENABLED,
+                                    Boolean.TRUE.equals(
+                                            startActivityReqModel.getData().getNotificationRepromptEnabled()),
+                                    Constants.PREF_NAME);
+                        }
+                        if (startActivityReqModel.getData().getNotificationRepromptDue() != null) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.NOTIFICATION_REPROMPT_DUE,
+                                    Boolean.TRUE.equals(
+                                            startActivityReqModel.getData().getNotificationRepromptDue()),
+                                    Constants.PREF_NAME);
+                        }
+                        if (startActivityReqModel.getData().getNotificationRepromptWave() != null) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.NOTIFICATION_REPROMPT_WAVE,
+                                    startActivityReqModel.getData().getNotificationRepromptWave(),
+                                    Constants.PREF_NAME);
+                        }
+                        // Notification opt-in: server true → local true. Server false only when
+                        // user previously opted out / re-prompt path — do not force OFF on first
+                        // open before OS permission was ever offered (legacy empty-FCM drafts).
+                        if (startActivityReqModel.getData().getNotificationFlag() != null) {
+                            boolean serverFlag = Boolean.TRUE.equals(
+                                    startActivityReqModel.getData().getNotificationFlag());
+                            if (serverFlag) {
+                                SharedPrefsData.putBool(
+                                        getApplicationContext(),
+                                        Constants.NOTIFICATION_ENABLED,
+                                        true,
+                                        Constants.PREF_NAME);
+                            } else {
+                                // Keep false only if we already asked OS or user had offline pref false.
+                                int askedVersion = SharedPrefsData.getInt(
+                                        getApplicationContext(),
+                                        Constants.NOTIFICATION_RUNTIME_ASK_VERSION,
+                                        Constants.PREF_NAME);
+                                boolean everAsked = askedVersion > 0;
+                                boolean existingPref = SharedPrefsData.getBool(
+                                        getApplicationContext(),
+                                        Constants.NOTIFICATION_ENABLED,
+                                        Constants.PREF_NAME,
+                                        true);
+                                if (everAsked || !existingPref) {
+                                    SharedPrefsData.putBool(
+                                            getApplicationContext(),
+                                            Constants.NOTIFICATION_ENABLED,
+                                            false,
+                                            Constants.PREF_NAME);
+                                } else {
+                                    // Fresh / never-asked: keep opt-in true until user denies OS.
+                                    SharedPrefsData.putBool(
+                                            getApplicationContext(),
+                                            Constants.NOTIFICATION_ENABLED,
+                                            true,
+                                            Constants.PREF_NAME);
+                                }
+                            }
+                        } else {
+                            // Missing key: default ON until user turns off.
+                            boolean hasKey;
+                            try {
+                                hasKey = getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE)
+                                        .contains(Constants.NOTIFICATION_ENABLED);
+                            } catch (Exception e) {
+                                hasKey = false;
+                            }
+                            if (!hasKey) {
+                                SharedPrefsData.putBool(
+                                        getApplicationContext(),
+                                        Constants.NOTIFICATION_ENABLED,
+                                        true,
+                                        Constants.PREF_NAME);
+                            }
+                        }
+                        Integer pollSec = startActivityReqModel.getData()
+                                .getCricketMiniPlayerPollIntervalSeconds();
+                        if (pollSec != null && pollSec > 0) {
+                            CricketSurfaceConfigHelper.savePollIntervalSeconds(
+                                    getApplicationContext(), pollSec);
+                        }
+                        Integer idleSec = startActivityReqModel.getData()
+                                .getCricketMiniPlayerIdlePollIntervalSeconds();
+                        if (idleSec != null && idleSec > 0) {
+                            CricketSurfaceConfigHelper.saveIdlePollIntervalSeconds(
+                                    getApplicationContext(), idleSec);
+                        }
+                        Integer hbSec = startActivityReqModel.getData()
+                                .getSessionHeartbeatIntervalSeconds();
+                        Boolean liveEnabled = startActivityReqModel.getData().getSessionLiveEnabled();
+                        Integer liveWindow = startActivityReqModel.getData()
+                                .getSessionLiveWindowSeconds();
+                        // True-live triad from splash. Interval 0 / enabled false = no heartbeats.
+                        CricketSurfaceConfigHelper.applyPresenceFromServer(
+                                getApplicationContext(),
+                                liveEnabled,
+                                hbSec != null ? Math.max(0, hbSec) : null,
+                                liveWindow);
+                        // Offline News pack max (default 24; hard 8–50).
+                        OfflineFeedStore.savePackMaxFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getOfflineNewsPackMax());
+                        // News|Read bar first-open auto-hide seconds (default 3; 0 = off).
+                        HomeModeChromeConfig.saveAutoHideSecondsFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData()
+                                        .getHomeModeChromeAutoHideSeconds());
+                        // Read / చదివినవి recency window (default 24h; 1–168).
+                        ReadHistoryConfig.saveHoursFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getReadHistoryHours());
+                        Boolean newMini = startActivityReqModel.getData()
+                                .getCricketMiniPlayerEnabled();
+                        if (newMini != null && prevMini != null && prevMini != newMini) {
+                            try {
+                                androidx.localbroadcastmanager.content.LocalBroadcastManager
+                                        .getInstance(getApplicationContext())
+                                        .sendBroadcast(new android.content.Intent(
+                                                SessionAnalyticsTracker.ACTION_CRICKET_STATE_CHANGED));
+                            } catch (Exception ignored) {
+                            }
+                        }
 
                         LanguageFontConfig splashFontConfig = startActivityReqModel.getData().getFontConfig();
                         Map<String, LanguageFontConfig> splashFontSettings =
@@ -1132,6 +1549,13 @@ public class StartingActivity extends AppCompatActivity {
 
                         }
 
+                        OpenPathCache.markSplashSuccess(getApplicationContext());
+
+                        if (configOnly) {
+                            // Soft config refresh only — do not re-navigate.
+                            maybeBackgroundRefreshStatic(startActivityReqModel);
+                            return;
+                        }
 
                         // 0=silenced, 1=up-to-date/disabled, 2=soft, 3=force.
                         // Soft/force no longer block splash with a center dialog — proceed to
@@ -1140,158 +1564,18 @@ public class StartingActivity extends AppCompatActivity {
                         if (updateMenuStatus == 1 || updateMenuStatus == 0
                                 || updateMenuStatus == 2 || updateMenuStatus == 3) {
 
-                            int static_data_value = SharedPrefsData.getInt(getApplicationContext(), Constants.StaticDataApi, Constants.PREF_NAME);
                             int language_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
 
                             if (language_id==0) {
-                                try {
-
-                                    scrren = startActivityReqModel.getData().getNextScreen();
-                                    if (scrren.equals("language")) {
-                                        Intent intent = new Intent(StartingActivity.this, LanguageActivity.class);
-                                        startActivity(intent);
-                                        finish();
-
-                                    } else if (scrren.equals("state")) {
-
-                                        Intent intent = new Intent(StartingActivity.this, States.class);
-                                        startActivity(intent);
-                                        finish();
-
-                                    } else if (scrren.equals("district")) {
-
-                                        Intent intent = new Intent(StartingActivity.this, Districs.class);
-                                        startActivity(intent);
-                                        finish();
-
-                                    } else if (scrren.equals("region")) {
-
-                                        Intent intent = new Intent(StartingActivity.this, AreaSelection.class);
-                                        startActivity(intent);
-                                        finish();
-
-                                    }else {
-                                        showLog("CHECK POINT HOMEPAGE 10");
-                                        Intent intent = new Intent(StartingActivity.this, HomePage.class);
-                                        intent.putExtra("EXTRA_SESSION_ID", "0");
-                                        intent.putExtra("TITLE", TITLE);
-                                        intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
-                                        intent.putExtra("SHARE_REDIRECT_ID",articleId1);
-                                        intent.putExtra("DATAFROM2G",DATAFROM2G);
-                                        if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                                            startActivity(intent);
-                                        }
-                                        finish();
-                                    }
-
-                                } catch (Exception e) {
-                                    //do things with exception
-                                }
+                                navigateAfterSplash(startActivityReqModel);
                             } else {
-
-
-                                JsonObject otp = set_static_data();
-
-
-                                APIService apiService = RestApiClient.getClient().create(APIService.class);
-
-                                Call<JsonObject> otp_generation = apiService.get_static_data("v3", otp);
-
-                                otp_generation.enqueue(new Callback<JsonObject>() {
-
-                                    @Override
-                                    public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
-
-                                        if (response.isSuccessful()) {
-
-                                            JsonObject jsonObject = response.body().getAsJsonObject();
-
-                                            Gson gson = new Gson();
-
-                                            LanguageModelResponse languageSelectionResponse = gson.fromJson(jsonObject, LanguageModelResponse.class);
-
-                                            if (languageSelectionResponse.getSuccess()) {
-
-                                                prefManager.setShared_Booleen(Allsharedpreference.Language, true);
-
-                                                String json = gson.toJson(languageSelectionResponse); // myObject - instance of MyObject
-                                                prefManager.setShared_String(Allsharedpreference.Translator, json);
-
-
-                                                SharedPrefsData.putString(StartingActivity.this, Constants.State_Name, languageSelectionResponse.getNextScreen(), Constants.PREF_NAME);
-
-
-
-                                                try {
-
-                                                    String scrren = startActivityReqModel.getData().getNextScreen();
-
-                                                    if (scrren.equals("language")) {
-
-                                                        Intent intent = new Intent(StartingActivity.this, LanguageActivity.class);
-                                                        startActivity(intent);
-                                                        finish();
-
-                                                    } else if (scrren.equals("state")) {
-
-                                                        Intent intent = new Intent(StartingActivity.this, States.class);
-                                                        startActivity(intent);
-                                                        finish();
-
-                                                    } else if (scrren.equals("district")) {
-
-                                                        Intent intent = new Intent(StartingActivity.this, Districs.class);
-                                                        startActivity(intent);
-                                                        finish();
-
-                                                    } else if (scrren.equals("region")) {
-
-                                                        Intent intent = new Intent(StartingActivity.this, AreaSelection.class);
-                                                        startActivity(intent);
-                                                        finish();
-
-                                                    } else {
-                                                        showLog("CHECK POINT HOMEPAGE 7");
-                                                        Intent intent = new Intent(StartingActivity.this, HomePage.class);
-                                                        intent.putExtra("EXTRA_SESSION_ID", "0");
-                                                        intent.putExtra("TITLE", TITLE);
-                                                        intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
-                                                        intent.putExtra("SHARE_REDIRECT_ID",articleId1);
-                                                        intent.putExtra("DATAFROM2G",DATAFROM2G);
-                                                        if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                                                            startActivity(intent);
-                                                            finish();
-                                                        }
-
-                                                    }
-
-                                                } catch (Exception e) {
-                                                    //do things with exception
-                                                }
-
-                                            } else {
-
-                                                //     Toast.makeText(context, languageSelectionResponse.getExtras().getMsg(), Toast.LENGTH_SHORT).show();
-                                                if ("main".equals(startActivityReqModel.getData().getNextScreen())) {
-                                                    openHomeFromSplash();
-                                                }
-
-                                            }
-
-                                        } else if ("main".equals(startActivityReqModel.getData().getNextScreen())) {
-                                            openHomeFromSplash();
-                                        }
-
-                                    }
-
-                                    @Override
-                                    public void onFailure(Call<JsonObject> call, Throwable t) {
-                                        if ("main".equals(startActivityReqModel.getData().getNextScreen())) {
-                                            openHomeFromSplash();
-                                        }
-                                    }
-                                });
-
+                                // Prefer cached translator; only fetch static when stale or missing.
+                                if (!OpenPathCache.shouldRefreshStatic(getApplicationContext())) {
+                                    showLog("OpenPath: skip get_static_data (fresh cache)");
+                                    navigateAfterSplash(startActivityReqModel);
+                                } else {
+                                    fetchStaticThenNavigate(startActivityReqModel);
+                                }
                             }
 
 
@@ -1303,24 +1587,145 @@ public class StartingActivity extends AppCompatActivity {
                     }
                     } catch (Exception e) {
                         e.printStackTrace();
-                        Toast.makeText(StartingActivity.this, "Unable to start app. Please try again.", Toast.LENGTH_LONG).show();
+                        if (!configOnly) {
+                            Toast.makeText(StartingActivity.this, "Unable to start app. Please try again.", Toast.LENGTH_LONG).show();
+                        }
                     }
 
                 } else {
                     showLog("Splash response unsuccessful, using cached route");
-                    routeReturningUser();
+                    if (!configOnly) {
+                        routeReturningUser();
+                    }
                 }
 
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                splashNetworkInFlight = false;
+                splashNetworkFailCount++;
                 showLog("Splash request failed, using cached route::" + t);
-                routeReturningUser();
+                if (!configOnly) {
+                    routeReturningUser();
+                }
             }
         });
 
 
+    }
+
+    private void maybeBackgroundRefreshStatic(final StartActivityReqModel startActivityReqModel) {
+        int language_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        if (language_id == 0 || !OpenPathCache.shouldRefreshStatic(getApplicationContext())) {
+            return;
+        }
+        fetchStaticThenNavigate(startActivityReqModel, true);
+    }
+
+    private void fetchStaticThenNavigate(final StartActivityReqModel startActivityReqModel) {
+        fetchStaticThenNavigate(startActivityReqModel, false);
+    }
+
+    private void fetchStaticThenNavigate(final StartActivityReqModel startActivityReqModel, final boolean configOnly) {
+        JsonObject otp = set_static_data();
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        Call<JsonObject> otp_generation = apiService.get_static_data("v3", otp);
+
+        NetworkCallDeduper.enqueueUnique("static_v3_" + SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME),
+                otp_generation, new Callback<JsonObject>() {
+
+            @Override
+            public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
+
+                if (response.isSuccessful() && response.body() != null) {
+
+                    JsonObject jsonObject = response.body().getAsJsonObject();
+
+                    Gson gson = new Gson();
+
+                    LanguageModelResponse languageSelectionResponse = gson.fromJson(jsonObject, LanguageModelResponse.class);
+
+                    if (languageSelectionResponse.getSuccess()) {
+
+                        prefManager.setShared_Booleen(Allsharedpreference.Language, true);
+
+                        String json = gson.toJson(languageSelectionResponse); // myObject - instance of MyObject
+                        prefManager.setShared_String(Allsharedpreference.Translator, json);
+                        OpenPathCache.markStaticSuccess(getApplicationContext());
+
+                        SharedPrefsData.putString(StartingActivity.this, Constants.State_Name, languageSelectionResponse.getNextScreen(), Constants.PREF_NAME);
+                    }
+                }
+                if (!configOnly) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        try {
+                            if ("main".equals(startActivityReqModel.getData().getNextScreen())
+                                    || (startActivityReqModel.getData().getNextScreen() != null
+                                    && !startActivityReqModel.getData().getNextScreen().isEmpty())) {
+                                navigateAfterSplash(startActivityReqModel);
+                                return;
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if ("main".equals(startActivityReqModel.getData().getNextScreen())) {
+                        openHomeFromSplash();
+                    } else {
+                        navigateAfterSplash(startActivityReqModel);
+                    }
+                }
+            }
+
+            @Override
+            public void onFailure(Call<JsonObject> call, Throwable t) {
+                if (!configOnly) {
+                    if ("main".equals(startActivityReqModel.getData().getNextScreen())
+                            || OpenPathCache.hasTranslator(getApplicationContext())) {
+                        openHomeFromSplash();
+                    }
+                }
+            }
+        });
+    }
+
+    private void navigateAfterSplash(StartActivityReqModel startActivityReqModel) {
+        try {
+            scrren = startActivityReqModel.getData().getNextScreen();
+            if (scrren == null) {
+                scrren = "main";
+            }
+
+            if (scrren.equals("language")) {
+                Intent intent = new Intent(StartingActivity.this, LanguageActivity.class);
+                startActivity(intent);
+                finish();
+
+            } else if (scrren.equals("state")) {
+
+                Intent intent = new Intent(StartingActivity.this, States.class);
+                startActivity(intent);
+                finish();
+
+            } else if (scrren.equals("district")) {
+
+                Intent intent = new Intent(StartingActivity.this, Districs.class);
+                startActivity(intent);
+                finish();
+
+            } else if (scrren.equals("region")) {
+
+                Intent intent = new Intent(StartingActivity.this, AreaSelection.class);
+                startActivity(intent);
+                finish();
+
+            } else {
+                openHomeFromSplash();
+            }
+
+        } catch (Exception e) {
+            openHomeFromSplash();
+        }
     }
 
     private JsonObject Splash_Scrren_Second_Time() {
@@ -1445,8 +1850,17 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     private void openHomeFromSplash() {
+        if (homeOpenedFromSplash) {
+            showLog("OpenPath: home already launched");
+            return;
+        }
+        homeOpenedFromSplash = true;
         markOnboardingCompleteIfNeeded("main");
         showLog("CHECK POINT HOMEPAGE fallback");
+        // Prefetch pickers as soon as user reaches main (also runs from HomePage).
+        SelectionListCache.prefetchInBackground(getApplicationContext());
+        // Race List_All_Articles while Home inflates (no offline-pack first paint).
+        OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
         Intent intent = new Intent(StartingActivity.this, HomePage.class);
         intent.putExtra("EXTRA_SESSION_ID", "0");
         intent.putExtra("TITLE", TITLE);
