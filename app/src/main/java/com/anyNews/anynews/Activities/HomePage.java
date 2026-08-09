@@ -633,15 +633,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private View homeActionChromeRoot;
     private TextView homeActionCalendarLabel;
     private TextView homeActionReloadLabel;
-    /** First-open unread badge (logo + count); once per process. */
-    private View homeUnreadChipRoot;
-    private TextView homeUnreadChipCount;
-    private TextView homeUnreadChipLabel;
-    /**
-     * Process-scoped: unread chip already dismissed for this app process (auto-hide
-     * or first user hide). Content-tap show does not re-open the chip.
-     */
-    private static boolean homeUnreadChipSessionHidden = false;
     private View homeBookmarksPanel;
     private RecyclerView homeBookmarksList;
     private TextView homeBookmarksEmpty;
@@ -4566,8 +4557,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Top Offline News | Bookmarks pill + bottom Home|Calendar|Reload overlay +
-     * first-open unread chip. Content tap toggles top+bottom together.
+     * Top Offline News | Bookmarks pill + bottom Home|Calendar|Reload overlay.
+     * Content tap toggles top+bottom together.
      */
     private void setupNewsBookmarksToggle() {
         homeModeToggleRoot = findViewById(R.id.home_news_bookmarks_toggle_root);
@@ -4602,7 +4593,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         homeBookmarksHint = findViewById(R.id.home_bookmarks_hint);
 
         bindHomeActionChrome();
-        bindHomeUnreadChip();
 
         if (homeBookmarksList != null && homeBookmarksAdapter == null) {
             homeBookmarksAdapter = new HomeBookmarksAdapter();
@@ -4673,27 +4663,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         applyHomeActionChromeLabels();
     }
 
-    private void bindHomeUnreadChip() {
-        homeUnreadChipRoot = findViewById(R.id.home_unread_chip_root);
-        if (homeUnreadChipRoot == null) {
-            View include = findViewById(R.id.include_home_unread_chip);
-            if (include != null) {
-                homeUnreadChipRoot = include.findViewById(R.id.home_unread_chip_root);
-                if (homeUnreadChipRoot == null) {
-                    homeUnreadChipRoot = include;
-                }
-            }
-        }
-        homeUnreadChipCount = findViewById(R.id.home_unread_chip_count);
-        homeUnreadChipLabel = findViewById(R.id.home_unread_chip_label);
-        if (homeUnreadChipRoot != null) {
-            homeUnreadChipRoot.setOnClickListener(v -> { /* consume */ });
-        }
-        if (homeUnreadChipLabel != null) {
-            homeUnreadChipLabel.setText(
-                    com.anyNews.anynews.Utils.HomeChromeActionLabels.unreadNews(this));
-        }
-    }
+
 
     private void applyHomeActionChromeLabels() {
         if (homeActionCalendarLabel != null) {
@@ -4703,10 +4673,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (homeActionReloadLabel != null) {
             homeActionReloadLabel.setText(
                     com.anyNews.anynews.Utils.HomeChromeActionLabels.reload(this));
-        }
-        if (homeUnreadChipLabel != null) {
-            homeUnreadChipLabel.setText(
-                    com.anyNews.anynews.Utils.HomeChromeActionLabels.unreadNews(this));
         }
     }
 
@@ -4725,61 +4691,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** Bottom Reload: same API refresh path as footer Reload. */
-    private void onHomeActionChromeReload() {
-        if (isFinishing() || isDestroyed()) return;
-        cancelHomeModeChromeSessionAutoHide(true);
-        try {
-            performFeedReload();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * Unread count for the floating chip: real articles in current (or snapped)
-     * news list when feed is unread-filtered.
-     */
-    private int computeHomeUnreadChipCount() {
-        try {
-            ArrayList<ModelClass.Datum> source = null;
-            if (isOnlineMainNewsChromeActive()) {
-                if (bookmarksModeSelected
-                        && hasSavedOnlineNewsSession
-                        && !savedOnlineNewsList.isEmpty()) {
-                    source = savedOnlineNewsList;
-                } else {
-                    source = list;
-                }
-            } else if (offlineChromeMode || !isDeviceOnline()) {
-                source = list;
-            }
-            if (source == null || source.isEmpty()) return 0;
-            return ReadArticleStore.countRealArticles(source);
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    private void refreshHomeUnreadChipContent() {
-        if (homeUnreadChipCount != null) {
-            int n = computeHomeUnreadChipCount();
-            if (n > 999) {
-                homeUnreadChipCount.setText("999+");
-            } else {
-                homeUnreadChipCount.setText(String.valueOf(Math.max(0, n)));
-            }
-        }
-        if (homeUnreadChipLabel != null) {
-            homeUnreadChipLabel.setText(
-                    com.anyNews.anynews.Utils.HomeChromeActionLabels.unreadNews(this));
-        }
-    }
+    
 
     /**
      * Single tap on article content (from FlipperAdapter) — hide/show the Offline
      * News|Bookmarks chrome only. Does not collapse article body/text.
-     * Top + bottom action chrome move together; unread chip does not reappear.
+     * Top + bottom action chrome move together.
      */
     public void toggleHomeModeChrome() {
         if (isFinishing() || isDestroyed()) return;
@@ -4794,8 +4711,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Once per app process: after N seconds (admin
      * {@code home_mode_chrome_auto_hide_seconds}, default 3), hide top + bottom
-     * chrome and unread chip using the same path as a content tap. 0 disables.
-     * Subsequent show/hide is tap-only (chip never returns).
+     * chrome using the same path as a content tap. 0 disables.
+     * Subsequent show/hide is tap-only.
      */
     private void scheduleHomeModeChromeSessionAutoHideIfNeeded() {
         if (homeModeChromeSessionAutoHideConsumed) return;
@@ -4830,17 +4747,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         homeModeChromeAutoHidePending = false;
         if (homeModeChromeSessionAutoHideConsumed) return;
         homeModeChromeSessionAutoHideConsumed = true;
-        // Never re-show unread chip after first-open window ends (even if not on main News).
-        homeUnreadChipSessionHidden = true;
         if (isFinishing() || isDestroyed()) return;
-        if (!isHomeModeChromeActive()) {
-            if (homeUnreadChipRoot != null) {
-                hideChromeViewImmediate(homeUnreadChipRoot);
-            }
-            return;
-        }
+        if (!isHomeModeChromeActive()) return;
         if (homeModeChromeUserHidden) return;
-        // Exact same animation path as content-tap hide (top + bottom + chip).
+        // Exact same animation path as content-tap hide (top + bottom).
         setHomeModeChromeVisible(false, true);
     }
 
@@ -4889,7 +4799,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Slide top News|Read bar (scrim + pill) up / bottom Home|Calendar|Reload
-     * down, and optionally first-open unread chip. Article body layout is untouched.
+     * down. Article body layout is untouched.
      */
     private void setHomeModeChromeVisible(boolean visible, boolean animate) {
         if (homeModeToggleRoot == null && homeActionChromeRoot == null) return;
@@ -4900,14 +4810,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         homeModeChromeUserHidden = !visible;
-        // Chip only once per process open; hide permanently once dismissed.
-        final boolean showChip = visible && !homeUnreadChipSessionHidden;
-        if (!visible) {
-            homeUnreadChipSessionHidden = true;
-        }
-        if (showChip) {
-            refreshHomeUnreadChipContent();
-        }
         cancelHomeModeChromeAnimator();
 
         Runnable run = () -> {
@@ -4937,38 +4839,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         homeActionChromeRoot, visible, hiddenY, animate);
                 if (a != null) parts.add(a);
             }
-            if (homeUnreadChipRoot != null) {
-                if (!showChip && !visible) {
-                    int h = homeUnreadChipRoot.getHeight();
-                    if (h <= 0) h = (int) (40f * dens);
-                    float hiddenY = -h - 8f * dens;
-                    if (homeUnreadChipRoot.getVisibility() == View.VISIBLE
-                            && homeUnreadChipRoot.getAlpha() > 0.05f) {
-                        Animator a = buildChromeSlideAlpha(
-                                homeUnreadChipRoot, false, hiddenY, animate);
-                        if (a != null) parts.add(a);
-                        else hideChromeViewImmediate(homeUnreadChipRoot);
-                    } else {
-                        hideChromeViewImmediate(homeUnreadChipRoot);
-                    }
-                } else if (showChip) {
-                    int h = homeUnreadChipRoot.getHeight();
-                    if (h <= 0) {
-                        h = (int) (40f * dens);
-                    }
-                    float hiddenY = -h - 8f * dens;
-                    prepareChromeSlideIn(homeUnreadChipRoot, true, hiddenY);
-                    Animator a = buildChromeSlideAlpha(
-                            homeUnreadChipRoot, true, hiddenY, animate);
-                    if (a != null) parts.add(a);
-                } else {
-                    // Showing chrome again after first open — keep chip gone.
-                    hideChromeViewImmediate(homeUnreadChipRoot);
-                }
-            }
 
             if (parts.isEmpty() || !animate) {
-                applyChromeVisibilityEndState(visible, showChip);
+                applyChromeVisibilityEndState(visible);
                 return;
             }
 
@@ -4980,7 +4853,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             set.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator animation) {
-                    applyChromeVisibilityEndState(visible, showChip);
+                    applyChromeVisibilityEndState(visible);
                     homeModeChromeAnimator = null;
                 }
 
@@ -5006,10 +4879,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (homeActionChromeRoot != null) {
                     homeActionChromeRoot.setVisibility(View.VISIBLE);
                     homeActionChromeRoot.setAlpha(0f);
-                }
-                if (showChip && homeUnreadChipRoot != null) {
-                    homeUnreadChipRoot.setVisibility(View.VISIBLE);
-                    homeUnreadChipRoot.setAlpha(0f);
                 }
             }
             View postHost = homeModeToggleRoot != null
@@ -5062,7 +4931,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return pair;
     }
 
-    private void applyChromeVisibilityEndState(boolean visible, boolean showChip) {
+    private void applyChromeVisibilityEndState(boolean visible) {
         if (homeModeToggleRoot != null) {
             homeModeToggleRoot.setTranslationY(visible ? 0f : homeModeToggleRoot.getTranslationY());
             homeModeToggleRoot.setAlpha(visible ? 1f : 0f);
@@ -5076,16 +4945,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             homeActionChromeRoot.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
             if (visible) {
                 homeActionChromeRoot.setTranslationY(0f);
-            }
-        }
-        if (homeUnreadChipRoot != null) {
-            if (showChip && visible) {
-                homeUnreadChipRoot.setTranslationY(0f);
-                homeUnreadChipRoot.setAlpha(1f);
-                homeUnreadChipRoot.setVisibility(View.VISIBLE);
-            } else {
-                homeUnreadChipRoot.setAlpha(0f);
-                homeUnreadChipRoot.setVisibility(View.INVISIBLE);
             }
         }
     }
@@ -5107,15 +4966,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             homeActionChromeRoot.setTranslationY(0f);
             homeActionChromeRoot.setAlpha(1f);
         }
-        if (homeUnreadChipRoot != null) {
-            homeUnreadChipRoot.setVisibility(View.GONE);
-            homeUnreadChipRoot.setTranslationY(0f);
-            homeUnreadChipRoot.setAlpha(1f);
-        }
     }
 
     /**
-     * Snap secondary chrome (bottom + chip) to the same show/hide as top when
+     * Snap secondary chrome (bottom action bar) to the same show/hide as top when
      * refreshHomeModeToggleUi decides without animation.
      */
     private void syncSecondaryChromeVisibilityFromTop() {
@@ -5135,20 +4989,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 homeActionChromeRoot.setAlpha(1f);
             }
         }
-        // Chip only while first-open window still open (not dismissed this process).
-        if (homeUnreadChipRoot != null) {
-            if (!homeUnreadChipSessionHidden) {
-                refreshHomeUnreadChipContent();
-                homeUnreadChipRoot.setVisibility(View.VISIBLE);
-                if (homeModeChromeAnimator == null) {
-                    homeUnreadChipRoot.setTranslationY(0f);
-                    homeUnreadChipRoot.setAlpha(1f);
-                }
-            } else {
-                homeUnreadChipRoot.setVisibility(View.INVISIBLE);
-                homeUnreadChipRoot.setAlpha(0f);
-            }
-        }
     }
 
     private void hideSecondaryChromeInstant() {
@@ -5164,10 +5004,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             h + 8f * getResources().getDisplayMetrics().density);
                 }
             }
-        }
-        if (homeUnreadChipRoot != null) {
-            homeUnreadChipRoot.setVisibility(View.INVISIBLE);
-            homeUnreadChipRoot.setAlpha(0f);
         }
     }
 
@@ -5189,10 +5025,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (homeActionChromeRoot != null) {
             homeActionChromeRoot.setTranslationY(0f);
             homeActionChromeRoot.setAlpha(1f);
-        }
-        if (homeUnreadChipRoot != null && !homeUnreadChipSessionHidden) {
-            homeUnreadChipRoot.setTranslationY(0f);
-            homeUnreadChipRoot.setAlpha(1f);
         }
     }
 
@@ -5535,13 +5367,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (homeActionChromeRoot != null) {
                 homeActionChromeRoot.setVisibility(View.GONE);
             }
-            if (homeUnreadChipRoot != null
-                    && (homeModeChromeUserHidden || homeUnreadChipSessionHidden)) {
-                homeUnreadChipRoot.setVisibility(View.GONE);
-            } else if (homeUnreadChipRoot != null) {
-                // While interstitial: hide chip briefly with chrome (if first-open window).
-                homeUnreadChipRoot.setVisibility(View.GONE);
-            }
             hideHomeModeNewsBadgeForeverOnline();
             ensureOnlineBottomNavVisible();
             // Still keep right-segment selected if Read panel open (panel-only).
@@ -5586,7 +5411,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             }
         }
-        // Bottom + chip follow the same user-hidden preference.
+        // Bottom action chrome follows the same user-hidden preference.
         if (homeModeChromeUserHidden) {
             hideSecondaryChromeInstant();
         } else {
@@ -5620,10 +5445,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             homeModeBookmarksLabel.setTextColor(Color.WHITE);
         }
         applyHomeActionChromeLabels();
-        if (!homeUnreadChipSessionHidden && homeUnreadChipRoot != null
-                && homeUnreadChipRoot.getVisibility() == View.VISIBLE) {
-            refreshHomeUnreadChipContent();
-        }
         if (homeModeNewsSeg != null) {
             homeModeNewsSeg.setBackground(null);
         }
