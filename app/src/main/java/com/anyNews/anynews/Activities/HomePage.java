@@ -463,6 +463,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     // comment post id
     String SHARE_REDIRECT_ID = "", TITLE_REWARDS = "", pushUpdatedID,DATAFROM2G;
     long SHARE_ID;
+    /**
+     * One extra page-0 after a sticky share miss — List_All_Articles with
+     * {@code share_post_id} re-fetches the post by id when the first page did not
+     * pin it (e.g. cache race). Cleared with {@link #consumeDeepLinkStickyIds()}.
+     */
+    private boolean deepLinkShareRescueAttempted = false;
 
     // local distic name
     TextView local_distic_name, selelcted_local_distic_name;
@@ -972,6 +978,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 SHARE_ID = Long.parseLong(SHARE_REDIRECT_ID.trim());
             } catch (NumberFormatException e) {
                 SHARE_ID = 0;
+            }
+        }
+        // Older splash still set TITLE=shareId. Prefer share_post_id (do not double-count Open).
+        if (SHARE_ID > 0) {
+            try {
+                if (pushUpdatedID != null) {
+                    String raw = pushUpdatedID.trim();
+                    if (!raw.isEmpty()
+                            && !raw.equalsIgnoreCase("null")
+                            && !raw.equals("0")
+                            && Long.parseLong(raw) == SHARE_ID) {
+                        pushUpdatedID = "0";
+                        try {
+                            Intent i = getIntent();
+                            if (i != null) {
+                                i.putExtra("TITLE", "0");
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        showLog("demote TITLE→0 when same as SHARE_ID (share deep-link)");
+                    }
+                }
+            } catch (Exception ignored) {
             }
         }
         boolean openAsSpecial = false;
@@ -10301,9 +10330,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 rememberFeedStickiesFrom(probe);
                                 java.util.Collection<Long> probeHold = null;
                                 long landProbeId = resolvePendingDeepLinkPostId();
-                                if (landProbeId > 0
-                                        && !ReadArticleStore.isRead(
-                                                getApplicationContext(), landProbeId)) {
+                                if (landProbeId > 0) {
                                     probeHold = java.util.Collections.singleton(landProbeId);
                                 }
                                 ReadArticleStore.stripReadFromFeed(
@@ -12843,13 +12870,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             rememberOnlineNewsAdTemplate(items);
             rememberFeedStickiesFrom(items);
-            // Keep an unread share/push land target through strip so densify never drops it
-            // before {@link #maybeLandDeepLinkPostOnNews} flips to the card. Committed-read
-            // share targets are routed to Read instead (not held on News).
+            // Hold the share/push land target through strip until land/consume — including
+            // committed-read ids so maybeLand can hand off to Chadivinavi with a postcard.
             java.util.Collection<Long> hold = null;
             long landId = resolvePendingDeepLinkPostId();
-            if (landId > 0
-                    && !ReadArticleStore.isRead(getApplicationContext(), landId)) {
+            if (landId > 0) {
                 hold = java.util.Collections.singleton(landId);
             }
             ReadArticleStore.stripReadFromFeed(getApplicationContext(), items, hold);
@@ -12912,6 +12937,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return false;
         }
         ModelClass.Datum land = findDatumInPage(pageData, targetId);
+        if (land == null && list != null) {
+            int i = findListIndexForPostId(targetId);
+            if (i >= 0) {
+                land = list.get(i);
+            }
+        }
         if (land == null) {
             land = ReadArticleStore.getCached(getApplicationContext(), targetId);
         }
@@ -12951,8 +12982,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * After News list paint: flip to share/push post when it is in the unread deck.
-     * Cache paint may land early if the card is already present; else wait for sticky network.
+     * After News list paint: flip to share/push post when it is in the deck, or hand
+     * committed-read shares to Chadivinavi. Cache paint may land early if present;
+     * otherwise wait for sticky network. One rescue page-0 re-pins via share_post_id.
      */
     private void maybeLandDeepLinkPostOnNews(boolean fromCache) {
         if (bookmarksModeSelected) return;
@@ -12960,8 +12992,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (targetId <= 0) return;
         int idx = findListIndexForPostId(targetId);
         if (idx < 0) {
-            // If the post was already committed-read, strip may have removed it from News.
-            // Prefer Chadivinavi when we still have a postcard (cold share of prior read).
+            // Committed-read postcard only (no list row yet).
             if (!fromCache
                     && ReadArticleStore.isRead(getApplicationContext(), targetId)) {
                 ModelClass.Datum cached =
@@ -12974,6 +13005,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     return;
                 }
             }
+            if (!fromCache && scheduleDeepLinkShareRescue(targetId)) {
+                return;
+            }
             if (!fromCache) {
                 showLog("deep-link News land: postId=" + targetId + " not in list after network");
                 // Avoid sticky force-network loops if server never pins the post.
@@ -12981,9 +13015,65 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             return;
         }
+        // In deck: Read history → Chadivinavi; else stay on News and flip exact card.
+        if (ReadArticleStore.isRead(getApplicationContext(), targetId)) {
+            ModelClass.Datum land = null;
+            try {
+                if (idx >= 0 && list != null && idx < list.size()) {
+                    land = list.get(idx);
+                }
+            } catch (Exception ignored) {
+            }
+            if (tryOpenShareDeepLinkOnReadTab(
+                    land != null
+                            ? java.util.Collections.singletonList(land)
+                            : null,
+                    null,
+                    false)) {
+                return;
+            }
+        }
         showLog("deep-link land → News flip postId=" + targetId + " idx=" + idx);
         flipToDeepLinkPage(idx);
         consumeDeepLinkStickyIds();
+    }
+
+    /**
+     * Sticky share miss: one page-0 with share_post_id so List_All_Articles can
+     * {@code findPostById} and pin the article. Preserves SHARE_ID (no cursor wipe).
+     */
+    private boolean scheduleDeepLinkShareRescue(long targetId) {
+        if (targetId <= 0 || deepLinkShareRescueAttempted) return false;
+        if (SHARE_ID <= 0 && resolvePendingDeepLinkPostId() <= 0) return false;
+        if (!isDeviceOnline() || offlineChromeMode) return false;
+        if (isSpecialFeedMode() || isVideoFeedMode()) return false;
+        if (isApiRequested) return false;
+        deepLinkShareRescueAttempted = true;
+        if (SHARE_ID <= 0) {
+            SHARE_ID = targetId;
+            SHARE_REDIRECT_ID = String.valueOf(targetId);
+        }
+        showLog("deep-link rescue page-0 share_post_id=" + SHARE_ID);
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                if (resolvePendingDeepLinkPostId() <= 0) return;
+                if (findListIndexForPostId(targetId) >= 0) {
+                    maybeLandDeepLinkPostOnNews(false);
+                    return;
+                }
+                last_post_id = 0;
+                skip = 0;
+                actual_skip = 0;
+                isApiRequested = true;
+                isDataParsed = true;
+                dummyResponse = null;
+                ShowNews_Data_Values(category_id, 0);
+            } catch (Exception e) {
+                showLog("deep-link rescue failed: " + e.getMessage());
+                consumeDeepLinkStickyIds();
+            }
+        });
+        return true;
     }
 
     private void flipToDeepLinkPage(int page) {
@@ -13017,6 +13107,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void consumeDeepLinkStickyIds() {
         SHARE_ID = 0;
         SHARE_REDIRECT_ID = "0";
+        deepLinkShareRescueAttempted = false;
         clearStickyPushPostId();
         try {
             Intent intent = getIntent();

@@ -282,8 +282,14 @@ public class StartingActivity extends AppCompatActivity {
                                 if (fromFdl == null || fromFdl.isEmpty()) {
                                     fromFdl = finalDeepLink.getQueryParameter("post_id");
                                 }
+                                if (fromFdl == null || fromFdl.isEmpty()) {
+                                    fromFdl = articleIdFromPath(finalDeepLink);
+                                }
                                 if (fromFdl != null && !fromFdl.isEmpty()) {
                                     articleId1 = fromFdl;
+                                    // Share sticky only — never TITLE (FCM push id).
+                                    SharedPrefsData.putString(getApplicationContext(),
+                                            Constants.PENDING_SHARE_POST, fromFdl, Constants.PREF_NAME);
                                 }
                                 showLog("CHECK POINT articleId1 %%%:"+articleId1);
                             }catch (Exception e){
@@ -539,7 +545,10 @@ public class StartingActivity extends AppCompatActivity {
             showLog("CHECK POINT ArticleId1 @@@:" + articleId2);
             if (articleId2 != null && !articleId2.isEmpty()) {
                 articleId1 = articleId2;
-                TITLE = articleId2;
+                // Share / App Link opens must use SHARE_REDIRECT_ID + share_post_id only.
+                // Do NOT set TITLE=articleId — TITLE is the FCM push sticky (push_post_id).
+                // Dual-assigning made server take the push_open branch, skip share pin, and
+                // left already-read shares stripped on News top instead of Chadivinavi.
                 // Persist as a one-shot so the exact post still opens even when a
                 // splash routing branch launches HomePage without the
                 // SHARE_REDIRECT_ID extra (e.g. returning-user static-data path).
@@ -669,8 +678,7 @@ public class StartingActivity extends AppCompatActivity {
                 final String id = resolvedId;
                 new Handler(Looper.getMainLooper()).post(() -> {
                     articleId1 = id;
-                    TITLE = id;
-                    // Same one-shot as extractData so late FDL/page.link resolve still lands.
+                    // Share sticky only — never TITLE (push). See extractData.
                     SharedPrefsData.putString(getApplicationContext(),
                             Constants.PENDING_SHARE_POST, id, Constants.PREF_NAME);
                     showLog("CHECK POINT page.link resolved articleId:" + id);
