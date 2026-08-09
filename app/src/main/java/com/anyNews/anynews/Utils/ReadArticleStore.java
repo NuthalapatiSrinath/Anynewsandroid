@@ -67,9 +67,11 @@ public final class ReadArticleStore {
     public static final int MAX_IDS = 300;
     /**
      * Cap for {@code exclude_post_ids} on List_All_Articles (new clients only).
-     * Newest-read first so recent pages fill with useful unread cards.
+     * Newest-read first so server densify can skip every locally committed read
+     * (must match {@link #MAX_IDS} - a smaller cap left older committed ids off
+     * the wire, server re-served them, and client strip emptied the page).
      */
-    public static final int EXCLUDE_IDS_SEND_CAP = 150;
+    public static final int EXCLUDE_IDS_SEND_CAP = MAX_IDS;
     /** Drop entries older than this when pruning (30 days). */
     public static final long TTL_MS = 30L * 24L * 60L * 60L * 1000L;
 

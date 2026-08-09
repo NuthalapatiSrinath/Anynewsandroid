@@ -703,8 +703,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Caps auto-pagination so we never spin forever.
      */
     private int onlineNewsAllReadSkipStreak = 0;
-    /** Raised so dense read history can skip past many already-read server pages. */
-    private static final int ONLINE_NEWS_ALL_READ_SKIP_CAP = 28;
+    /**
+     * Max auto-pages while every real was already-read after strip.
+     * Continuous unread: walk past today + yesterday + older unreads as long as
+     * the catalog has posts (page size ~8 -> 200 pages ~ 1600 depth). Stop earlier
+     * on true empty catalog when skip no longer advances (see empty-page path).
+     * Was 28 - power users hit empty while older unread still stored.
+     */
+    private static final int ONLINE_NEWS_ALL_READ_SKIP_CAP = 200;
     /** Prefer at least this many real unread cards before stopping skip-ahead. */
     private static final int ONLINE_NEWS_MIN_UNREAD_CARDS = 4;
     /**
@@ -9264,6 +9270,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // New clients only: optional capped recent-read ids so server can densify unread pages
         // via shared feed cache + in-memory strip (never per-user Mongo). Primary UX filter
         // remains client stripReadFromFeed on merge/paint; exclude is additive densify only.
+        // Cap = full committed ReadArticleStore (MAX_IDS) so older-than-N reads are not
+        // re-served and client-stripped to empty while deeper unreads exist.
         // Never on Special/Video. Old server ignores unknown fields; omit → legacy shared path.
         if (!specialMode && !videoMode && isDeviceOnline()) {
             try {
@@ -10822,22 +10830,81 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     } else {
 
                         if (validateUserOtp.getData().size() == 0) {
-                            if (list.size() == 0 && !fromCache) {
-                                mFlipView.setVisibility(View.GONE);
-                                layout_with_data.setVisibility(View.VISIBLE);
-                                hideHomeFeedLoadingReveal(fromCache);
-                                post_news_scrren.setVisibility(View.GONE);
-                                txtNoData.setVisibility(View.VISIBLE);
+                            // Empty payload still carries next skip/actual_skip/last_post_id.
+                            // Apply cursors first so densify walks deeper (all-read strip +
+                            // exclude top-up shortfall) instead of re-requesting the same page.
+                            int skipBeforeEmpty = skip;
+                            long actualBeforeEmpty = actual_skip;
+                            if (!fromCache) {
                                 try {
-                                    if (nodatascreen != null && isVideoFeedMode()) {
-                                        nodatascreen.setText(getString(R.string.video_news_empty));
+                                    if (validateUserOtp.getLastPostId() != null) {
+                                        last_post_id = validateUserOtp.getLastPostId();
+                                    }
+                                    if (validateUserOtp.getSkip() != null) {
+                                        skip = validateUserOtp.getSkip();
+                                    }
+                                    if (validateUserOtp.getActualSkip() != null) {
+                                        actual_skip = validateUserOtp.getActualSkip();
                                     }
                                 } catch (Exception ignored) {
                                 }
-                                initialCall=true;
-                                showLog("txtNoData VISIBLE::");
+                            }
+                            final boolean cursorAdvanced = !fromCache
+                                    && (skip > skipBeforeEmpty
+                                            || actual_skip > actualBeforeEmpty);
+                            if (list.size() == 0 && !fromCache) {
+                                if (canPageOnlineMainNews()
+                                        && cursorAdvanced
+                                        && onlineNewsAllReadSkipStreak
+                                                < ONLINE_NEWS_ALL_READ_SKIP_CAP) {
+                                    // Server page empty after densify window - keep walking
+                                    // while cursor advances (older unread may still exist).
+                                    resolveSoftEmptyNewsFeed("api_empty_page_data");
+                                    initialCall = true;
+                                } else {
+                                    // True end of catalog (no cursor progress) or skip cap.
+                                    mFlipView.setVisibility(View.GONE);
+                                    layout_with_data.setVisibility(View.VISIBLE);
+                                    hideHomeFeedLoadingReveal(fromCache);
+                                    post_news_scrren.setVisibility(View.GONE);
+                                    txtNoData.setVisibility(View.VISIBLE);
+                                    try {
+                                        if (nodatascreen != null && isVideoFeedMode()) {
+                                            nodatascreen.setText(getString(R.string.video_news_empty));
+                                        }
+                                    } catch (Exception ignored) {
+                                    }
+                                    initialCall=true;
+                                    showLog("txtNoData VISIBLE:: empty page end"
+                                            + " cursorAdvanced=" + cursorAdvanced
+                                            + " streak=" + onlineNewsAllReadSkipStreak);
+                                }
                             } else if (!fromCache) {
                                 no_article_message="No articles to read further";
+                                // List has cards; empty next page. Keep densify only when
+                                // under min unread and cursor still moves (continuous fill).
+                                try {
+                                    if (canPageOnlineMainNews()
+                                            && !bookmarksModeSelected
+                                            && cursorAdvanced
+                                            && list != null
+                                            && ReadArticleStore.countRealArticles(list)
+                                                    < ONLINE_NEWS_MIN_UNREAD_CARDS
+                                            && onlineNewsAllReadSkipStreak
+                                                    < ONLINE_NEWS_ALL_READ_SKIP_CAP
+                                            && !isApiRequested) {
+                                        onlineNewsAllReadSkipStreak++;
+                                        isApiRequested = false;
+                                        new Handler(Looper.getMainLooper()).post(() -> {
+                                            if (!isApiRequested && canPageOnlineMainNews()
+                                                    && !bookmarksModeSelected) {
+                                                isApiRequested = true;
+                                                ShowNews_Data_Values(category_id, 3);
+                                            }
+                                        });
+                                    }
+                                } catch (Exception ignored) {
+                                }
                             }
 
                         }
