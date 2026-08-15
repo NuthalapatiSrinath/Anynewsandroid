@@ -41,6 +41,17 @@ public class ModelClass implements Serializable {
         @SerializedName("category_id")
         @Expose
         private Integer categoryId;
+        /** Post geo — used with location_label for the card pin (not user district). */
+        @SerializedName("state_id")
+        @Expose
+        private Integer state_id;
+        @SerializedName("dist_id")
+        @Expose
+        private Integer dist_id;
+        /** Server-resolved district/state name for the location pin. */
+        @SerializedName("location_label")
+        @Expose
+        private String location_label;
         @SerializedName("post_type")
         @Expose
         private String postType;
@@ -101,6 +112,9 @@ public class ModelClass implements Serializable {
         @SerializedName("like_status")
         @Expose
         private Integer likeStatus;
+        @SerializedName("bookmark_status")
+        @Expose
+        private Integer bookmarkStatus;
         @SerializedName("writer_name")
         @Expose
         private String writerName;
@@ -410,6 +424,30 @@ public class ModelClass implements Serializable {
             this.categoryId = categoryId;
         }
 
+        public Integer getState_id() {
+            return state_id;
+        }
+
+        public void setState_id(Integer state_id) {
+            this.state_id = state_id;
+        }
+
+        public Integer getDist_id() {
+            return dist_id;
+        }
+
+        public void setDist_id(Integer dist_id) {
+            this.dist_id = dist_id;
+        }
+
+        public String getLocation_label() {
+            return location_label;
+        }
+
+        public void setLocation_label(String location_label) {
+            this.location_label = location_label;
+        }
+
         public String getPostType() {
             return postType;
         }
@@ -576,6 +614,15 @@ public class ModelClass implements Serializable {
 
         public void setLikeStatus(Integer likeStatus) {
             this.likeStatus = likeStatus;
+        }
+
+        public Integer getBookmarkStatus() {
+            if (bookmarkStatus == null) return 0;
+            return bookmarkStatus;
+        }
+
+        public void setBookmarkStatus(Integer bookmarkStatus) {
+            this.bookmarkStatus = bookmarkStatus;
         }
 
         public String getWriterName() {
@@ -784,7 +831,7 @@ public class ModelClass implements Serializable {
     }
 
     public void setActualSkip(Long skip) {
-        this.actualSkip = actualSkip;
+        this.actualSkip = skip;
     }
 
 

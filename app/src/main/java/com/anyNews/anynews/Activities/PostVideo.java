@@ -68,6 +68,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
@@ -385,90 +386,8 @@ public class PostVideo extends AppCompatActivity {
 
     private void requestStoragePermission() {
         AppHelper.showLog("requestStoragePermission");
-        //Initialize Google Play Services
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            AppHelper.showLog("PERMISSION");
-            if ((ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.READ_EXTERNAL_STORAGE)
-                    == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
-                    || ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED)  {
-                //Location Permission already granted
-                AppHelper.showLog("PERMISSION GRANTED +++++");
-                showFileChooser();
-            } else {
-                //Request Location Permission
-                AppHelper.showLog("NO PERMISSION");
-                if(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU){
-
-                    PermissionX.init(this)
-                            .permissions(Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.CAMERA)
-                            .onExplainRequestReason(new ExplainReasonCallback() {
-                                @Override
-                                public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
-                                    scope.showRequestReasonDialog(deniedList, "Please allow the below necessary permissions to upload photos and videos", "OK", "Cancel");
-                                }
-                            })
-                            .onForwardToSettings(new ForwardToSettingsCallback() {
-                                @Override
-                                public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
-                                    scope.showForwardToSettingsDialog(deniedList, "Please allow the below necessary permissions manually from settings page to upload photos and videos", "OK", "Cancel");
-
-                                }
-                            })
-                            .request(new RequestCallback() {
-                                @Override
-                                public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
-                                    if (allGranted) {
-                                        showFileChooser();
-                                        //  Toast.makeText(PostArticles.this, "All permissions are granted", Toast.LENGTH_LONG).show();
-                                    } else {
-                                        //  Toast.makeText(PostArticles.this, "These permissions are denied___:"+deniedList, Toast.LENGTH_LONG).show();
-                                    }
-                                }
-                            });
-//                    requestPermissions(
-//                            new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.CAMERA},
-//                            STORAGE_PERMISSION_CODE);
-                }else{
-
-                    PermissionX.init(this)
-                            .permissions(Manifest.permission.READ_MEDIA_VIDEO,Manifest.permission.CAMERA)
-                            .onExplainRequestReason(new ExplainReasonCallback() {
-                                @Override
-                                public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
-                                    scope.showRequestReasonDialog(deniedList, "Please allow the below necessary permissions to upload photos and videos", "OK", "Cancel");
-                                }
-                            })
-                            .onForwardToSettings(new ForwardToSettingsCallback() {
-                                @Override
-                                public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
-                                    scope.showForwardToSettingsDialog(deniedList, "Please allow the below necessary permissions manually from settings page to upload photos and videos", "OK", "Cancel");
-
-                                }
-                            })
-
-                            .request(new RequestCallback() {
-                                @Override
-                                public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
-                                    if (allGranted) {
-                                        showFileChooser();
-                                        //Toast.makeText(PostArticles.this, "All permissions are granted", Toast.LENGTH_LONG).show();
-                                    } else {
-                                        //Toast.makeText(PostArticles.this, "These permissions are denied##:"+deniedList, Toast.LENGTH_LONG).show();
-                                    }
-                                }
-                            });
-//                    requestPermissions(
-//                            new String[]{Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.CAMERA},
-//                            STORAGE_PERMISSION_CODE);
-                }
-            }
-        } else {
-            AppHelper.showLog("PERMISSION GRANTED ___");
-            showFileChooser();
-        }
+        // Chooser first. CAMERA only when recording; gallery video via SAF (no dual grant).
+        showFileChooser();
     }
 
 
@@ -528,33 +447,41 @@ public class PostVideo extends AppCompatActivity {
             @Override
             public void onClick(DialogInterface dialog, int item) {
                 if (options[item].equals("" + languageModelResponse.getData().getTakePhoto())) {
-                    Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                        startActivityForResult(intent, PICK_IMAGE_REQUEST_CAMARA);
-                    }
-
-
+                    DeferredMediaPermissions.ensureCamera(PostVideo.this,
+                            new DeferredMediaPermissions.GrantCallback() {
+                                @Override
+                                public void onGranted() {
+                                    Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                                    if (getApplicationContext() != null
+                                            && getApplicationContext().getPackageName()
+                                            .equals(BuildConfig.APPLICATION_ID)) {
+                                        startActivityForResult(intent, PICK_IMAGE_REQUEST_CAMARA);
+                                    }
+                                }
+                            });
                 } else if (options[item].equals("" + languageModelResponse.getData().getChooseFromGallery())) {
-                    /*Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                        startActivityForResult(intent, PICK_IMAGE_REQUEST);
-                    }*/
                     Intent intent = new Intent();
                     intent.setType("video/*");
                     intent.setAction(Intent.ACTION_GET_CONTENT);
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        startActivityForResult(Intent.createChooser(intent, "Complete action using"), PICK_IMAGE_REQUEST);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    if (getApplicationContext() != null
+                            && getApplicationContext().getPackageName()
+                            .equals(BuildConfig.APPLICATION_ID)) {
+                        startActivityForResult(
+                                Intent.createChooser(intent, "Complete action using"),
+                                PICK_IMAGE_REQUEST);
                     }
-
                 } else if (options[item].equals("" + languageModelResponse.getData().getRecord_video())) {
-
-                    Intent takeVideoIntent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
-                   // takeVideoIntent.putExtra(MediaStore.EXTRA_DURATION_LIMIT, 30);
-                    takeVideoIntent.putExtra(MediaStore.EXTRA_OUTPUT, Environment.getExternalStorageDirectory().getPath()+"videocapture_example.mp4");
-
-                    startActivityForResult(takeVideoIntent, PICK_IMAGE_REQUEST);
-                }else if (options[item].equals("" + languageModelResponse.getData().getCancel())) {
-
+                    DeferredMediaPermissions.ensureCamera(PostVideo.this,
+                            new DeferredMediaPermissions.GrantCallback() {
+                                @Override
+                                public void onGranted() {
+                                    Intent takeVideoIntent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
+                                    startActivityForResult(takeVideoIntent, PICK_IMAGE_REQUEST);
+                                }
+                            });
+                } else if (options[item].equals("" + languageModelResponse.getData().getCancel())) {
                     dialog.dismiss();
                 }
             }

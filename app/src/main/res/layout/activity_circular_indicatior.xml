@@ -186,19 +186,20 @@
         </LinearLayout>
 
     </LinearLayout>
-    <!-- Hidden: footer Share replaces on-image corner share for all galleries. -->
+    <!-- Magazines/Special glow galleries: blue blink Share bottom-right (above footer).
+         Normal News galleries keep this GONE. Same asset as Calendar / full_image. -->
     <ImageView
         android:id="@+id/image_gallary_share"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_gravity="end|bottom"
         android:layout_marginEnd="@dimen/_20sdp"
-        android:layout_marginBottom="20dp"
+        android:layout_marginBottom="64dp"
         android:visibility="gone"
         android:contentDescription="@string/share_more_options"
         android:padding="12dp"
         android:scaleType="centerInside"
-        android:src="@drawable/ic_baseline_share_24"/>
+        android:src="@drawable/ic_share_full"/>
 
 
 </FrameLayout>

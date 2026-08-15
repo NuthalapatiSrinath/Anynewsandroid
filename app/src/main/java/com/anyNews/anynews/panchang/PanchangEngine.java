@@ -15,9 +15,15 @@ import java.util.TimeZone;
 /**
  * On-device Telugu panchang year generator (mirrors server {@code panchangEngine.js}).
  * <p>
- * Deterministic for (year, lat, lng, Asia/Kolkata) — no randomness.
+ * Product rule (Way2News parity): the in-app calendar always uses the fixed
+ * Hyderabad ProKerala pack via {@link PanchangYearCache} / {@link PanchangRepository};
+ * device GPS must not drive timings. Do not trim Shubha∩Rahu overlaps.
  * <p>
- * Data source (honest, not temple-grade):
+ * Preferred data source:
+ * <ul>
+ *   <li>Bundled ProKerala Telugu Panchangam asset {@code panchang/hyderabad_YYYY.json}</li>
+ * </ul>
+ * Fallback (missing asset only — still at {@link #DEFAULT_LAT}/{@link #DEFAULT_LNG}):
  * <ul>
  *   <li>Sunrise/sunset: NOAA-style solar equation of time + altitude formula</li>
  *   <li>Tithi / nakshatra: low-precision sun & moon ecliptic longitudes → elongation / 27-fold</li>
@@ -25,19 +31,17 @@ import java.util.TimeZone;
  *   <li>Abhijit / Amrita / Brahma / Varjya / vehicle: fixed fractional day approximations</li>
  *   <li>Festivals: fixed national dates + curated seeded movable religious dates per year</li>
  * </ul>
- * Not claimed to match every printed panchang or competitor to the minute.
  */
 public final class PanchangEngine {
 
-    /** Bump when festival seeds or day-structure rules change (invalidates disk cache). */
+    /** Bump when festival seeds, vendor packs, or day-structure rules change. */
     public static final int ENGINE_VERSION = 3;
     public static final String DATA_SOURCE =
-            "astronomical_approx+seeded_festivals_v3";
-    /** Drop auspicious fragments shorter than this after trimming Rahu / Yama / Gulika. */
-    private static final double MIN_SHUBHA_FRAGMENT_MIN = 5.0;
+            "prokerala_telugu_panchangam_hyderabad+astronomical_fallback_v3";
 
-    public static final double DEFAULT_LAT = 14.6819;
-    public static final double DEFAULT_LNG = 77.6006;
+    /** Hyderabad — matches ProKerala Telugu Panchangam reference calendars. */
+    public static final double DEFAULT_LAT = 17.3850;
+    public static final double DEFAULT_LNG = 78.4867;
     public static final String DEFAULT_TZ = "Asia/Kolkata";
     private static final int TZ_OFFSET_MIN = 330;
 
@@ -121,7 +125,9 @@ public final class PanchangEngine {
         pack.lat = lat;
         pack.lng = lng;
         pack.timezone = DEFAULT_TZ;
-        pack.locationName = "Anantapur / default AP";
+        pack.locationName = (Math.abs(lat - DEFAULT_LAT) < 0.05 && Math.abs(lng - DEFAULT_LNG) < 0.05)
+                ? "Hyderabad, Telangana"
+                : "Custom location";
         pack.generatedAt = isoNow();
         pack.engineVersion = ENGINE_VERSION;
         pack.dataSource = DATA_SOURCE;
@@ -269,25 +275,20 @@ public final class PanchangEngine {
         day.dateDisplayEn = EN_SHORT[m0] + " " + d + ", " + y;
         day.dateDisplayTe = TE_MONTH[m0] + " " + d;
 
-        // Major inauspicious day-slots: trim these out of shubha so we never label
-        // Rahu (etc.) time as auspicious when the raw windows overlap.
-        List<double[]> majorAshubha = new ArrayList<>(3);
-        majorAshubha.add(rahu);
-        majorAshubha.add(yama);
-        majorAshubha.add(gulika);
-
+        // Shubha / ashubha listed independently (same as printed panchangams).
+        // Overlap is expected — different classical tables, not mutually exclusive.
         day.shubha = new ArrayList<>();
-        addShubhaTrimmed(day.shubha, "అభిజిత్ ముహూర్తాలు", abhijit[0], abhijit[1], majorAshubha);
-        addShubhaTrimmed(day.shubha, "అమృతకాలము", amrita[0], amrita[1], majorAshubha);
-        addShubhaTrimmed(day.shubha, "బ్రహ్మ ముహూర్తం", brahma[0], brahma[1], majorAshubha);
+        day.shubha.add(item("అభిజిత్ ముహూర్తాలు", abhijit[0], abhijit[1]));
+        day.shubha.add(item("అమృతకాలము", amrita[0], amrita[1]));
+        day.shubha.add(item("బ్రహ్మ ముహూర్తం", brahma[0], brahma[1]));
         if (vehicle != null) {
-            addShubhaTrimmed(day.shubha, "వాహన కొనుగోలు", vehicle[0], vehicle[1], majorAshubha);
+            day.shubha.add(item("వాహన కొనుగోలు", vehicle[0], vehicle[1]));
         }
 
         day.ashubha = new ArrayList<>();
-        day.ashubha.add(item("రాహు", rahu[0], rahu[1]));
+        day.ashubha.add(item("రాహుకాలం", rahu[0], rahu[1]));
         day.ashubha.add(item("యమగండం", yama[0], yama[1]));
-        day.ashubha.add(item("గుళిక", gulika[0], gulika[1]));
+        day.ashubha.add(item("గుళికా", gulika[0], gulika[1]));
         double[][] durs = DURMU[weekday];
         for (double[] dr : durs) {
             double dayLen = sunset - sunrise;
@@ -304,53 +305,6 @@ public final class PanchangEngine {
 
     private static PanchangModels.TimeItem item(String label, double a, double b) {
         return new PanchangModels.TimeItem(label, formatRange(a, b));
-    }
-
-    /**
-     * Subtract major inauspicious intervals from an auspicious window and append
-     * remaining fragment(s). Splits when Rahu cuts through the middle.
-     */
-    private static void addShubhaTrimmed(
-            List<PanchangModels.TimeItem> out,
-            String label,
-            double start,
-            double end,
-            List<double[]> blockers) {
-        List<double[]> segs = new ArrayList<>();
-        segs.add(new double[]{start, end});
-        if (blockers != null) {
-            for (double[] bad : blockers) {
-                if (bad == null || bad.length < 2) continue;
-                segs = subtractIntervalList(segs, bad[0], bad[1]);
-            }
-        }
-        for (double[] seg : segs) {
-            if (seg[1] - seg[0] >= MIN_SHUBHA_FRAGMENT_MIN) {
-                out.add(item(label, seg[0], seg[1]));
-            }
-        }
-    }
-
-    @NonNull
-    private static List<double[]> subtractIntervalList(
-            List<double[]> segs, double badStart, double badEnd) {
-        if (badEnd <= badStart) return segs;
-        List<double[]> next = new ArrayList<>();
-        for (double[] seg : segs) {
-            double a = seg[0];
-            double b = seg[1];
-            if (b <= badStart || a >= badEnd) {
-                next.add(seg);
-                continue;
-            }
-            if (a < badStart) {
-                next.add(new double[]{a, Math.min(b, badStart)});
-            }
-            if (b > badEnd) {
-                next.add(new double[]{Math.max(a, badEnd), b});
-            }
-        }
-        return next;
     }
 
     private static boolean hasIcon(List<PanchangModels.Festival> list, String icon) {

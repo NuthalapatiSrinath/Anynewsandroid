@@ -56,7 +56,8 @@
                         android:layout_height="match_parent"
                         app:civ_border_overlay="true"
                         android:layout_below="@+id/data_value"
-                        android:src="@drawable/upload_photo"
+                        android:src="@drawable/ic_user_profile"
+                        android:scaleType="centerCrop"
                         android:layout_centerHorizontal="true" />
 
                 </LinearLayout>

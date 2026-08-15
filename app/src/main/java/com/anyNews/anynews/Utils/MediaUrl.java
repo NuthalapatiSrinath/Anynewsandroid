@@ -42,14 +42,23 @@ public final class MediaUrl {
             return DEFAULT_PROFILE;
         }
         String trimmed = url.trim();
+        String out;
         if (trimmed.contains("objectstorage.") && trimmed.contains("oraclecloud.com")) {
-            return trimmed;
+            out = trimmed;
+        } else {
+            String key = extractObjectKey(trimmed);
+            if (key != null && isStaticObjectKey(key) && isLegacyHost(trimmed)) {
+                out = OCI_BASE + key;
+            } else {
+                out = trimmed;
+            }
         }
-        String key = extractObjectKey(trimmed);
-        if (key != null && isStaticObjectKey(key) && isLegacyHost(trimmed)) {
-            return OCI_BASE + key;
+        // Soft-accounting for public object opens (app→OCI dashboard beacon).
+        try {
+            MediaAccessReporter.get().recordUrl(out);
+        } catch (Exception ignored) {
         }
-        return trimmed;
+        return out;
     }
 
     public static void normalizeFollowProfile(FollowersProfileModel.Datum profile) {

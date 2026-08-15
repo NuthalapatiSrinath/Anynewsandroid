@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Soft glow only for Special blink polish; glyph is ic_footer_special (sparkles). -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:width="28dp"
-        android:height="28dp"
+        android:width="24dp"
+        android:height="24dp"
         android:gravity="center">
         <shape android:shape="oval">
             <solid android:color="#33FF6300" />
@@ -11,6 +12,6 @@
     <item
         android:width="22dp"
         android:height="22dp"
-        android:drawable="@drawable/ic_home_specials"
+        android:drawable="@drawable/ic_footer_special"
         android:gravity="center" />
 </layer-list>

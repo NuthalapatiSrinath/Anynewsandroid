@@ -57,8 +57,8 @@ android {
         minSdkVersion 24
         targetSdk 35
         multiDexEnabled true
-        versionCode 150
-        versionName "3.40.50"
+        versionCode 167
+        versionName "3.40.67"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
@@ -163,6 +163,8 @@ android {
 
 dependencies {
     implementation 'com.android.installreferrer:installreferrer:2.2'
+    // Referral integrity token collection. Server verification remains authoritative.
+    implementation 'com.google.android.play:integrity:1.4.0'
     // Google Play In-App Updates (flexible / incremental via Play — not full APK from our server)
     implementation 'com.google.android.play:app-update:2.1.0'
     implementation 'com.google.android.gms:play-services-analytics-impl:18.2.0'
@@ -211,6 +213,8 @@ dependencies {
     implementation 'com.jakewharton:butterknife:10.2.1'
     annotationProcessor 'com.jakewharton:butterknife-compiler:10.2.1'
     implementation 'com.google.android.material:material:1.1.0'
+    implementation 'androidx.viewpager:viewpager:1.0.0'
+    implementation 'androidx.viewpager2:viewpager2:1.1.0'
 
     implementation 'com.rollbar:rollbar-java:1.+'
     implementation 'com.rollbar:rollbar-android:1.+@aar'

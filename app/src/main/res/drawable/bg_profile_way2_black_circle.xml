@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Black circular chevron control (Way2 language/location rows). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/profile_way2_circle_btn" />
+    <size
+        android:width="32dp"
+        android:height="32dp" />
+</shape>

@@ -632,7 +632,7 @@
                 android:layout_height="match_parent"
                 android:gravity="center"
                 android:orientation="horizontal"
-                android:visibility="visible">
+                android:visibility="gone">
 
                 <include layout="@layout/layout_loading"></include>
 

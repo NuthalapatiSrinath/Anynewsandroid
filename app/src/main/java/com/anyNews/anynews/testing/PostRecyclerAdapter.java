@@ -71,19 +71,40 @@ public class PostRecyclerAdapter extends RecyclerView.Adapter<BaseViewHolder> {
     }
 
     public void addItems(List<PostItem.Datum> postItems) {
+        if (postItems == null || postItems.isEmpty()) return;
         mPostItems.addAll(postItems);
         notifyDataSetChanged();
     }
 
+    /** Replace list content in one shot (first page / cache paint). */
+    public void setItems(List<PostItem.Datum> postItems) {
+        isLoaderVisible = false;
+        mPostItems.clear();
+        if (postItems != null && !postItems.isEmpty()) {
+            mPostItems.addAll(postItems);
+        }
+        notifyDataSetChanged();
+    }
+
+    public boolean hasItems() {
+        if (mPostItems == null || mPostItems.isEmpty()) return false;
+        // Ignore trailing loading row
+        if (isLoaderVisible && mPostItems.size() == 1) return false;
+        return true;
+    }
+
     public void addLoading() {
+        if (isLoaderVisible) return;
         isLoaderVisible = true;
         mPostItems.add(new PostItem.Datum());
         notifyItemInserted(mPostItems.size() - 1);
     }
 
     public void removeLoading() {
+        if (!isLoaderVisible) return;
         isLoaderVisible = false;
         int position = mPostItems.size() - 1;
+        if (position < 0) return;
         PostItem.Datum item = getItem(position);
         if (item != null) {
             mPostItems.remove(position);
@@ -92,6 +113,7 @@ public class PostRecyclerAdapter extends RecyclerView.Adapter<BaseViewHolder> {
     }
 
     public void clear() {
+        isLoaderVisible = false;
         mPostItems.clear();
         notifyDataSetChanged();
     }
@@ -153,12 +175,12 @@ public class PostRecyclerAdapter extends RecyclerView.Adapter<BaseViewHolder> {
 
              //   showLog("NARASIMHARAO_AKKISETTY" + item.getTransactionStatus());
 
-                if (item.getTransactionStatus() == 1) {
+                if (item.getTransactionStatus() != null && item.getTransactionStatus() == 1) {
 
                     payment_status_image_view.setVisibility(View.VISIBLE);
                     payment_status_value.setVisibility(View.GONE);
 
-                } else if (item.getTransactionStatus() == 2) {
+                } else if (item.getTransactionStatus() != null && item.getTransactionStatus() == 2) {
                     payment_status_image_view.setVisibility(View.GONE);
                     payment_status_value.setVisibility(View.VISIBLE);
 
@@ -179,7 +201,7 @@ public class PostRecyclerAdapter extends RecyclerView.Adapter<BaseViewHolder> {
                 article_transaction.setVisibility(View.VISIBLE);
                 redeem_transaction.setVisibility(View.GONE);
 
-              if(item.getPoints()>1){
+              if(item.getPoints() != null && item.getPoints() > 1){
 
                 article_transaction_amount.setTextColor(Color.GREEN);
                 article_transaction_amount.setText("+"+item.getPoints());
@@ -198,12 +220,17 @@ public class PostRecyclerAdapter extends RecyclerView.Adapter<BaseViewHolder> {
 
 
             String complete_date = ""+item.getCreatedAt();
-            String date = complete_date.substring(0, 2);
-            String month = complete_date.substring(3, 6);
-            String year = complete_date.substring(7, 11);
-            redeem_transaction_year.setText(year);
-            redeem_transaction_month.setText(month);
-            redeem_transaction_date.setText(date);
+            if (complete_date != null && complete_date.length() >= 11) {
+                try {
+                    String date = complete_date.substring(0, 2);
+                    String month = complete_date.substring(3, 6);
+                    String year = complete_date.substring(7, 11);
+                    redeem_transaction_year.setText(year);
+                    redeem_transaction_month.setText(month);
+                    redeem_transaction_date.setText(date);
+                } catch (Exception ignored) {
+                }
+            }
 
 
 

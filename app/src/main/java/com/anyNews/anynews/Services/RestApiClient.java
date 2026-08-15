@@ -3,6 +3,7 @@ package com.anyNews.anynews.Services;
 import static com.anyNews.anynews.Utils.AppHelper.showLog;
 
 import com.anyNews.anynews.BuildConfig;
+import com.anyNews.anynews.Utils.ServerAvailabilityInterceptor;
 import com.google.gson.Gson;
 
 import java.security.SecureRandom;
@@ -30,10 +31,14 @@ public class RestApiClient
         if(BuildConfig.DEBUG){
             interceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
         }
+        // First-open feed must fail fast into shimmer retry, not hang 30–100s.
         OkHttpClient.Builder clientBuilder = new OkHttpClient.Builder()
-                .connectTimeout(100, TimeUnit.SECONDS)
+                .connectTimeout(8, TimeUnit.SECONDS)
+                .writeTimeout(15, TimeUnit.SECONDS)
+                .addInterceptor(new ServerAvailabilityInterceptor())
                 .addNetworkInterceptor(interceptor)
-                .readTimeout(100, TimeUnit.SECONDS);
+                .readTimeout(15, TimeUnit.SECONDS)
+                .callTimeout(20, TimeUnit.SECONDS);
 
         // Debug-only: allow API calls from emulator when host SSL inspection / missing CA breaks handshake.
         if (BuildConfig.DEBUG) {

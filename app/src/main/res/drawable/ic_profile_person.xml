@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default/guest avatar: light-blue circle + white person silhouette (matches ic_user_profile). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="72dp"
+    android:height="72dp"
+    android:viewportWidth="72"
+    android:viewportHeight="72">
+    <path
+        android:fillColor="#FF009FE3"
+        android:pathData="M36,0C16.12,0 0,16.12 0,36s16.12,36 36,36 36,-16.12 36,-36S55.88,0 36,0z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M36,36c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9 -9,4.03 -9,9 4.03,9 9,9zM36,40.5c-6,0 -18,3.01 -18,9V54h36v-4.5c0,-5.99 -12,-9 -18,-9z" />
+</vector>

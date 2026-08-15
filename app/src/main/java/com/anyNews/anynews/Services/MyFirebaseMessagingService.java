@@ -1,6 +1,7 @@
 package com.anyNews.anynews.Services;
 
 import static com.anyNews.anynews.Utils.AppHelper.showLog;
+import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 import android.Manifest;
 import android.app.NotificationChannel;
@@ -11,13 +12,18 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.text.Spannable;
-import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -28,19 +34,17 @@ import android.widget.RemoteViews;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import com.anyNews.anynews.Activities.HomePage;
 import com.anyNews.anynews.Activities.StartingActivity;
 import com.anyNews.anynews.Pojo.AddLikeResponse;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.StartingAppRequest;
 import com.anyNews.anynews.R;
-import com.anyNews.anynews.Services.APIService;
-import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -49,17 +53,10 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.IgnoreExtraProperties;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
-
-import org.json.JSONObject;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-
-import static com.anyNews.anynews.Utils.MyUtils.encrypt;
+import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -67,23 +64,36 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.Map;
-import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+/**
+ * FCM receive + tray UI. Compact row: [article thumb LEFT | optional red brand logo] | headline.
+ * Never injects white monochrome launcher as large content logo. setSmallIcon remains for the
+ * status bar (system monochrome). Admin knobs via splash + FCM data (include_logo, sizes).
+ */
 public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
-    // firebase storage
+    private static final String STYLE_TEXT_ONLY = "text_only";
+    private static final String STYLE_COMPACT = "compact_with_image";
+    private static final int DEFAULT_LEFT_DP = 48;
+    private static final int DEFAULT_THUMB_DP = 48;
+    private static final int DEFAULT_TITLE_SP = 13;
+    private static final int BIG_PICTURE_MAX_W = 720;
+    private static final int BIG_PICTURE_MAX_H = 360;
+
     FirebaseDatabase database = FirebaseDatabase.getInstance();
     DatabaseReference myRef = database.getReference();
     String type_firebase = "push_receive";
     String device_id = "";
     long post_id_long, sent_at, draft_id = 0;
-            String pn_color="#000000";
-            boolean showPNTime=true;
-
+    String pn_color = "#000000";
+    boolean showPNTime = true;
 
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
@@ -99,7 +109,8 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                     if (title == null || title.isEmpty()) {
                         title = "AnyNews";
                     }
-                    sendNotification(null, title, "0", "{}", pn_color, true);
+                    presentNewsNotification(
+                            title, "0", "{}", pn_color, true, null, null, null);
                 }
                 return;
             }
@@ -112,7 +123,6 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 return;
             }
 
-            // Targeted per-user alert: someone replied to this user's comment.
             if ("comment_reply".equals(type)) {
                 sendCommentReplyNotification(object);
                 return;
@@ -136,12 +146,45 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 e.printStackTrace();
             }
 
-            // Always show the notification immediately — do not wait for image download.
-            sendNotification(null, title, post_id, object.toString(), pn_color, showPNTime);
+            PushAppearance appearance = resolveAppearance(object);
+            // Show immediately (no white launcher logo); hydrate images async.
+            presentNewsNotification(
+                    title,
+                    post_id,
+                    object.toString(),
+                    pn_color,
+                    showPNTime,
+                    null,
+                    null,
+                    appearance);
+
+            if (shouldLoadArticleImage(appearance, image)
+                    || (appearance.includeLogo
+                    && appearance.logoUrl != null
+                    && !appearance.logoUrl.isEmpty())) {
+                new LoadNotificationImagesTask(
+                        image,
+                        title,
+                        post_id,
+                        object.toString(),
+                        pn_color,
+                        showPNTime,
+                        appearance)
+                        .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+            }
 
             Logone.e("NotificationData", object.toString());
             long current_time_firebase = System.currentTimeMillis();
-            writePushReceive("User", type_firebase, post_id_long, current_time_firebase, language_id, sent_at, draft_id, device_id, showPNTime);
+            writePushReceive(
+                    "User",
+                    type_firebase,
+                    post_id_long,
+                    current_time_firebase,
+                    language_id,
+                    sent_at,
+                    draft_id,
+                    device_id,
+                    showPNTime);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -211,38 +254,139 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     }
 
     private boolean canPostNotifications() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        // App Settings → Notifications off: OS may still deliver FCM data; we skip tray UI.
+        if (!SharedPrefsData.getBool(
+                getApplicationContext(),
+                Constants.NOTIFICATION_ENABLED,
+                Constants.PREF_NAME,
+                true)) {
+            return false;
+        }
+        try {
+            if (!NotificationManagerCompat.from(getApplicationContext()).areNotificationsEnabled()) {
+                return false;
+            }
+        } catch (Exception ignored) {
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(
+                            getApplicationContext(), Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+
+    private int dpToPx(int dp) {
+        float density = getResources().getDisplayMetrics().density;
+        return Math.max(1, Math.round(dp * density));
+    }
+
+    private int prefIntClamped(String key, int fallback, int min, int max) {
+        int v = SharedPrefsData.getInt(getApplicationContext(), key, Constants.PREF_NAME);
+        if (v <= 0) {
+            v = fallback;
+        }
+        return Math.max(min, Math.min(max, v));
+    }
+
+    /** Prefs from splash + optional per-push FCM extras (same keys). */
+    private PushAppearance resolveAppearance(@Nullable JSONObject object) {
+        PushAppearance a = new PushAppearance();
+        a.showArticleImage = SharedPrefsData.getBool(
+                getApplicationContext(), Constants.PN_SHOW_ARTICLE_IMAGE, Constants.PREF_NAME, true);
+        String mode = SharedPrefsData.getString(
+                getApplicationContext(), Constants.PN_STYLE_MODE, Constants.PREF_NAME);
+        a.styleMode = normalizeStyleMode(mode);
+        String logo = SharedPrefsData.getString(
+                getApplicationContext(), Constants.PN_LARGE_ICON_URL, Constants.PREF_NAME);
+        a.logoUrl = logo != null ? logo.trim() : "";
+        a.includeLogo = SharedPrefsData.getBool(
+                getApplicationContext(), Constants.PN_INCLUDE_LOGO_DEFAULT, Constants.PREF_NAME, false);
+        a.leftIconSizeDp = prefIntClamped(Constants.PN_LEFT_ICON_SIZE_DP, DEFAULT_LEFT_DP, 24, 96);
+        a.thumbSizeDp = prefIntClamped(Constants.PN_THUMB_SIZE_DP, DEFAULT_THUMB_DP, 24, 120);
+        a.titleSizeSp = prefIntClamped(Constants.PN_TITLE_SIZE_SP, DEFAULT_TITLE_SP, 10, 22);
+
+        if (object != null) {
+            if (object.has("pn_show_article_image")) {
+                a.showArticleImage = parseTruthy(object.optString("pn_show_article_image", "true"), true);
+            } else if (object.has("show_article_image")) {
+                a.showArticleImage = parseTruthy(object.optString("show_article_image", "true"), true);
+            }
+            if (object.has("pn_style_mode")) {
+                a.styleMode = normalizeStyleMode(object.optString("pn_style_mode", STYLE_COMPACT));
+            } else if (object.has("pn_style")) {
+                a.styleMode = normalizeStyleMode(object.optString("pn_style", STYLE_COMPACT));
+            }
+            if (object.has("pn_large_icon_url")) {
+                a.logoUrl = object.optString("pn_large_icon_url", "").trim();
+            } else if (object.has("push_logo_url")) {
+                a.logoUrl = object.optString("push_logo_url", "").trim();
+            } else if (object.has("large_icon_url")) {
+                a.logoUrl = object.optString("large_icon_url", "").trim();
+            }
+            if (object.has("include_logo")) {
+                a.includeLogo = parseTruthy(object.optString("include_logo", "false"), false);
+            } else if (object.has("include_logo_in_push")) {
+                a.includeLogo = parseTruthy(object.optString("include_logo_in_push", "false"), false);
+            } else if (object.has("push_include_logo")) {
+                a.includeLogo = parseTruthy(object.optString("push_include_logo", "false"), false);
+            }
+            if (object.has("pn_left_icon_size_dp")) {
+                a.leftIconSizeDp = clampInt(object.optInt("pn_left_icon_size_dp", DEFAULT_LEFT_DP), 24, 96);
+            } else if (object.has("push_left_icon_size_dp")) {
+                a.leftIconSizeDp = clampInt(object.optInt("push_left_icon_size_dp", DEFAULT_LEFT_DP), 24, 96);
+            }
+            if (object.has("pn_thumb_size_dp")) {
+                a.thumbSizeDp = clampInt(object.optInt("pn_thumb_size_dp", DEFAULT_THUMB_DP), 24, 120);
+            } else if (object.has("push_thumb_size_dp")) {
+                a.thumbSizeDp = clampInt(object.optInt("push_thumb_size_dp", DEFAULT_THUMB_DP), 24, 120);
+            }
+            if (object.has("pn_title_size_sp")) {
+                a.titleSizeSp = clampInt(object.optInt("pn_title_size_sp", DEFAULT_TITLE_SP), 10, 22);
+            }
+        }
+        return a;
+    }
+
+    private static int clampInt(int v, int min, int max) {
+        if (v <= 0) {
+            return min;
+        }
+        return Math.max(min, Math.min(max, v));
+    }
+
+    private static boolean shouldLoadArticleImage(PushAppearance appearance, String imageUrl) {
+        if (appearance == null || !appearance.showArticleImage) {
+            return false;
+        }
+        if (STYLE_TEXT_ONLY.equals(appearance.styleMode)) {
+            return false;
+        }
+        return imageUrl != null && !imageUrl.trim().isEmpty()
+                && !"null".equalsIgnoreCase(imageUrl.trim())
+                && !"undefined".equalsIgnoreCase(imageUrl.trim());
+    }
+
+    private static String normalizeStyleMode(String raw) {
+        if (raw != null && STYLE_TEXT_ONLY.equalsIgnoreCase(raw.trim())) {
+            return STYLE_TEXT_ONLY;
+        }
+        return STYLE_COMPACT;
+    }
+
+    private static boolean parseTruthy(String raw, boolean defaultValue) {
+        if (raw == null || raw.isEmpty()) {
+            return defaultValue;
+        }
+        String v = raw.trim().toLowerCase();
+        if ("false".equals(v) || "0".equals(v) || "no".equals(v) || "off".equals(v)) {
+            return false;
+        }
+        if ("true".equals(v) || "1".equals(v) || "yes".equals(v) || "on".equals(v)) {
             return true;
         }
-        return ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.POST_NOTIFICATIONS)
-                == PackageManager.PERMISSION_GRANTED;
+        return defaultValue;
     }
-
-    private void fetchArticleDetails(final String body, String title, String post_id, String object, String pnColor) {
-
-        new GetBitmapURL(body, title, post_id, object,pn_color).execute();
-
-    }
-
-
-    public void getBitmapFromURL(String src, String title, String post_id, String object,String pn_color,boolean showPNTime) {
-        try {
-            URL url = new URL(src);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setDoInput(true);
-            connection.connect();
-            InputStream input = connection.getInputStream();
-            Bitmap myBitmap = BitmapFactory.decodeStream(input);
-
-            sendNotification(myBitmap, title, post_id, object,pn_color,showPNTime);
-
-        } catch (IOException e) {
-
-            //   Log exception
-
-        }
-    }
-
 
     public SpannableStringBuilder makeSpannable(String text, String regex, String colorCode) {
         int colorIndex = 0;
@@ -258,17 +402,21 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         StringBuffer sb = new StringBuffer();
         SpannableStringBuilder spannable = new SpannableStringBuilder();
         Pattern pattern = Pattern.compile(regex);
-        Matcher matcher = pattern.matcher(text);
+        Matcher matcher = pattern.matcher(text != null ? text : "");
 
         while (matcher.find()) {
             sb.setLength(0);
             String group = matcher.group();
             String spanText = group.substring(1, group.length() - 1);
-            matcher.appendReplacement(sb, spanText);
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(spanText));
             spannable.append(sb.toString());
             int start = spannable.length() - spanText.length();
             final StyleSpan boldSpan = new StyleSpan(android.graphics.Typeface.BOLD);
-            spannable.setSpan(new ForegroundColorSpan(safeParseColor(colorCodeList.get(colorIndex % colorCodeList.size()))), start, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            spannable.setSpan(
+                    new ForegroundColorSpan(safeParseColor(colorCodeList.get(colorIndex % colorCodeList.size()))),
+                    start,
+                    spannable.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             spannable.setSpan(boldSpan, start, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             colorIndex++;
         }
@@ -279,7 +427,177 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         return spannable;
     }
 
-    private void sendNotification(Bitmap imgUrl, String title, String post_id, String object,String pnColor,boolean showPNTime) {
+    /**
+     * Full-color red AnyNews brand mark for custom RemoteViews only.
+     * Never {@code ic_launcher} adaptive monochrome / white glyph look.
+     */
+    private Bitmap redBrandLogoBitmap(int sizePx) {
+        try {
+            Bitmap src = BitmapFactory.decodeResource(getResources(), R.drawable.app_share_logo);
+            if (src == null) {
+                src = BitmapFactory.decodeResource(getResources(), R.drawable.new_splash_app_logo);
+            }
+            if (src == null) {
+                src = BitmapFactory.decodeResource(getResources(), R.drawable.app_splash_logo);
+            }
+            return scaleCenterCrop(src, sizePx, sizePx, true);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void applyRemoteViewSizes(RemoteViews views, int iconViewId, int titleViewId,
+                                      int iconDp, int titleSp) {
+        try {
+            if (Build.VERSION.SDK_INT >= 31) {
+                views.setViewLayoutWidth(iconViewId, iconDp, android.util.TypedValue.COMPLEX_UNIT_DIP);
+                views.setViewLayoutHeight(iconViewId, iconDp, android.util.TypedValue.COMPLEX_UNIT_DIP);
+            }
+            if (titleViewId != 0 && titleSp > 0) {
+                views.setTextViewTextSize(
+                        titleViewId, android.util.TypedValue.COMPLEX_UNIT_SP, titleSp);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Nullable
+    private static Bitmap downloadBitmap(String src, int maxW, int maxH) {
+        if (src == null || src.trim().isEmpty()) {
+            return null;
+        }
+        HttpURLConnection connection = null;
+        InputStream input = null;
+        try {
+            URL url = new URL(src.trim());
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(10000);
+            connection.setDoInput(true);
+            connection.connect();
+            input = connection.getInputStream();
+            Bitmap raw = BitmapFactory.decodeStream(input);
+            if (raw == null) {
+                return null;
+            }
+            return scaleToFit(raw, maxW, maxH);
+        } catch (IOException e) {
+            return null;
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    @Nullable
+    private static Bitmap scaleToFit(@Nullable Bitmap src, int maxW, int maxH) {
+        if (src == null) {
+            return null;
+        }
+        int w = src.getWidth();
+        int h = src.getHeight();
+        if (w <= 0 || h <= 0) {
+            return src;
+        }
+        float scale = Math.min((float) maxW / w, (float) maxH / h);
+        if (scale >= 1f) {
+            return src;
+        }
+        int nw = Math.max(1, Math.round(w * scale));
+        int nh = Math.max(1, Math.round(h * scale));
+        try {
+            Bitmap out = Bitmap.createScaledBitmap(src, nw, nh, true);
+            if (out != src) {
+                src.recycle();
+            }
+            return out;
+        } catch (Exception e) {
+            return src;
+        }
+    }
+
+    @Nullable
+    private static Bitmap scaleCenterCrop(@Nullable Bitmap src, int sizeX, int sizeY, boolean rounded) {
+        if (src == null) {
+            return null;
+        }
+        try {
+            int w = src.getWidth();
+            int h = src.getHeight();
+            if (w <= 0 || h <= 0) {
+                return src;
+            }
+            float scale = Math.max((float) sizeX / w, (float) sizeY / h);
+            int scaledW = Math.max(1, Math.round(w * scale));
+            int scaledH = Math.max(1, Math.round(h * scale));
+            Bitmap scaled = Bitmap.createScaledBitmap(src, scaledW, scaledH, true);
+            int x = Math.max(0, (scaledW - sizeX) / 2);
+            int y = Math.max(0, (scaledH - sizeY) / 2);
+            Bitmap cropped = Bitmap.createBitmap(scaled, x, y, Math.min(sizeX, scaledW), Math.min(sizeY, scaledH));
+            if (scaled != src && scaled != cropped) {
+                scaled.recycle();
+            }
+            if (!rounded) {
+                return cropped;
+            }
+            return roundBitmap(cropped, 10f);
+        } catch (Exception e) {
+            return src;
+        }
+    }
+
+    @Nullable
+    private static Bitmap roundBitmap(@Nullable Bitmap src, float radiusPx) {
+        if (src == null) {
+            return null;
+        }
+        try {
+            Bitmap out = Bitmap.createBitmap(src.getWidth(), src.getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(out);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            Rect rect = new Rect(0, 0, src.getWidth(), src.getHeight());
+            RectF rectF = new RectF(rect);
+            canvas.drawRoundRect(rectF, radiusPx, radiusPx, paint);
+            paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+            canvas.drawBitmap(src, rect, rect, paint);
+            if (out != src) {
+                src.recycle();
+            }
+            return out;
+        } catch (Exception e) {
+            return src;
+        }
+    }
+
+    private void presentNewsNotification(
+            String title,
+            String post_id,
+            String object,
+            String pnColor,
+            boolean showPNTime,
+            @Nullable Bitmap articleImage,
+            @Nullable Bitmap logoImage,
+            @Nullable PushAppearance appearance) {
+
+        if (appearance == null) {
+            appearance = resolveAppearance(null);
+        }
+
+        boolean showImage = appearance.showArticleImage
+                && !STYLE_TEXT_ONLY.equals(appearance.styleMode)
+                && articleImage != null;
+
+        int leftDp = appearance.includeLogo ? appearance.leftIconSizeDp : appearance.thumbSizeDp;
+        int leftPx = dpToPx(leftDp);
+        int titleSp = appearance.titleSizeSp;
+
         RemoteViews collapsedView = new RemoteViews(getPackageName(), R.layout.new_collapsed_request);
         RemoteViews expandedView = new RemoteViews(getPackageName(), R.layout.new_request);
         final Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
@@ -287,60 +605,94 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         Spannable pnTitle = makeSpannable(title, "\\[.*?\\]", pnColor);
 
         String GROUP_KEY_WORK_EMAIL = "com.anyNews.anynews.Services.WORK_EMAIL";
-        collapsedView.setTextViewText(R.id.notification_titleE,pnTitle);
-        collapsedView.setTextViewText(R.id.notification_titleTEL,pnTitle);
-        collapsedView.setTextViewText(R.id.notification_titleTa,pnTitle);
+        collapsedView.setTextViewText(R.id.notification_titleE, pnTitle);
+        collapsedView.setTextViewText(R.id.notification_titleTEL, pnTitle);
+        collapsedView.setTextViewText(R.id.notification_titleTa, pnTitle);
+        expandedView.setTextViewText(R.id.notification_title, pnTitle);
+
+        applyRemoteViewSizes(collapsedView, R.id.imageViewIcon, R.id.notification_titleE, leftDp, titleSp);
+        applyRemoteViewSizes(collapsedView, R.id.imageViewIcon, R.id.notification_titleTEL, leftDp, titleSp);
+        applyRemoteViewSizes(collapsedView, R.id.imageViewIcon, R.id.notification_titleTa, leftDp, titleSp);
+        applyRemoteViewSizes(expandedView, R.id.imageViewIconExpanded, R.id.notification_title, leftDp, titleSp);
 
         int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
         if (languageId == 4) {
             collapsedView.setViewVisibility(R.id.notification_titleE, View.GONE);
-            collapsedView.setViewVisibility(R.id.notification_titleTEL,View.GONE);
-            collapsedView.setViewVisibility(R.id.notification_titleTa,View.VISIBLE);
+            collapsedView.setViewVisibility(R.id.notification_titleTEL, View.GONE);
+            collapsedView.setViewVisibility(R.id.notification_titleTa, View.VISIBLE);
         } else if (languageId == 1) {
-            collapsedView.setViewVisibility(R.id.notification_titleE,View.VISIBLE);
-            collapsedView.setViewVisibility(R.id.notification_titleTEL,View.GONE);
-            collapsedView.setViewVisibility(R.id.notification_titleTa,View.GONE);
-        }else{
-            collapsedView.setViewVisibility(R.id.notification_titleE,View.GONE);
-            collapsedView.setViewVisibility(R.id.notification_titleTEL,View.VISIBLE);
-            collapsedView.setViewVisibility(R.id.notification_titleTa,View.GONE);
+            collapsedView.setViewVisibility(R.id.notification_titleE, View.VISIBLE);
+            collapsedView.setViewVisibility(R.id.notification_titleTEL, View.GONE);
+            collapsedView.setViewVisibility(R.id.notification_titleTa, View.GONE);
+        } else {
+            collapsedView.setViewVisibility(R.id.notification_titleE, View.GONE);
+            collapsedView.setViewVisibility(R.id.notification_titleTEL, View.VISIBLE);
+            collapsedView.setViewVisibility(R.id.notification_titleTa, View.GONE);
         }
 
+        // Left: brand logo (if include_logo) OR article tile — never white launcher.
+        Bitmap leftIcon = null;
+        if (appearance.includeLogo) {
+            if (logoImage != null) {
+                leftIcon = scaleCenterCrop(logoImage, leftPx, leftPx, true);
+            }
+            if (leftIcon == null) {
+                leftIcon = redBrandLogoBitmap(leftPx);
+            }
+        } else if (showImage) {
+            try {
+                Bitmap articleCopy = articleImage.copy(articleImage.getConfig() != null
+                        ? articleImage.getConfig()
+                        : Bitmap.Config.ARGB_8888, false);
+                leftIcon = scaleCenterCrop(
+                        articleCopy != null ? articleCopy : articleImage, leftPx, leftPx, true);
+            } catch (Exception ignored) {
+                leftIcon = null;
+            }
+        }
 
-        expandedView.setTextViewText(R.id.notification_title,pnTitle);
+        if (leftIcon != null) {
+            collapsedView.setImageViewBitmap(R.id.imageViewIcon, leftIcon);
+            expandedView.setImageViewBitmap(R.id.imageViewIconExpanded, leftIcon);
+            collapsedView.setViewVisibility(R.id.imageViewIcon, View.VISIBLE);
+            expandedView.setViewVisibility(R.id.imageViewIconExpanded, View.VISIBLE);
+        } else {
+            // No logo, no article yet — hide left slot (avoid white app icon).
+            collapsedView.setViewVisibility(R.id.imageViewIcon, View.GONE);
+            expandedView.setViewVisibility(R.id.imageViewIconExpanded, View.GONE);
+        }
+        collapsedView.setViewVisibility(R.id.notificationThumb, View.GONE);
+
+        if (showImage) {
+            Bitmap big = scaleToFit(articleImage, BIG_PICTURE_MAX_W, BIG_PICTURE_MAX_H);
+            if (big != null) {
+                expandedView.setImageViewBitmap(R.id.notificationView, big);
+                expandedView.setViewVisibility(R.id.notificationView, View.VISIBLE);
+            } else {
+                expandedView.setViewVisibility(R.id.notificationView, View.GONE);
+            }
+        } else {
+            expandedView.setViewVisibility(R.id.notificationView, View.GONE);
+        }
+
         Intent resultIntent = new Intent(getApplicationContext(), StartingActivity.class);
         resultIntent.putExtra("notification", true);
         resultIntent.putExtra("TITILE", post_id);
-        resultIntent.putExtra("TITLE_REWARDS",title);
+        resultIntent.putExtra("TITLE_REWARDS", title);
         resultIntent.putExtra("OBJECT", object);
-
-        // ary answe my call
-
-        System.out.println("TITTIL_OBJECT:: " + post_id);
         resultIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        // add notification one by one in case of multiple
-        //PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), Integer.parseInt(post_id), resultIntent, PendingIntent.FLAG_IMMUTABLE);
-        // only updated one will show and over ride
-        //final PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), Integer.parseInt(post_id), resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-        /*PendingIntent resultPendingIntent = PendingIntent.getPendingIntent(Integer.parseInt(post_id)
-                        , PendingIntent.FLAG_UPDATE_CURRENT);*/
-        // flag mutable |
-        PendingIntent pendingIntent;
-        int notificationId = safeNotificationId(post_id);
 
+        int notificationId = safeNotificationId(post_id);
+        PendingIntent pendingIntent;
         if (Build.VERSION.SDK_INT >= 31) {
             pendingIntent = PendingIntent.getActivity(
                     getApplicationContext(),
                     notificationId,
                     resultIntent,
-                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT // setting the mutability flag
-            );
-
-
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         } else {
-            pendingIntent = PendingIntent.getActivity(this,
-                    notificationId, resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-
+            pendingIntent = PendingIntent.getActivity(
+                    this, notificationId, resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
         }
 
         try {
@@ -363,12 +715,14 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 }
             }
 
+            // Strip [] for plain fallback title (some OEMs fall back to contentTitle).
+            String plainTitle = title != null ? title.replaceAll("\\[|\\]", "") : "AnyNews";
+
             NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), Constants.Channel_ID)
-                    // use xxxhdpi
                     .setSmallIcon(R.drawable.ic_arman_notificatio)
-//                    .setContentTitle("" + title)
-//                    .setContentText(body)
+                    .setContentTitle(plainTitle)
                     .setCustomContentView(collapsedView)
+                    .setCustomBigContentView(expandedView)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setVibrate(new long[]{1000, 1000, 1000, 1000})
                     .setSound(uri)
@@ -379,24 +733,24 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                     .setDefaults(NotificationCompat.DEFAULT_ALL)
                     .setStyle(new NotificationCompat.DecoratedCustomViewStyle())
                     .setContentIntent(pendingIntent)
-                    .setAutoCancel(true);
+                    .setAutoCancel(true)
+                    .setOnlyAlertOnce(true);
+            // Intentionally omit setLargeIcon — OEMs place it on the RIGHT of the row.
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                builder.setSmallIcon(R.drawable.ic_arman_notificatio);
                 builder.setColor(getResources().getColor(R.color.colorPrimary));
-            } else {
-                builder.setSmallIcon(R.drawable.ic_arman_notificatio);
             }
-            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(getApplicationContext());
 
-            int m = (int) ((new Date().getTime() / 1000L) % Integer.MAX_VALUE);
-            //notificationManager.notify(random.nextInt(), builder.build());
-            notificationManager.notify(m, builder.build());
+            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(getApplicationContext());
+            // Stable id so the async image pass updates the same tray entry.
+            int notifyId = notificationId != 0 ? notificationId : Math.abs(title != null ? title.hashCode() : 1);
+            if (notifyId == 0) {
+                notifyId = 1;
+            }
+            notificationManager.notify(notifyId, builder.build());
         } catch (Exception e) {
             Log.v("NotificationData", String.valueOf(e.getMessage()));
         }
-
-
     }
 
     private void handleReporterStatusChanged(JSONObject object) {
@@ -501,49 +855,117 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                     .setContentIntent(pendingIntent)
                     .setAutoCancel(true);
 
+            // Red brand mark if largeIcon is used — never white launcher.
+            Bitmap logo = redBrandLogoBitmap(dpToPx(48));
+            if (logo != null) {
+                builder.setLargeIcon(logo);
+            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 builder.setColor(getResources().getColor(R.color.colorPrimary));
             }
 
             NotificationManagerCompat notificationManager = NotificationManagerCompat.from(getApplicationContext());
-            int m = (int) ((new Date().getTime() / 1000L) % Integer.MAX_VALUE);
-            notificationManager.notify(m, builder.build());
+            notificationManager.notify(notificationId != 0 ? notificationId : 1, builder.build());
         } catch (Exception e) {
             Log.v("NotificationData", String.valueOf(e.getMessage()));
         }
     }
 
-    public class GetBitmapURL extends AsyncTask<Void, Void, Void> {
-        String src;
-        String title;
-        String post_id;
-        String object;
-        String pnColor;
+    private final class LoadNotificationImagesTask extends AsyncTask<Void, Void, ImageLoadResult> {
+        private final String imageUrl;
+        private final String title;
+        private final String postId;
+        private final String objectJson;
+        private final String pnColor;
+        private final boolean showTime;
+        private final PushAppearance appearance;
 
-        public GetBitmapURL(String src, String title, String post_id, String object,String pnColor) {
-            this.src = src;
+        LoadNotificationImagesTask(
+                String imageUrl,
+                String title,
+                String postId,
+                String objectJson,
+                String pnColor,
+                boolean showTime,
+                PushAppearance appearance) {
+            this.imageUrl = imageUrl;
             this.title = title;
-            this.post_id = post_id;
-            this.object = object;
+            this.postId = postId;
+            this.objectJson = objectJson;
             this.pnColor = pnColor;
-
+            this.showTime = showTime;
+            this.appearance = appearance;
         }
 
         @Override
-        protected Void doInBackground(Void... params) {
-            try {
-                getBitmapFromURL(src, title, post_id, object,pnColor,showPNTime);
-            } catch (Exception e) {
-                e.printStackTrace();
+        protected ImageLoadResult doInBackground(Void... params) {
+            ImageLoadResult result = new ImageLoadResult();
+            int logoPx = dpToPx(appearance != null ? appearance.leftIconSizeDp : DEFAULT_LEFT_DP);
+            if (appearance != null && appearance.includeLogo) {
+                String logoUrl = appearance.logoUrl;
+                if (logoUrl != null && !logoUrl.isEmpty()) {
+                    Bitmap remoteLogo = downloadBitmap(logoUrl, logoPx * 2, logoPx * 2);
+                    result.logo = scaleCenterCrop(remoteLogo, logoPx, logoPx, true);
+                }
+                if (result.logo == null) {
+                    result.logo = redBrandLogoBitmap(logoPx);
+                }
             }
+            if (shouldLoadArticleImage(appearance, imageUrl)) {
+                result.article = downloadBitmap(imageUrl, BIG_PICTURE_MAX_W, BIG_PICTURE_MAX_H);
+            }
+            return result;
+        }
 
-            return null;
+        @Override
+        protected void onPostExecute(ImageLoadResult result) {
+            if (result == null) {
+                return;
+            }
+            // Re-present only when we actually fetched something to show.
+            if (result.article == null && result.logo == null) {
+                return;
+            }
+            presentNewsNotification(
+                    title,
+                    postId,
+                    objectJson,
+                    pnColor,
+                    showTime,
+                    result.article,
+                    result.logo,
+                    appearance);
         }
     }
 
-    public void writePushReceive(String userId, String type_firebase, long post_id, long current_time, int language_id, long sent_at, long draft_id, String device_id,boolean showPNTime) {
-        PushReceive appOpen = new PushReceive(type_firebase, post_id, current_time, language_id, sent_at, draft_id, device_id,showPNTime);
+    private static final class ImageLoadResult {
+        @Nullable Bitmap article;
+        @Nullable Bitmap logo;
+    }
 
+    private static final class PushAppearance {
+        boolean showArticleImage = true;
+        boolean includeLogo = false;
+        String styleMode = STYLE_COMPACT;
+        String logoUrl = "";
+        int leftIconSizeDp = DEFAULT_LEFT_DP;
+        int thumbSizeDp = DEFAULT_THUMB_DP;
+        int titleSizeSp = DEFAULT_TITLE_SP;
+    }
+
+    public void writePushReceive(
+            String userId,
+            String type_firebase,
+            long post_id,
+            long current_time,
+            int language_id,
+            long sent_at,
+            long draft_id,
+            String device_id,
+            boolean showPNTime) {
+        PushReceive appOpen = new PushReceive(
+                type_firebase, post_id, current_time, language_id, sent_at, draft_id, device_id, showPNTime);
         myRef.child("Events").push().setValue(appOpen);
     }
 
@@ -560,12 +982,18 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         public String device_id;
         public boolean showPNTime;
 
-
         public PushReceive() {
-            // Default constructor required for calls to DataSnapshot.getValue(User.class)
         }
 
-        public PushReceive(String type_firebase, long post_id, long current_time, int language_id, long sent_at, long draft_id, String device_id,boolean showPNTime) {
+        public PushReceive(
+                String type_firebase,
+                long post_id,
+                long current_time,
+                int language_id,
+                long sent_at,
+                long draft_id,
+                String device_id,
+                boolean showPNTime) {
             this.type = type_firebase;
             this.post_id = post_id;
             this.created_at = current_time;
@@ -575,6 +1003,5 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             this.device_id = device_id;
             this.showPNTime = showPNTime;
         }
-
     }
 }

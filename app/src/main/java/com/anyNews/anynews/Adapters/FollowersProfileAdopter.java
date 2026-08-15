@@ -17,13 +17,13 @@ import com.anyNews.anynews.Pojo.LikeSelectionRequest;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
+import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.Constants;
-import com.anyNews.anynews.Utils.MediaUrl;
+import com.anyNews.anynews.Utils.SelfFollowGuard;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.FollowersProfileModel;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.squareup.picasso.Picasso;
 
 import java.util.ArrayList;
 
@@ -57,12 +57,20 @@ public class FollowersProfileAdopter extends RecyclerView.Adapter<FollowersProfi
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         FollowersProfileModel.Datum item = followersProfileModel.get(position);
-        if (item.getProfilePic() != null) {
-            Picasso.get().load(MediaUrl.resolve(item.getProfilePic())).into(holder.img_upload_photo);
-        }
+        AvatarImageHelper.loadPicasso(holder.img_upload_photo, item.getProfilePic());
         holder.beat_writer_name.setText(item.getWriterName());
         holder.beat_writer_location.setText(item.getRole());
         holder.beat_writer_likes.setText(item.getLocation());
+        final boolean self = SelfFollowGuard.isSelf(context, item.getWriterId());
+        if (self) {
+            holder.follow_button.setVisibility(View.GONE);
+            holder.beat_writer_follow.setVisibility(View.GONE);
+            holder.follow_button.setOnClickListener(null);
+            holder.beat_writer_follow.setOnClickListener(null);
+            return;
+        }
+        holder.follow_button.setVisibility(View.VISIBLE);
+        holder.beat_writer_follow.setVisibility(View.VISIBLE);
         bindFollowLabel(holder, item);
 
         holder.follow_button.setOnClickListener(v -> onFollowClicked(holder));
@@ -74,7 +82,7 @@ public class FollowersProfileAdopter extends RecyclerView.Adapter<FollowersProfi
         if (pos == RecyclerView.NO_POSITION || pos >= followersProfileModel.size()) return;
 
         FollowersProfileModel.Datum item = followersProfileModel.get(pos);
-        if (item.getWriterId() == null) return;
+        if (item.getWriterId() == null || SelfFollowGuard.isSelf(context, item.getWriterId())) return;
 
         int currentFollow = item.getIsFollow() != null ? item.getIsFollow() : 0;
         if (currentFollow == 0) {

@@ -7,27 +7,36 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 import android.Manifest;
 import android.accounts.AccountManager;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -37,18 +46,17 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 
-import com.permissionx.guolindev.PermissionX;
-import com.permissionx.guolindev.callback.ExplainReasonCallback;
-import com.permissionx.guolindev.callback.ForwardToSettingsCallback;
-import com.permissionx.guolindev.callback.RequestCallback;
-import com.permissionx.guolindev.request.ExplainScope;
-import com.permissionx.guolindev.request.ForwardScope;
+import java.lang.ref.WeakReference;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.volley.DefaultRetryPolicy;
 import com.android.volley.NetworkResponse;
@@ -61,6 +69,7 @@ import com.android.volley.toolbox.Volley;
 import com.anyNews.anynews.Application.VolleyMultipartRequest;
 import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.AddProfileResponse;
+import com.anyNews.anynews.Pojo.CategoriesRequest;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.LanguageModelResponse;
@@ -73,14 +82,36 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.CommonUtilities;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
+import com.anyNews.anynews.models.SearchModel;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppHelper;
+import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.CropHelper;
+import com.anyNews.anynews.Utils.DeferredMediaPermissions;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.MediaUrl;
+import com.anyNews.anynews.Utils.FooterStyleHelper;
+import com.anyNews.anynews.Utils.FooterTabLabels;
+import com.anyNews.anynews.Utils.HomeOfflineModeLabels;
+import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
+import com.anyNews.anynews.Utils.ProfileHubLabels;
+import com.anyNews.anynews.Utils.ProfilePhotoLabels;
+import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.anyNews.anynews.Utils.ReporterProfileCache;
+import com.anyNews.anynews.Utils.ReporterProfilePrefetcher;
+import com.anyNews.anynews.Utils.ProfileAchievementHelper;
+import com.anyNews.anynews.Utils.FollowListCache;
+import com.anyNews.anynews.Utils.WalletHistoryCache;
+import com.anyNews.anynews.Utils.WalletHistoryPrefetcher;
 import com.anyNews.anynews.testing.MainActivity;
+import com.canhub.cropper.CropImageContract;
+import com.canhub.cropper.CropImageContractOptions;
+import com.canhub.cropper.CropImageView;
 import com.google.android.gms.common.AccountPicker;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
@@ -111,10 +142,28 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 public class newProfileDetails extends AppCompatActivity {
+
+    /** Soft-ref so Home can dismiss a warm Profile left under the feed without flashing it. */
+    private static WeakReference<newProfileDetails> sAliveProfile;
+
+    /** Finish a stopped Profile instance (warm-reuse under Home) with no animation. */
+    public static void finishAliveQuiet() {
+        newProfileDetails alive = sAliveProfile != null ? sAliveProfile.get() : null;
+        if (alive == null || alive.isFinishing()) {
+            return;
+        }
+        try {
+            alive.finish();
+            alive.overridePendingTransition(0, 0);
+        } catch (Exception ignored) {
+        }
+    }
+    private static final String TAG = "PROFILE_IMAGE";
     TextView local_distic_name;
-    ImageView img_back;
     ImageView neo_settings;
     ImageView edit_profile_icon;
+    View btnNewsNav;
+    TextView tvNewsNav;
     String currentUserEmail = "";
     LinearLayout login, share,loadingProfileView,loadingProgressbar;
     String mInvitationUrl;
@@ -130,6 +179,8 @@ public class newProfileDetails extends AppCompatActivity {
     LinearLayout layout_follow_more, only_change_language;
     CircleImageView img_upload_photo;
     ImageView back_ground_profile;
+    ImageView avatar_add_badge;
+    TextView tv_avatar_add_hint;
 
     AlertDialog alertDialog;
     private int PICK_IMAGE_REQUEST = 1;
@@ -141,9 +192,20 @@ public class newProfileDetails extends AppCompatActivity {
      * a second chooser stacked behind the first — so it re-appeared after the first pick.
      */
     private androidx.appcompat.app.AlertDialog imagePickerDialog;
+    private Dialog profilePhotoViewerDialog;
     boolean CHECK_VALUE = false;
     CommonMethods mCommonmethods;
     private Uri filePath;
+    private Uri cameraOutputUri;
+    /** App-owned FileProvider URI — crop after pick; cancel falls back to this. */
+    private Uri pendingLocalImageUri;
+    private boolean needsCropAfterResume = false;
+    private ActivityResultLauncher<CropImageContractOptions> cropImage;
+    private ActivityResultLauncher<PickVisualMediaRequest> pickVisualMedia;
+    /** Modern Activity Result for gallery chooser (replaces startActivityForResult). */
+    private ActivityResultLauncher<Intent> galleryPickLauncher;
+    /** Modern Activity Result for camera capture. */
+    private ActivityResultLauncher<Intent> cameraCaptureLauncher;
     private Bitmap bitmap;
     private String ImageId, Email = "";
     ProgressBar progressbar;
@@ -174,13 +236,132 @@ public class newProfileDetails extends AppCompatActivity {
     TextView total_amount, profile_next_payment,check_box,account_delete_name,textViewAppDelete;
     CheckBox checkBox2;
 
-    LinearLayout reportLayout, userLayout,account_delete,layoutAppDelete;
+    LinearLayout reportLayout, userLayout,account_delete,layoutAppDelete,layoutAppLogout;
+    TextView textViewAppLogout;
+
+    /** True after first onResume; avoids double profile network from onCreate+onResume. */
+    private boolean profileResumeArmed = false;
+    private int appliedNightUiMask = 0;
+    private boolean pendingNightModeRecreate = false;
+    /** True when paint path last decided this user is an approved reporter. */
+    private boolean showingReporterUi = false;
+    /** Soft alpha pulse on Status Videos "New" badge. */
+    private ObjectAnimator statusVideosBadgePulse;
+    private BottomNavigationView profileBottomNav;
+
+    /** Approved-reporter create FAB (bottom-end speed dial). */
+    private View profileReporterFabRoot;
+    private View profileReporterFabScrim;
+    private View profileReporterFabMenu;
+    private com.google.android.material.floatingactionbutton.FloatingActionButton profileReporterFabMain;
+    private View profileFabActionArticle;
+    private View profileFabActionVideo;
+    private View profileFabActionFull;
+    private boolean profileReporterFabExpanded = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        sAliveProfile = new WeakReference<>(this);
+        appliedNightUiMask =
+                getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        pendingNightModeRecreate = false;
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        // Matching chrome while the large layout inflates — avoids white flash / perceived lag.
+        try {
+            getWindow().setBackgroundDrawableResource(R.color.profile_hub_scrim);
+        } catch (Exception ignored) {
+        }
         setContentView(R.layout.activity_new_profile_details);
+        // Footer switches must feel like in-shell tabs (no slide-up).
+        overridePendingTransition(0, 0);
+
+        // Bind footer chrome immediately so the page "is Profile" on first frame.
+        setupProfileFooterNav();
+
+        // CanHub crop — register before resumed (same path as PostArticles/FullPost).
+        cropImage = registerForActivityResult(new CropImageContract(),
+                new ActivityResultCallback<CropImageView.CropResult>() {
+                    @Override
+                    public void onActivityResult(CropImageView.CropResult result) {
+                        if (result != null && result.isSuccessful() && result.getUriContent() != null) {
+                            Log.e(TAG, "crop success uri=" + result.getUriContent());
+                            handleProfileCroppedImage(result.getUriContent());
+                            return;
+                        }
+                        if (result != null && result.getError() != null) {
+                            Log.e(TAG, "crop error - fallback", result.getError());
+                            Toast.makeText(newProfileDetails.this,
+                                    "Crop failed - using selected photo",
+                                    Toast.LENGTH_SHORT).show();
+                        } else {
+                            Log.e(TAG, "crop cancelled - fallback pending=" + pendingLocalImageUri);
+                        }
+                        if (pendingLocalImageUri != null) {
+                            handleProfileCroppedImage(pendingLocalImageUri);
+                        }
+                    }
+                });
+        pickVisualMedia = registerForActivityResult(
+                new ActivityResultContracts.PickVisualMedia(),
+                new ActivityResultCallback<Uri>() {
+                    @Override
+                    public void onActivityResult(Uri uri) {
+                        if (uri != null) {
+                            onExternalProfileImagePicked(uri);
+                        }
+                    }
+                });
+        galleryPickLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
+                        return;
+                    }
+                    Intent data = result.getData();
+                    Uri uri = data.getData();
+                    if (uri == null) {
+                        return;
+                    }
+                    try {
+                        final int takeFlags = data.getFlags()
+                                & (Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                        if (takeFlags != 0) {
+                            getContentResolver().takePersistableUriPermission(uri, takeFlags);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    onExternalProfileImagePicked(uri);
+                });
+        cameraCaptureLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() != Activity.RESULT_OK) {
+                        return;
+                    }
+                    try {
+                        Uri capturedUri = null;
+                        if (cameraOutputUri != null) {
+                            capturedUri = cameraOutputUri;
+                        } else if (result.getData() != null && result.getData().getData() != null) {
+                            capturedUri = result.getData().getData();
+                        } else if (result.getData() != null && result.getData().getExtras() != null
+                                && result.getData().getExtras().get("data") instanceof Bitmap) {
+                            capturedUri = saveBitmapToProfileCache(
+                                    (Bitmap) result.getData().getExtras().get("data"));
+                        }
+                        if (capturedUri != null) {
+                            onExternalProfileImagePicked(capturedUri);
+                        } else {
+                            Toast.makeText(this, "Error while capturing image", Toast.LENGTH_LONG).show();
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        Toast.makeText(this, "Error while capturing image", Toast.LENGTH_LONG).show();
+                    }
+                });
+
         mCommonmethods = new CommonMethods(newProfileDetails.this);
         layout_with_out_data = findViewById(R.id.layout_with_out_data);
         checkBox2 = findViewById(R.id.checkBox2);
@@ -200,16 +381,20 @@ public class newProfileDetails extends AppCompatActivity {
         imageupload_progressbar = findViewById(R.id.imageupload_progressbar);
         ic_back_ground_image = findViewById(R.id.ic_back_ground_image);
         back_ground_profile = findViewById(R.id.back_ground_profile);
-        img_back = (ImageView) findViewById(R.id.img_back);
         neo_settings = (ImageView) findViewById(R.id.neo_settings);
         edit_profile_icon = (ImageView) findViewById(R.id.edit_profile_icon);
+        btnNewsNav = findViewById(R.id.btn_news_nav);
+        tvNewsNav = findViewById(R.id.tv_news_nav);
+        bindNewsNavLabel();
         local_distic_name = (TextView) findViewById(R.id.local_distic_name);
         login = (LinearLayout) findViewById(R.id.login);
         loadingProfileView = (LinearLayout) findViewById(R.id.loadingProfileView);
         loadingProfileView.setVisibility(View.GONE);
         loadingProgressbar = (LinearLayout) findViewById(R.id.loadingProgressbar);
-        loadingProgressbar.setVisibility(View.VISIBLE);
+        loadingProgressbar.setVisibility(View.GONE);
         img_upload_photo = findViewById(R.id.img_upload_photo);
+        avatar_add_badge = findViewById(R.id.avatar_add_badge);
+        tv_avatar_add_hint = findViewById(R.id.tv_avatar_add_hint);
         username_text = findViewById(R.id.username_text);
         logintext = findViewById(R.id.logintext);
         share_test = findViewById(R.id.share_test);
@@ -267,29 +452,32 @@ public class newProfileDetails extends AppCompatActivity {
         textViewFollowingUser = findViewById(R.id.textViewFollowingUser);
         account_delete = findViewById(R.id.account_delete);
         layoutAppDelete = findViewById(R.id.layoutAppDelete);
+        layoutAppLogout = findViewById(R.id.layoutAppLogout);
         account_delete_name = findViewById(R.id.account_delete_name);
 
         textViewAppDelete = findViewById(R.id.textViewAppDelete);
+        textViewAppLogout = findViewById(R.id.textViewAppLogout);
         profile_layout_rewards.setVisibility(View.GONE);
         profile_layout_shareToearn.setVisibility(View.VISIBLE);
-        img_upload_photo.setVisibility(View.GONE);
-        imageupload_progressbar.setVisibility(View.VISIBLE);
+        // Keep avatar tappable (guest → login; signed-in → pick/crop).
+        img_upload_photo.setVisibility(View.VISIBLE);
+        imageupload_progressbar.setVisibility(View.GONE);
 
-        getWriterProfileData();
-        setStaticdata();
-        boolean is_login = SharedPrefsData.getBool(newProfileDetails.this, Constants.is_login, Constants.PREF_NAME);
-//        if (is_login) {
-//            reportLayout.setVisibility(View.VISIBLE);
-//            userLayout.setVisibility(View.GONE);
-//            showLog("progressViewApproval VISIBLE");
-//        } else {
-//            reportLayout.setVisibility(View.GONE);
-//            userLayout.setVisibility(View.VISIBLE);
-//            showLog("progressViewApproval GONE");
-//            progressMainLayout.setVisibility(View.GONE);
-//
-//        }
-
+        // Instant first paint: name / email / avatar / verified / achieved from prefs+cache
+        // (do not wait for network / translator Gson / hub extras).
+        paintIdentityFromLocalPrefs();
+        boolean cachedReporter = SharedPrefsData.getBool(
+                newProfileDetails.this, Constants.is_reporter, Constants.PREF_NAME);
+        applyReporterChrome(cachedReporter);
+        paintAchievedFromLocalPrefs();
+        // Full last-known profile (stats + achieved) before deferred network soft-refresh.
+        try {
+            showCachedProfileInstant();
+        } catch (Exception ignored) {
+        }
+        applyGuestProfileCardDefaults();
+        bindProfileLoginPill();
+        applyLoginGatedHubRows();
 
         check_box.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -317,22 +505,23 @@ public class newProfileDetails extends AppCompatActivity {
         layoutAppShare.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent sendIntent = new Intent();
-                sendIntent.setAction(Intent.ACTION_SEND);
-                sendIntent.putExtra(Intent.EXTRA_TEXT,
-                        "Hey check out my app at: https://play.google.com/store/apps/details?id=" + BuildConfig.APPLICATION_ID);
-                sendIntent.setType("text/plain");
-                startActivity(sendIntent);
+                startActivity(new Intent(newProfileDetails.this,
+                        com.anyNews.anynews.referral.ReferralActivity.class));
             }
         });
-        layoutFollowMore.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                showLog("layoutFollowMore");
-                Intent intent = new Intent(newProfileDetails.this, FollowersProfileDetailes.class);
-                startActivity(intent);
-            }
-        });
+        // Follow / Discover was a duplicate of Following → Explore; hide the extra row.
+        if (layoutFollowMore != null) {
+            layoutFollowMore.setVisibility(View.GONE);
+            layoutFollowMore.setOnClickListener(null);
+        }
+        if (layout_follow_more_list != null) {
+            layout_follow_more_list.setVisibility(View.GONE);
+            layout_follow_more_list.setOnClickListener(null);
+        }
+        if (writer_layout_followmore != null) {
+            writer_layout_followmore.setVisibility(View.GONE);
+            writer_layout_followmore.setOnClickListener(null);
+        }
         layoutFollowing.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -344,21 +533,8 @@ public class newProfileDetails extends AppCompatActivity {
         user_profile_total_amount.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
-                boolean is_login = SharedPrefsData.getBool(newProfileDetails.this, Constants.is_login, Constants.PREF_NAME);
-
-                if (is_login) {
-
-                    Intent intent = new Intent(newProfileDetails.this, MainActivity.class);
-                    intent.putExtra("PAYMENT_HISTORY", profile_total_amount.getText().toString());
-                    if (getApplicationContext() != null && newProfileDetails.this.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        startActivity(intent);
-                    }
-
-                } else {
-                    Intent intent = new Intent(newProfileDetails.this, LoginActivityDetails.class);
-                    startActivity(intent);
-                }
+                // Total Cash → article amount history (instant open; cache paint + soft refresh)
+                openWalletHistory(1);
             }
         });
         profile_layout_shareToearn.setOnClickListener(new View.OnClickListener() {
@@ -402,29 +578,32 @@ public class newProfileDetails extends AppCompatActivity {
         next_payment.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
-                if (AvailablePoints >= RedeemValue) {
-
+                // Enough for payout → redeem form. Otherwise open Payment History instantly
+                // (was only a toast; now matches "Earnings → history" expectation with soft UI).
+                if (AvailablePoints >= RedeemValue && RedeemValue > 0) {
                     Intent intent = new Intent(newProfileDetails.this, RedeemPageActivity.class);
                     startActivity(intent);
-
                 } else {
-
-                    Toast.makeText(newProfileDetails.this, " "
-                            + languageModelResponse.getData().getPleaseWaitUntilYouHaveReachedMinimumAmount() + RedeemValue, Toast.LENGTH_SHORT).show();
-
+                    openWalletHistory(2);
                 }
-
             }
         });
-        layout_articles_list.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                // Articles tile → submitted article status list (not wallet/history).
-                Intent intent = new Intent(newProfileDetails.this, PostArticleStatus.class);
-                startActivity(intent);
-            }
-        });
+        layout_articles_list = findViewById(R.id.layout_articles_list);
+        if (layout_articles_list != null) {
+            layout_articles_list.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    openArticlesStatus(null);
+                }
+            });
+        }
+        layout_likes_list = findViewById(R.id.layout_likes_list);
+        if (layout_likes_list != null) {
+            layout_likes_list.setOnClickListener(v -> openArticlesStatus("likes"));
+        }
+        if (layout_follower_list != null) {
+            layout_follower_list.setOnClickListener(v -> openFollowersList());
+        }
         layout_following_list.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -434,29 +613,12 @@ public class newProfileDetails extends AppCompatActivity {
                 startActivity(intent);
             }
         });
-        layout_follow_more_list.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent intent = new Intent(newProfileDetails.this, FollowersProfileDetailes.class);
-                startActivity(intent);
-            }
-        });
         user_layout_following_list.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
 
                 Intent intent = new Intent(newProfileDetails.this, FolloweingMenders.class);
                 startActivity(intent);
-            }
-        });
-        writer_layout_followmore.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-
-                Intent intent = new Intent(newProfileDetails.this, FollowersProfileDetailes.class);
-                startActivity(intent);
-
             }
         });
         profile_layout_rewards.setOnClickListener(new View.OnClickListener() {
@@ -484,72 +646,66 @@ public class newProfileDetails extends AppCompatActivity {
 
         try {
 
-            local_distic_name.setText("" + SharedPrefsData.getString(newProfileDetails.this, Constants.Selected_Distric_Name1, Constants.PREF_NAME));
+            String distLabel = DistrictLabelHelper.resolveDisplayLabel(newProfileDetails.this);
+            local_distic_name.setText("" + distLabel);
 
-            SharedPrefsData.putString(newProfileDetails.this, Constants.Selected_Distric_Name1, local_distic_name.getText().toString(), Constants.PREF_NAME);
+            if (DistrictLabelHelper.isUsable(distLabel)) {
+                DistrictLabelHelper.saveName(newProfileDetails.this, distLabel);
+            }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
 
 
-        img_back.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-//                Intent intent = new Intent(newProfileDetails.this, HomePage.class);
-//                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-//                if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-//                    startActivity(intent);
-//                }
-                finish();
-            }
-        });
-
+        if (btnNewsNav != null) {
+            btnNewsNav.setOnClickListener(v -> returnToNewsFeed());
+        }
+        if (tvNewsNav != null) {
+            tvNewsNav.setOnClickListener(v -> returnToNewsFeed());
+        }
 
         login.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if(logintext.getText().toString().equalsIgnoreCase("Login")){
-                    try {
-                        Intent intent =
-                                AccountPicker.newChooseAccountIntent(
-                                        new AccountPicker.AccountChooserOptions.Builder()
-                                                .setAllowableAccountsTypes(Arrays.asList("com.google"))
-                                                .setAlwaysShowAccountPicker(true)
-                                                .setTitleOverrideText("Choose Account For AnyNews")
-                                                .build());
-                        someActivityResultLauncher.launch(intent);
-                    } catch (ActivityNotFoundException e) {
-                        // TODO
-                    }
-
-                }
-
-
-
+                openReporterLogin();
             }
         });
+        if (login_neomorph_layout != null) {
+            login_neomorph_layout.setOnClickListener(v -> openReporterLogin());
+        }
+        bindStatusVideosNewBadge();
+        bindLocationRowText();
 
-        neo_settings.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent intent = new Intent(newProfileDetails.this, Settings_Scrren.class);
-                startActivity(intent);
-            }
-        });
+        if (neo_settings != null) {
+            neo_settings.setOnClickListener(v ->
+                    startActivity(new Intent(newProfileDetails.this, Settings_Scrren.class)));
+        }
 
-        edit_profile_icon.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                showEditProfileDialog();
-            }
-        });
+        View layoutBookmarks = findViewById(R.id.layout_bookmarks);
+        if (layoutBookmarks != null) {
+            layoutBookmarks.setOnClickListener(v -> {
+                startActivity(new Intent(newProfileDetails.this, BookmarksActivity.class));
+            });
+        }
+
+        View completeProfile = findViewById(R.id.layout_complete_profile);
+        if (completeProfile != null) {
+            completeProfile.setOnClickListener(v -> showEditNameDialog());
+        }
+
+        if (edit_profile_icon != null) {
+            edit_profile_icon.setOnClickListener(v -> showEditNameDialog());
+        }
         layoutAppDelete.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 showAccountDeletePopup();
             }
         });
+        if (layoutAppLogout != null) {
+            layoutAppLogout.setOnClickListener(v -> showLogoutConfirmDialog());
+        }
         account_delete.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -559,42 +715,41 @@ public class newProfileDetails extends AppCompatActivity {
         });
 
 
-        username_text.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-                AlertDialog.Builder builder = new AlertDialog.Builder(newProfileDetails.this);
-                ViewGroup viewGroup = view.findViewById(android.R.id.content);
-                View dialogView = LayoutInflater.from(view.getContext()).inflate(R.layout.customview, viewGroup, false);
-                TextView button = dialogView.findViewById(R.id.sudmit_user_name);
-                EditText enter_user_name = dialogView.findViewById(R.id.username_et);
-                enter_user_name.setText(username_text.getText().toString());
-                builder.setView(dialogView);
-                alertDialog = builder.create();
-                alertDialog.show();
-
-                button.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        if (enter_user_name.getText().toString().trim().length() >= 1) {
-                            String newName = enter_user_name.getText().toString().trim();
-                            SharedPrefsData.putString(newProfileDetails.this, Constants.USER_NAME, newName, Constants.PREF_NAME);
-                            ProfileUpdate(newName);
-                        }
-                    }
-                });
-            }
-        });
+        if (username_text != null) {
+            username_text.setOnClickListener(v -> showEditNameDialog());
+        }
 
         img_upload_photo.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (checkBox2.isChecked())
-                    requestStoragePermission();
-                else
-                    Toast.makeText(newProfileDetails.this, "Please Select Privacy Policy", Toast.LENGTH_SHORT).show();
+                boolean loggedIn = SharedPrefsData.getBool(
+                        newProfileDetails.this, Constants.is_login, Constants.PREF_NAME);
+                if (!loggedIn) {
+                    Intent intent = new Intent(newProfileDetails.this, LoginActivityDetails.class);
+                    intent.putExtra(LoginActivityDetails.EXTRA_RETURN_TO_PROFILE, true);
+                    startActivity(intent);
+                    return;
+                }
+                // Privacy checkbox is collapsed in hub UI; default checked so upload still works.
+                if (checkBox2 != null && !checkBox2.isChecked()) {
+                    checkBox2.setChecked(true);
+                }
+                if (hasProfilePhoto()) {
+                    showProfilePhotoFullscreen();
+                } else {
+                    beginChangeProfilePhoto();
+                }
             }
         });
+
+        // Heavy translator / hub / network after first frame so open feels instant.
+        final View decor = getWindow() != null ? getWindow().getDecorView() : null;
+        Runnable deferred = this::finishProfileFirstFrameWork;
+        if (decor != null) {
+            decor.post(deferred);
+        } else {
+            deferred.run();
+        }
 
         // firebase events
         /*draft_id_firebase_profile = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
@@ -602,6 +757,32 @@ public class newProfileDetails extends AppCompatActivity {
         String device_id_firebase = SharedPrefsData.getString(getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
 
         writeProfilePageSelection("User",type_firebase_profile ,draft_id_firebase_profile ,device_id_firebase, current_time_firebase_profile);*/
+    }
+
+    /** Translator JSON, hub strip, network profile — safe after first paint. */
+    private void finishProfileFirstFrameWork() {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        try {
+            setStaticdata();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        try {
+            getWriterProfileData();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        try {
+            setupProfileHubExtras();
+            setupReporterDesk();
+            setupReporterCreateFab();
+            applyLoginGatedHubRows();
+            setupReporterShortcutClicks();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     ActivityResultLauncher<Intent> someActivityResultLauncher = registerForActivityResult(
@@ -650,6 +831,91 @@ public class newProfileDetails extends AppCompatActivity {
         }
 
 
+    }
+
+    private void showLogoutConfirmDialog() {
+        String title = getString(R.string.profile_logout);
+        String message = getString(R.string.profile_logout_confirm);
+        String yes = getString(R.string.profile_logout_yes);
+        String no = getString(R.string.profile_logout_no);
+        new androidx.appcompat.app.AlertDialog.Builder(newProfileDetails.this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton(yes, (d, which) -> performLogout())
+                .setNegativeButton(no, (d, which) -> d.dismiss())
+                .show();
+    }
+
+    /**
+     * Clears local login session and returns to splash as a logged-out guest.
+     * No dedicated logout API exists; local state always clears.
+     * Keeps device language, geography, settings, and FCM device token.
+     */
+    private void performLogout() {
+        try {
+            SessionAnalyticsTracker.get().onAppTerminate(getApplicationContext());
+        } catch (Exception ignored) {
+        }
+
+        Context app = getApplicationContext();
+
+        // Auth / identity — force guest; splash must not resurrect via server is_login.
+        SharedPrefsData.putBoolImmediate(app, Constants.is_login, false, Constants.PREF_NAME);
+        SharedPrefsData.putBoolImmediate(app, Constants.FORCE_LOGGED_OUT, true, Constants.PREF_NAME);
+        SharedPrefsData.putBoolImmediate(app, Constants.is_reporter, false, Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.PROFILE_ACHIEVED_PCT, "", Constants.PREF_NAME);
+        SharedPrefsData.putBool(app, Constants.IS_USER_ALREADY_LOGIN, false, Constants.PREF_NAME);
+        SharedPrefsData.putBool(app, Constants.IS_ALREADY_LOGIN, false, Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.Selected_Phone_Number, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.PhoneNumber, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.USER_NAME, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.PROFILE_PIC_URL, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.Email, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.AVAILABLEPOINTS, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.REDEEMPOINTS, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.USER_SESSION_ID, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.SessionID, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.REFERAL_LINK, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.REFERAL_LINK2, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(app, Constants.CUSST_ID, "", Constants.PREF_NAME);
+        SharedPrefsData.putLong(app, Constants.USER_ID, 0L, Constants.PREF_NAME);
+        SharedPrefsData.putBool(app, Constants.PAN_CARD_STATUS, false, Constants.PREF_NAME);
+        SharedPrefsData.putInt(app, Constants.UserID, 0, Constants.PREF_NAME);
+        SharedPrefsData.putInt(app, Constants.reporter_language_id, 0, Constants.PREF_NAME);
+        // New anonymous draft after logout (splash will re-bind DraftID).
+        SharedPrefsData.putInt(app, Constants.DraftID, 0, Constants.PREF_NAME);
+
+        ReporterProfileCache.clear(app);
+        try {
+            FollowListCache.clear(app);
+        } catch (Exception ignored) {
+        }
+
+        if (prefShare == null) {
+            prefShare = new Allsharedpreference(newProfileDetails.this);
+        }
+        prefShare.setEmailID("");
+        prefShare.setShared_String(Allsharedpreference.EMAIL_ID, "");
+        prefShare.setShared_Booleen(Allsharedpreference.IS_USER_ALREADY_LOGIN, false);
+        prefShare.setShared_Booleen(Allsharedpreference.IS_ALREADY_LOGIN, false);
+
+        // In-memory UI so FAB / header never flash logged-in after clear.
+        showingReporterUi = false;
+        currentUserEmail = "";
+        ImageId = null;
+        profileReporterFabExpanded = false;
+        try {
+            applyReporterChrome(false);
+            paintLoggedOutIdentity();
+            bindReporterCreateFab();
+            applyLoginGatedHubRows();
+        } catch (Exception ignored) {
+        }
+
+        Intent intent = new Intent(newProfileDetails.this, StartingActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
     }
 
     private JsonObject getUserDeleteData() {
@@ -717,78 +983,13 @@ public class newProfileDetails extends AppCompatActivity {
         }
     }
 
+    /**
+     * Open camera/gallery chooser without asking storage+camera together.
+     * Gallery uses SAF / Photo Picker (no READ_MEDIA). Camera permission only when
+     * the user picks "Camera" — one system dialog max per action.
+     */
     private void requestStoragePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Android 13+: READ_EXTERNAL_STORAGE is never granted — must use READ_MEDIA_IMAGES.
-            // Without that check the profile photo path re-requested storage every tap.
-            boolean hasMediaAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                    ? ContextCompat.checkSelfPermission(newProfileDetails.this,
-                    Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
-                    : ContextCompat.checkSelfPermission(newProfileDetails.this,
-                    Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
-            boolean hasCamera = ContextCompat.checkSelfPermission(newProfileDetails.this,
-                    Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
-
-            if (hasMediaAccess && hasCamera) {
-                showFileChooser();
-            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                PermissionX.init(newProfileDetails.this)
-                        .permissions(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.CAMERA)
-                        .onExplainRequestReason(new ExplainReasonCallback() {
-                            @Override
-                            public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
-                                scope.showRequestReasonDialog(deniedList,
-                                        "Please allow the below necessary permissions to upload photos",
-                                        "OK", "Cancel");
-                            }
-                        })
-                        .onForwardToSettings(new ForwardToSettingsCallback() {
-                            @Override
-                            public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
-                                scope.showForwardToSettingsDialog(deniedList,
-                                        "Please allow the below necessary permissions manually from settings page to upload photos",
-                                        "OK", "Cancel");
-                            }
-                        })
-                        .request(new RequestCallback() {
-                            @Override
-                            public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
-                                if (allGranted) {
-                                    showFileChooser();
-                                }
-                            }
-                        });
-            } else {
-                PermissionX.init(newProfileDetails.this)
-                        .permissions(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.CAMERA)
-                        .onExplainRequestReason(new ExplainReasonCallback() {
-                            @Override
-                            public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
-                                scope.showRequestReasonDialog(deniedList,
-                                        "Please allow the below necessary permissions to upload photos",
-                                        "OK", "Cancel");
-                            }
-                        })
-                        .onForwardToSettings(new ForwardToSettingsCallback() {
-                            @Override
-                            public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
-                                scope.showForwardToSettingsDialog(deniedList,
-                                        "Please allow the below necessary permissions manually from settings page to upload photos",
-                                        "OK", "Cancel");
-                            }
-                        })
-                        .request(new RequestCallback() {
-                            @Override
-                            public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
-                                if (allGranted) {
-                                    showFileChooser();
-                                }
-                            }
-                        });
-            }
-        } else {
-            showFileChooser();
-        }
+        showFileChooser();
     }
 
 
@@ -804,31 +1005,50 @@ public class newProfileDetails extends AppCompatActivity {
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
 
+        String takePhoto = "Camera";
+        String chooseGallery = "Gallery";
+        String cancel = "Cancel";
+        try {
+            if (languageModelResponse != null && languageModelResponse.getData() != null) {
+                if (languageModelResponse.getData().getTakePhoto() != null) {
+                    takePhoto = "" + languageModelResponse.getData().getTakePhoto();
+                }
+                if (languageModelResponse.getData().getChooseFromGallery() != null) {
+                    chooseGallery = "" + languageModelResponse.getData().getChooseFromGallery();
+                }
+                if (languageModelResponse.getData().getCancel() != null) {
+                    cancel = "" + languageModelResponse.getData().getCancel();
+                }
+            }
+        } catch (Exception ignored) {
+        }
 
-        androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(newProfileDetails.this);
-        builder.setTitle("" + languageModelResponse.getData().getAddPhoto());
-        final CharSequence[] options = {"" + languageModelResponse.getData().getTakePhoto(), "" + languageModelResponse.getData().getChooseFromGallery(), "" + languageModelResponse.getData().getCancel()};
+        androidx.appcompat.app.AlertDialog.Builder builder =
+                new androidx.appcompat.app.AlertDialog.Builder(newProfileDetails.this);
+        try {
+            if (languageModelResponse != null && languageModelResponse.getData() != null
+                    && languageModelResponse.getData().getAddPhoto() != null) {
+                builder.setTitle("" + languageModelResponse.getData().getAddPhoto());
+            } else {
+                builder.setTitle("Add photo");
+            }
+        } catch (Exception e) {
+            builder.setTitle("Add photo");
+        }
 
+        final CharSequence[] options = {takePhoto, chooseGallery, cancel};
+        final String takePhotoFinal = takePhoto;
+        final String chooseGalleryFinal = chooseGallery;
+        final String cancelFinal = cancel;
 
         builder.setItems(options, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int item) {
-                if (options[item].equals("" + languageModelResponse.getData().getTakePhoto())) {
-                    Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        startActivityForResult(intent, PICK_IMAGE_REQUEST_CAMARA);
-                    }
-
-
-                } else if (options[item].equals("" + languageModelResponse.getData().getChooseFromGallery())) {
-                    Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        startActivityForResult(intent, PICK_IMAGE_REQUEST);
-                    }
-
-
-                } else if (options[item].equals("" + languageModelResponse.getData().getCancel())) {
-
+                if (options[item].equals(takePhotoFinal)) {
+                    openCameraForProfilePhoto();
+                } else if (options[item].equals(chooseGalleryFinal)) {
+                    openGalleryForProfilePhoto();
+                } else if (options[item].equals(cancelFinal)) {
                     dialog.dismiss();
                 }
             }
@@ -843,55 +1063,522 @@ public class newProfileDetails extends AppCompatActivity {
         imagePickerDialog.show();
     }
 
+    private void openCameraForProfilePhoto() {
+        Log.e(TAG, "openCameraForProfilePhoto");
+        DeferredMediaPermissions.ensureCamera(this, new DeferredMediaPermissions.GrantCallback() {
+            @Override
+            public void onGranted() {
+                launchCameraCapture();
+            }
+        });
+    }
+
+    private void launchCameraCapture() {
+        File photoFile;
+        try {
+            photoFile = createProfileImageFile();
+        } catch (IOException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Unable to create photo file", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        cameraOutputUri = FileProvider.getUriForFile(
+                this, getPackageName() + ".provider", photoFile);
+        Intent intent = DeferredMediaPermissions.buildCameraIntent(this, cameraOutputUri);
+        if (intent == null) {
+            cameraOutputUri = null;
+            Toast.makeText(this, "No camera app available", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            if (cameraCaptureLauncher != null) {
+                cameraCaptureLauncher.launch(intent);
+            } else {
+                startActivityForResult(intent, PICK_IMAGE_REQUEST_CAMARA);
+            }
+        } catch (ActivityNotFoundException e) {
+            cameraOutputUri = null;
+            Toast.makeText(this, "No camera app available", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openGalleryForProfilePhoto() {
+        Log.e(TAG, "openGalleryForProfilePhoto");
+        // SAF / Photo Picker — no storage permission; use Activity Result launcher.
+        DeferredMediaPermissions.openImageGallery(this, galleryPickLauncher, pickVisualMedia);
+    }
+
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-
+        // Legacy fallback only if launchers were unavailable on this device.
         if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            filePath = data.getData();
             try {
-                bitmap = MediaStore.Images.Media.getBitmap(newProfileDetails.this.getContentResolver(), filePath);
-                img_upload_photo.setVisibility(View.GONE);
-                img_upload_photo.setImageBitmap(bitmap);
-
-                imageupload_progressbar.setVisibility(View.VISIBLE);
-
-                uploadImage();
-
-            } catch (IOException e) {
-                e.printStackTrace();
+                final int takeFlags = data.getFlags()
+                        & (Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                if (takeFlags != 0) {
+                    getContentResolver().takePersistableUriPermission(data.getData(), takeFlags);
+                }
+            } catch (Exception ignored) {
             }
+            onExternalProfileImagePicked(data.getData());
         } else if (requestCode == PICK_IMAGE_REQUEST_CAMARA && resultCode == RESULT_OK) {
-            File f = new File(Environment.getExternalStorageDirectory()
-                    .toString());
-            for (File temp : f.listFiles()) {
-                if (temp.getName().equals("temp.jpg")) {
-                    f = temp;
-                    break;
+            try {
+                Uri capturedUri = null;
+                if (cameraOutputUri != null) {
+                    capturedUri = cameraOutputUri;
+                } else if (data != null && data.getData() != null) {
+                    capturedUri = data.getData();
+                } else if (data != null && data.getExtras() != null
+                        && data.getExtras().get("data") instanceof Bitmap) {
+                    capturedUri = saveBitmapToProfileCache((Bitmap) data.getExtras().get("data"));
+                }
+                if (capturedUri != null) {
+                    onExternalProfileImagePicked(capturedUri);
+                } else {
+                    Toast.makeText(this, "Error while capturing image", Toast.LENGTH_LONG).show();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                Toast.makeText(this, "Error while capturing image", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    /**
+     * Empty avatar: camera illustration + badge + localized "tap to add" hint.
+     * With photo: hide badge/hint so the picture is primary.
+     */
+    private void bindEmptyProfilePhotoAffordance(boolean empty) {
+        try {
+            String hint = empty
+                    ? ProfilePhotoLabels.tapToAdd(this)
+                    : ProfilePhotoLabels.changePhoto(this);
+            if (img_upload_photo != null) {
+                img_upload_photo.setContentDescription(hint);
+            }
+            if (avatar_add_badge != null) {
+                avatar_add_badge.setVisibility(empty ? View.VISIBLE : View.GONE);
+                avatar_add_badge.setContentDescription(hint);
+            }
+            if (tv_avatar_add_hint != null) {
+                tv_avatar_add_hint.setText(ProfilePhotoLabels.tapToAdd(this));
+                tv_avatar_add_hint.setVisibility(empty ? View.VISIBLE : View.GONE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Prefs / in-memory URL for the signed-in reporter avatar. */
+    private String resolveCurrentProfilePhotoUrl() {
+        try {
+            if (ImageId != null && !ImageId.trim().isEmpty()
+                    && !AvatarImageHelper.isMissing(ImageId)) {
+                return ImageId.trim();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            String pic = SharedPrefsData.getString(this, Constants.PROFILE_PIC_URL, Constants.PREF_NAME);
+            if (pic != null) {
+                pic = pic.trim();
+                if (!AvatarImageHelper.isMissing(pic)) {
+                    return pic;
                 }
             }
-            if (!f.exists()) {
-                showLog("NRAAAAAAA" + img_upload_photo.toString());
-                Toast.makeText(newProfileDetails.this,
-                                "Error while capturing image", Toast.LENGTH_LONG)
-                        .show();
+        } catch (Exception ignored) {
+        }
+        try {
+            NewUserProfileResponse cached = ReporterProfileCache.load(getApplicationContext());
+            if (cached != null && cached.getData() != null
+                    && cached.getData().getProfilePic() != null) {
+                String pic = cached.getData().getProfilePic().trim();
+                if (!AvatarImageHelper.isMissing(pic)) {
+                    return pic;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    private boolean hasProfilePhoto() {
+        return !AvatarImageHelper.isMissing(resolveCurrentProfilePhotoUrl());
+    }
+
+    /** Camera/gallery chooser used by empty avatar, fullscreen Change photo, and edit profile. */
+    private void beginChangeProfilePhoto() {
+        dismissProfilePhotoViewer();
+        if (checkBox2 != null && !checkBox2.isChecked()) {
+            checkBox2.setChecked(true);
+        }
+        requestStoragePermission();
+    }
+
+    /** WhatsApp-style dark full-bleed viewer with bottom-end Change photo. */
+    private void showProfilePhotoFullscreen() {
+        final String url = resolveCurrentProfilePhotoUrl();
+        if (AvatarImageHelper.isMissing(url)) {
+            beginChangeProfilePhoto();
+            return;
+        }
+        if (profilePhotoViewerDialog != null && profilePhotoViewerDialog.isShowing()) {
+            return;
+        }
+
+        View content = LayoutInflater.from(this)
+                .inflate(R.layout.dialog_profile_photo_viewer, null, false);
+        ImageView fullImage = content.findViewById(R.id.profile_photo_viewer_image);
+        TextView changeBtn = content.findViewById(R.id.profile_photo_viewer_change);
+        ImageButton closeBtn = content.findViewById(R.id.profile_photo_viewer_close);
+
+        if (changeBtn != null) {
+            changeBtn.setText(ProfilePhotoLabels.changePhoto(this));
+        }
+
+        try {
+            Picasso.get()
+                    .load(MediaUrl.resolve(url))
+                    .placeholder(R.drawable.ic_profile_add_photo)
+                    .error(R.drawable.ic_profile_add_photo)
+                    .into(fullImage);
+        } catch (Exception e) {
+            if (fullImage != null) {
+                fullImage.setImageResource(R.drawable.ic_profile_add_photo);
+            }
+        }
+
+        profilePhotoViewerDialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        profilePhotoViewerDialog.setContentView(content);
+        profilePhotoViewerDialog.setCancelable(true);
+        Window window = profilePhotoViewerDialog.getWindow();
+        if (window != null) {
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            window.setBackgroundDrawableResource(android.R.color.black);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            try {
+                window.setStatusBarColor(0xFF000000);
+                window.setNavigationBarColor(0xFF000000);
+            } catch (Exception ignored) {
+            }
+        }
+        profilePhotoViewerDialog.setOnDismissListener(dialog -> profilePhotoViewerDialog = null);
+
+        if (closeBtn != null) {
+            closeBtn.setOnClickListener(v -> dismissProfilePhotoViewer());
+        }
+        if (changeBtn != null) {
+            changeBtn.setOnClickListener(v -> beginChangeProfilePhoto());
+        }
+
+        profilePhotoViewerDialog.show();
+    }
+
+    private void dismissProfilePhotoViewer() {
+        try {
+            if (profilePhotoViewerDialog != null && profilePhotoViewerDialog.isShowing()) {
+                profilePhotoViewerDialog.dismiss();
+            }
+        } catch (Exception ignored) {
+        }
+        profilePhotoViewerDialog = null;
+    }
+
+    /**
+     * Paint name / email / avatar from local prefs immediately so Profile never waits
+     * on the network (email no longer appears “late”).
+     * When logged out, always force Guest + Login CTA (never resurrect cache/prefs identity).
+     */
+    private void paintIdentityFromLocalPrefs() {
+        try {
+            boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+            if (!loggedIn) {
+                paintLoggedOutIdentity();
                 return;
             }
-            try {
-                bitmap = (Bitmap) data.getExtras().get("data");
-                img_upload_photo.setImageBitmap(bitmap);
-                img_upload_photo.setVisibility(View.GONE);
-                imageupload_progressbar.setVisibility(View.VISIBLE);
 
-                uploadImage();
-                //storeImageTosdCard(bitmap);
-            } catch (Exception e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
+            String email = "";
+            if (prefShare != null && prefShare.getEmailId() != null) {
+                email = prefShare.getEmailId().trim();
             }
-        } else if (requestCode == 200 && resultCode == RESULT_OK) {
+            if (email.isEmpty()) {
+                try {
+                    String prefEmail = SharedPrefsData.getString(
+                            this, Constants.Email, Constants.PREF_NAME);
+                    if (prefEmail != null) email = prefEmail.trim();
+                } catch (Exception ignored) {
+                }
+            }
+            String name = "";
+            try {
+                name = SharedPrefsData.getString(this, Constants.USER_NAME, Constants.PREF_NAME);
+                if (name == null) name = "";
+                name = name.trim();
+            } catch (Exception ignored) {
+            }
+            String pic = "";
+            try {
+                pic = SharedPrefsData.getString(this, Constants.PROFILE_PIC_URL, Constants.PREF_NAME);
+                if (pic == null) pic = "";
+                pic = pic.trim();
+            } catch (Exception ignored) {
+            }
 
+            // Prefer disk profile cache for richer fields when available (still instant).
+            try {
+                NewUserProfileResponse cached = ReporterProfileCache.load(getApplicationContext());
+                if (cached != null && cached.getData() != null) {
+                    NewUserProfileResponse.Data d = cached.getData();
+                    if ((name == null || name.isEmpty()) && d.getUserName() != null) {
+                        name = d.getUserName().trim();
+                    }
+                    if ((email == null || email.isEmpty()) && d.getEmail() != null) {
+                        email = d.getEmail().trim();
+                    }
+                    if ((pic == null || pic.isEmpty()) && d.getProfilePic() != null) {
+                        pic = d.getProfilePic().trim();
+                    }
+                }
+            } catch (Exception ignored) {
+            }
 
+            boolean hasAccount = email != null && !email.isEmpty() && email.contains("@");
+            if (hasAccount) {
+                try {
+                    if (prefShare != null) {
+                        prefShare.setEmailID(email);
+                    }
+                    SharedPrefsData.putString(this, Constants.Email, email, Constants.PREF_NAME);
+                } catch (Exception ignored) {
+                }
+            }
+            if (username_text != null) {
+                if (name != null && !name.isEmpty() && !"null".equalsIgnoreCase(name)) {
+                    username_text.setText(name);
+                    try {
+                        SharedPrefsData.putString(this, Constants.USER_NAME, name, Constants.PREF_NAME);
+                    } catch (Exception ignored) {
+                    }
+                } else if (!hasAccount) {
+                    username_text.setText(ProfileHubLabels.guest(this));
+                }
+            }
+            if (user_login_number != null) {
+                if (hasAccount) {
+                    user_login_number.setText(email);
+                    user_login_number.setTextColor(
+                            ContextCompat.getColor(this, R.color.profile_way2_guest_sub));
+                    user_login_number.setVisibility(View.VISIBLE);
+                    currentUserEmail = email;
+                }
+            }
+            if (img_upload_photo != null) {
+                if (!AvatarImageHelper.isMissing(pic)) {
+                    AvatarImageHelper.loadProfilePicasso(img_upload_photo, pic);
+                    bindEmptyProfilePhotoAffordance(false);
+                    ImageId = pic;
+                } else {
+                    AvatarImageHelper.setProfileEmpty(img_upload_photo);
+                    bindEmptyProfilePhotoAffordance(true);
+                }
+            }
+            if (hasAccount && login_neomorph_layout != null) {
+                login_neomorph_layout.setVisibility(View.GONE);
+            }
+            bindProfileLoginPill();
+        } catch (Exception e) {
+            e.printStackTrace();
+            bindEmptyProfilePhotoAffordance(true);
+            bindProfileLoginPill();
+        }
+    }
+
+    /** Force Guest header + Login CTA; used after logout and when is_login is false. */
+    private void paintLoggedOutIdentity() {
+        showingReporterUi = false;
+        currentUserEmail = "";
+        ImageId = null;
+        if (username_text != null) {
+            username_text.setText(ProfileHubLabels.guest(this));
+        }
+        if (user_login_number != null) {
+            user_login_number.setVisibility(View.VISIBLE);
+            user_login_number.setText(ProfileHubLabels.guestSubtitle(this));
+            user_login_number.setTextColor(
+                    ContextCompat.getColor(this, R.color.profile_way2_guest_sub));
+        }
+        if (img_upload_photo != null) {
+            AvatarImageHelper.setProfileEmpty(img_upload_photo);
+            bindEmptyProfilePhotoAffordance(true);
+        }
+        if (login_neomorph_layout != null) {
+            login_neomorph_layout.setVisibility(View.VISIBLE);
+        }
+        if (login != null) {
+            login.setVisibility(View.VISIBLE);
+        }
+        bindProfileLoginPill();
+        collapseReporterCreateFab(false);
+        bindReporterCreateFab();
+    }
+
+    /**
+     * Copy external URI → app cache, then CanHub oval crop (same robustness as reporter posts).
+     */
+    private void onExternalProfileImagePicked(Uri sourceUri) {
+        Log.e(TAG, "onExternalProfileImagePicked source=" + sourceUri);
+        if (sourceUri == null) {
+            return;
+        }
+        Uri localUri = copyUriToAppCache(sourceUri);
+        if (localUri == null) {
+            Toast.makeText(this, "Unable to read selected image", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        pendingLocalImageUri = localUri;
+        needsCropAfterResume = true;
+        if (getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            needsCropAfterResume = false;
+            final Uri cropUri = localUri;
+            getWindow().getDecorView().post(new Runnable() {
+                @Override
+                public void run() {
+                    if (isFinishing() || isDestroyed()) {
+                        needsCropAfterResume = true;
+                        return;
+                    }
+                    launchProfileCrop(cropUri);
+                }
+            });
+        }
+    }
+
+    private void launchProfileCrop(Uri sourceUri) {
+        if (sourceUri == null) {
+            return;
+        }
+        Log.e(TAG, "launchProfileCrop sourceUri=" + sourceUri);
+        try {
+            cropImage.launch(CropHelper.buildProfileCropOptions(newProfileDetails.this, sourceUri));
+        } catch (Exception e) {
+            Log.e(TAG, "launchProfileCrop failed - using original", e);
+            Toast.makeText(this, "Unable to open crop screen - using original photo",
+                    Toast.LENGTH_SHORT).show();
+            handleProfileCroppedImage(sourceUri);
+        }
+    }
+
+    private void handleProfileCroppedImage(Uri selectedUri) {
+        Log.e(TAG, "handleProfileCroppedImage uri=" + selectedUri);
+        if (selectedUri == null) {
+            return;
+        }
+        try {
+            Uri durable = selectedUri;
+            if (!isAppOwnedUri(selectedUri)) {
+                Uri copied = copyUriToAppCache(selectedUri);
+                if (copied != null) {
+                    durable = copied;
+                }
+            }
+            filePath = durable;
+            pendingLocalImageUri = durable;
+            bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), durable);
+            if (img_upload_photo != null) {
+                img_upload_photo.setImageBitmap(bitmap);
+                img_upload_photo.setVisibility(View.VISIBLE);
+            }
+            bindEmptyProfilePhotoAffordance(false);
+            if (imageupload_progressbar != null) {
+                imageupload_progressbar.setVisibility(View.VISIBLE);
+            }
+            uploadImage();
+        } catch (Exception e) {
+            Log.e(TAG, "handleProfileCroppedImage failed", e);
+            Toast.makeText(this, "Unable to use selected image", Toast.LENGTH_SHORT).show();
+            if (imageupload_progressbar != null) {
+                imageupload_progressbar.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private File createProfileImageFile() throws IOException {
+        File cachePath = new File(getCacheDir(), "images");
+        if (!cachePath.exists() && !cachePath.mkdirs()) {
+            throw new IOException("Unable to create images cache directory");
+        }
+        return File.createTempFile("profile_" + System.currentTimeMillis() + "_", ".jpg", cachePath);
+    }
+
+    private Uri copyUriToAppCache(Uri sourceUri) {
+        if (sourceUri == null) {
+            return null;
+        }
+        if (isAppOwnedUri(sourceUri)) {
+            return sourceUri;
+        }
+        java.io.InputStream input = null;
+        java.io.OutputStream output = null;
+        try {
+            input = getContentResolver().openInputStream(sourceUri);
+            if (input == null) {
+                return null;
+            }
+            File outFile = createProfileImageFile();
+            output = new java.io.FileOutputStream(outFile);
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            output.flush();
+            return FileProvider.getUriForFile(this, getPackageName() + ".provider", outFile);
+        } catch (Exception e) {
+            Log.e(TAG, "copyUriToAppCache exception", e);
+            return null;
+        } finally {
+            try {
+                if (input != null) {
+                    input.close();
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                if (output != null) {
+                    output.close();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private boolean isAppOwnedUri(Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        String auth = uri.getAuthority();
+        return auth != null && (auth.equals(getPackageName() + ".provider")
+                || auth.equals(getPackageName() + ".cropper.fileprovider"));
+    }
+
+    private Uri saveBitmapToProfileCache(Bitmap source) {
+        if (source == null) {
+            return null;
+        }
+        try {
+            File cachePath = new File(getCacheDir(), "images");
+            if (!cachePath.exists() && !cachePath.mkdirs()) {
+                return null;
+            }
+            File file = new File(cachePath, "camera_" + System.currentTimeMillis() + ".jpg");
+            java.io.FileOutputStream stream = new java.io.FileOutputStream(file);
+            source.compress(Bitmap.CompressFormat.JPEG, 95, stream);
+            stream.close();
+            return FileProvider.getUriForFile(this, getPackageName() + ".provider", file);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
@@ -913,25 +1600,53 @@ public class newProfileDetails extends AppCompatActivity {
                         JSONObject extraMsgOBJ = jObj.getJSONObject("extras");
                         ImageId = extraMsgOBJ.getString("url");
 
-                        layout_with_out_data.setVisibility(View.GONE);
-                        layout_with_data.setVisibility(View.VISIBLE);
+                        if (layout_with_out_data != null) {
+                            layout_with_out_data.setVisibility(View.GONE);
+                        }
+                        if (layout_with_data != null) {
+                            layout_with_data.setVisibility(View.VISIBLE);
+                        }
 
-                        Toast.makeText(newProfileDetails.this, "" + languageModelResponse.getData().getImageUploadSuccessfully(), Toast.LENGTH_SHORT).show();
-                        img_upload_photo.setVisibility(View.GONE);
-                        imageupload_progressbar.setVisibility(View.VISIBLE);
-                        if (ImageId != null)
-                            Picasso.get().load(MediaUrl.resolve(ImageId)).into(img_upload_photo);
+                        try {
+                            if (languageModelResponse != null && languageModelResponse.getData() != null
+                                    && languageModelResponse.getData().getImageUploadSuccessfully() != null) {
+                                Toast.makeText(newProfileDetails.this,
+                                        "" + languageModelResponse.getData().getImageUploadSuccessfully(),
+                                        Toast.LENGTH_SHORT).show();
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        if (img_upload_photo != null) {
+                            img_upload_photo.setVisibility(View.VISIBLE);
+                            if (ImageId != null) {
+                                AvatarImageHelper.loadProfilePicasso(img_upload_photo, ImageId);
+                                bindEmptyProfilePhotoAffordance(false);
+                            }
+                        }
+                        // Keep spinner only until profileUpdateimage completes.
+                        if (imageupload_progressbar != null) {
+                            imageupload_progressbar.setVisibility(View.VISIBLE);
+                        }
 
+                        try {
+                            SharedPrefsData.putString(getApplicationContext(),
+                                    Constants.PROFILE_PIC_URL, ImageId, Constants.PREF_NAME);
+                        } catch (Exception ignored) {
+                        }
 
                         ProfileUpdateImage();
 
                     } else {
                         Toast.makeText(getContext(), "Image not Captured", Toast.LENGTH_SHORT).show();
-
+                        if (imageupload_progressbar != null) {
+                            imageupload_progressbar.setVisibility(View.GONE);
+                        }
                     }
                 } catch (JSONException e) {
-//                    mCropImageUri = null;
                     e.printStackTrace();
+                    if (imageupload_progressbar != null) {
+                        imageupload_progressbar.setVisibility(View.GONE);
+                    }
                 }
             }
         }, new com.android.volley.Response.ErrorListener() {
@@ -939,7 +1654,6 @@ public class newProfileDetails extends AppCompatActivity {
             public void onErrorResponse(VolleyError error) {
                 NetworkResponse networkResponse = error.networkResponse;
                 String errorMessage = "Unknown error";
-//                mCropImageUri = null;
                 if (networkResponse == null) {
                     if (error.getClass().equals(TimeoutError.class)) {
                         errorMessage = "Request timeout";
@@ -970,6 +1684,9 @@ public class newProfileDetails extends AppCompatActivity {
                         e.printStackTrace();
                     }
                 }
+                if (imageupload_progressbar != null) {
+                    imageupload_progressbar.setVisibility(View.GONE);
+                }
                 mCommonmethods.showerror(errorMessage);
                 error.printStackTrace();
             }
@@ -979,34 +1696,35 @@ public class newProfileDetails extends AppCompatActivity {
                 newProfileDetails.this.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        String progresscontent = String.valueOf(progress);
-//                        pDialog.setTitle("Uploading.." + progresscontent+" %");
-
+                        // Upload progress optional UI
                     }
                 });
-//
             }
         }) {
             @Override
             protected Map<String, DataPart> getByteData() {
                 Map<String, DataPart> params = new HashMap<>();
-                params.put("file", new DataPart(UUID.randomUUID().toString() + ".jpeg", AppHelper.getFileDataFromDrawable(getContext(), img_upload_photo.getDrawable()), "image/jpeg"));
+                byte[] bytes = null;
+                try {
+                    if (filePath != null) {
+                        bytes = AppHelper.getFileDataFromDrawables(newProfileDetails.this, filePath);
+                    }
+                } catch (Exception ignored) {
+                }
+                if (bytes == null || bytes.length == 0) {
+                    bytes = AppHelper.getFileDataFromDrawable(getContext(), img_upload_photo.getDrawable());
+                }
+                params.put("file", new DataPart(UUID.randomUUID().toString() + ".jpeg",
+                        bytes, "image/jpeg"));
                 return params;
             }
         };
-//        // Adding request to request queue
         multipartRequest.setRetryPolicy(new DefaultRetryPolicy(
                 100000,
                 DefaultRetryPolicy.DEFAULT_MAX_RETRIES,
                 DefaultRetryPolicy.DEFAULT_BACKOFF_MULT));
-        //Creating a Request Queue
         RequestQueue requestQueue = Volley.newRequestQueue(newProfileDetails.this);
-
-        //Adding request to the queue
         requestQueue.add(multipartRequest);
-        // VolleySingleton.getInstance(getBaseContext()).addToRequestQueue(multipartRequest);
-
-
     }
 
     private void ProfileUpdate(String User_Name) {
@@ -1051,59 +1769,180 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
 
-    private void showEditProfileDialog() {
+    /** Logged-in only: edit name + email + photo via update_reporter_profile / upload path. Guests skip. */
+    private void showEditNameDialog() {
+        boolean loggedIn = SharedPrefsData.getBool(
+                newProfileDetails.this, Constants.is_login, Constants.PREF_NAME);
+        if (!loggedIn) {
+            return;
+        }
         AlertDialog.Builder builder = new AlertDialog.Builder(newProfileDetails.this);
         View dialogView = LayoutInflater.from(newProfileDetails.this)
                 .inflate(R.layout.dialog_edit_profile, null, false);
+        TextView title = dialogView.findViewById(R.id.edit_profile_title);
+        CircleImageView editPhoto = dialogView.findViewById(R.id.edit_profile_photo);
+        TextView changePhotoBtn = dialogView.findViewById(R.id.edit_profile_change_photo);
+        EditText nameEt = dialogView.findViewById(R.id.edit_profile_name);
+        EditText emailEt = dialogView.findViewById(R.id.edit_profile_email);
+        ProgressBar progress = dialogView.findViewById(R.id.edit_profile_progress);
+        TextView cancelBtn = dialogView.findViewById(R.id.edit_profile_cancel);
+        TextView saveBtn = dialogView.findViewById(R.id.edit_profile_save);
 
-        final EditText nameField = dialogView.findViewById(R.id.edit_profile_name);
-        final EditText emailField = dialogView.findViewById(R.id.edit_profile_email);
-        final ProgressBar progress = dialogView.findViewById(R.id.edit_profile_progress);
-        final TextView saveBtn = dialogView.findViewById(R.id.edit_profile_save);
-        final TextView cancelBtn = dialogView.findViewById(R.id.edit_profile_cancel);
+        if (title != null) {
+            title.setText(resolveCompleteProfileLabel());
+        }
+        if (changePhotoBtn != null) {
+            changePhotoBtn.setText(ProfilePhotoLabels.changePhoto(this));
+        }
+        String editPicUrl = resolveCurrentProfilePhotoUrl();
+        if (editPhoto != null) {
+            if (!AvatarImageHelper.isMissing(editPicUrl)) {
+                AvatarImageHelper.loadProfilePicasso(editPhoto, editPicUrl);
+            } else {
+                AvatarImageHelper.setProfileEmpty(editPhoto);
+            }
+            editPhoto.setOnClickListener(v -> {
+                if (alertDialog != null && alertDialog.isShowing()) {
+                    alertDialog.dismiss();
+                }
+                beginChangeProfilePhoto();
+            });
+        }
+        if (changePhotoBtn != null) {
+            changePhotoBtn.setOnClickListener(v -> {
+                if (alertDialog != null && alertDialog.isShowing()) {
+                    alertDialog.dismiss();
+                }
+                beginChangeProfilePhoto();
+            });
+        }
 
-        // Pre-fill with current values.
-        String prefillName = username_text.getText() != null ? username_text.getText().toString().trim() : "";
-        nameField.setText(prefillName);
-        nameField.setSelection(nameField.getText().length());
-        emailField.setText(currentUserEmail != null ? currentUserEmail.trim() : "");
+        String currentName = username_text != null && username_text.getText() != null
+                ? username_text.getText().toString().trim() : "";
+        if (currentName.isEmpty()) {
+            currentName = SharedPrefsData.getString(this, Constants.USER_NAME, Constants.PREF_NAME);
+            if (currentName == null) currentName = "";
+        }
+        nameEt.setText(currentName);
+        if (nameEt.getText().length() > 0) {
+            nameEt.setSelection(nameEt.getText().length());
+        }
+
+        String emailPrefill = currentUserEmail != null ? currentUserEmail.trim() : "";
+        if (emailPrefill.isEmpty()) {
+            try {
+                if (prefShare != null && prefShare.getEmailId() != null) {
+                    emailPrefill = prefShare.getEmailId().trim();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (emailPrefill.isEmpty()) {
+            String fromPrefs = SharedPrefsData.getString(this, Constants.Email, Constants.PREF_NAME);
+            if (fromPrefs != null) emailPrefill = fromPrefs.trim();
+        }
+        emailEt.setText(emailPrefill);
 
         builder.setView(dialogView);
-        final AlertDialog dialog = builder.create();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        alertDialog = builder.create();
+        if (alertDialog.getWindow() != null) {
+            alertDialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
-        dialog.show();
+        alertDialog.show();
 
-        cancelBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                dialog.dismiss();
+        cancelBtn.setOnClickListener(v -> {
+            if (alertDialog != null && alertDialog.isShowing()) {
+                alertDialog.dismiss();
             }
         });
 
-        saveBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                String newName = nameField.getText().toString().trim();
-                String newEmail = emailField.getText().toString().trim();
-
-                if (newName.isEmpty()) {
-                    nameField.setError("Name cannot be empty");
-                    return;
-                }
-                if (!newEmail.isEmpty()
-                        && !android.util.Patterns.EMAIL_ADDRESS.matcher(newEmail).matches()) {
-                    emailField.setError("Enter a valid email");
-                    return;
-                }
-
-                progress.setVisibility(View.VISIBLE);
-                saveBtn.setEnabled(false);
-                cancelBtn.setEnabled(false);
-                updateReporterProfile(newName, newEmail, dialog, progress, saveBtn, cancelBtn);
+        saveBtn.setOnClickListener(v -> {
+            String newName = nameEt.getText() != null ? nameEt.getText().toString().trim() : "";
+            String newEmail = emailEt.getText() != null ? emailEt.getText().toString().trim() : "";
+            if (newName.isEmpty()) {
+                Toast.makeText(newProfileDetails.this, "Please enter your name", Toast.LENGTH_SHORT).show();
+                return;
             }
+            if (!newEmail.isEmpty() && !newEmail.contains("@")) {
+                Toast.makeText(newProfileDetails.this, "Please enter a valid email", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            progress.setVisibility(View.VISIBLE);
+            saveBtn.setEnabled(false);
+            cancelBtn.setEnabled(false);
+            // Optimistic header paint before API returns.
+            SharedPrefsData.putString(newProfileDetails.this, Constants.USER_NAME, newName, Constants.PREF_NAME);
+            if (username_text != null) {
+                username_text.setText(newName);
+            }
+            if (!newEmail.isEmpty()) {
+                currentUserEmail = newEmail;
+                SharedPrefsData.putString(newProfileDetails.this, Constants.Email, newEmail, Constants.PREF_NAME);
+                try {
+                    if (prefShare != null) prefShare.setEmailID(newEmail);
+                } catch (Exception ignored) {
+                }
+                if (user_login_number != null) {
+                    user_login_number.setText(newEmail);
+                }
+            }
+            refreshAchievedPctFromLocalIdentity();
+            setTextSafe((TextView) findViewById(R.id.complete_profile_label), resolveCompleteProfileLabel());
+            updateReporterProfile(newName, newEmail, alertDialog, progress, saveBtn, cancelBtn);
         });
+    }
+
+    /** Recompute "% profile completed" from prefs/identity after local edit or photo change. */
+    private void refreshAchievedPctFromLocalIdentity() {
+        try {
+            int local = ProfileAchievementHelper.computePctFromPrefs(this);
+            // Keep currentUserEmail / name edits that may not be flushed yet.
+            NewUserProfileResponse.Data stub = new NewUserProfileResponse().new Data();
+            ProfileAchievementHelper.mergeIdentityFromPrefs(this, stub);
+            if (currentUserEmail != null && currentUserEmail.contains("@")) {
+                stub.setEmail(currentUserEmail);
+            }
+            if (username_text != null && username_text.getText() != null) {
+                String onScreen = username_text.getText().toString().trim();
+                if (!onScreen.isEmpty() && !"guest".equalsIgnoreCase(onScreen)) {
+                    stub.setUserName(onScreen);
+                }
+            }
+            local = Math.max(local, ProfileAchievementHelper.computeLocalProfileCompletionPct(stub));
+            bindApprovalProgress(String.valueOf(local));
+            SharedPrefsData.putString(this, Constants.PROFILE_ACHIEVED_PCT,
+                    String.valueOf(local), Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Finish profile → Home news feed (under-activity kept for feed state). */
+    private void returnToNewsFeed() {
+        navigateHomeWithFooterTab(R.id.navigation_home);
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(0, 0);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (intent != null) {
+            setIntent(intent);
+        }
+        // Warm re-show from Home footer — keep Profile tab selected, refresh light chrome.
+        try {
+            if (profileBottomNav != null) {
+                profileBottomNav.setSelectedItemId(R.id.navigation_profile);
+            }
+            applyProfileFooterTabLabels();
+            bindProfileLoginPill();
+            applyLoginGatedHubRows();
+        } catch (Exception ignored) {
+        }
     }
 
     private JsonObject getEditProfileData(String name, String email) {
@@ -1146,16 +1985,29 @@ public class newProfileDetails extends AppCompatActivity {
                 cancelBtn.setEnabled(true);
 
                 if (success) {
-                    // Update local cache + UI immediately.
                     SharedPrefsData.putString(newProfileDetails.this, Constants.USER_NAME, name, Constants.PREF_NAME);
-                    username_text.setText(name);
-                    currentUserEmail = email;
-                    if (email != null && !email.isEmpty()) {
-                        user_login_number.setText(" " + email);
+                    if (username_text != null) {
+                        username_text.setText(name);
                     }
+                    currentUserEmail = email != null ? email : "";
+                    if (email != null && !email.isEmpty()) {
+                        SharedPrefsData.putString(newProfileDetails.this, Constants.Email, email, Constants.PREF_NAME);
+                        try {
+                            if (prefShare != null) prefShare.setEmailID(email);
+                        } catch (Exception ignored) {
+                        }
+                        if (user_login_number != null) {
+                            user_login_number.setText(email);
+                        }
+                    }
+                    refreshAchievedPctFromLocalIdentity();
+                    setTextSafe((TextView) findViewById(R.id.complete_profile_label),
+                            resolveCompleteProfileLabel());
                     Toast.makeText(newProfileDetails.this, "Profile updated", Toast.LENGTH_SHORT).show();
-                    dialog.dismiss();
-                    // Refresh from backend so counts/name stay consistent.
+                    if (dialog != null && dialog.isShowing()) {
+                        dialog.dismiss();
+                    }
+                    // Soft-refresh from backend so counts/name stay consistent.
                     getWriterProfileData();
                 } else {
                     Toast.makeText(newProfileDetails.this, "Could not update profile. Please try again.", Toast.LENGTH_SHORT).show();
@@ -1174,13 +2026,31 @@ public class newProfileDetails extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-          super.onBackPressed();
-//        Intent intent = new Intent(newProfileDetails.this, HomePage.class);
-//        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-//        if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-//            startActivity(intent);
-//        }
+        if (profileReporterFabExpanded) {
+            collapseReporterCreateFab(true);
+            return;
+        }
+        // System / gesture back — same reverse slide as News >
+        super.onBackPressed();
+    }
 
+    /**
+     * Opens wallet history immediately (no spin-wait on profile).
+     * @param tab 1 = article amount transactions, 2 = payment / redeem history
+     */
+    private void openWalletHistory(int tab) {
+        boolean is_login = SharedPrefsData.getBool(newProfileDetails.this, Constants.is_login, Constants.PREF_NAME);
+        if (!is_login) {
+            openReporterLogin();
+            return;
+        }
+        Intent intent = new Intent(newProfileDetails.this, MainActivity.class);
+        String amount = profile_total_amount != null ? profile_total_amount.getText().toString() : "";
+        intent.putExtra(MainActivity.EXTRA_PAYMENT_HISTORY, amount);
+        intent.putExtra(MainActivity.EXTRA_OPEN_TAB, tab);
+        // Warm header cache for next opens
+        WalletHistoryCache.saveTotalPointsDisplay(this, amount);
+        startActivity(intent);
     }
 
     private void setStaticdata() {
@@ -1188,21 +2058,49 @@ public class newProfileDetails extends AppCompatActivity {
         Gson gson = new Gson();
         String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
-        language_name.setText(languageModelResponse.getData().getLanguage());
-        textViewLanguageNameUser.setText(languageModelResponse.getData().getLanguage());
+        if (languageModelResponse == null || languageModelResponse.getData() == null) {
+            applyProfileHubTranslatedLabels();
+            bindProfileLoginPill();
+            bindLocationRowText();
+            bindStatusVideosNewBadge();
+            bindReporterShortcutLabels();
+            applyProfileFooterTabLabels();
+            return;
+        }
+        if (language_name != null) {
+            language_name.setText(languageModelResponse.getData().getLanguage());
+        }
+        if (textViewLanguageNameUser != null) {
+            textViewLanguageNameUser.setText(resolveCurrentLanguageDisplay());
+        }
+        TextView langLabel = findViewById(R.id.profile_language_label);
+        if (langLabel != null && languageModelResponse.getData().getSelectLanguage() != null
+                && !languageModelResponse.getData().getSelectLanguage().trim().isEmpty()) {
+            langLabel.setText(languageModelResponse.getData().getSelectLanguage());
+        }
         textViewFollowingUser.setText(" " + languageModelResponse.getData().getFollowing());
-        textViewShareEarnUser.setText("" + languageModelResponse.getData().getShareToEarn());
-        textViewFollowMore.setText("" + languageModelResponse.getData().getFollowMore());
+        if (textViewShareEarnUser != null) {
+            String share = languageModelResponse.getData().getShareToEarn();
+            textViewShareEarnUser.setText(share != null && !share.isEmpty()
+                    ? share : getString(R.string.profile_referral));
+        }
+        if (textViewFollowMore != null) {
+            textViewFollowMore.setText("" + languageModelResponse.getData().getFollowMore());
+        }
 
         profile_article_name.setText(" " + languageModelResponse.getData().getArticles());
         profile_like_name.setText(" " + languageModelResponse.getData().getLikes());
         profile_followers_name.setText(" " + languageModelResponse.getData().getFollowers());
         profile_following_name.setText(" " + languageModelResponse.getData().getFollowing());
         writer_following_name.setText(" " + languageModelResponse.getData().getFollowing());
-        profile_follow_more.setText("" + languageModelResponse.getData().getFollowMore());
+        if (profile_follow_more != null) {
+            profile_follow_more.setText("" + languageModelResponse.getData().getFollowMore());
+        }
         user_rewards.setText("" + languageModelResponse.getData().getRewards());
         user_share_to_earn.setText("" + languageModelResponse.getData().getShareToEarn());
-        user_follow_more_data.setText("" + languageModelResponse.getData().getFollowMore());
+        if (user_follow_more_data != null) {
+            user_follow_more_data.setText("" + languageModelResponse.getData().getFollowMore());
+        }
         only_language_name.setText("" + languageModelResponse.getData().getLanguage());
         total_amount.setText("" + languageModelResponse.getData().getTotalAmount());
         profile_next_payment.setText("Earnings");
@@ -1213,11 +2111,305 @@ public class newProfileDetails extends AppCompatActivity {
         }else{
             textViewAppDelete.setText("Delete Account");
         }
+        if (textViewAppLogout != null) {
+            textViewAppLogout.setText(R.string.profile_logout);
+        }
+        bindNewsNavLabel();
+        applyProfileHubTranslatedLabels();
+        bindProfileLoginPill();
+        bindLocationRowText();
+        bindStatusVideosNewBadge();
+        bindReporterShortcutLabels();
+        applyProfileFooterTabLabels();
+    }
 
+    /**
+     * Profile hub / Way2 menu labels from SessionPreferences translator JSON
+     * ({@link Allsharedpreference#Translator} → {@link LanguageModelResponse}), with
+     * string-resource fallbacks for keys missing from older language packs.
+     */
+    private void applyProfileHubTranslatedLabels() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
 
+        TextView tagline = findViewById(R.id.profile_tagline);
+        if (tagline != null) {
+            // No translator field for marketing tagline — keep resource (may be English).
+            tagline.setText(R.string.profile_tagline);
+        }
 
+        setHubLabel(R.id.profile_categories_label,
+                firstTranslator(d != null ? d.getCategory() : null,
+                        d != null ? d.getDiscover() : null,
+                        getString(R.string.profile_categories)));
 
+        TextView viewAll = findViewById(R.id.profile_categories_view_all);
+        if (viewAll != null) {
+            // Packs rarely carry "View All"; prefer full resource, else translator view.
+            String view = d != null ? d.getView() : null;
+            if (notEmptyTranslator(view) && !"view".equalsIgnoreCase(view.trim())) {
+                viewAll.setText(view.trim());
+            } else {
+                viewAll.setText(R.string.profile_categories_view_all);
+            }
+        }
 
+        setHubLabel(R.id.profile_status_videos_label, ProfileHubLabels.statusVideos(this));
+
+        TextView locationCaption = findViewById(R.id.profile_location_label);
+        if (locationCaption != null) {
+            locationCaption.setText(ProfileHubLabels.selectedLocation(this));
+        }
+
+        setHubLabel(R.id.profile_settings_row_label,
+                firstTranslator(d != null ? d.getSettings() : null, null,
+                        getString(R.string.profile_settings)));
+
+        TextView feedbackLabel = findViewById(R.id.profile_feedback_label);
+        if (feedbackLabel != null) {
+            feedbackLabel.setText(firstTranslator(
+                    d != null ? d.getFeedback() : null, null, getString(R.string.profile_feedback)));
+        }
+
+        TextView contactLabel = findViewById(R.id.profile_contact_label);
+        if (contactLabel != null) {
+            contactLabel.setText(firstTranslator(
+                    d != null ? d.getContactUs() : null, null, getString(R.string.profile_contact_us)));
+        }
+
+        TextView bmLabel = findViewById(R.id.profile_bookmarks_label);
+        if (bmLabel != null) {
+            bmLabel.setText(HomeOfflineModeLabels.bookmarks(this));
+        }
+
+        // Following / Share rows already bound above via textViewFollowingUser / textViewShareEarnUser.
+        if (textViewFollowingUser != null && d != null && notEmptyTranslator(d.getFollowing())) {
+            textViewFollowingUser.setText(" " + d.getFollowing().trim());
+        }
+        if (textViewShareEarnUser != null) {
+            String share = firstTranslator(
+                    d != null ? d.getShareToEarn() : null,
+                    d != null ? d.getShare() : null,
+                    getString(R.string.profile_referral));
+            textViewShareEarnUser.setText(share);
+        }
+        // Login CTA text is applied in bindProfileLoginPill (guest-only).
+    }
+
+    private void setHubLabel(int id, String text) {
+        TextView tv = findViewById(id);
+        if (tv != null && text != null) tv.setText(text);
+    }
+
+    private static boolean notEmptyTranslator(String s) {
+        return s != null && !s.trim().isEmpty() && !"null".equalsIgnoreCase(s.trim());
+    }
+
+    private static String firstTranslator(String a, String b, String fallback) {
+        if (notEmptyTranslator(a)) return a.trim();
+        if (notEmptyTranslator(b)) return b.trim();
+        return fallback;
+    }
+
+    /** Way2 top-right: always "News" (locale), never Home / Reload pack wording. */
+    private void bindNewsNavLabel() {
+        if (tvNewsNav == null) {
+            return;
+        }
+        String packHome = null;
+        String packReload = null;
+        try {
+            if (languageModelResponse != null && languageModelResponse.getData() != null) {
+                packHome = languageModelResponse.getData().getHome();
+                packReload = languageModelResponse.getData().getReload();
+            }
+        } catch (Exception ignored) {
+        }
+        String label = com.anyNews.anynews.Utils.NewsFooterLabel.stripNavDecoration(
+                com.anyNews.anynews.Utils.NewsFooterLabel.resolveDisplay(
+                        this, packHome, packReload));
+        tvNewsNav.setText(label);
+    }
+
+    /** Native+English display for current language id (fallback when LanName not stored). */
+    private String resolveCurrentLanguageDisplay() {
+        String saved = SharedPrefsData.getString(this, Constants.Lang, Constants.PREF_NAME);
+        if (saved != null && !saved.trim().isEmpty() && !"null".equalsIgnoreCase(saved.trim())) {
+            return saved.trim();
+        }
+        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        switch (id) {
+            case 1: return "മലയാളം Malayalam";
+            case 2: return "हिन्दी Hindi";
+            case 3: return "తెలుగు Telugu";
+            case 4: return "தமிழ் Tamil";
+            case 5: return "ಕನ್ನಡ Kannada";
+            case 6: return "ଓଡ଼ିଆ Odia";
+            default:
+                if (languageModelResponse != null && languageModelResponse.getData() != null
+                        && languageModelResponse.getData().getLanguage() != null) {
+                    return languageModelResponse.getData().getLanguage();
+                }
+                return "Language";
+        }
+    }
+
+    private void bindLocationRowText() {
+        TextView locationValue = findViewById(R.id.profile_location_value);
+        if (locationValue == null) return;
+        String dist = DistrictLabelHelper.resolveDisplayLabel(this);
+        if (dist == null || dist.isEmpty()) {
+            if (local_distic_name != null && local_distic_name.getText() != null) {
+                String t = local_distic_name.getText().toString().trim();
+                if (DistrictLabelHelper.isUsable(t)
+                        && DistrictLabelHelper.labelCompatibleWithLanguage(
+                                t,
+                                SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME))) {
+                    dist = t;
+                }
+            }
+        }
+        if (dist == null || dist.isEmpty()) {
+            locationValue.setText(ProfileHubLabels.selectedLocation(this));
+            locationValue.setTextColor(ContextCompat.getColor(this, R.color.profile_way2_value));
+            return;
+        }
+        String change = resolveLocationChangeSuffix();
+        String full = dist + change;
+        android.text.SpannableString span = new android.text.SpannableString(full);
+        int start = dist.length();
+        int end = full.length();
+        int orange = ContextCompat.getColor(this, R.color.brand_orange);
+        int value = ContextCompat.getColor(this, R.color.profile_way2_value);
+        span.setSpan(new android.text.style.ForegroundColorSpan(value), 0, start,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        span.setSpan(new android.text.style.ForegroundColorSpan(orange), start, end,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        span.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, start,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        locationValue.setText(span);
+    }
+
+    /** Localized " (Change)" suffix for the location tile; prefers language-id default over English. */
+    private String resolveLocationChangeSuffix() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        if (d != null && notEmptyTranslator(d.getEdit())) {
+            return " (" + d.getEdit().trim() + ")";
+        }
+        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        switch (id) {
+            case 1: return " (മാറ്റുക)";
+            case 2: return " (बदलें)";
+            case 3: return " (ఎడిట్)";
+            case 4: return " (மாற்று)";
+            case 5: return " (ಬದಲಿಸಿ)";
+            case 6: return " (ପରିବର୍ତ୍ତନ)";
+            default: return getString(R.string.profile_edit_suffix);
+        }
+    }
+
+    /** Orange "New" badge on Status Videos — labeled via locale; hidden after first open. */
+    private void bindStatusVideosNewBadge() {
+        TextView badge = findViewById(R.id.profile_status_videos_new_badge);
+        View statusRow = findViewById(R.id.layout_status_videos);
+        if (badge == null) return;
+
+        boolean statusVisible = statusRow != null
+                && statusRow.getVisibility() == View.VISIBLE
+                && ProfileHubConfigHelper.isStatusVideosEnabled(this);
+        boolean seen = SharedPrefsData.getBool(
+                this, Constants.STATUS_VIDEOS_BADGE_SEEN, Constants.PREF_NAME);
+
+        if (!statusVisible || seen) {
+            stopStatusVideosBadgePulse();
+            badge.setVisibility(View.GONE);
+            return;
+        }
+
+        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        String label;
+        switch (id) {
+            case 1: label = "പുതിയ"; break;
+            case 2: label = "नया"; break;
+            case 3: label = "కొత్త"; break;
+            case 4: label = "புதிய"; break;
+            case 5: label = "ಹೊಸ"; break;
+            case 6: label = "ନୂଆ"; break;
+            default: label = getString(R.string.profile_following_new); break;
+        }
+        badge.setText(label);
+        badge.setVisibility(View.VISIBLE);
+        startStatusVideosBadgePulse(badge);
+    }
+
+    private void startStatusVideosBadgePulse(View badge) {
+        if (badge == null) return;
+        if (statusVideosBadgePulse != null && statusVideosBadgePulse.isRunning()) {
+            return;
+        }
+        stopStatusVideosBadgePulse();
+        badge.setAlpha(1f);
+        ObjectAnimator anim = ObjectAnimator.ofFloat(badge, View.ALPHA, 1f, 0.4f);
+        anim.setDuration(1000);
+        anim.setRepeatCount(ValueAnimator.INFINITE);
+        anim.setRepeatMode(ValueAnimator.REVERSE);
+        anim.setInterpolator(new AccelerateDecelerateInterpolator());
+        statusVideosBadgePulse = anim;
+        anim.start();
+    }
+
+    private void stopStatusVideosBadgePulse() {
+        if (statusVideosBadgePulse != null) {
+            statusVideosBadgePulse.cancel();
+            statusVideosBadgePulse = null;
+        }
+        TextView badge = findViewById(R.id.profile_status_videos_new_badge);
+        if (badge != null) {
+            badge.clearAnimation();
+            badge.setAlpha(1f);
+        }
+    }
+
+    private void markStatusVideosBadgeSeen() {
+        SharedPrefsData.putBool(this, Constants.STATUS_VIDEOS_BADGE_SEEN, true, Constants.PREF_NAME);
+        stopStatusVideosBadgePulse();
+        TextView badge = findViewById(R.id.profile_status_videos_new_badge);
+        if (badge != null) {
+            badge.setVisibility(View.GONE);
+        }
+    }
+
+    /** Show orange Login → pill for guests (not logged in via reporter login). */
+    private void bindProfileLoginPill() {
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        if (login_neomorph_layout != null) {
+            login_neomorph_layout.setVisibility(loggedIn ? View.GONE : View.VISIBLE);
+        }
+        if (login != null) {
+            login.setVisibility(loggedIn ? View.GONE : View.VISIBLE);
+        }
+        if (logintext != null && !loggedIn) {
+            LanguageModelResponse.Data d =
+                    languageModelResponse != null ? languageModelResponse.getData() : null;
+            String loginLabel = firstTranslator(d != null ? d.getLogin() : null, null, null);
+            if (loginLabel != null) {
+                logintext.setText(loginLabel + " →");
+            } else {
+                logintext.setText(ProfileHubLabels.loginCta(this));
+            }
+            logintext.setTextColor(ContextCompat.getColor(this, R.color.profile_way2_login_text));
+        }
+    }
+
+    /** Guest card defaults matching Profile mock (before network paints real user). */
+    private void applyGuestProfileCardDefaults() {
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        if (!loggedIn) {
+            paintLoggedOutIdentity();
+            return;
+        }
+        bindProfileLoginPill();
     }
 
     private JsonObject set_writer_profile_data() {
@@ -1255,305 +2447,1101 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     /**
-     * Renders the last-known reporter profile from SharedPrefs cache so the screen
-     * shows real content immediately on open (name, location, counts, points, email
-     * and avatar) instead of a blank blocking "Loading..." spinner. The live network
-     * response then updates these values when it returns. No-op when there is no
-     * cached profile yet (first ever open).
+     * Renders the last-known reporter profile from memory+disk cache so the screen
+     * shows real content immediately on open instead of a blank blocking spinner.
+     * Network soft-refresh updates values when ready.
      */
     private void showCachedProfileInstant() {
         try {
-            String cached = SharedPrefsData.getString(getApplicationContext(), Constants.PROFILE_CACHE, Constants.PREF_NAME);
-            if (cached == null || cached.isEmpty()) {
-                return;
-            }
-            NewUserProfileResponse resp = new Gson().fromJson(cached, NewUserProfileResponse.class);
+            if (loadingProgressbar != null) loadingProgressbar.setVisibility(View.GONE);
+            if (loadingProfileView != null) loadingProfileView.setVisibility(View.VISIBLE);
+            if (imageupload_progressbar != null) imageupload_progressbar.setVisibility(View.GONE);
+            if (layout_with_out_data != null) layout_with_out_data.setVisibility(View.GONE);
+            if (layout_with_data != null) layout_with_data.setVisibility(View.VISIBLE);
+            if (img_upload_photo != null) img_upload_photo.setVisibility(View.VISIBLE);
+        } catch (Exception ignored) {
+        }
+
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        if (!loggedIn) {
+            paintLoggedOutIdentity();
+            applyReporterChrome(false);
+            bindReporterDesk();
+            return;
+        }
+
+        // Always re-assert local identity (email/name) so empty cache still shows prefs.
+        paintIdentityFromLocalPrefs();
+
+        try {
+            NewUserProfileResponse resp = ReporterProfileCache.load(getApplicationContext());
             if (resp == null || !Boolean.TRUE.equals(resp.getSuccess()) || resp.getData() == null) {
+                boolean flag = SharedPrefsData.getBool(this, Constants.is_reporter, Constants.PREF_NAME);
+                applyReporterChrome(flag);
+                if (flag) {
+                    try {
+                        WalletHistoryPrefetcher.prefetchIfPossible(getApplicationContext());
+                    } catch (Exception ignored) {
+                    }
+                }
+                bindReporterDesk();
+                bindReporterCreateFab();
                 return;
             }
-            NewUserProfileResponse.Data d = resp.getData();
-
-            // Reveal content, hide the blocking spinner.
-            loadingProgressbar.setVisibility(View.GONE);
-            loadingProfileView.setVisibility(View.VISIBLE);
-            imageupload_progressbar.setVisibility(View.GONE);
-            img_upload_photo.setVisibility(View.VISIBLE);
-            local_distic_name.setVisibility(View.VISIBLE);
-
-            username_text.setText(d.getUserName());
-            local_distic_name.setText(d.getLocation());
-            profile_article_count.setText("" + d.getArticles());
-            profile_like_count.setText("" + d.getLikes());
-            profile_followers_count.setText("" + d.getFollowers());
-            profile_following_count.setText("" + d.getFollowing());
-            writer_following_count.setText("" + d.getFollowing());
-            profile_total_amount.setText("\u20B9 " + d.getTotalPoints());
-            earned_total_amount.setText("\u20B9 " + d.getAvailablePoints());
-            user_login_number.setText(" " + d.getEmail());
-            currentUserEmail = d.getEmail() != null ? d.getEmail() : "";
-            payment_layout.setVisibility(View.VISIBLE);
-
-            boolean isReporter = Boolean.TRUE.equals(d.getIsReporter())
-                    && d.getMobileNumber() != null
-                    && !d.getMobileNumber().equals("")
-                    && !d.getMobileNumber().equals("null");
-            if (isReporter) {
-                profile_articales_list.setVisibility(View.VISIBLE);
-                profile_following_list.setVisibility(View.VISIBLE);
-                progressMainLayout.setVisibility(View.VISIBLE);
-                user_articales_list.setVisibility(View.GONE);
-                profile_follower_list.setVisibility(View.VISIBLE);
-                profile_refer_list.setVisibility(View.VISIBLE);
-                only_profile_follower_list.setVisibility(View.VISIBLE);
-                profile_one.setVisibility(View.GONE);
-            } else {
-                reportLayout.setVisibility(View.GONE);
-                userLayout.setVisibility(View.VISIBLE);
-                progressMainLayout.setVisibility(View.GONE);
-            }
-
-            try {
-                if (d.getProfilePic() != null) {
-                    Picasso.get().load(MediaUrl.resolve(d.getProfilePic())).into(img_upload_photo);
-                    layout_with_out_data.setVisibility(View.GONE);
-                    layout_with_data.setVisibility(View.VISIBLE);
-                }
-            } catch (IllegalArgumentException e) {
-                e.printStackTrace();
-            }
+            applyProfileDataToUi(resp.getData(), true);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
+    /** Single paint path for cache + network. Safe across theme recreate. */
+    private void applyProfileDataToUi(NewUserProfileResponse.Data d, boolean fromCache) {
+        if (d == null) return;
+
+        // After logout, draft-bound profile API must not resurrect name/email/reporter UI.
+        if (!SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME)) {
+            paintLoggedOutIdentity();
+            applyReporterChrome(false);
+            bindReporterDesk();
+            return;
+        }
+
+        if (local_distic_name != null) {
+            local_distic_name.setVisibility(View.GONE);
+            if (d.getLocation() != null) local_distic_name.setText(d.getLocation());
+        }
+        // Prefer real name over draft "Guest" (login prefs often already have it).
+        ProfileAchievementHelper.mergeIdentityFromPrefs(this, d);
+        if (username_text != null && d.getUserName() != null
+                && !d.getUserName().trim().isEmpty()
+                && !"guest".equalsIgnoreCase(d.getUserName().trim())) {
+            username_text.setText(d.getUserName().trim());
+        }
+
+        long articles = d.getArticles() != null ? d.getArticles() : 0L;
+        long likes = d.getLikes() != null ? d.getLikes() : 0L;
+        long followers = d.getFollowers() != null ? d.getFollowers() : 0L;
+        long following = d.getFollowing() != null ? d.getFollowing() : 0L;
+        long totalPts = 0L;
+        try { totalPts = d.getTotalPoints(); } catch (Exception ignored) { }
+        Long available = d.getAvailablePoints();
+        long availablePts = available != null ? available : 0L;
+
+        setTextSafe(profile_article_count, String.valueOf(articles));
+        setTextSafe(profile_like_count, String.valueOf(likes));
+        setTextSafe(profile_followers_count, String.valueOf(followers));
+        setTextSafe(profile_following_count, String.valueOf(following));
+        setTextSafe(writer_following_count, String.valueOf(following));
+        setTextSafe(profile_total_amount, "\u20B9 " + totalPts);
+        setTextSafe(earned_total_amount, "\u20B9 " + availablePts);
+
+        setTextSafe((TextView) findViewById(R.id.tile_articles_count), formatCompactCount(articles));
+        setTextSafe((TextView) findViewById(R.id.tile_followers_count), formatCompactCount(followers));
+        setTextSafe((TextView) findViewById(R.id.tile_earnings_count), "\u20B9 " + totalPts);
+
+        String email = d.getEmail() != null ? d.getEmail().trim() : "";
+        // Never wipe a known login email when soft-refresh payload omits it.
+        if (email.contains("@")) {
+            currentUserEmail = email;
+        } else if (currentUserEmail == null || !currentUserEmail.contains("@")) {
+            try {
+                if (prefShare != null && prefShare.getEmailId() != null
+                        && prefShare.getEmailId().contains("@")) {
+                    currentUserEmail = prefShare.getEmailId().trim();
+                    d.setEmail(currentUserEmail);
+                    email = currentUserEmail;
+                }
+            } catch (Exception ignored) {
+            }
+        } else {
+            d.setEmail(currentUserEmail);
+            email = currentUserEmail;
+        }
+        if (user_login_number != null && email != null && email.contains("@")) {
+            user_login_number.setText(email);
+            user_login_number.setTextColor(
+                    ContextCompat.getColor(this, R.color.profile_way2_guest_sub));
+            user_login_number.setVisibility(View.VISIBLE);
+        }
+
+        if (d.getMobileNumber() != null
+                && !d.getMobileNumber().equals("")
+                && !d.getMobileNumber().equals("null")) {
+            SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Phone_Number,
+                    "" + d.getMobileNumber(), Constants.PREF_NAME);
+        }
+
+        boolean isReporter = Boolean.TRUE.equals(d.getIsReporter());
+        // Prefer immediate write so any concurrent open sees verified without apply() race.
+        SharedPrefsData.putBoolImmediate(getApplicationContext(), Constants.is_reporter,
+                isReporter, Constants.PREF_NAME);
+        applyReporterChrome(isReporter);
+        // max(API, prefs) so soft-refresh never resets bar to 0% when login identity exists.
+        int achievedPct = ProfileAchievementHelper.resolveAchievedPctWithPrefs(this, d);
+        bindApprovalProgress(String.valueOf(achievedPct));
+        try {
+            SharedPrefsData.putString(getApplicationContext(), Constants.PROFILE_ACHIEVED_PCT,
+                    String.valueOf(achievedPct), Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        setTextSafe((TextView) findViewById(R.id.complete_profile_label), resolveCompleteProfileLabel());
+        bindLocationRowText();
+
+        // Persist canonical user_id before wallet prefetch (cache paint used to skip this).
+        if (d.getUserId() != null && d.getUserId() > 0) {
+            try {
+                SharedPrefsData.putLong(getApplicationContext(), Constants.USER_ID,
+                        d.getUserId(), Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Warm wallet page-0 while reporter is looking at profile (network free path).
+        if (isReporter) {
+            try {
+                WalletHistoryCache.saveTotalPointsDisplay(this, "\u20B9" + totalPts);
+            } catch (Exception ignored) {
+            }
+            try {
+                final android.view.View decor = getWindow() != null ? getWindow().getDecorView() : null;
+                if (decor != null) {
+                    decor.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            WalletHistoryPrefetcher.prefetchIfPossible(getApplicationContext());
+                        }
+                    });
+                } else {
+                    WalletHistoryPrefetcher.prefetchIfPossible(getApplicationContext());
+                }
+            } catch (Exception ignored) {
+                try {
+                    WalletHistoryPrefetcher.prefetchIfPossible(getApplicationContext());
+                } catch (Exception ignored2) {
+                }
+            }
+        }
+
+        if (!fromCache) {
+            AvailablePoints = availablePts;
+            RedeemValue = d.getRedeemValue() != null ? d.getRedeemValue() : 0L;
+            refer_earn = d.getRefLink();
+            SharedPrefsData.putString(getApplicationContext(), Constants.AVAILABLEPOINTS,
+                    "" + availablePts, Constants.PREF_NAME);
+            SharedPrefsData.putString(getApplicationContext(), Constants.REDEEMPOINTS,
+                    "" + RedeemValue, Constants.PREF_NAME);
+            if (d.getPanStatus() != null) {
+                SharedPrefsData.putBool(getApplicationContext(), Constants.PAN_CARD_STATUS,
+                        d.getPanStatus(), Constants.PREF_NAME);
+            }
+            if (androidProgressBar != null && RedeemValue > 0) {
+                androidProgressBar.setMax((int) RedeemValue);
+                androidProgressBar.setProgress((int) Math.min(AvailablePoints, RedeemValue));
+            }
+        }
+
+        if (payment_layout != null) payment_layout.setVisibility(View.GONE);
+        if (reportLayout != null) reportLayout.setVisibility(View.GONE);
+
+        try {
+            if (d.getProfilePic() != null && !d.getProfilePic().isEmpty()) {
+                AvatarImageHelper.loadProfilePicasso(img_upload_photo, d.getProfilePic());
+                bindEmptyProfilePhotoAffordance(false);
+                try {
+                    SharedPrefsData.putString(getApplicationContext(), Constants.PROFILE_PIC_URL,
+                            d.getProfilePic(), Constants.PREF_NAME);
+                } catch (Exception ignored) {
+                }
+            } else {
+                AvatarImageHelper.setProfileEmpty(img_upload_photo);
+                bindEmptyProfilePhotoAffordance(true);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // Persist identity for next open (instant name/email/avatar).
+        try {
+            if (d.getUserName() != null && !d.getUserName().trim().isEmpty()) {
+                SharedPrefsData.putString(getApplicationContext(), Constants.USER_NAME,
+                        d.getUserName().trim(), Constants.PREF_NAME);
+            }
+            if (email != null && !email.isEmpty()) {
+                SharedPrefsData.putString(getApplicationContext(), Constants.Email, email, Constants.PREF_NAME);
+                if (prefShare != null) {
+                    prefShare.setEmailID(email);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        if (login_neomorph_layout != null) {
+            if (prefShare != null && prefShare.getEmailId() != null
+                    && !prefShare.getEmailId().equals("")) {
+                login_neomorph_layout.setVisibility(View.GONE);
+            }
+        }
+        applyLoginGatedHubRows();
+        bindReporterDesk();
+        bindReporterCreateFab();
+    }
+
+    private void setTextSafe(TextView tv, String text) {
+        if (tv != null && text != null) tv.setText(text);
+    }
+
+    private static String formatCompactCount(long n) {
+        if (n >= 1_000_000L) {
+            return String.format(java.util.Locale.US, "%.1fM", n / 1_000_000d);
+        }
+        if (n >= 1000L) {
+            double k = n / 1000d;
+            if (Math.abs(k - Math.rint(k)) < 0.05) {
+                return String.format(java.util.Locale.US, "%.0fK", k);
+            }
+            return String.format(java.util.Locale.US, "%.1fK", k);
+        }
+        return String.valueOf(n);
+    }
+
+    private void bindApprovalProgress(String progressRaw) {
+        int pct = 0;
+        Integer parsed = ProfileAchievementHelper.parsePct(progressRaw);
+        if (parsed != null) {
+            pct = parsed;
+        }
+        pct = Math.max(0, Math.min(100, pct));
+        String progressLabel = ProfileHubLabels.profileCompleted(this, pct);
+        TextView label = findViewById(R.id.reporter_progress_label);
+        if (label != null) {
+            label.setText(progressLabel);
+        }
+        View fill = findViewById(R.id.reporter_progress_fill);
+        if (fill != null && fill.getParent() instanceof View) {
+            final int finalPct = pct;
+            View parent = (View) fill.getParent();
+            parent.post(() -> {
+                int w = parent.getWidth();
+                if (w <= 0) return;
+                ViewGroup.LayoutParams lp = fill.getLayoutParams();
+                lp.width = Math.max(0, (int) (w * (finalPct / 100f)));
+                fill.setLayoutParams(lp);
+            });
+        }
+        try {
+            if (progressViewApproval != null) {
+                progressViewApproval.setLabelText(progressLabel);
+                progressViewApproval.setProgress(pct);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Last-known achieved % from prefs so the bar never flashes 0% while network loads. */
+    private void paintAchievedFromLocalPrefs() {
+        try {
+            if (!SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME)) {
+                return;
+            }
+            int local = ProfileAchievementHelper.computePctFromPrefs(this);
+            String pct = SharedPrefsData.getString(
+                    this, Constants.PROFILE_ACHIEVED_PCT, Constants.PREF_NAME);
+            Integer stored = ProfileAchievementHelper.parsePct(pct);
+            int best = local;
+            if (stored != null) {
+                best = Math.max(stored, local);
+            }
+            if (best > 0) {
+                bindApprovalProgress(String.valueOf(best));
+            }
+            setTextSafe((TextView) findViewById(R.id.complete_profile_label),
+                    resolveCompleteProfileLabel());
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void applyReporterChrome(boolean isReporter) {
+        // Never show reporter chrome while logged out (stale prefs / cache).
+        if (!SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME)) {
+            isReporter = false;
+        }
+        showingReporterUi = isReporter;
+
+        View star = findViewById(R.id.reporter_star_badge);
+        View pill = findViewById(R.id.reporter_role_pill);
+        View verified = findViewById(R.id.layout_profile_verified);
+        View hero = findViewById(R.id.profile_hero_brand);
+        View guestCard = findViewById(R.id.profile_guest_card);
+        View shortcuts = findViewById(R.id.layout_reporter_shortcuts);
+        View categories = findViewById(R.id.layout_profile_categories);
+        View statusVideos = findViewById(R.id.layout_status_videos);
+        View settingsRow = findViewById(R.id.layout_profile_settings_row);
+        View contact = findViewById(R.id.layout_profile_contact);
+        View menuLang = findViewById(R.id.layout_menu_change_language);
+        TextView statusVideosBadge = findViewById(R.id.profile_status_videos_new_badge);
+
+        int rep = isReporter ? View.VISIBLE : View.GONE;
+
+        if (star != null) star.setVisibility(rep);
+        if (pill != null) pill.setVisibility(rep);
+        if (verified != null) verified.setVisibility(rep);
+        if (progressMainLayout != null) progressMainLayout.setVisibility(rep);
+        if (shortcuts != null) shortcuts.setVisibility(rep);
+        if (menuLang != null) menuLang.setVisibility(rep);
+
+        if (categories != null) {
+            if (isReporter) {
+                categories.setVisibility(View.GONE);
+            }
+            // Non-reporter: leave visible; setupProfileHubExtras / load path manages content.
+        }
+        // Status Videos is for everyone (guest / logged-in / reporter); admin flag only.
+        if (statusVideos != null) {
+            statusVideos.setVisibility(
+                    ProfileHubConfigHelper.isStatusVideosEnabled(this)
+                            ? View.VISIBLE : View.GONE);
+        }
+        if (settingsRow != null) {
+            if (isReporter) {
+                settingsRow.setVisibility(View.GONE);
+            } else if (ProfileHubConfigHelper.isSettingsRowVisible(this)) {
+                settingsRow.setVisibility(View.VISIBLE);
+            }
+        }
+        if (contact != null) {
+            contact.setVisibility(isReporter ? View.GONE : View.VISIBLE);
+        }
+        if (layoutAppShare != null) {
+            if (isReporter) {
+                layoutAppShare.setVisibility(View.GONE);
+            } else if (isReferralProgrammeEnabled() && ProfileHubConfigHelper.isReferralVisible(this)) {
+                layoutAppShare.setVisibility(View.VISIBLE);
+            }
+        }
+        if (hero != null) hero.setVisibility(isReporter ? View.GONE : View.VISIBLE);
+        if (guestCard != null) {
+            ViewGroup.MarginLayoutParams lp =
+                    (ViewGroup.MarginLayoutParams) guestCard.getLayoutParams();
+            if (lp != null) {
+                float dens = getResources().getDisplayMetrics().density;
+                lp.topMargin = Math.round((isReporter ? 48f : 108f) * dens);
+                guestCard.setLayoutParams(lp);
+            }
+            if (isReporter) {
+                guestCard.setBackgroundResource(android.R.color.transparent);
+                guestCard.setElevation(0f);
+                guestCard.setTranslationZ(0f);
+            } else {
+                guestCard.setBackgroundResource(R.drawable.bg_profile_guest_card);
+                guestCard.setElevation(10f);
+                guestCard.setTranslationZ(10f);
+            }
+        }
+
+        if (reportLayout != null) reportLayout.setVisibility(View.GONE);
+        if (payment_layout != null) payment_layout.setVisibility(View.GONE);
+
+        // Guests / non-approved must never keep reporter chrome from stale memory.
+        if (!SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME)) {
+            showingReporterUi = false;
+        }
+
+        bindReporterVerifiedLabel();
+        bindReporterShortcutLabels();
+        bindReporterDesk();
+        bindReporterCreateFab();
+        bindStatusVideosNewBadge();
+    }
+
+    /** Same reporter login screen that used to open from home center +. */
+    private void openReporterLogin() {
+        boolean loggedIn = SharedPrefsData.getBool(
+                newProfileDetails.this, Constants.is_login, Constants.PREF_NAME);
+        if (loggedIn) {
+            return;
+        }
+        Intent intent = new Intent(newProfileDetails.this, LoginActivityDetails.class);
+        intent.putExtra(LoginActivityDetails.EXTRA_RETURN_TO_PROFILE, true);
+        startActivity(intent);
+    }
+
+    /**
+     * Same News|Special|Calendar|Video|Profile footer as HomePage. Profile content
+     * scrolls above; other tabs return to HomePage with the selected mode.
+     */
+    private void setupProfileFooterNav() {
+        profileBottomNav = findViewById(R.id.profile_nav_view);
+        if (profileBottomNav == null) {
+            return;
+        }
+        try {
+            FooterStyleHelper.apply(this, profileBottomNav);
+        } catch (Exception ignored) {
+        }
+        try {
+            android.view.Menu menu = profileBottomNav.getMenu();
+            if (menu != null) {
+                setFooterMenuVisible(menu.findItem(R.id.navigation_home),
+                        ProfileHubConfigHelper.isFooterShowReload(this));
+                setFooterMenuVisible(menu.findItem(R.id.navigation_catagiries),
+                        ProfileHubConfigHelper.isFooterShowSpecial(this));
+                setFooterMenuVisible(menu.findItem(R.id.navigation_stricker),
+                        ProfileHubConfigHelper.isFooterShowCalendar(this));
+                setFooterMenuVisible(menu.findItem(R.id.navigation_status),
+                        ProfileHubConfigHelper.isFooterShowVideos(this));
+                setFooterMenuVisible(menu.findItem(R.id.navigation_profile),
+                        ProfileHubConfigHelper.isFooterShowProfile(this));
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            profileBottomNav.setSelectedItemId(R.id.navigation_profile);
+        } catch (Exception ignored) {
+        }
+        applyProfileFooterTabLabels();
+        profileBottomNav.setOnNavigationItemSelectedListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.navigation_profile) {
+                return true;
+            }
+            navigateHomeWithFooterTab(id);
+            return true;
+        });
+        profileBottomNav.setOnNavigationItemReselectedListener(item -> {
+            if (item.getItemId() == R.id.navigation_profile) {
+                View scroll = findViewById(R.id.profile_scroll);
+                if (scroll instanceof android.widget.ScrollView) {
+                    ((android.widget.ScrollView) scroll).smoothScrollTo(0, 0);
+                }
+            }
+        });
+    }
+
+    /**
+     * Match HomePage footer language: translator pack + LanguageID helpers
+     * (News / Events / Calendar / Video / Profile). Menu XML titles stay English
+     * until this runs — without it Profile looks English while Home is Telugu.
+     */
+    private void applyProfileFooterTabLabels() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        FooterTabLabels.apply(this, profileBottomNav, d);
+    }
+
+    private void setFooterMenuVisible(MenuItem item, boolean visible) {
+        if (item != null) {
+            item.setVisible(visible);
+        }
+    }
+
+    private void navigateHomeWithFooterTab(int footerTabId) {
+        Intent intent = new Intent(newProfileDetails.this, HomePage.class);
+        // Bring Home forward; keep this Profile instance warm under it so the next
+        // Profile tap is REORDER_TO_FRONT (instant) instead of cold inflate.
+        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.putExtra(HomePage.EXTRA_FOOTER_TAB, footerTabId);
+        if (getApplicationContext() != null
+                && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+            startActivity(intent);
+            overridePendingTransition(0, 0);
+        }
+        // Do not finish() — warm reuse for next Profile open.
+    }
+
+    private void setupReporterDesk() {
+        // No second login CTA — guest uses the top Login → pill only.
+        View loginCta = findViewById(R.id.reporter_desk_login_cta);
+        if (loginCta != null) {
+            loginCta.setOnClickListener(null);
+            loginCta.setVisibility(View.GONE);
+        }
+        View article = findViewById(R.id.reporter_desk_post_article);
+        if (article != null) {
+            article.setOnClickListener(v -> openReporterPostArticle());
+        }
+        View video = findViewById(R.id.reporter_desk_post_video);
+        if (video != null) {
+            video.setOnClickListener(v -> openReporterPostVideo());
+        }
+        View full = findViewById(R.id.reporter_desk_post_full);
+        if (full != null) {
+            full.setOnClickListener(v -> openReporterPostFull());
+        }
+        bindReporterDesk();
+    }
+
+    /**
+     * Reporter desk: pending-approval status only.
+     * Approved reporters create via the bottom-end + FAB (no duplicate desk tiles / no second login).
+     */
+    private void bindReporterDesk() {
+        View desk = findViewById(R.id.layout_reporter_desk);
+        if (desk == null) {
+            return;
+        }
+
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        boolean isReporter = SharedPrefsData.getBool(this, Constants.is_reporter, Constants.PREF_NAME)
+                || showingReporterUi;
+
+        TextView title = findViewById(R.id.reporter_desk_title);
+        TextView status = findViewById(R.id.reporter_desk_status);
+        View loginCta = findViewById(R.id.reporter_desk_login_cta);
+        View postActions = findViewById(R.id.reporter_desk_post_actions);
+
+        // Never show a second login — top Guest / Login → is the only entry.
+        if (loginCta != null) {
+            loginCta.setVisibility(View.GONE);
+        }
+        // Create actions live on the FAB, not the desk card.
+        if (postActions != null) {
+            postActions.setVisibility(View.GONE);
+        }
+
+        if (!loggedIn) {
+            desk.setVisibility(View.GONE);
+            return;
+        }
+
+        // Approved: FAB owns create — hide desk card entirely.
+        if (isReporter) {
+            desk.setVisibility(View.GONE);
+            return;
+        }
+
+        // Logged in but awaiting reporter approval.
+        desk.setVisibility(View.VISIBLE);
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        if (title != null) {
+            String r = d != null ? d.getReporter() : null;
+            title.setText(notEmptyTranslator(r) ? r.trim()
+                    : getString(R.string.profile_reporter_desk_title));
+        }
+        if (status != null) {
+            status.setText(R.string.profile_reporter_desk_pending);
+        }
+    }
+
+    /**
+     * Wire Profile reporter + FAB once (Twitter-style end stack, brand orange).
+     */
+    private void setupReporterCreateFab() {
+        profileReporterFabRoot = findViewById(R.id.profile_reporter_fab_root);
+        profileReporterFabScrim = findViewById(R.id.profile_reporter_fab_scrim);
+        profileReporterFabMenu = findViewById(R.id.profile_reporter_fab_menu);
+        profileReporterFabMain = findViewById(R.id.profile_reporter_fab_main);
+        profileFabActionArticle = findViewById(R.id.profile_fab_action_article);
+        profileFabActionVideo = findViewById(R.id.profile_fab_action_video);
+        profileFabActionFull = findViewById(R.id.profile_fab_action_full);
+
+        if (profileReporterFabMain != null) {
+            profileReporterFabMain.setOnClickListener(v -> {
+                if (profileReporterFabExpanded) {
+                    collapseReporterCreateFab(true);
+                } else {
+                    expandReporterCreateFab();
+                }
+            });
+        }
+        if (profileReporterFabScrim != null) {
+            profileReporterFabScrim.setOnClickListener(v -> collapseReporterCreateFab(true));
+        }
+        View miniArticle = findViewById(R.id.profile_fab_mini_article);
+        View miniVideo = findViewById(R.id.profile_fab_mini_video);
+        View miniFull = findViewById(R.id.profile_fab_mini_full);
+        View.OnClickListener articleClick = v -> {
+            collapseReporterCreateFab(false);
+            openReporterPostArticle();
+        };
+        View.OnClickListener videoClick = v -> {
+            collapseReporterCreateFab(false);
+            openReporterPostVideo();
+        };
+        View.OnClickListener fullClick = v -> {
+            collapseReporterCreateFab(false);
+            openReporterPostFull();
+        };
+        if (profileFabActionArticle != null) profileFabActionArticle.setOnClickListener(articleClick);
+        if (miniArticle != null) miniArticle.setOnClickListener(articleClick);
+        if (profileFabActionVideo != null) profileFabActionVideo.setOnClickListener(videoClick);
+        if (miniVideo != null) miniVideo.setOnClickListener(videoClick);
+        if (profileFabActionFull != null) profileFabActionFull.setOnClickListener(fullClick);
+        if (miniFull != null) miniFull.setOnClickListener(fullClick);
+
+        bindReporterCreateFab();
+    }
+
+    /**
+     * Show + only for logged-in approved reporters. Mini actions honor admin
+     * {@link Constants#ENABLE_ARTICLE_POST} / {@link Constants#ENABLE_VIDEO_POST} /
+     * {@link Constants#ENABLE_FULL_POST} (same prefs as old home FAB satellites).
+     */
+    private void bindReporterCreateFab() {
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        boolean isReporter = SharedPrefsData.getBool(this, Constants.is_reporter, Constants.PREF_NAME)
+                || showingReporterUi;
+        boolean showFab = loggedIn && isReporter;
+
+        if (profileReporterFabRoot == null) {
+            profileReporterFabRoot = findViewById(R.id.profile_reporter_fab_root);
+        }
+        if (profileReporterFabRoot == null) {
+            return;
+        }
+
+        if (!showFab) {
+            collapseReporterCreateFab(false);
+            profileReporterFabRoot.setVisibility(View.GONE);
+            return;
+        }
+
+        profileReporterFabRoot.setVisibility(View.VISIBLE);
+        applyReporterFabPostTypeVisibility();
+        bindReporterFabLabels();
+
+        // If every admin post type is off, hide the whole FAB.
+        if (!hasAnyReporterPostTypeEnabled()) {
+            collapseReporterCreateFab(false);
+            profileReporterFabRoot.setVisibility(View.GONE);
+        }
+    }
+
+    private boolean hasAnyReporterPostTypeEnabled() {
+        try {
+            SharedPreferences sp = getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+            return sp.getBoolean(Constants.ENABLE_ARTICLE_POST, true)
+                    || sp.getBoolean(Constants.ENABLE_VIDEO_POST, true)
+                    || sp.getBoolean(Constants.ENABLE_FULL_POST, true);
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private void applyReporterFabPostTypeVisibility() {
+        try {
+            SharedPreferences sp = getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+            if (profileFabActionArticle == null) {
+                profileFabActionArticle = findViewById(R.id.profile_fab_action_article);
+            }
+            if (profileFabActionVideo == null) {
+                profileFabActionVideo = findViewById(R.id.profile_fab_action_video);
+            }
+            if (profileFabActionFull == null) {
+                profileFabActionFull = findViewById(R.id.profile_fab_action_full);
+            }
+            if (profileFabActionArticle != null) {
+                profileFabActionArticle.setVisibility(
+                        sp.getBoolean(Constants.ENABLE_ARTICLE_POST, true)
+                                ? View.VISIBLE : View.GONE);
+            }
+            if (profileFabActionVideo != null) {
+                profileFabActionVideo.setVisibility(
+                        sp.getBoolean(Constants.ENABLE_VIDEO_POST, true)
+                                ? View.VISIBLE : View.GONE);
+            }
+            if (profileFabActionFull != null) {
+                profileFabActionFull.setVisibility(
+                        sp.getBoolean(Constants.ENABLE_FULL_POST, true)
+                                ? View.VISIBLE : View.GONE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void bindReporterFabLabels() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        TextView article = findViewById(R.id.profile_fab_label_article);
+        TextView video = findViewById(R.id.profile_fab_label_video);
+        TextView full = findViewById(R.id.profile_fab_label_full);
+        if (article != null) {
+            String a = d != null ? d.getArticle() : null;
+            article.setText(notEmptyTranslator(a) ? a.trim()
+                    : getString(R.string.profile_reporter_post_article));
+        }
+        if (video != null) {
+            String v = d != null ? d.getVideoPost() : null;
+            video.setText(notEmptyTranslator(v) ? v.trim()
+                    : getString(R.string.profile_reporter_post_video));
+        }
+        if (full != null) {
+            String f = d != null ? d.getFullPost() : null;
+            full.setText(notEmptyTranslator(f) ? f.trim()
+                    : getString(R.string.profile_reporter_post_full));
+        }
+    }
+
+    private void expandReporterCreateFab() {
+        if (!canOpenReporterPost()) {
+            return;
+        }
+        applyReporterFabPostTypeVisibility();
+        if (!hasAnyReporterPostTypeEnabled()) {
+            return;
+        }
+        profileReporterFabExpanded = true;
+        if (profileReporterFabMenu != null) {
+            profileReporterFabMenu.setVisibility(View.VISIBLE);
+        }
+        if (profileReporterFabScrim != null) {
+            profileReporterFabScrim.setVisibility(View.VISIBLE);
+        }
+        if (profileReporterFabMain != null) {
+            profileReporterFabMain.animate().rotation(45f).setDuration(180).start();
+        }
+    }
+
+    private void collapseReporterCreateFab(boolean animate) {
+        profileReporterFabExpanded = false;
+        if (profileReporterFabMenu != null) {
+            profileReporterFabMenu.setVisibility(View.GONE);
+        }
+        if (profileReporterFabScrim != null) {
+            profileReporterFabScrim.setVisibility(View.GONE);
+        }
+        if (profileReporterFabMain != null) {
+            if (animate) {
+                profileReporterFabMain.animate().rotation(0f).setDuration(180).start();
+            } else {
+                profileReporterFabMain.setRotation(0f);
+            }
+        }
+    }
+
+    private void openReporterPostArticle() {
+        if (!canOpenReporterPost()) return;
+        try {
+            SharedPreferences sp = getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+            if (!sp.getBoolean(Constants.ENABLE_ARTICLE_POST, true)) return;
+        } catch (Exception ignored) {
+        }
+        Intent intent = new Intent(newProfileDetails.this, PostArticles.class);
+        intent.putExtra("POST_VIDEO", "0");
+        startActivity(intent);
+    }
+
+    private void openReporterPostVideo() {
+        if (!canOpenReporterPost()) return;
+        try {
+            SharedPreferences sp = getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+            if (!sp.getBoolean(Constants.ENABLE_VIDEO_POST, true)) return;
+        } catch (Exception ignored) {
+        }
+        Intent intent = new Intent(newProfileDetails.this, PostVideo.class);
+        intent.putExtra("POST_VIDEO", "1");
+        startActivity(intent);
+    }
+
+    private void openReporterPostFull() {
+        if (!canOpenReporterPost()) return;
+        try {
+            SharedPreferences sp = getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+            if (!sp.getBoolean(Constants.ENABLE_FULL_POST, true)) return;
+        } catch (Exception ignored) {
+        }
+        startActivity(new Intent(newProfileDetails.this, FullPost.class));
+    }
+
+    private boolean canOpenReporterPost() {
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        boolean isReporter = SharedPrefsData.getBool(this, Constants.is_reporter, Constants.PREF_NAME)
+                || showingReporterUi;
+        if (!loggedIn) {
+            openReporterLogin();
+            return false;
+        }
+        if (!isReporter) {
+            Toast.makeText(this, R.string.profile_reporter_desk_pending, Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        return true;
+    }
+
+    private void bindReporterVerifiedLabel() {
+        TextView tv = findViewById(R.id.profile_verified_label);
+        if (tv == null) return;
+        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        if (id == 3) {
+            tv.setText("వెరిఫైడ్");
+        } else {
+            tv.setText(R.string.profile_verified);
+        }
+    }
+
+    private void bindReporterShortcutLabels() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        if (d != null && notEmptyTranslator(d.getArticles())) {
+            setTextSafe((TextView) findViewById(R.id.tile_articles_label), d.getArticles().trim());
+        } else {
+            setTextSafe((TextView) findViewById(R.id.tile_articles_label), resolveArticlesLabel());
+        }
+        setTextSafe((TextView) findViewById(R.id.tile_followers_label),
+                firstTranslator(d != null ? d.getFollowers() : null, null,
+                        resolveFollowersShortcutLabel()));
+        setTextSafe((TextView) findViewById(R.id.tile_earnings_label), resolveTotalEarningsLabel());
+        setTextSafe((TextView) findViewById(R.id.reporter_shortcuts_title), resolveShortcutsTitle());
+        setTextSafe((TextView) findViewById(R.id.complete_profile_label), resolveCompleteProfileLabel());
+        // Re-apply completion % wording for current LanguageID (EN/TE/…).
+        paintAchievedFromLocalPrefs();
+        setTextSafe((TextView) findViewById(R.id.profile_menu_change_language_label),
+                firstTranslator(d != null ? d.getSelectLanguage() : null,
+                        d != null ? d.getLanguage() : null,
+                        getString(R.string.profile_change_language_menu)));
+        TextView role = findViewById(R.id.reporter_role_pill);
+        if (role != null) {
+            String r = d != null ? d.getReporter() : null;
+            role.setText(notEmptyTranslator(r) ? r.trim() : getString(R.string.profile_role_reporter));
+        }
+    }
+
+    private String resolveArticlesLabel() {
+        if (SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME) == 3) {
+            return "ఆర్టికల్స్";
+        }
+        return "Articles";
+    }
+
+    private String resolveFollowersShortcutLabel() {
+        if (SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME) == 3) {
+            return "ఫాలోవర్లు";
+        }
+        return getString(R.string.profile_followers_label);
+    }
+
+    private String resolveTotalEarningsLabel() {
+        if (SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME) == 3) {
+            return "మొత్తం సంపాదన";
+        }
+        return getString(R.string.profile_total_earnings);
+    }
+
+    private String resolveShortcutsTitle() {
+        if (SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME) == 3) {
+            return "రిపోర్టర్ షార్ట్‌కట్లు";
+        }
+        return getString(R.string.profile_reporter_shortcuts);
+    }
+
+    /**
+     * Logged-in users who already gave name/email/mobile at login see "Edit profile";
+     * otherwise "Complete profile".
+     */
+    private String resolveCompleteProfileLabel() {
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        if (loggedIn && hasBasicIdentityForEditCta()) {
+            return resolveEditProfileLabel();
+        }
+        return resolveCompleteProfileOnlyLabel();
+    }
+
+    private boolean hasBasicIdentityForEditCta() {
+        String name = SharedPrefsData.getString(this, Constants.USER_NAME, Constants.PREF_NAME);
+        if (name == null || name.trim().isEmpty() || "guest".equalsIgnoreCase(name.trim())) {
+            if (username_text != null && username_text.getText() != null) {
+                name = username_text.getText().toString().trim();
+            }
+        }
+        boolean hasName = name != null && !name.trim().isEmpty()
+                && !"guest".equalsIgnoreCase(name.trim())
+                && !"null".equalsIgnoreCase(name.trim());
+
+        String email = currentUserEmail != null ? currentUserEmail.trim() : "";
+        if (email.isEmpty()) {
+            try {
+                if (prefShare != null && prefShare.getEmailId() != null) {
+                    email = prefShare.getEmailId().trim();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (email.isEmpty()) {
+            String e = SharedPrefsData.getString(this, Constants.Email, Constants.PREF_NAME);
+            if (e != null) email = e.trim();
+        }
+        boolean hasEmail = email.contains("@");
+
+        String mobile = SharedPrefsData.getString(
+                this, Constants.Selected_Phone_Number, Constants.PREF_NAME);
+        if (mobile == null) mobile = "";
+        String digits = mobile.replaceAll("\\D", "");
+        boolean hasMobile = digits.length() >= 10;
+
+        // Login already collected basics — any two (or name+mobile) is enough for Edit CTA.
+        int basics = (hasName ? 1 : 0) + (hasEmail ? 1 : 0) + (hasMobile ? 1 : 0);
+        return basics >= 2;
+    }
+
+    private String resolveEditProfileLabel() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        // Prefer translator "edit" + profile word when both exist.
+        if (d != null && notEmptyTranslator(d.getEdit()) && notEmptyTranslator(d.getProfile())) {
+            return d.getProfile().trim() + " " + d.getEdit().trim();
+        }
+        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        switch (id) {
+            case 1: return "പ്രൊഫൈൽ എഡിറ്റ് ചെയ്യുക";
+            case 2: return "प्रोफ़ाइल संपादित करें";
+            case 3: return "ప్రొఫైల్ ఎడిట్ చేయండి";
+            case 4: return "சுயவிவரத்தைத் திருத்து";
+            case 5: return "ಪ್ರೊಫೈಲ್ ಸಂಪಾದಿಸಿ";
+            case 6: return "ପ୍ରୋଫାଇଲ୍ ସମ୍ପାଦନ କରନ୍ତୁ";
+            default: return getString(R.string.profile_edit_profile);
+        }
+    }
+
+    private String resolveCompleteProfileOnlyLabel() {
+        if (SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME) == 3) {
+            return "ప్రొఫైల్ పూర్తి చేయండి";
+        }
+        return getString(R.string.profile_complete_profile);
+    }
+
+    private void setupReporterShortcutClicks() {
+        View articles = findViewById(R.id.tile_articles);
+        if (articles != null) articles.setOnClickListener(v -> openArticlesStatus(null));
+        View followers = findViewById(R.id.tile_followers);
+        if (followers != null) {
+            followers.setOnClickListener(v -> openFollowersList());
+        }
+        View earnings = findViewById(R.id.tile_earnings);
+        // Total earnings → article amount history (page-0 get_article_transactions, cached)
+        if (earnings != null) earnings.setOnClickListener(v -> openWalletHistory(1));
+        View menuLang = findViewById(R.id.layout_menu_change_language);
+        if (menuLang != null) {
+            menuLang.setOnClickListener(v ->
+                    startActivity(new Intent(newProfileDetails.this, LanguageActivity.class)));
+        }
+    }
+
+    /** Followers of this reporter — list_followers API + disk cache. */
+    private void openFollowersList() {
+        Intent intent = new Intent(newProfileDetails.this, FolloweingMenders.class);
+        intent.putExtra(FolloweingMenders.EXTRA_MODE, FolloweingMenders.MODE_FOLLOWERS);
+        startActivity(intent);
+    }
+
+    private void openArticlesStatus() {
+        openArticlesStatus(null);
+    }
+
+    /**
+     * @param metric null/empty = my posts status tabs; likes|comments|views = engagement sort list
+     */
+    private void openArticlesStatus(String metric) {
+        Intent intent = new Intent(newProfileDetails.this, PostArticleStatus.class);
+        if (metric != null && !metric.trim().isEmpty()) {
+            intent.putExtra(PostArticleStatus.EXTRA_METRIC, metric.trim().toLowerCase());
+        }
+        String mobile = SharedPrefsData.getString(getApplicationContext(),
+                Constants.Selected_Phone_Number, Constants.PREF_NAME);
+        if (mobile == null || mobile.trim().isEmpty() || "null".equalsIgnoreCase(mobile.trim())) {
+            try {
+                NewUserProfileResponse cached = ReporterProfileCache.load(getApplicationContext());
+                if (cached != null && cached.getData() != null
+                        && cached.getData().getMobileNumber() != null) {
+                    mobile = cached.getData().getMobileNumber();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (mobile != null && !mobile.trim().isEmpty() && !"null".equalsIgnoreCase(mobile.trim())) {
+            SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Phone_Number,
+                    mobile.trim(), Constants.PREF_NAME);
+            intent.putExtra(PostArticleStatus.EXTRA_MOBILE_NUMBER, mobile.trim());
+        }
+        startActivity(intent);
+    }
+
     public void getWriterProfileData() {
-
         userProfileResponse = new ArrayList<>();
-
-        // Paint cached profile immediately (avatar/name/counts) so the screen shows
-        // content right away while the network request refreshes it in the background.
         showCachedProfileInstant();
 
+        // Logged-out guests: never fetch draft-bound profile (it resurrects name/reporter).
+        if (!SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME)) {
+            return;
+        }
+
         JsonObject otp = set_writer_profile_data();
-
-
         APIService apiService = RestApiClient.getClient().create(APIService.class);
         Call<EncreptionRequest> apiResponse = apiService.get_user_profile("v3", otp);
         apiResponse.enqueue(new Callback<EncreptionRequest>() {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-
-
                 EncreptionRequest encreptionRequest = response.body();
-                String encrpt_data = null;
-                /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    encrpt_data = decrypt(encreptionRequest.getData());
-                }*/
-                AppHelper.showLog("Encrypted GETData:"+encreptionRequest.getData());
-                encrpt_data = decrypt(encreptionRequest.getData());
-                AppHelper.showLog("Encrypted Data:"+encrpt_data);
-                AppHelper.showLog("Encrypted Data:"+encreptionRequest.getCards_display());
+                if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                    return;
+                }
+                String encrpt_data = decrypt(encreptionRequest.getData());
+                AppHelper.showLog("Encrypted Data:" + encrpt_data);
 
                 Gson gsonObj = new Gson();
-                NewUserProfileResponse newUserProfileResponse = gsonObj.fromJson(encrpt_data, NewUserProfileResponse.class);
+                NewUserProfileResponse newUserProfileResponse =
+                        gsonObj.fromJson(encrpt_data, NewUserProfileResponse.class);
 
-                if (newUserProfileResponse.getSuccess()) {
-                    // Cache the decrypted profile so the next open can paint instantly
-                    // (from cache) instead of showing a blank "Loading..." spinner.
+                if (newUserProfileResponse != null
+                        && Boolean.TRUE.equals(newUserProfileResponse.getSuccess())
+                        && newUserProfileResponse.getData() != null) {
+                    if (!SharedPrefsData.getBool(newProfileDetails.this,
+                            Constants.is_login, Constants.PREF_NAME)) {
+                        paintLoggedOutIdentity();
+                        applyReporterChrome(false);
+                        return;
+                    }
                     try {
-                        SharedPrefsData.putString(getApplicationContext(), Constants.PROFILE_CACHE, encrpt_data, Constants.PREF_NAME);
+                        ReporterProfileCache.save(getApplicationContext(), encrpt_data);
                     } catch (Exception ignored) {
                     }
-                    local_distic_name.setVisibility(View.VISIBLE);
-                 //   username_text.setTextColor(getResources().getColor(R.color.white));
-                    username_text.setText(newUserProfileResponse.getData().getUserName());
-                    local_distic_name.setText(newUserProfileResponse.getData().getLocation());
-                    profile_article_count.setText("" + newUserProfileResponse.getData().getArticles());
-                    profile_like_count.setText("" + newUserProfileResponse.getData().getLikes());
-                    profile_followers_count.setText("" + newUserProfileResponse.getData().getFollowers());
-                    profile_following_count.setText("" + newUserProfileResponse.getData().getFollowing());
-                    writer_following_count.setText("" + newUserProfileResponse.getData().getFollowing());
-                    profile_total_amount.setText("\u20B9 " + newUserProfileResponse.getData().getTotalPoints());
-                    earned_total_amount.setText("\u20B9 " + newUserProfileResponse.getData().getAvailablePoints());
-                    user_login_number.setText(" " + newUserProfileResponse.getData().getEmail());
-                    currentUserEmail = newUserProfileResponse.getData().getEmail() != null
-                            ? newUserProfileResponse.getData().getEmail() : "";
-                    String progress = newUserProfileResponse.getData().getApproval_rates();
-                    Logone.e("ApprovalRates", "" + newUserProfileResponse.getData().getApproval_rates());
-                    // set approval rates for freelancer profile
 
+                    if (imageupload_progressbar != null) imageupload_progressbar.setVisibility(View.GONE);
+                    if (loadingProgressbar != null) loadingProgressbar.setVisibility(View.GONE);
+                    if (loadingProfileView != null) loadingProfileView.setVisibility(View.VISIBLE);
+                    if (img_upload_photo != null) img_upload_photo.setVisibility(View.VISIBLE);
 
+                    applyProfileDataToUi(newUserProfileResponse.getData(), false);
+                    WalletHistoryPrefetcher.prefetchIfPossible(getApplicationContext());
 
-
-                    if (newUserProfileResponse.getData().getMobileNumber().equals("") || newUserProfileResponse.getData().getMobileNumber().equals("null")) {
-
-                        payment_layout.setVisibility(View.VISIBLE);
-                        profile_total_amount.setText("\u20B9 " + "0");
-
+                    boolean stillLoggedIn = SharedPrefsData.getBool(newProfileDetails.this,
+                            Constants.is_login, Constants.PREF_NAME);
+                    if (!stillLoggedIn) {
+                        paintLoggedOutIdentity();
+                        applyReporterChrome(false);
                     } else {
-                        payment_layout.setVisibility(View.VISIBLE);
-                    }
-                    refer_earn = newUserProfileResponse.getData().getRefLink();
-
-                    AvailablePoints = newUserProfileResponse.getData().getAvailablePoints();
-                    RedeemValue = newUserProfileResponse.getData().getRedeemValue();
-
-                    SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Phone_Number, "" + newUserProfileResponse.getData().getMobileNumber(), Constants.PREF_NAME);
-
-                    SharedPrefsData.putString(getApplicationContext(), Constants.AVAILABLEPOINTS, "" + newUserProfileResponse.getData().getAvailablePoints(), Constants.PREF_NAME);
-                    SharedPrefsData.putString(getApplicationContext(), Constants.REDEEMPOINTS, "" + newUserProfileResponse.getData().getRedeemValue(), Constants.PREF_NAME);
-                    SharedPrefsData.putBool(getApplicationContext(), Constants.PAN_CARD_STATUS, newUserProfileResponse.getData().getPanStatus(), Constants.PREF_NAME);
-
-
-                    int AvailablePoints_here = (int) AvailablePoints;
-                    int RedeemValue_here = (int) RedeemValue;
-
-                    androidProgressBar.setMax(RedeemValue_here);
-
-                    if (AvailablePoints_here >= RedeemValue_here) {
-
-                        new Thread(new Runnable() {
-                            public void run() {
-                                while (progressStatusCounter < AvailablePoints_here) {
-                                    progressStatusCounter += 2;
-                                    progressHandler.post(new Runnable() {
-                                        public void run() {
-                                            androidProgressBar.setProgress(RedeemValue_here);
-
-                                        }
-                                    });
-                                    try {
-                                        Thread.sleep(10);
-                                    } catch (InterruptedException e) {
-                                        e.printStackTrace();
-                                    }
-                                }
+                        bindProfileLoginPill();
+                        if (prefShare != null && prefShare.getEmailId() != null
+                                && !prefShare.getEmailId().equals("")) {
+                            if (login_neomorph_layout != null) {
+                                login_neomorph_layout.setVisibility(View.GONE);
                             }
-                        }).start();
-
-                    } else {
-
-                        new Thread(new Runnable() {
-                            public void run() {
-                                while (progressStatusCounter < AvailablePoints_here) {
-                                    progressStatusCounter += 2;
-                                    progressHandler.post(new Runnable() {
-                                        public void run() {
-                                            androidProgressBar.setProgress(AvailablePoints_here);
-
-                                        }
-                                    });
-                                    try {
-                                        Thread.sleep(10);
-                                    } catch (InterruptedException e) {
-                                        e.printStackTrace();
-                                    }
+                            if (user_login_number != null) {
+                                user_login_number.setVisibility(View.VISIBLE);
+                                if (newUserProfileResponse.getData().getEmail() != null
+                                        && !newUserProfileResponse.getData().getEmail().isEmpty()) {
+                                    user_login_number.setText(
+                                            newUserProfileResponse.getData().getEmail());
+                                } else {
+                                    user_login_number.setText(prefShare.getEmailId());
                                 }
+                                user_login_number.setTextColor(ContextCompat.getColor(
+                                        newProfileDetails.this, R.color.profile_way2_guest_sub));
                             }
-                        }).start();
-
-                    }
-
-
-                    SharedPrefsData.putLong(getApplicationContext(), Constants.USER_ID, newUserProfileResponse.getData().getUserId(), Constants.PREF_NAME);
-
-                    imageupload_progressbar.setVisibility(View.GONE);
-                    loadingProgressbar.setVisibility(View.GONE);
-                    loadingProfileView.setVisibility(View.VISIBLE);
-
-                    img_upload_photo.setVisibility(View.VISIBLE);
-                    showLog("Reporter Login::"+newUserProfileResponse.getData().getIsReporter());
-                    // Cache the approved-reporter flag so HomePage's center FAB can reflect
-                    // an approval change on resume without requiring a reinstall.
-                    SharedPrefsData.putBool(getApplicationContext(), Constants.is_reporter,
-                            Boolean.TRUE.equals(newUserProfileResponse.getData().getIsReporter()), Constants.PREF_NAME);
-                    boolean b=newUserProfileResponse.getData().getIsReporter() && !newUserProfileResponse.getData().getMobileNumber().equals("") && !newUserProfileResponse.getData().getMobileNumber().equals("null");
-                    if (b) {
-                        showLog("Reporter is logged in");
-                        profile_articales_list.setVisibility(View.VISIBLE);
-                        profile_following_list.setVisibility(View.VISIBLE);
-                        progressMainLayout.setVisibility(View.VISIBLE);
-                        user_articales_list.setVisibility(View.GONE);
-                        profile_follower_list.setVisibility(View.VISIBLE);
-                        profile_refer_list.setVisibility(View.VISIBLE);
-                        only_profile_follower_list.setVisibility(View.GONE);
-                        only_profile_follower_list.setVisibility(View.VISIBLE);
-                        profile_one.setVisibility(View.GONE);
-                        if(progress!=null){
-                            progressViewApproval.setLabelText(progress + "% achieved");
-                            progressViewApproval.setProgress(Integer.parseInt(progress));
-                        }else{
-                            progressViewApproval.setLabelText("0% achieved");
-                            progressViewApproval.setProgress(Integer.parseInt("0"));
                         }
-                        try {
-                            if(encreptionRequest.getCards_display()!=null){
-                                if(!encreptionRequest.getCards_display().isNext_payment()|| !encreptionRequest.getCards_display().isWallet_balance()){
-                                    payment_layout.setVisibility(View.GONE);
-                                }else{
-                                    payment_layout.setVisibility(View.VISIBLE);
-                                }
-                                if(!encreptionRequest.getCards_display().isArticles()){
-                                    layout_articles_list.setVisibility(View.GONE);
-                                }
-                                if(!encreptionRequest.getCards_display().isLikes()){
-                                    layout_likes_list.setVisibility(View.GONE);
-                                }
-                                if(!encreptionRequest.getCards_display().isFollowers()){
-                                    layout_follower_list.setVisibility(View.GONE);
-                                }
-
-                            }
-                        }catch (Exception e){
-                            e.printStackTrace();
-                        }
-
-                    } else {
-                        showLog("USER is logged in");
-                        reportLayout.setVisibility(View.GONE);
-                        userLayout.setVisibility(View.VISIBLE);
-                        progressMainLayout.setVisibility(View.GONE);
-
-//                        profile_refer_list.setVisibility(View.VISIBLE);
-//                        user_articales_list.setVisibility(View.VISIBLE);
-//                        profile_articales_list.setVisibility(View.GONE);
-//                        profile_follower_list.setVisibility(View.GONE);
-//                        profile_following_list.setVisibility(View.GONE);
-//                        only_profile_follower_list.setVisibility(View.VISIBLE);
-//                        progressViewApproval.setVisibility(View.GONE);
-//
-//                        profile_one.setVisibility(View.INVISIBLE);
                     }
-                    try {
-                        if (newUserProfileResponse.getData().getProfilePic() != null) {
-                            Picasso.get().load(MediaUrl.resolve(newUserProfileResponse.getData().getProfilePic().toString())).into(img_upload_photo);
-                            layout_with_out_data.setVisibility(View.GONE);
-                            layout_with_data.setVisibility(View.VISIBLE);
-                        }
-                    } catch (IllegalArgumentException e) {
-                        e.printStackTrace();
-                    }
-                    showLog("Display Email Id:" + prefShare.getEmailId());
-                    if (prefShare.getEmailId().equals("")) {
-                        login_neomorph_layout.setVisibility(View.VISIBLE);
-                        logintext.setText("Login");
-                        user_login_number.setVisibility(View.GONE);
-                    } else {
-                        login_neomorph_layout.setVisibility(View.VISIBLE);
-                        logintext.setText("Logged-in");
-                    }
-
+                    bindLocationRowText();
+                    applyLoginGatedHubRows();
+                    applyProfileHubTranslatedLabels();
+                    bindReporterShortcutLabels();
+                    bindReporterCreateFab();
                 }
-
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
+                // Keep cache-painted UI.
             }
         });
-
-
     }
 
     private JsonObject setProfileUpdateImage() {
@@ -1588,19 +3576,36 @@ public class newProfileDetails extends AppCompatActivity {
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
 
 
-                EncreptionRequest encreptionRequest = response.body();
+                EncreptionRequest encreptionRequest = response != null ? response.body() : null;
+                if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                    if (imageupload_progressbar != null) {
+                        imageupload_progressbar.setVisibility(View.GONE);
+                    }
+                    Toast.makeText(newProfileDetails.this,
+                            R.string.profile_photo_upload_failed, Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 String encrpt_data = null;
                 /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                     encrpt_data = decrypt(encreptionRequest.getData());
                 }*/
-                encrpt_data = decrypt(encreptionRequest.getData());
-
+                try {
+                    encrpt_data = decrypt(encreptionRequest.getData());
+                } catch (Exception e) {
+                    if (imageupload_progressbar != null) {
+                        imageupload_progressbar.setVisibility(View.GONE);
+                    }
+                    Toast.makeText(newProfileDetails.this,
+                            R.string.profile_photo_upload_failed, Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
                 Gson gsonObj = new Gson();
                 UpdateImageResponse userProfileUpdateResponse = gsonObj.fromJson(encrpt_data, UpdateImageResponse.class);
 
 
-                if (userProfileUpdateResponse.getSuccess()) {
+                if (userProfileUpdateResponse != null
+                        && Boolean.TRUE.equals(userProfileUpdateResponse.getSuccess())) {
 
 
                     layout_with_out_data.setVisibility(View.GONE);
@@ -1609,21 +3614,57 @@ public class newProfileDetails extends AppCompatActivity {
                     imageupload_progressbar.setVisibility(View.GONE);
                     img_upload_photo.setVisibility(View.VISIBLE);
 
+                    String finalUrl = ImageId;
+                    try {
+                        if (userProfileUpdateResponse.getImageUrl() != null
+                                && !userProfileUpdateResponse.getImageUrl().isEmpty()) {
+                            finalUrl = userProfileUpdateResponse.getImageUrl();
+                            ImageId = finalUrl;
+                        } else if (userProfileUpdateResponse.getExtras() != null
+                                && userProfileUpdateResponse.getExtras().getImageUrl() != null
+                                && !userProfileUpdateResponse.getExtras().getImageUrl().isEmpty()) {
+                            finalUrl = userProfileUpdateResponse.getExtras().getImageUrl();
+                            ImageId = finalUrl;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    if (finalUrl != null && !finalUrl.isEmpty()) {
+                        AvatarImageHelper.loadProfilePicasso(img_upload_photo, finalUrl);
+                        bindEmptyProfilePhotoAffordance(false);
+                        try {
+                            SharedPrefsData.putString(getApplicationContext(),
+                                    Constants.PROFILE_PIC_URL, finalUrl, Constants.PREF_NAME);
+                        } catch (Exception ignored) {
+                        }
+                        refreshAchievedPctFromLocalIdentity();
+                    }
+
                     Toast.makeText(newProfileDetails.this, "Profile has been updated", Toast.LENGTH_SHORT).show();
+                    // Refresh cache so reopen/splash keep the new avatar.
+                    try {
+                        getWriterProfileData();
+                    } catch (Exception ignored) {
+                    }
 
 
                 } else {
-
+                    if (imageupload_progressbar != null) {
+                        imageupload_progressbar.setVisibility(View.GONE);
+                    }
+                    Toast.makeText(newProfileDetails.this,
+                            R.string.profile_photo_upload_failed, Toast.LENGTH_SHORT).show();
                 }
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
-                Toast.makeText(newProfileDetails.this, t.getMessage(), Toast.LENGTH_LONG).show();
-
-
+                if (imageupload_progressbar != null) {
+                    imageupload_progressbar.setVisibility(View.GONE);
+                }
+                String msg = t != null && t.getMessage() != null
+                        ? t.getMessage()
+                        : getString(R.string.profile_photo_upload_failed);
+                Toast.makeText(newProfileDetails.this, msg, Toast.LENGTH_LONG).show();
             }
         });
 
@@ -1694,17 +3735,465 @@ public class newProfileDetails extends AppCompatActivity {
                 });
     }
 
+    /**
+     * Way2-style Profile hub extras: categories strip, Status Videos, location,
+     * settings/feedback/contact, admin visibility + menu text size.
+     * Does not remove existing profile tiles (wallet, follow, language, bookmarks…).
+     */
+    private void setupProfileHubExtras() {
+        int menuSp = ProfileHubConfigHelper.getMenuTextSizeSp(this);
+
+        // Hub lives outside reporter-only reportLayout so every user sees it.
+        View hubRoot = findViewById(R.id.layout_profile_hub);
+        if (hubRoot != null) {
+            hubRoot.setVisibility(View.VISIBLE);
+        }
+
+        // Glass-tinged root background (existing content kept).
+        try {
+            View root = findViewById(android.R.id.content);
+            if (root != null) {
+                root.setBackgroundColor(ContextCompat.getColor(this, R.color.profile_hub_scrim));
+            }
+        } catch (Exception ignored) {
+        }
+
+        // Location tile (Way2: bold blue "District (Change)")
+        View layoutLocation = findViewById(R.id.layout_profile_location);
+        bindLocationRowText();
+        if (layoutLocation != null) {
+            layoutLocation.setOnClickListener(v -> {
+                Intent intent = new Intent(newProfileDetails.this, Districs.class);
+                startActivity(intent);
+            });
+        }
+        // Also allow tapping the header district line.
+        if (local_distic_name != null) {
+            local_distic_name.setOnClickListener(v -> {
+                Intent intent = new Intent(newProfileDetails.this, Districs.class);
+                startActivity(intent);
+            });
+        }
+
+        // Status Videos
+        View layoutStatus = findViewById(R.id.layout_status_videos);
+        TextView statusLabel = findViewById(R.id.profile_status_videos_label);
+        if (statusLabel != null) {
+            statusLabel.setTextSize(menuSp);
+        }
+        if (layoutStatus != null) {
+            boolean on = ProfileHubConfigHelper.isStatusVideosEnabled(this);
+            layoutStatus.setVisibility(on ? View.VISIBLE : View.GONE);
+            layoutStatus.setOnClickListener(v -> {
+                markStatusVideosBadgeSeen();
+                startActivity(new Intent(newProfileDetails.this, StatusVideosActivity.class));
+            });
+        }
+
+        // Settings row
+        View layoutSettings = findViewById(R.id.layout_profile_settings_row);
+        TextView settingsLabel = findViewById(R.id.profile_settings_row_label);
+        if (settingsLabel != null) settingsLabel.setTextSize(menuSp);
+        if (layoutSettings != null) {
+            boolean on = ProfileHubConfigHelper.isSettingsRowVisible(this);
+            layoutSettings.setVisibility(on ? View.VISIBLE : View.GONE);
+            layoutSettings.setOnClickListener(v ->
+                    startActivity(new Intent(newProfileDetails.this, Settings_Scrren.class)));
+        }
+
+        // Feedback → same mailto path as Settings Feedback (legacy contact-dialog option)
+        View layoutFeedback = findViewById(R.id.layout_profile_feedback);
+        if (layoutFeedback != null) {
+            layoutFeedback.setOnClickListener(v -> openHubMailto("Feedback — AnyNews"));
+        }
+
+        // Contact Us → admin contact_email pref, else Config.LINK_CONTACT_EMAIL
+        View layoutContact = findViewById(R.id.layout_profile_contact);
+        if (layoutContact != null) {
+            layoutContact.setOnClickListener(v -> openHubMailto("Contact — AnyNews"));
+        }
+
+        // Bookmarks visibility
+        View layoutBookmarks = findViewById(R.id.layout_bookmarks);
+        if (layoutBookmarks != null) {
+            layoutBookmarks.setVisibility(
+                    ProfileHubConfigHelper.isBookmarksVisible(this) ? View.VISIBLE : View.GONE);
+            TextView bmLabel = findViewById(R.id.profile_bookmarks_label);
+            if (bmLabel != null) bmLabel.setTextSize(menuSp);
+        }
+
+        // Referral / share visibility (hub row layoutAppShare + legacy reporter tile)
+        if (layoutAppShare != null) {
+            layoutAppShare.setVisibility(
+                    isReferralProgrammeEnabled() && ProfileHubConfigHelper.isReferralVisible(this) ? View.VISIBLE : View.GONE);
+        }
+        if (profile_layout_shareToearn != null) {
+            if (!isReferralProgrammeEnabled() || !ProfileHubConfigHelper.isReferralVisible(this)) {
+                profile_layout_shareToearn.setVisibility(View.GONE);
+            }
+        }
+
+        // Categories horizontal strip (same list as SearchActivity) — guest hub only
+        View categoriesBlock = findViewById(R.id.layout_profile_categories);
+        RecyclerView catList = findViewById(R.id.profile_categories_list);
+        TextView catLabel = findViewById(R.id.profile_categories_label);
+        TextView viewAll = findViewById(R.id.profile_categories_view_all);
+        if (catLabel != null) catLabel.setTextSize(Math.max(14, menuSp));
+        if (viewAll != null) {
+            viewAll.setOnClickListener(v -> {
+                try {
+                    Intent intent = new Intent(newProfileDetails.this, SearchActivity.class);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Intent intent = new Intent(newProfileDetails.this, HomePage.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    startActivity(intent);
+                }
+            });
+        }
+        boolean isRep = SharedPrefsData.getBool(this, Constants.is_reporter, Constants.PREF_NAME)
+                || showingReporterUi;
+        if (categoriesBlock != null && catList != null && !isRep) {
+            catList.setLayoutManager(
+                    new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+            loadProfileCategories(catList, categoriesBlock);
+        } else if (categoriesBlock != null && isRep) {
+            categoriesBlock.setVisibility(View.GONE);
+        }
+        bindStatusVideosNewBadge();
+        bindLocationRowText();
+        applyGuestProfileCardDefaults();
+        applyProfileHubTranslatedLabels();
+        bindReporterShortcutLabels();
+        bindReporterDesk();
+        // Keep Follow / Discover row hidden — Following already embeds Explore.
+        if (layoutFollowMore != null) {
+            layoutFollowMore.setVisibility(View.GONE);
+        }
+    }
+
+    /** Profile hub Contact / Feedback — same mailto targets as Settings Contact Us rows. */
+    private void openHubMailto(String subject) {
+        String to = ProfileHubConfigHelper.getContactEmail(this);
+        try {
+            Intent email = new Intent(Intent.ACTION_SENDTO);
+            email.setData(Uri.parse("mailto:" + to));
+            email.putExtra(Intent.EXTRA_SUBJECT, subject);
+            startActivity(Intent.createChooser(email, getString(R.string.profile_contact_us)));
+        } catch (Exception e) {
+            startActivity(new Intent(newProfileDetails.this, Settings_Scrren.class));
+        }
+    }
+
+    /**
+     * Logout and Delete Account only for logged-in users (not guests / anonymous).
+     * Hides trailing dividers so the menu does not end with an orphan line.
+     */
+    private void applyLoginGatedHubRows() {
+        boolean loggedIn = SharedPrefsData.getBool(
+                newProfileDetails.this, Constants.is_login, Constants.PREF_NAME);
+        int vis = loggedIn ? View.VISIBLE : View.GONE;
+        if (layoutAppLogout != null) {
+            layoutAppLogout.setVisibility(vis);
+        }
+        if (layoutAppDelete != null) {
+            layoutAppDelete.setVisibility(vis);
+        }
+        if (account_delete != null) {
+            account_delete.setVisibility(vis);
+        }
+        View divBeforeAuth = findViewById(R.id.divider_before_delete_logout);
+        if (divBeforeAuth != null) {
+            divBeforeAuth.setVisibility(vis);
+        }
+        // Pencil: name save only for logged-in users.
+        if (edit_profile_icon != null) {
+            edit_profile_icon.setVisibility(vis);
+        }
+    }
+
+    private void loadProfileCategories(RecyclerView catList, View categoriesBlock) {
+        CategoriesRequest requestModel = new CategoriesRequest();
+        requestModel.setDraftId(SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+        requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
+        requestModel.setScreenType(0);
+        String jsonString = new Gson().toJson(requestModel);
+        String encrpt_data = encrypt(jsonString);
+        EncritonRequestData body = new EncritonRequestData();
+        body.setData(encrpt_data);
+        JsonObject otp = new Gson().toJsonTree(body).getAsJsonObject();
+
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        apiService.List_All_Categories("v3", otp).enqueue(new Callback<EncreptionRequest>() {
+            @Override
+            public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                try {
+                    if (response.body() == null || response.body().getData() == null) {
+                        categoriesBlock.setVisibility(View.GONE);
+                        return;
+                    }
+                    String plain = decrypt(response.body().getData());
+                    SearchModel model = new Gson().fromJson(plain, SearchModel.class);
+                    if (model != null && model.getSuccess() && model.getData() != null
+                            && !model.getData().isEmpty()) {
+                        ArrayList<SearchModel.Datum> cats = new ArrayList<>(model.getData());
+                        catList.setAdapter(new ProfileCategoryAdapter(cats));
+                        categoriesBlock.setVisibility(View.VISIBLE);
+                    } else {
+                        categoriesBlock.setVisibility(View.GONE);
+                    }
+                } catch (Exception e) {
+                    showLog("loadProfileCategories: " + e.getMessage());
+                    categoriesBlock.setVisibility(View.GONE);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                categoriesBlock.setVisibility(View.GONE);
+            }
+        });
+    }
+
+    private class ProfileCategoryAdapter extends RecyclerView.Adapter<ProfileCategoryAdapter.VH> {
+        private final ArrayList<SearchModel.Datum> data;
+        private final int sizePx;
+        private final int selectedId;
+        private final int[] CAT_COLORS = {
+                0xFFEF4923, // orange — news
+                0xFFE53935, // red — politics
+                0xFF00897B, // teal
+                0xFF1E88E5, // blue
+                0xFF7E57C2, // purple
+                0xFFEC407A, // pink
+                0xFF43A047, // green
+                0xFFFB8C00  // amber
+        };
+        private final int[] CAT_SOFT = {
+                0x33EF4923,
+                0x33E53935,
+                0x3300897B,
+                0x331E88E5,
+                0x337E57C2,
+                0x33EC407A,
+                0x3343A047,
+                0x33FB8C00
+        };
+        private final int[] CAT_ICONS = {
+                R.drawable.ic_cat_news,
+                R.drawable.ic_cat_politics,
+                R.drawable.ic_cat_business,
+                R.drawable.ic_cat_sports,
+                R.drawable.ic_cat_cinema,
+                R.drawable.ic_cat_generic,
+                R.drawable.ic_cat_news,
+                R.drawable.ic_cat_business
+        };
+
+        ProfileCategoryAdapter(ArrayList<SearchModel.Datum> data) {
+            this.data = data;
+            float density = getResources().getDisplayMetrics().density;
+            this.sizePx = Math.round(ProfileHubConfigHelper.getCategoryIconSizeDp(newProfileDetails.this) * density);
+            this.selectedId = SharedPrefsData.getInt(newProfileDetails.this, Constants.CategoryID, Constants.PREF_NAME);
+        }
+
+        @NonNull
+        @Override
+        public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.item_profile_category_chip, parent, false);
+            return new VH(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull VH holder, int position) {
+            SearchModel.Datum cat = data.get(position);
+            String name = cat.getName() != null ? cat.getName() : "";
+            holder.name.setText(name);
+
+            int color = CAT_COLORS[Math.floorMod(position, CAT_COLORS.length)];
+            int soft = CAT_SOFT[Math.floorMod(position, CAT_SOFT.length)];
+            int iconRes = CAT_ICONS[Math.floorMod(position, CAT_ICONS.length)];
+            boolean selected = cat.getCategoryId() == selectedId && selectedId > 0;
+
+            if (holder.circle != null) {
+                ViewGroup.LayoutParams clp = holder.circle.getLayoutParams();
+                if (clp != null) {
+                    clp.width = sizePx;
+                    clp.height = sizePx;
+                    holder.circle.setLayoutParams(clp);
+                }
+                android.graphics.drawable.GradientDrawable squircle =
+                        new android.graphics.drawable.GradientDrawable();
+                squircle.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+                float r = 16f * getResources().getDisplayMetrics().density;
+                squircle.setCornerRadius(r);
+                if (selected) {
+                    squircle.setColor(color);
+                    if (holder.icon != null) {
+                        holder.icon.setImageResource(iconRes);
+                        holder.icon.setVisibility(View.VISIBLE);
+                        holder.icon.setColorFilter(0xFFFFFFFF);
+                    }
+                    holder.name.setTextColor(ContextCompat.getColor(
+                            newProfileDetails.this, R.color.brand_orange));
+                } else {
+                    squircle.setColor(soft);
+                    if (holder.icon != null) {
+                        holder.icon.setImageResource(iconRes);
+                        holder.icon.setVisibility(View.VISIBLE);
+                        holder.icon.setColorFilter(color);
+                    }
+                    holder.name.setTextColor(ContextCompat.getColor(
+                            newProfileDetails.this, R.color.profile_way2_menu_text));
+                }
+                holder.circle.setBackground(squircle);
+            }
+            if (holder.letter != null) {
+                holder.letter.setVisibility(View.GONE);
+            }
+
+            holder.itemView.setOnClickListener(v -> {
+                try {
+                    SharedPrefsData.putInt(newProfileDetails.this, Constants.CategoryID,
+                            cat.getCategoryId(), Constants.PREF_NAME);
+                } catch (Exception ignored) {
+                }
+                Intent intent = new Intent(newProfileDetails.this, HomePage.class);
+                intent.putExtra("EXTRA_SESSION_ID", "" + cat.getCategoryId());
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                if (getApplicationContext() != null
+                        && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                    startActivity(intent);
+                }
+                finish();
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return data != null ? data.size() : 0;
+        }
+
+        class VH extends RecyclerView.ViewHolder {
+            final TextView letter;
+            final TextView name;
+            final View circle;
+            final ImageView icon;
+
+            VH(View itemView) {
+                super(itemView);
+                letter = itemView.findViewById(R.id.category_chip_letter);
+                name = itemView.findViewById(R.id.category_chip_name);
+                circle = itemView.findViewById(R.id.category_chip_circle);
+                icon = itemView.findViewById(R.id.category_chip_icon);
+            }
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        int nightMask = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        if (nightMask != appliedNightUiMask) {
+            pendingNightModeRecreate = true;
+            if (!isFinishing() && hasWindowFocus()) {
+                maybeRecreateForNightModeChange();
+            }
+        }
+    }
+
+    private void maybeRecreateForNightModeChange() {
+        boolean confNight =
+                (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                        == Configuration.UI_MODE_NIGHT_YES;
+        boolean outOfSync =
+                pendingNightModeRecreate
+                        || confNight != com.anyNews.anynews.Utils.NightModeHelper.isEnabled(this)
+                        || ((getResources().getConfiguration().uiMode
+                                        & Configuration.UI_MODE_NIGHT_MASK)
+                                != appliedNightUiMask);
+        if (!outOfSync) {
+            return;
+        }
+        pendingNightModeRecreate = false;
+        appliedNightUiMask =
+                getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        com.anyNews.anynews.Utils.NightModeHelper.recreateWithFade(this);
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        try {
+            if (pendingNightModeRecreate
+                    || ((getResources().getConfiguration().uiMode
+                                    & Configuration.UI_MODE_NIGHT_MASK)
+                            != appliedNightUiMask)) {
+                maybeRecreateForNightModeChange();
+                return;
+            }
+        } catch (Exception ignored) {
+        }
 
         //    getWriterProfileData();
+        try {
+            applyLoginGatedHubRows();
+            bindProfileLoginPill();
+            bindReporterDesk();
+            bindLocationRowText();
+            bindStatusVideosNewBadge();
+            if (local_distic_name != null) {
+                String dist = com.anyNews.anynews.Utils.DistrictLabelHelper.resolveDisplayLabel(this);
+                if (dist != null && !dist.isEmpty()) {
+                    local_distic_name.setText(dist);
+                }
+            }
+            if (textViewLanguageNameUser != null) {
+                textViewLanguageNameUser.setText(resolveCurrentLanguageDisplay());
+            }
+        } catch (Exception ignored) {
+        }
+
+        // After gallery/camera returns: launch CanHub crop once fully resumed.
+        if (needsCropAfterResume && pendingLocalImageUri != null && cropImage != null) {
+            needsCropAfterResume = false;
+            final Uri cropUri = pendingLocalImageUri;
+            Log.e(TAG, "onResume launching profile crop for " + cropUri);
+            getWindow().getDecorView().post(new Runnable() {
+                @Override
+                public void run() {
+                    if (isFinishing() || isDestroyed()) {
+                        needsCropAfterResume = true;
+                        return;
+                    }
+                    launchProfileCrop(cropUri);
+                }
+            });
+        }
+
+        // Soft-refresh stats after navigating back (not on first open — onCreate already fetches).
+        if (profileResumeArmed) {
+            try {
+                getWriterProfileData();
+            } catch (Exception ignored) {
+            }
+        }
+        profileResumeArmed = true;
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopStatusVideosBadgePulse();
+        if (sAliveProfile != null && sAliveProfile.get() == this) {
+            sAliveProfile.clear();
+        }
+        super.onDestroy();
     }
 
     @Override
     protected void onRestart() {
         super.onRestart();
-        //   getWriterProfileData();
     }
 
     public void writeProfilePageSelection(String userId, String type_firebase, int draft_id, String device_id, long current_time) {
@@ -1734,6 +4223,10 @@ public class newProfileDetails extends AppCompatActivity {
             this.created_at = current_time;
         }
 
+    }
+
+    private boolean isReferralProgrammeEnabled() {
+        return SharedPrefsData.getBool(this, Constants.REFERRAL_PROGRAM_ENABLED, Constants.PREF_NAME);
     }
 }
 

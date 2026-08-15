@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Magazine-only Share attention BLINK.
-  The icon clearly flashes on/off (alpha 1.0 -> 0.15) with a slight scale bounce.
-  Infinite, reversing. No ring, no solid circle.
+  Magazine/calendar Share attention BLINK — slow gentle pulse.
+  Alpha 1.0 -> 0.15 with slight scale bounce. Infinite reverse.
+  One-way ~1200ms → full cycle ~2400ms. No ring, no solid circle.
 -->
 <set xmlns:android="http://schemas.android.com/apk/res/android"
     android:interpolator="@android:anim/accelerate_decelerate_interpolator"
     android:shareInterpolator="false">
 
     <alpha
-        android:duration="420"
+        android:duration="1200"
         android:fromAlpha="1.0"
         android:toAlpha="0.15"
         android:repeatCount="infinite"
         android:repeatMode="reverse" />
 
     <scale
-        android:duration="420"
+        android:duration="1200"
         android:fromXScale="1.0"
         android:fromYScale="1.0"
         android:toXScale="1.15"

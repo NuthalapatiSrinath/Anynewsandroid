@@ -30,6 +30,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -102,6 +103,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                 holder.second_neomorphFrameLayout.setVisibility(View.VISIBLE);
 
                 SharedPrefsData.putInt(context,Constants.LanguageID,arrayList.get(position).getId(),Constants.PREF_NAME);
+                SharedPrefsData.putString(context, Constants.Lang, arrayList.get(position).getName(), Constants.PREF_NAME);
                 LanguageSelection(arrayList.get(position).getId(), arrayList.get(position).getName());
 
             }
@@ -202,8 +204,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
                             Intent intent = new Intent(context, AreaSelection.class);
                             SharedPrefsData.putInt(context, Constants.Back_Button_Move, 1, Constants.PREF_NAME);
-                            SharedPrefsData.putString(context, Constants.Selected_Distric_Name,"India",  Constants.PREF_NAME);
-                            SharedPrefsData.putString(context, Constants.Selected_Distric_Name1,"India",  Constants.PREF_NAME);
+                            DistrictLabelHelper.saveName(context, "India");
 
                             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
                             intent.putExtra("EXTRA_SESSION_ID", "0");

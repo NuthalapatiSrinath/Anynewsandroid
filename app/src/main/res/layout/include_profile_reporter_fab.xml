@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Approved-reporter create FAB (bottom-end, above Profile footer). Brand orange, not Twitter blue. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/profile_reporter_fab_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:visibility="gone">
+
+    <!-- Dim scrim while speed-dial is open; tap closes. -->
+    <View
+        android:id="@+id/profile_reporter_fab_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#66000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/profile_reporter_fab_stack"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="66dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <!-- Speed-dial actions (shown when + expands) -->
+        <LinearLayout
+            android:id="@+id/profile_reporter_fab_menu"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:gravity="end"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/profile_fab_action_article"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/profile_fab_label_article"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_profile_fab_label"
+                    android:elevation="4dp"
+                    android:includeFontPadding="false"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/profile_reporter_post_article"
+                    android:textColor="@color/profile_way2_menu_text"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.floatingactionbutton.FloatingActionButton
+                    android:id="@+id/profile_fab_mini_article"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/profile_reporter_post_article"
+                    app:backgroundTint="@color/brand_orange"
+                    app:borderWidth="0dp"
+                    app:elevation="6dp"
+                    app:fabCustomSize="44dp"
+                    app:maxImageSize="22dp"
+                    app:srcCompat="@drawable/ic_reporter_article"
+                    app:tint="@color/on_brand_text" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/profile_fab_action_video"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/profile_fab_label_video"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_profile_fab_label"
+                    android:elevation="4dp"
+                    android:includeFontPadding="false"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/profile_reporter_post_video"
+                    android:textColor="@color/profile_way2_menu_text"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.floatingactionbutton.FloatingActionButton
+                    android:id="@+id/profile_fab_mini_video"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/profile_reporter_post_video"
+                    app:backgroundTint="@color/brand_orange"
+                    app:borderWidth="0dp"
+                    app:elevation="6dp"
+                    app:fabCustomSize="44dp"
+                    app:maxImageSize="20dp"
+                    app:srcCompat="@drawable/ic_video_play"
+                    app:tint="@color/on_brand_text" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/profile_fab_action_full"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/profile_fab_label_full"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/bg_profile_fab_label"
+                    android:elevation="4dp"
+                    android:includeFontPadding="false"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/profile_reporter_post_full"
+                    android:textColor="@color/profile_way2_menu_text"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.floatingactionbutton.FloatingActionButton
+                    android:id="@+id/profile_fab_mini_full"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/profile_reporter_post_full"
+                    app:backgroundTint="@color/brand_orange"
+                    app:borderWidth="0dp"
+                    app:elevation="6dp"
+                    app:fabCustomSize="44dp"
+                    app:maxImageSize="20dp"
+                    app:srcCompat="@drawable/ic_fullscreen_24dp"
+                    app:tint="@color/on_brand_text" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/profile_reporter_fab_main"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/post_selection"
+            app:backgroundTint="@color/brand_orange"
+            app:borderWidth="0dp"
+            app:elevation="8dp"
+            app:fabCustomSize="56dp"
+            app:maxImageSize="28dp"
+            app:srcCompat="@drawable/ic_plus_icon"
+            app:tint="@color/on_brand_text" />
+    </LinearLayout>
+</FrameLayout>

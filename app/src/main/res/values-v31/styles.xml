@@ -149,7 +149,8 @@
     </style>
 
     <style name="SwitchTheme" parent="Theme.AppCompat.Light">
-        <item name="android:colorControlActivated">@color/red</item>
+        <item name="android:colorControlActivated">@color/brand_orange</item>
+        <item name="colorControlActivated">@color/brand_orange</item>
     </style>
     <style name="ShapeAppearance_profile">
         <item name="neumorph_cornerFamily">rounded</item>
@@ -267,7 +268,7 @@
              drawable. One of these is required. -->
         <item name="windowSplashScreenAnimatedIcon">@drawable/double_splash_screen</item>
         <!-- Required for animated icons. -->
-        <item name="windowSplashScreenAnimationDuration">200</item>
+        <item name="windowSplashScreenAnimationDuration">100</item>
 
         <!-- Set the theme of the Activity that directly follows your splash
         screen. This is required. -->

@@ -12,8 +12,8 @@ import com.anyNews.anynews.R;
  * The app selects its content language by an in-app {@code language_id} (stored
  * as {@link Constants#LanguageID}), NOT by device Locale, so footer labels
  * cannot come from per-locale {@code strings.xml}. Like the other footer labels
- * (Reload / Events / Category / Profile / Share, which come from the server
- * language pack), the cricket label is resolved from the selected language id.
+ * (News / Events / Category / Profile / Share, which come from the server
+ * language pack or local News helpers), the cricket label is resolved from the selected language id.
  *
  * Language ids (server): 1 Malayalam · 2 Hindi · 3 Telugu · 4 Tamil ·
  * 5 Kannada · 6 Odia. Anything else falls back to English "Cricket"

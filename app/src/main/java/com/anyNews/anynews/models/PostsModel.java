@@ -9,7 +9,7 @@ import java.util.List;
 public class PostsModel {
 
 
-    public class Datum {
+    public static class Datum {
 
         @SerializedName("title")
         @Expose
@@ -40,12 +40,58 @@ public class PostsModel {
         @Expose
         private Long post_status;
 
+        /** Optional engagement from live post (get_user_posts). */
+        @SerializedName("likes")
+        @Expose
+        private Integer likes;
+        @SerializedName("comments")
+        @Expose
+        private Integer comments;
+        @SerializedName(value = "views", alternate = {"total_views", "totalViews"})
+        @Expose
+        private Integer views;
+        @SerializedName("live_post_id")
+        @Expose
+        private Integer livePostId;
+
         public Long getPost_status() {
             return post_status;
         }
 
         public void setPost_status(Long post_status) {
             this.post_status = post_status;
+        }
+
+        public Integer getLikes() {
+            return likes != null ? likes : 0;
+        }
+
+        public void setLikes(Integer likes) {
+            this.likes = likes;
+        }
+
+        public Integer getComments() {
+            return comments != null ? comments : 0;
+        }
+
+        public void setComments(Integer comments) {
+            this.comments = comments;
+        }
+
+        public Integer getViews() {
+            return views != null ? views : 0;
+        }
+
+        public void setViews(Integer views) {
+            this.views = views;
+        }
+
+        public Integer getLivePostId() {
+            return livePostId;
+        }
+
+        public void setLivePostId(Integer livePostId) {
+            this.livePostId = livePostId;
         }
 
         public String getTitle() {
@@ -158,6 +204,41 @@ public class PostsModel {
 
     public void setFirstPostId(Long firstPostId) {
         this.firstPostId = firstPostId;
+    }
+
+    /** Totals across all of the reporter's posts (not just this page). */
+    @SerializedName("approved_count")
+    @Expose
+    private Integer approvedCount;
+    @SerializedName("pending_count")
+    @Expose
+    private Integer pendingCount;
+    @SerializedName("rejected_count")
+    @Expose
+    private Integer rejectedCount;
+
+    public Integer getApprovedCount() {
+        return approvedCount;
+    }
+
+    public void setApprovedCount(Integer approvedCount) {
+        this.approvedCount = approvedCount;
+    }
+
+    public Integer getPendingCount() {
+        return pendingCount;
+    }
+
+    public void setPendingCount(Integer pendingCount) {
+        this.pendingCount = pendingCount;
+    }
+
+    public Integer getRejectedCount() {
+        return rejectedCount;
+    }
+
+    public void setRejectedCount(Integer rejectedCount) {
+        this.rejectedCount = rejectedCount;
     }
 
 

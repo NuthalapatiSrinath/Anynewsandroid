@@ -49,6 +49,36 @@ object CropHelper {
         )
     }
 
+    /** Square oval crop for profile / writer avatars (same CanHub path as posts). */
+    @JvmStatic
+    fun buildProfileCropOptions(context: Context, uri: Uri?): CropImageContractOptions {
+        val outputUri = createCropOutputUri(context)
+        Log.e(TAG, "buildProfileCropOptions source=$uri output=$outputUri")
+        return CropImageContractOptions(
+            uri = uri,
+            cropImageOptions = CropImageOptions(
+                guidelines = CropImageView.Guidelines.ON,
+                outputCompressFormat = Bitmap.CompressFormat.JPEG,
+                outputCompressQuality = 90,
+                customOutputUri = outputUri,
+                imageSourceIncludeGallery = false,
+                imageSourceIncludeCamera = false,
+                showIntentChooser = false,
+                scaleType = CropImageView.ScaleType.FIT_CENTER,
+                autoZoomEnabled = true,
+                multiTouchEnabled = true,
+                cropShape = CropImageView.CropShape.OVAL,
+                fixAspectRatio = true,
+                aspectRatioX = 1,
+                aspectRatioY = 1,
+                initialCropWindowPaddingRatio = 0.1f,
+                activityTitle = "Crop photo",
+                allowRotation = true,
+                allowFlipping = true,
+            ),
+        )
+    }
+
     /** Prefer [buildCropOptions] with Context so output URI is set. */
     @JvmStatic
     fun buildCropOptions(uri: Uri?): CropImageContractOptions {

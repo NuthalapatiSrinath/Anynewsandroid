@@ -63,8 +63,6 @@ public class PaymentHistoryAdopter  extends RecyclerView.Adapter<PaymentViewHold
     @Override
     public void onBindViewHolder(@NonNull PaymentViewHolder holder, int position) {
         holder.onBind(position);
-
-        Toast.makeText(context, ""+position, Toast.LENGTH_SHORT).show();
     }
 
     @Override
@@ -82,19 +80,32 @@ public class PaymentHistoryAdopter  extends RecyclerView.Adapter<PaymentViewHold
     }
 
     public void addItems(List<PostItem.Datum> postItems) {
+        if (postItems == null || postItems.isEmpty()) return;
         mPostItems.addAll(postItems);
         notifyDataSetChanged();
     }
 
+    public void setItems(List<PostItem.Datum> postItems) {
+        isLoaderVisible = false;
+        mPostItems.clear();
+        if (postItems != null && !postItems.isEmpty()) {
+            mPostItems.addAll(postItems);
+        }
+        notifyDataSetChanged();
+    }
+
     public void addLoading() {
+        if (isLoaderVisible) return;
         isLoaderVisible = true;
         mPostItems.add(new PostItem.Datum());
         notifyItemInserted(mPostItems.size() - 1);
     }
 
     public void removeLoading() {
+        if (!isLoaderVisible) return;
         isLoaderVisible = false;
         int position = mPostItems.size() - 1;
+        if (position < 0) return;
         PostItem.Datum item = getItem(position);
         if (item != null) {
             mPostItems.remove(position);
@@ -103,6 +114,7 @@ public class PaymentHistoryAdopter  extends RecyclerView.Adapter<PaymentViewHold
     }
 
     public void clear() {
+        isLoaderVisible = false;
         mPostItems.clear();
         notifyDataSetChanged();
     }
@@ -123,11 +135,6 @@ public class PaymentHistoryAdopter  extends RecyclerView.Adapter<PaymentViewHold
 
         public void onBind(int position) {
             super.onBind(position);
-
-            PostItem.Datum item = mPostItems.get(position);
-            Toast.makeText(context, " DD "+item.getTitle(), Toast.LENGTH_SHORT).show();
-
-
         }
     }
 

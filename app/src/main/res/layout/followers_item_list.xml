@@ -70,11 +70,10 @@
                             <ImageView
                                 android:id="@+id/follower_images"
                                 android:src="@drawable/ic_user_profile"
-                                android:scaleType="fitXY"
+                                android:scaleType="centerCrop"
                                 android:layout_width="match_parent"
-                                android:layout_height="match_parent">
-
-                            </ImageView>
+                                android:layout_height="match_parent"
+                                android:contentDescription="@null" />
 
                         </androidx.cardview.widget.CardView>
 

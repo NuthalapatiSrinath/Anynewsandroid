@@ -64,6 +64,7 @@ import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CropHelper;
+import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
@@ -341,87 +342,8 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
     }
 
     private void requestStoragePermission() {
-        //Initialize Google Play Services
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(FullPost.this,
-                    Manifest.permission.READ_EXTERNAL_STORAGE)
-                    == PackageManager.PERMISSION_GRANTED&&ContextCompat.checkSelfPermission(FullPost.this,
-                    Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(FullPost.this,
-                    Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED) {
-
-                showFileChooser();
-            } else {
-                //Request Location Permission
-                AppHelper.showLog("NO PERMISSION");
-                if(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU){
-
-                    PermissionX.init(FullPost.this)
-                            .permissions(Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.CAMERA)
-                            .onExplainRequestReason(new ExplainReasonCallback() {
-                                @Override
-                                public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
-                                    scope.showRequestReasonDialog(deniedList, "Please allow the below necessary permissions to upload photos and videos", "OK", "Cancel");
-                                }
-                            })
-                            .onForwardToSettings(new ForwardToSettingsCallback() {
-                                @Override
-                                public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
-                                    scope.showForwardToSettingsDialog(deniedList, "Please allow the below necessary permissions manually from settings page to upload photos and videos", "OK", "Cancel");
-
-                                }
-                            })
-                            .request(new RequestCallback() {
-                                @Override
-                                public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
-                                    if (allGranted) {
-                                        showFileChooser();
-                                        //  Toast.makeText(PostArticles.this, "All permissions are granted", Toast.LENGTH_LONG).show();
-                                    } else {
-                                        //  Toast.makeText(PostArticles.this, "These permissions are denied___:"+deniedList, Toast.LENGTH_LONG).show();
-                                    }
-                                }
-                            });
-//                    requestPermissions(
-//                            new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.CAMERA},
-//                            STORAGE_PERMISSION_CODE);
-                }else{
-
-                    PermissionX.init(FullPost.this)
-                            .permissions(Manifest.permission.READ_MEDIA_IMAGES,Manifest.permission.CAMERA)
-                            .onExplainRequestReason(new ExplainReasonCallback() {
-                                @Override
-                                public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
-                                    scope.showRequestReasonDialog(deniedList, "Please allow the below necessary permissions to upload photos and videos", "OK", "Cancel");
-                                }
-                            })
-                            .onForwardToSettings(new ForwardToSettingsCallback() {
-                                @Override
-                                public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
-                                    scope.showForwardToSettingsDialog(deniedList, "Please allow the below necessary permissions manually from settings page to upload photos and videos", "OK", "Cancel");
-
-                                }
-                            })
-
-                            .request(new RequestCallback() {
-                                @Override
-                                public void onResult(boolean allGranted, @NonNull List<String> grantedList, @NonNull List<String> deniedList) {
-                                    if (allGranted) {
-                                        showFileChooser();
-                                        //Toast.makeText(PostArticles.this, "All permissions are granted", Toast.LENGTH_LONG).show();
-                                    } else {
-                                        //Toast.makeText(PostArticles.this, "These permissions are denied##:"+deniedList, Toast.LENGTH_LONG).show();
-                                    }
-                                }
-                            });
-//                    requestPermissions(
-//                            new String[]{Manifest.permission.READ_EXTERNAL_STORAGE,Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.CAMERA},
-//                            STORAGE_PERMISSION_CODE);
-                }
-            }
-        }
-        else {
-            showFileChooser();
-        }
+        // Chooser first — no dual CAMERA+storage system dialog before pick.
+        showFileChooser();
     }
 
 
@@ -623,7 +545,13 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
             public void onClick(DialogInterface dialog, int item) {
                 if (options[item].equals(""+languageModelResponse.getData().getTakePhoto()))
                 {
-                    openCameraForPhoto();
+                    DeferredMediaPermissions.ensureCamera(FullPost.this,
+                            new DeferredMediaPermissions.GrantCallback() {
+                                @Override
+                                public void onGranted() {
+                                    openCameraForPhoto();
+                                }
+                            });
                 }
                 else if (options[item].equals(""+languageModelResponse.getData().getChooseFromGallery()))
                 {
@@ -680,42 +608,7 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
 
     private void openGalleryForPhoto() {
         Log.e(TAG, "FullPost openGalleryForPhoto");
-        Intent getContent = new Intent(Intent.ACTION_GET_CONTENT);
-        getContent.setType("image/*");
-        getContent.addCategory(Intent.CATEGORY_OPENABLE);
-        getContent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-        Intent pick = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-        pick.setType("image/*");
-
-        Intent openDocument = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        openDocument.addCategory(Intent.CATEGORY_OPENABLE);
-        openDocument.setType("image/*");
-        openDocument.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
-                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-
-        Intent chooser = Intent.createChooser(getContent, "Select Image");
-        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{pick, openDocument});
-        try {
-            startActivityForResult(chooser, PICK_IMAGE_REQUEST);
-            return;
-        } catch (ActivityNotFoundException e) {
-            e.printStackTrace();
-        }
-
-        if (ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(this)) {
-            try {
-                pickVisualMedia.launch(
-                        new PickVisualMediaRequest.Builder()
-                                .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
-                                .build());
-                return;
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        Toast.makeText(this, "No gallery app available on this device", Toast.LENGTH_LONG).show();
+        DeferredMediaPermissions.openImageGallery(this, null, pickVisualMedia);
     }
 
     private File createCameraImageFile() throws IOException {

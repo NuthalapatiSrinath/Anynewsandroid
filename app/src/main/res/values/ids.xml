@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Half-article body collapse animation state (FlipperAdapter) -->
+    <item name="tag_half_body_collapsed" type="id" />
+    <item name="tag_half_body_title_h" type="id" />
+    <item name="tag_half_body_media_h" type="id" />
+    <item name="tag_half_body_title_weight" type="id" />
+    <item name="tag_half_body_animator" type="id" />
+</resources>

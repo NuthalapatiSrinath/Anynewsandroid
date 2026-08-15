@@ -24,6 +24,8 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.HurlStack;
 import com.android.volley.toolbox.ImageLoader;
 import com.android.volley.toolbox.Volley;
+import com.anyNews.anynews.Activities.BookmarkReaderActivity;
+import com.anyNews.anynews.Activities.BookmarksActivity;
 import com.anyNews.anynews.Activities.HomePage;
 import com.anyNews.anynews.Activities.StartingActivity;
 import com.anyNews.anynews.BuildConfig;
@@ -33,9 +35,12 @@ import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.ImageLoaderInit;
+import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
+import com.anyNews.anynews.Utils.MediaAccessReporter;
+import com.anyNews.anynews.Utils.AdImpressionReporter;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
 import com.facebook.ads.AdSettings;
@@ -75,6 +80,10 @@ public class AppController extends MultiDexApplication {
     public void onCreate() {
         AppHelper.showLog("onCreate for AppController");
         super.onCreate();
+        // Manual night mode only (pref) — never follow system / battery-saver auto DayNight.
+        try {
+            com.anyNews.anynews.Utils.NightModeHelper.applyStoredPreference(this);
+        } catch (Exception ignored) { }
         FirebaseApp.initializeApp(this);
         mInstance = this;
         ImageLoaderInit.ensureInitialized(this);
@@ -90,12 +99,25 @@ public class AppController extends MultiDexApplication {
         SessionAnalyticsTracker.get().init(this);
         // Batched views/dwell — flip settle enqueues; flush ~60s or on background.
         ViewsBatchTracker.get().init(this);
+        // Soft-accounting for public OCI / object URL opens (admin App→OCI dashboard).
+        MediaAccessReporter.get().init(this);
+        // Real native-ad display counts (Google/FB painted) — one batched flush.
+        AdImpressionReporter.get().init(this);
+
+        // One-shot per process: previous session's flip views → permanent Read before News loads.
+        try {
+            com.anyNews.anynews.Utils.ReadArticleStore.commitSessionViewedToReadOncePerProcess(this);
+        } catch (Exception ignored) {
+        }
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle bundle) {
                 // Splash keeps its own full-screen look; HomePage / Login re-apply after this.
-                if (!(activity instanceof StartingActivity)) {
+                // Bookmarks / reader paint brand-orange status bars and keep content below them.
+                if (!(activity instanceof StartingActivity)
+                        && !(activity instanceof BookmarksActivity)
+                        && !(activity instanceof BookmarkReaderActivity)) {
                     applyThemeSystemBars(activity);
                 }
 
@@ -148,6 +170,10 @@ public class AppController extends MultiDexApplication {
             ViewsBatchTracker.get().flush(this, true);
         } catch (Exception ignored) {
         }
+        try {
+            AdImpressionReporter.get().flush(this, true);
+        } catch (Exception ignored) {
+        }
         super.onTerminate();
     }
 
@@ -161,6 +187,10 @@ public class AppController extends MultiDexApplication {
             }
             try {
                 ViewsBatchTracker.get().flush(this, true);
+            } catch (Exception ignored) {
+            }
+            try {
+                AdImpressionReporter.get().flush(this, true);
             } catch (Exception ignored) {
             }
         }

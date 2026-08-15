@@ -1,0 +1,212 @@
+package com.anyNews.anynews.Utils;
+
+import android.os.SystemClock;
+import android.text.TextUtils;
+import android.util.Log;
+
+import androidx.annotation.NonNull;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+/**
+ * Small process-local coordinator for native inventory. It deliberately has no network or
+ * backend dependency: HomePage remains the sole owner of GMA/Facebook SDK calls and views.
+ *
+ * <p>A slot is valid while its configured unit/type remains in the current feed. Flip changes do
+ * not invalidate it. A real feed replacement or Activity destroy calls {@link #clearAll()}.
+ */
+public final class NativeAdCacheCoordinator {
+    private static final String TAG = "NativeAdCache";
+    private static final int MAX_READY = 4;
+    private static final int MAX_RETRIES = 2;
+    private static final long RETRY_BASE_MS = 1_000L;
+    private static final long NO_FILL_RETRY_MS = 8_000L;
+
+    public enum StartDecision { START, ALREADY_READY, IN_FLIGHT, BACKOFF, CACHE_FULL }
+
+    private static final class Entry {
+        final String key;
+        int failures;
+        boolean inFlight;
+        boolean ready;
+        long retryAfterUptimeMs;
+
+        Entry(String key) {
+            this.key = key;
+        }
+    }
+
+    private final Map<String, Entry> entries = new HashMap<>();
+    private int eligibleOpportunities;
+    private int paidLoaded;
+    private int paidShown;
+    private int houseFallbacks;
+    private int failures;
+    private int noFills;
+    private int cacheHits;
+    private int cacheMisses;
+
+    private NativeAdCacheCoordinator() {}
+
+    private static final class Holder {
+        private static final NativeAdCacheCoordinator INSTANCE = new NativeAdCacheCoordinator();
+    }
+
+    public static NativeAdCacheCoordinator get() {
+        return Holder.INSTANCE;
+    }
+
+    public static String key(String adType, String adCode, int requestPosition) {
+        return (TextUtils.isEmpty(adType) ? "google" : adType.toLowerCase())
+                + "|" + (adCode == null ? "" : adCode.trim()) + "|" + requestPosition;
+    }
+
+    public synchronized StartDecision requestStart(
+            String adType, String adCode, int requestPosition, int maxInFlight) {
+        if (TextUtils.isEmpty(adCode)) {
+            log("REQUEST rejected empty configured unit");
+            return StartDecision.BACKOFF;
+        }
+        eligibleOpportunities++;
+        String key = key(adType, adCode, requestPosition);
+        Entry entry = entries.get(key);
+        if (entry == null) {
+            entry = new Entry(key);
+            entries.put(key, entry);
+        }
+        if (entry.ready) {
+            cacheHits++;
+            log("CACHE HIT " + key);
+            return StartDecision.ALREADY_READY;
+        }
+        cacheMisses++;
+        long now = SystemClock.uptimeMillis();
+        if (entry.inFlight) {
+            log("REQUEST dedupe in-flight " + key);
+            return StartDecision.IN_FLIGHT;
+        }
+        if (entry.retryAfterUptimeMs > now) {
+            log("REQUEST backoff " + key + " remaining="
+                    + (entry.retryAfterUptimeMs - now));
+            return StartDecision.BACKOFF;
+        }
+        if (readyCountLocked() >= MAX_READY || inFlightCountLocked() >= Math.max(1, maxInFlight)) {
+            log("REQUEST cache/cap full " + key);
+            return StartDecision.CACHE_FULL;
+        }
+        entry.inFlight = true;
+        log("REQUEST / LOAD START " + key);
+        return StartDecision.START;
+    }
+
+    public synchronized void onLoaded(String adType, String adCode, int requestPosition,
+                                      String adapterName) {
+        Entry entry = getOrCreate(adType, adCode, requestPosition);
+        entry.inFlight = false;
+        entry.ready = true;
+        entry.failures = 0;
+        entry.retryAfterUptimeMs = 0L;
+        paidLoaded++;
+        log("LOAD SUCCESS / PRELOAD " + entry.key + " adapter=" + safe(adapterName));
+        trimReadyLocked();
+    }
+
+    /** Returns a bounded retry delay, or -1 when the slot has exhausted retries. */
+    public synchronized long onFailed(String adType, String adCode, int requestPosition,
+                                      boolean noFill, String detail) {
+        Entry entry = getOrCreate(adType, adCode, requestPosition);
+        entry.inFlight = false;
+        entry.ready = false;
+        failures++;
+        if (noFill) noFills++;
+        entry.failures++;
+        if (entry.failures > MAX_RETRIES) {
+            log((noFill ? "NO FILL" : "LOAD FAILURE") + " retries exhausted " + entry.key);
+            return -1L;
+        }
+        long delay = noFill ? NO_FILL_RETRY_MS
+                : RETRY_BASE_MS * (1L << (entry.failures - 1));
+        entry.retryAfterUptimeMs = SystemClock.uptimeMillis() + delay;
+        log((noFill ? "NO FILL" : "LOAD FAILURE") + " / RETRY " + entry.key
+                + " delay=" + delay + " detail=" + safe(detail));
+        return delay;
+    }
+
+    public synchronized void onConsumed(String adType, String adCode, int requestPosition) {
+        Entry entry = entries.get(key(adType, adCode, requestPosition));
+        if (entry != null) {
+            entry.ready = false;
+        }
+        log("CONSUMED / replacement preload eligible "
+                + key(adType, adCode, requestPosition));
+    }
+
+    /** Called only from a network SDK's real impression callback. */
+    public synchronized void onPaidShown(String adType, String adCode, int requestPosition) {
+        paidShown++;
+        log("SHOWN " + key(adType, adCode, requestPosition));
+    }
+
+    public synchronized void onHouseFallback(int requestPosition) {
+        houseFallbacks++;
+        log("HOUSE FALLBACK pos=" + requestPosition);
+    }
+
+    public synchronized void logMediationAdapter(String adapterName) {
+        log("MEDIATION ADAPTER " + safe(adapterName));
+    }
+
+    public synchronized void clearAll() {
+        entries.clear();
+        log("CACHE disposed");
+    }
+
+    private Entry getOrCreate(String type, String code, int position) {
+        String key = key(type, code, position);
+        Entry entry = entries.get(key);
+        if (entry == null) {
+            entry = new Entry(key);
+            entries.put(key, entry);
+        }
+        return entry;
+    }
+
+    private int inFlightCountLocked() {
+        int count = 0;
+        for (Entry entry : entries.values()) if (entry.inFlight) count++;
+        return count;
+    }
+
+    private int readyCountLocked() {
+        int count = 0;
+        for (Entry entry : entries.values()) if (entry.ready) count++;
+        return count;
+    }
+
+    private void trimReadyLocked() {
+        int ready = readyCountLocked();
+        if (ready <= MAX_READY) return;
+        Iterator<Entry> iterator = entries.values().iterator();
+        while (iterator.hasNext() && ready > MAX_READY) {
+            Entry entry = iterator.next();
+            if (entry.ready && !entry.inFlight) {
+                iterator.remove();
+                ready--;
+            }
+        }
+    }
+
+    @NonNull
+    private static String safe(String value) {
+        return value == null ? "unknown" : value;
+    }
+
+    private void log(String message) {
+        Log.d(TAG, message + " counters{eligible=" + eligibleOpportunities
+                + ",loaded=" + paidLoaded + ",shown=" + paidShown + ",house=" + houseFallbacks
+                + ",fail=" + failures + ",noFill=" + noFills + ",hit=" + cacheHits
+                + ",miss=" + cacheMisses + "}");
+    }
+}

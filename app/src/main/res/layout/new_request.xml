@@ -1,34 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical" android:layout_width="match_parent"
-    android:layout_height="@dimen/_180sdp">
-    <ImageView
-        android:id="@+id/notificationView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="fitXY"
-        android:src="@mipmap/ic_launcher"/>
+<!-- Expanded tray: left thumb/brand + title; optional article image below (not right) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingBottom="4dp">
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:paddingBottom="@dimen/_10sdp"
-        android:paddingTop="@dimen/_10sdp"
-        android:paddingLeft="@dimen/_8sdp"
-        android:gravity="center"
-        >
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="0dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="2dp"
+        android:paddingBottom="6dp">
+
+        <ImageView
+            android:id="@+id/imageViewIconExpanded"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="10dp"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:src="@drawable/app_share_logo"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/notification_title"
             style="@style/TextAppearance.Compat.Notification.Title"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:textSize="@dimen/_12sdp"
-            android:maxLines="3"
-            android:gravity="center|left"
-            android:textColor="@color/on_brand_text"
-            android:text="Hello" />
-
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="4"
+            android:text="AnyNews"
+            android:textColor="@color/black"
+            android:textSize="@dimen/_13sdp" />
     </LinearLayout>
 
-
-</RelativeLayout>
+    <ImageView
+        android:id="@+id/notificationView"
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+</LinearLayout>

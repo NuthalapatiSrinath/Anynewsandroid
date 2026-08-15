@@ -30,6 +30,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -187,10 +188,9 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
                 String encrpt_data = decrypt(encreptionRequest.getData());
                 Gson gsonObj = new Gson();
                 UpdateStateResponse languageModel = gsonObj.fromJson(encrpt_data, UpdateStateResponse.class);
-                if (languageModel != null && languageModel.getSuccess()) {
+                    if (languageModel != null && languageModel.getSuccess()) {
 
-                    SharedPrefsData.putString(context, Constants.Selected_Distric_Name, distric_name, Constants.PREF_NAME);
-                    SharedPrefsData.putString(context, Constants.Selected_Distric_Name1, distric_name, Constants.PREF_NAME);
+                    DistrictLabelHelper.saveSelected(context, id, distric_name);
                     SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
                     SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
 

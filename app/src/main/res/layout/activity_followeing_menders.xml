@@ -1,171 +1,152 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
     android:layout_height="match_parent"
+    android:background="@color/whitewithblack"
     android:fitsSystemWindows="true"
-    android:background="@color/whitewithblack">
+    android:orientation="vertical"
+    tools:context=".Activities.FolloweingMenders">
+
     <LinearLayout
-        android:orientation="vertical"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fitsSystemWindows="true">
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="@dimen/_40sdp"
-            android:background="@color/whitewithblack">
+        android:layout_height="@dimen/_40sdp"
+        android:background="@color/whitewithblack"
+        android:gravity="center"
+        android:orientation="horizontal">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="horizontal"
-                android:gravity="center">
-
-
-                <ImageView
-                    android:layout_marginTop="@dimen/ten"
-                    android:id="@+id/back"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:src="@drawable/ic_back_arrow"
-                    android:layout_marginLeft="@dimen/twenty"
-                    android:scaleType="fitXY" />
-
-                <TextView
-                    android:visibility="invisible"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:text="Payment"
-                    android:layout_marginLeft="@dimen/_10sdp"
-                    android:id="@+id/username"
-                    android:textSize="16dp"
-                    android:gravity="left|center"
-                    android:textStyle="normal"
-                    android:layout_marginRight="@dimen/fiveteen"
-                    android:textColor="@color/warm_grey"/>
-
-
-
-
-            </LinearLayout>
-
-        </LinearLayout>
+        <ImageView
+            android:id="@+id/back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="@dimen/twenty"
+            android:scaleType="fitXY"
+            android:src="@drawable/ic_back_arrow" />
 
         <TextView
-            android:id="@+id/menbers_list"
-            android:text="MEMBERS"
+            android:id="@+id/username"
             android:layout_width="match_parent"
-            android:textSize="@dimen/_18sdp"
-            android:gravity="center"
-            android:textColor="@color/title_color"
-            android:layout_height="@dimen/_30sdp">
+            android:layout_height="match_parent"
+            android:layout_marginLeft="@dimen/_10sdp"
+            android:layout_marginRight="@dimen/fiveteen"
+            android:gravity="left|center"
+            android:text="Payment"
+            android:textColor="@color/warm_grey"
+            android:textSize="16dp"
+            android:textStyle="normal"
+            android:visibility="invisible" />
+    </LinearLayout>
 
-        </TextView>
+    <TextView
+        android:id="@+id/menbers_list"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/_30sdp"
+        android:gravity="center"
+        android:text="MEMBERS"
+        android:textColor="@color/title_color"
+        android:textSize="@dimen/_18sdp" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
         <androidx.core.widget.NestedScrollView
+            android:id="@+id/following_scroll"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
-
-
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:orientation="vertical"
-            android:layout_height="match_parent">
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
 
             <LinearLayout
-                android:id="@+id/follow_layout_with_data"
-                android:visibility="gone"
-                android:layout_below="@+id/linear"
                 android:layout_width="match_parent"
-                android:gravity="center"
+                android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:layout_height="match_parent">
-
-
-
-
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/followeing_menbers"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent">
-
-                </androidx.recyclerview.widget.RecyclerView>
+                android:paddingBottom="16dp">
 
                 <LinearLayout
-                    android:id="@+id/linear_no_recyclerView"
+                    android:id="@+id/follow_layout_with_data"
                     android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:layout_marginTop="250dp"
-                    android:gravity="center|center_horizontal"
-                    android:visibility="gone"
-                    android:layout_height="wrap_content">
-                    <ImageView
-                        android:src="@drawable/nodata"
-                        android:layout_width="100dp"
-                        android:layout_height="100dp">
-                    </ImageView>
-                    <TextView
-                        android:layout_marginTop="@dimen/ten"
-                        android:text="No data"
-                        android:layout_width="wrap_content"
-                        android:textColor="@color/colorTextSecondary"
-                        android:textSize="@dimen/fiveteen"
-                        android:layout_height="wrap_content">
+                    android:visibility="gone">
 
-                    </TextView>
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/followeing_menbers"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false" />
                 </LinearLayout>
 
+                <LinearLayout
+                    android:id="@+id/layout_following_suggestions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="8dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/suggestions_header"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:text="@string/people_you_may_follow"
+                        android:textColor="@color/title_color"
+                        android:textSize="@dimen/_14sdp"
+                        android:textStyle="bold" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/following_suggestions_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp" />
+                </LinearLayout>
             </LinearLayout>
-
-            <LinearLayout
-
-                android:id="@+id/follow_layout_with_out_data"
-                android:layout_width="match_parent"
-                android:gravity="center"
-                android:layout_marginTop="@dimen/_180sdp"
-                android:layout_height="match_parent">
-
-                <include layout="@layout/layout_loading"></include>
-
-            </LinearLayout>
-
-            <LinearLayout
-                android:visibility="gone"
-                android:id="@+id/no_data_scrren"
-                android:layout_width="match_parent"
-                android:orientation="vertical"
-                android:layout_marginTop="@dimen/_200sdp"
-                android:gravity="center|center_horizontal"
-
-                android:layout_height="wrap_content">
-                <ImageView
-                    android:src="@drawable/nodata"
-                    android:layout_width="100dp"
-                    android:layout_height="100dp">
-                </ImageView>
-                <TextView
-                    android:layout_marginTop="@dimen/ten"
-                    android:text="No data"
-                    android:layout_width="wrap_content"
-                    android:textColor="@color/colorTextSecondary"
-                    android:textSize="@dimen/fiveteen"
-                    android:layout_height="wrap_content">
-
-                </TextView>
-            </LinearLayout>
-
-        </LinearLayout>
-
         </androidx.core.widget.NestedScrollView>
 
+        <LinearLayout
+            android:id="@+id/follow_layout_with_out_data"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center">
 
+            <include layout="@layout/layout_loading" />
+        </LinearLayout>
 
-    </LinearLayout>
+        <LinearLayout
+            android:id="@+id/no_data_scrren"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="100dp"
+                android:layout_height="100dp"
+                android:src="@drawable/nodata" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ten"
+                android:text="No data"
+                android:textColor="@color/colorTextSecondary"
+                android:textSize="@dimen/fiveteen" />
+        </LinearLayout>
+
+        <!-- Kept for id compatibility; unused -->
+        <LinearLayout
+            android:id="@+id/linear_no_recyclerView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+    </FrameLayout>
 
 </LinearLayout>

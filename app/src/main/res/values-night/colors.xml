@@ -5,11 +5,80 @@
     <color name="colorPrimary">#EF4923</color>
     <color name="colorAccent">#D15353</color>
 
+    <!-- Glass / profile hub (night: dark frost; soft light edge, not red outline) -->
+    <color name="glass_header_scrim">#B31E1E1E</color>
+    <color name="glass_panel">#E62C2C2C</color>
+    <color name="glass_stroke">#33FFFFFF</color>
+    <color name="special_badge_orange">#EF4923</color>
+    <!-- Profile/More mock — dark #121216 + orange -->
+    <color name="profile_hub_scrim">#121216</color>
+    <color name="status_list_title">#F5F5F5</color>
+    <color name="status_list_subtitle">#B0B0B0</color>
+    <color name="profile_way2_header_bg">#0D0F14</color>
+    <color name="profile_way2_row_bg">#1A1A20</color>
+    <!-- Glass guest card: dark frost so globe shows through underneath -->
+    <color name="profile_way2_card_bg">#B81C1E26</color>
+    <color name="profile_way2_card_stroke">#33FFFFFF</color>
+    <color name="profile_guest_card_glass">#B81C1E26</color>
+    <color name="profile_login_pill_glow">#66EF4923</color>
+    <color name="profile_header_globe_alpha">#FFFFFFFF</color>
+    <color name="profile_way2_label">#8E8E96</color>
+    <!-- Profile top bar News > + link tints (bright cyan on dark header) -->
+    <color name="profile_way2_link">#4DDBFF</color>
+    <color name="profile_topbar_settings">#F5F5F7</color>
+    <color name="profile_way2_value">#FFFFFF</color>
+    <color name="profile_way2_circle_btn">#EF4923</color>
+    <color name="profile_way2_divider">#2A2A32</color>
+    <color name="profile_way2_menu_icon">#EF4923</color>
+    <color name="profile_way2_menu_text">#F2F2F4</color>
+    <color name="profile_way2_circle_icon">#FFFFFF</color>
+    <color name="profile_way2_chevron">#6E6E78</color>
+    <color name="profile_way2_location_pin">#EF4923</color>
+    <color name="profile_way2_tagline">#9A9AA3</color>
+    <color name="profile_way2_avatar_ring">#EF4923</color>
+    <color name="profile_way2_guest_sub">#8E8E96</color>
+    <color name="profile_way2_icon_circle_fill">#EF4923</color>
+    <color name="profile_way2_icon_circle_stroke">#00000000</color>
+    <color name="profile_way2_login_text">#FFFFFF</color>
+    <color name="profile_header_globe_tint">#CCFF6B00</color>
+    <color name="profile_way2_icon_cradle">#2A2A32</color>
+    <color name="profile_way2_progress_track">#2A2A32</color>
+    <color name="profile_verified_green">#22C55E</color>
+    <color name="profile_shortcut_stat">#F2F2F4</color>
+
     <!-- color page -->
     <color name="colorGray">#FDCCCCCC</color>
 
 
     <color name="background_color">#1E1E1E</color>
+    <!-- Settings screen tokens — dark mock (#0B0F19 + dark cards + orange) -->
+    <color name="settings_page_bg">#0B0F19</color>
+    <color name="settings_header_text">#FFFFFF</color>
+    <color name="settings_title_text">#FFFFFF</color>
+    <color name="settings_sub_text">#A8A8B0</color>
+    <color name="settings_version_text">#8E8E96</color>
+    <color name="settings_divider">#2A2A36</color>
+    <color name="settings_accent">#FF6600</color>
+    <color name="settings_back_tint">#FFFFFF</color>
+    <color name="settings_chevron">#FF6600</color>
+    <color name="settings_section_title">#FF6600</color>
+    <color name="settings_banner_bg">#141824</color>
+    <color name="settings_banner_stroke">#E6FF6600</color>
+    <color name="settings_banner_text">#B0B0B8</color>
+    <color name="settings_banner_link">#FF6600</color>
+    <color name="settings_card_bg">#141824</color>
+    <color name="settings_card_border">#00000000</color>
+    <color name="settings_card_shadow">#00000000</color>
+    <color name="settings_grid_label">#FFFFFF</color>
+    <color name="settings_icon_primary">#FFFFFF</color>
+    <color name="settings_icon_muted">#FFFFFF</color>
+    <color name="settings_icon_sparkle">#FF6600</color>
+    <color name="settings_switch_track_on">#FF6600</color>
+    <color name="settings_switch_track_off">#3A3A48</color>
+    <color name="settings_switch_thumb_on">#FF6600</color>
+    <color name="settings_switch_thumb_off">#C8C8D0</color>
+    <color name="settings_button_bg">#141824</color>
+    <color name="settings_row_pressed">#14FFFFFF</color>
     <color name="chip_background">#2C2C2C</color>
     <color name="state_card_background">#2C2C2C</color>
     <color name="state_landmark_tint">#FFFFFF</color>
@@ -81,7 +150,7 @@
     <!-- Color Search-->
 
     <!-- Bookmarks -->
-    <color name="colorBookmarksInfo">#555555</color>
+    <color name="colorBookmarksInfo">#B0B0B0</color>
 
 
     <!-- Color Profile-->
@@ -165,4 +234,11 @@
     <color name="soft_divider">#3A3A3A</color>
     <color name="cmp_over_ball_grey">#2C3138</color>
     <color name="poll_option_shadow">#1A1A1A</color>
+
+    <!-- Feed skeleton shimmer (dark): dark surface + readable dark-grey bones, L→R sweep. -->
+    <color name="feed_shimmer_surface">#121417</color>
+    <color name="feed_shimmer_base">#2A2E34</color>
+    <color name="feed_shimmer_bone">#363B43</color>
+    <color name="feed_shimmer_highlight">#18FFFFFF</color>
+    <color name="feed_shimmer_highlight_center">#30FFFFFF</color>
 </resources>

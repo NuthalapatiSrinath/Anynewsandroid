@@ -25,10 +25,10 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
+import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.SharedPrefsData;
-import com.bumptech.glide.Glide;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -232,9 +232,8 @@ public class WriterProfileActivity extends AppCompatActivity {
                         login_button_selected.setVisibility(View.GONE);
 
                     }
-                    Glide.with(WriterProfileActivity.this)
-                            .load(MediaUrl.resolve(writerResponse.getData().getProfilePic()))
-                            .into(profile_image);
+                    AvatarImageHelper.loadGlideCircle(WriterProfileActivity.this, profile_image,
+                            writerResponse.getData().getProfilePic());
                     layout_with_out_data.setVisibility(View.GONE);
                     layout_with_data.setVisibility(View.VISIBLE);
                 } else {

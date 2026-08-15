@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Footer Profile — filled person glyph (no frame).
+  Solid black fill so BottomNavigationView itemIconTint (checked brand orange /
+  unchecked gray) applies via SRC_IN. Visual weight similar to special/sparkles.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Head -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12,12c2.21,0 4,-1.79 4,-4s-1.79,-4 -4,-4 -4,1.79 -4,4 1.79,4 4,4z" />
+    <!-- Shoulders / torso -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12,13c-2.67,0 -8,1.34 -8,4v2c0,0.55 0.45,1 1,1h14c0.55,0 1,-0.45 1,-1v-2c0,-2.66 -5.33,-4 -8,-4z" />
+</vector>

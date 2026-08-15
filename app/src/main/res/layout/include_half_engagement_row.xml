@@ -176,6 +176,6 @@
             android:background="@drawable/white_oval"
             android:contentDescription="@null"
             android:padding="7dp"
-            android:src="@drawable/ic_action_report" />
+            android:src="@drawable/ic_action_more_vert" />
     </LinearLayout>
 </LinearLayout>

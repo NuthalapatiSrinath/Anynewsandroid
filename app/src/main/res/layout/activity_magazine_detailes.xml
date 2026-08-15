@@ -25,10 +25,11 @@
             android:paddingEnd="30dp"
             android:paddingRight="30dp"
             android:paddingBottom="80dp" />
-        <!-- Hidden: footer glow Share replaces poster-corner share for magazines. -->
+        <!-- Blue blink Share (ic_share_full): bottom-right on magazine posts.
+             Footer Calendar replaced the old center Share slot. -->
         <ImageView
             android:id="@+id/imageViewShare"
-            android:src="@drawable/ic_share_black_24dp"
+            android:src="@drawable/ic_share_full"
             android:layout_above="@+id/magzine_ll_dots"
             android:layout_alignParentEnd="true"
             android:padding="12dp"

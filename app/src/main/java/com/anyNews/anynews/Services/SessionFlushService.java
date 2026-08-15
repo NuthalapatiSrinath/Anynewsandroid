@@ -7,6 +7,7 @@ import android.os.IBinder;
 
 import androidx.annotation.Nullable;
 
+import com.anyNews.anynews.Utils.AdImpressionReporter;
 import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
@@ -56,6 +57,10 @@ public class SessionFlushService extends Service {
             }
             try {
                 ViewsBatchTracker.get().flush(getApplicationContext(), true);
+            } catch (Exception ignored) {
+            }
+            try {
+                AdImpressionReporter.get().flush(getApplicationContext(), true);
             } catch (Exception ignored) {
             }
             SessionAnalyticsTracker.get().flushPendingCloseFromService(getApplicationContext(), () -> {

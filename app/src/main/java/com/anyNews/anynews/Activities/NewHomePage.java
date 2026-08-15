@@ -122,6 +122,10 @@ public class NewHomePage extends AppCompatActivity implements FlipperAdapter.Cal
     }
 
     @Override
+    public void onVideoAutoplayEndedRequestNext(int position) {
+    }
+
+    @Override
     public void onFlippedToPage(FlipView v, int position, long id) {
         showLog("onFlippedToPage POSITION::"+position);
     }

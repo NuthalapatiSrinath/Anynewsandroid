@@ -180,7 +180,34 @@
     </style>
 
     <style name="SwitchTheme" parent="Theme.AppCompat.Light">
-        <item name="android:colorControlActivated">@color/red</item>
+        <item name="android:colorControlActivated">@color/settings_accent</item>
+        <item name="colorControlActivated">@color/settings_accent</item>
+    </style>
+
+    <!-- Custom pill track/thumb; Material-smooth SwitchCompat animation kept by framework. -->
+    <style name="SettingsSwitch" parent="Widget.AppCompat.CompoundButton.Switch">
+        <item name="android:colorControlActivated">@color/settings_accent</item>
+        <item name="colorControlActivated">@color/settings_accent</item>
+        <item name="android:showText">false</item>
+        <item name="android:track">@drawable/settings_switch_track</item>
+        <item name="android:thumb">@drawable/settings_switch_thumb</item>
+        <item name="android:background">@null</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- Smooth DayNight activity recreate (Settings toggle / deferred HomePage). -->
+    <style name="NightModeWindowAnimation">
+        <item name="android:activityOpenEnterAnimation">@anim/night_mode_fade_in</item>
+        <item name="android:activityOpenExitAnimation">@anim/night_mode_fade_out</item>
+        <item name="android:activityCloseEnterAnimation">@anim/night_mode_fade_in</item>
+        <item name="android:activityCloseExitAnimation">@anim/night_mode_fade_out</item>
+        <item name="android:taskOpenEnterAnimation">@anim/night_mode_fade_in</item>
+        <item name="android:taskOpenExitAnimation">@anim/night_mode_fade_out</item>
+        <item name="android:taskCloseEnterAnimation">@anim/night_mode_fade_in</item>
+        <item name="android:taskCloseExitAnimation">@anim/night_mode_fade_out</item>
+        <item name="android:taskToFrontEnterAnimation">@anim/night_mode_fade_in</item>
+        <item name="android:taskToFrontExitAnimation">@anim/night_mode_fade_out</item>
     </style>
     <style name="ShapeAppearance_profile">
         <item name="neumorph_cornerFamily">rounded</item>
@@ -308,7 +335,7 @@
              drawable. One of these is required. -->
         <item name="windowSplashScreenAnimatedIcon">@drawable/splash_bg</item>
         <!-- Required for animated icons. -->
-        <item name="windowSplashScreenAnimationDuration">200</item>
+        <item name="windowSplashScreenAnimationDuration">100</item>
 
         <!-- Set the theme of the Activity that directly follows your splash
         screen. This is required. -->

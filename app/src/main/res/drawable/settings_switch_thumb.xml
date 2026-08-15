@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Circular thumb; color selector + soft edge for ON/OFF polish. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true">
+        <layer-list>
+            <item>
+                <shape android:shape="oval">
+                    <size android:width="22dp" android:height="22dp" />
+                    <solid android:color="#26000000" />
+                </shape>
+            </item>
+            <item
+                android:bottom="1.5dp"
+                android:left="1dp"
+                android:right="1dp"
+                android:top="0.5dp">
+                <shape android:shape="oval">
+                    <solid android:color="@color/settings_switch_thumb_on" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    <item>
+        <layer-list>
+            <item>
+                <shape android:shape="oval">
+                    <size android:width="22dp" android:height="22dp" />
+                    <solid android:color="#1A000000" />
+                </shape>
+            </item>
+            <item
+                android:bottom="1.5dp"
+                android:left="1dp"
+                android:right="1dp"
+                android:top="0.5dp">
+                <shape android:shape="oval">
+                    <solid android:color="@color/settings_switch_thumb_off" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

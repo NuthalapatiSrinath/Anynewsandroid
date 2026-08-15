@@ -29,6 +29,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -289,8 +290,7 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
 
                 if (languageModel != null && languageModel.getSuccess()) {
 
-                    SharedPrefsData.putString(context, Constants.Selected_Distric_Name, languageModel.getDist_name(), Constants.PREF_NAME);
-                    SharedPrefsData.putString(context, Constants.Selected_Distric_Name1, languageModel.getDist_name(), Constants.PREF_NAME);
+                    DistrictLabelHelper.saveName(context, languageModel.getDist_name());
                     SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
                     SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
 

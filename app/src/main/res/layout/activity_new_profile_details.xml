@@ -1,507 +1,619 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@color/whitewithblack"
-    android:fitsSystemWindows="true"
-    android:orientation="vertical">
+    android:layout_height="match_parent"
+    android:background="@color/profile_hub_scrim"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+    <ScrollView
+        android:id="@+id/profile_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/profile_hub_scrim"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:orientation="vertical">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/background_color"
+        android:background="@color/profile_hub_scrim"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:orientation="vertical">
 
         <LinearLayout
             android:id="@+id/layout_with_data"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:orientation="vertical"
             android:visibility="visible">
 
-            <LinearLayout
+            <!-- Profile header: LAYER 0 hero (brand+globe) BEHIND, LAYER 1 glass guest card OVER (~45% overlap). -->
+            <FrameLayout
+                android:id="@+id/profile_header_stack"
                 android:layout_width="match_parent"
-                android:layout_height="340dp"
-                android:background="@color/brand_orange"
-                android:visibility="visible"
-                android:orientation="vertical">
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_profile_way2_header"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingBottom="10dp">
 
-                <RelativeLayout
-                    android:layout_width="match_parent"
+                <!-- Cover / legacy ids (gone) -->
+                <ImageView
+                    android:id="@+id/ic_back_ground_image"
+                    android:layout_width="0dp"
                     android:layout_height="0dp"
-                    android:layout_weight="1">
+                    android:contentDescription="@null"
+                    android:visibility="gone" />
 
-                    <FrameLayout
+                <ImageView
+                    android:id="@+id/back_ground_profile"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:contentDescription="@null"
+                    android:visibility="gone" />
+
+                <!-- Legacy edit-name id (gated in code; not part of top-right bar) -->
+                <ImageView
+                    android:id="@+id/edit_profile_icon"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:contentDescription="@string/edit_name"
+                    android:src="@drawable/ic_edit_profile"
+                    android:visibility="gone" />
+
+                <!-- ===== LAYER 0: Hero brand + glowing globe (behind guest card) ===== -->
+                <FrameLayout
+                    android:id="@+id/profile_hero_brand"
+                    android:layout_width="match_parent"
+                    android:layout_height="210dp"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:paddingStart="18dp"
+                    android:paddingTop="14dp"
+                    android:paddingEnd="0dp">
+
+                    <!-- Glow bloom (back-most decorative) -->
+                    <View
+                        android:id="@+id/profile_header_globe_glow"
+                        android:layout_width="220dp"
+                        android:layout_height="220dp"
+                        android:layout_gravity="end|top"
+                        android:layout_marginTop="-16dp"
+                        android:layout_marginEnd="-36dp"
+                        android:alpha="@dimen/profile_header_globe_glow_alpha"
+                        android:background="@drawable/bg_profile_header_orange_glow" />
+
+                    <!-- Faint wireframe falloff map under raster -->
+                    <ImageView
+                        android:layout_width="200dp"
+                        android:layout_height="200dp"
+                        android:layout_gravity="end|top"
+                        android:layout_marginTop="-4dp"
+                        android:layout_marginEnd="-28dp"
+                        android:alpha="0.28"
+                        android:contentDescription="@null"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/profile_header_globe" />
+
+                    <!-- Rich 3D orange globe — half sits above guest card, half under glass -->
+                    <ImageView
+                        android:id="@+id/profile_header_globe_view"
+                        android:layout_width="196dp"
+                        android:layout_height="196dp"
+                        android:layout_gravity="end|top"
+                        android:layout_marginTop="-8dp"
+                        android:layout_marginEnd="-30dp"
+                        android:alpha="@dimen/profile_header_globe_alpha"
+                        android:contentDescription="@null"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/profile_header_globe_3d" />
+
+                    <!-- Orbital arcs overlay -->
+                    <ImageView
+                        android:layout_width="204dp"
+                        android:layout_height="204dp"
+                        android:layout_gravity="end|top"
+                        android:layout_marginTop="-12dp"
+                        android:layout_marginEnd="-34dp"
+                        android:alpha="@dimen/profile_header_orbit_alpha"
+                        android:contentDescription="@null"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/profile_header_globe_orbits" />
+
+                    <!-- Brand block (left) — same z as globe, sits behind glass card via sibling order -->
+                    <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:layout_weight="1">
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="120dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="4dp">
 
                         <ImageView
-                            android:id="@+id/ic_back_ground_image"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:alpha="0.4"
-                            android:background="@drawable/profile_cover_icon"
-                            android:scaleType="fitXY" />
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:contentDescription="@string/anynews"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/logo_new" />
 
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:letterSpacing="0.04"
+                                android:text="@string/anynews"
+                                android:textAllCaps="true"
+                                android:textColor="@color/brand_orange"
+                                android:textSize="22sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/profile_tagline"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="3dp"
+                                android:includeFontPadding="false"
+                                android:text="@string/profile_tagline"
+                                android:textColor="@color/profile_way2_tagline"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Top-right overlay: Settings gear then News > (above brand/globe, status-bar safe padding) -->
+                <LinearLayout
+                    android:id="@+id/profile_top_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
+                    android:elevation="14dp"
+                    android:gravity="end|center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="4dp"
+                    android:translationZ="14dp">
+
+                    <ImageView
+                        android:id="@+id/neo_settings"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/settings_title"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_hub_settings"
+                        app:tint="@color/profile_topbar_settings" />
+
+                    <LinearLayout
+                        android:id="@+id/btn_news_nav"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="2dp"
+                        android:paddingEnd="2dp">
+
+                        <TextView
+                            android:id="@+id/tv_news_nav"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:includeFontPadding="false"
+                            android:text="@string/news_back"
+                            android:textColor="@color/profile_way2_link"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:layout_marginStart="1dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_profile_chevron_right"
+                            app:tint="@color/profile_way2_link" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ===== LAYER 1: Glass guest/profile card (ON TOP, ~45% over globe) ===== -->
+                <LinearLayout
+                    android:id="@+id/profile_guest_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
+                    android:layout_marginStart="14dp"
+                    android:layout_marginTop="108dp"
+                    android:layout_marginEnd="14dp"
+                    android:background="@drawable/bg_profile_guest_card"
+                    android:elevation="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="14dp"
+                    android:paddingTop="14dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="14dp"
+                    android:translationZ="10dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical">
+
+                        <FrameLayout
+                            android:layout_width="66dp"
+                            android:layout_height="66dp"
+                            android:clipChildren="false"
+                            android:clipToPadding="false">
+
+                            <de.hdodenhof.circleimageview.CircleImageView
+                                android:layout_width="62dp"
+                                android:layout_height="62dp"
+                                android:layout_gravity="center"
+                                android:src="@drawable/ic_profile_add_photo"
+                                app:civ_border_color="@color/profile_way2_avatar_ring"
+                                app:civ_border_overlay="true"
+                                app:civ_border_width="2.5dp" />
+
+                            <de.hdodenhof.circleimageview.CircleImageView
+                                android:id="@+id/img_upload_photo"
+                                android:layout_width="62dp"
+                                android:layout_height="62dp"
+                                android:layout_gravity="center"
+                                android:contentDescription="@string/profile_tap_add_photo"
+                                android:src="@drawable/ic_profile_add_photo"
+                                app:civ_border_color="@color/profile_way2_avatar_ring"
+                                app:civ_border_overlay="true"
+                                app:civ_border_width="2.5dp" />
+
+                            <LinearLayout
+                                android:id="@+id/imageupload_progressbar"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:visibility="gone">
+
+                                <ProgressBar
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:visibility="visible" />
+                            </LinearLayout>
+
+                            <!-- Camera badge: empty photo = tap to upload -->
+                            <ImageView
+                                android:id="@+id/avatar_add_badge"
+                                android:layout_width="22dp"
+                                android:layout_height="22dp"
+                                android:layout_gravity="bottom|end"
+                                android:background="@drawable/bg_avatar_camera_badge"
+                                android:contentDescription="@string/profile_tap_add_photo"
+                                android:padding="4dp"
+                                android:src="@drawable/ic_avatar_camera_badge"
+                                android:visibility="visible" />
+
+                            <!-- Reporter star badge (top-right of avatar) -->
+                            <FrameLayout
+                                android:id="@+id/reporter_star_badge"
+                                android:layout_width="20dp"
+                                android:layout_height="20dp"
+                                android:layout_gravity="top|end"
+                                android:background="@drawable/bg_reporter_star_badge"
+                                android:visibility="gone">
+
+                                <ImageView
+                                    android:layout_width="11dp"
+                                    android:layout_height="11dp"
+                                    android:layout_gravity="center"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_reporter_star" />
+                            </FrameLayout>
+                        </FrameLayout>
+
+                        <TextView
+                            android:id="@+id/tv_avatar_add_hint"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:gravity="center"
+                            android:maxWidth="72dp"
+                            android:text="@string/profile_tap_add_photo"
+                            android:textColor="@color/profile_way2_guest_sub"
+                            android:textSize="10sp"
+                            android:visibility="visible" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
                         <LinearLayout
                             android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:orientation="vertical">
-
-
-                            <RelativeLayout
-                                android:layout_width="fill_parent"
-                                android:layout_height="wrap_content">
-
-                                <ImageView
-                                    android:id="@+id/img_back"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_alignParentLeft="true"
-                                    android:layout_marginStart="12dp"
-                                    android:layout_marginTop="16dp"
-                                    app:srcCompat="@drawable/ic_arrowwhite_back" />
-
-
-                                <ImageView
-                                    android:id="@+id/neo_settings"
-                                    android:layout_width="@dimen/_30sdp"
-                                    android:layout_height="@dimen/_35sdp"
-                                    android:layout_alignParentRight="true"
-                                    android:layout_gravity="center"
-                                    android:layout_marginTop="@dimen/ten"
-                                    android:layout_marginRight="@dimen/_10sdp"
-                                    android:padding="@dimen/two"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/profile_setting_icon" />
-
-                                <ImageView
-                                    android:id="@+id/edit_profile_icon"
-                                    android:layout_width="@dimen/_30sdp"
-                                    android:layout_height="@dimen/_35sdp"
-                                    android:layout_gravity="center"
-                                    android:layout_marginTop="@dimen/ten"
-                                    android:layout_marginRight="@dimen/six"
-                                    android:layout_toLeftOf="@id/neo_settings"
-                                    android:contentDescription="Edit Profile"
-                                    android:padding="@dimen/five"
-                                    android:scaleType="fitCenter"
-                                    android:src="@drawable/ic_edit_profile" />
-
-                            </RelativeLayout>
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="top|center"
-                                android:orientation="vertical">
-
-
-                                <RelativeLayout
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent">
-
-                                    <de.hdodenhof.circleimageview.CircleImageView
-                                        android:layout_width="120dp"
-                                        android:layout_height="90dp"
-                                        android:layout_centerHorizontal="true"
-                                        android:src="@drawable/ic_user_profile"
-                                        app:civ_border_color="@color/on_brand_text"
-                                        app:civ_border_overlay="true"
-                                        app:civ_border_width="@dimen/one" />
-
-                                    <de.hdodenhof.circleimageview.CircleImageView
-                                        android:id="@+id/img_upload_photo"
-                                        android:layout_width="120dp"
-                                        android:layout_height="90dp"
-                                        android:layout_centerHorizontal="true"
-                                        app:civ_border_color="@color/on_brand_text"
-                                        app:civ_border_overlay="false"
-                                        app:civ_border_width="2dp" />
-
-                                    <LinearLayout
-                                        android:id="@+id/imageupload_progressbar"
-                                        android:layout_width="match_parent"
-                                        android:layout_height="80dp"
-                                        android:gravity="center">
-
-                                        <ProgressBar
-                                            android:layout_width="wrap_content"
-                                            android:layout_height="wrap_content"
-                                            android:layout_centerInParent="true"
-                                            android:visibility="visible" />
-                                    </LinearLayout>
-
-                                </RelativeLayout>
-
-
-                                <TextView
-                                    style="@style/TextStyle28"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_below="@id/img_upload_photo"
-                                    android:layout_centerHorizontal="true"
-                                    android:layout_marginTop="12dp"
-                                    android:text="Upload Photo"
-                                    android:visibility="gone" />
-
-
-                            </LinearLayout>
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_marginTop="-5dp"
-                                android:gravity="center|center_horizontal"
-                                android:layout_height="wrap_content">
-                                <CheckBox
-                                    android:id="@+id/checkBox2"
-                                    android:layout_width="wrap_content"
-                                    android:gravity="center"
-                                    android:layout_height="wrap_content"
-                                    android:textSize="@dimen/_12sdp"
-                                    android:buttonTint="@color/on_brand_text"
-                                    android:textColor="@color/on_brand_text" />
-                                <TextView
-                                    android:id="@+id/check_box"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:text="@string/terms_conditions"
-                                    android:textColor="@color/on_brand_text"
-                                    android:textSize="@dimen/_12sdp" />
-                            </LinearLayout>
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
                             <TextView
                                 android:id="@+id/username_text"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_gravity="center"
-                                android:layout_marginTop="@dimen/three"
-                                android:layout_marginBottom="@dimen/three"
-                                android:textColor="@color/on_brand_text"
-                                android:textSize="20dp"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:text="@string/profile_guest_name"
+                                android:textColor="@color/profile_way2_menu_text"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
                                 android:visibility="visible" />
 
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center">
-
-                                <ImageView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginRight="@dimen/_5sdp"
-                                    android:background="@drawable/ic_location_icon">
-
-                                </ImageView>
-
-                                <TextView
-                                    android:id="@+id/local_distic_name"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:layout_marginLeft="-5dp"
-                                    android:text="Hyderabad "
-                                    android:textColor="@color/on_brand_text"
-                                    android:textSize="18dp" />
-                            </LinearLayout>
-
-
-                            <LinearLayout
-                                android:id="@+id/login_button"
+                            <TextView
+                                android:id="@+id/reporter_role_pill"
                                 android:layout_width="wrap_content"
-                                android:layout_height="@dimen/_25sdp"
-                                android:layout_gravity="center"
-                                android:orientation="vertical">
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:background="@drawable/bg_reporter_role_pill"
+                                android:includeFontPadding="false"
+                                android:paddingStart="10dp"
+                                android:paddingTop="3dp"
+                                android:paddingEnd="10dp"
+                                android:paddingBottom="3dp"
+                                android:text="@string/profile_role_reporter"
+                                android:textColor="#FFFFFF"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
 
-                                <com.anyNews.anynews.Ui.NeomorphFrameLayout
-                                    android:id="@+id/login_neomorph_layout"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:layout_marginTop="@dimen/three"
-                                    app:layout_constraintBottom_toBottomOf="parent"
-                                    app:layout_constraintLeft_toLeftOf="parent"
-                                    app:layout_constraintRight_toRightOf="parent"
-                                    app:layout_constraintTop_toTopOf="parent"
-                                    app:neomorph_background_color="@color/chip_background"
-                                    app:neomorph_corner_radius="30dp"
-                                    app:neomorph_elevation="0dp"
-                                    app:neomorph_highlight_color="@color/red_one"
-                                    app:neomorph_layer_type="hardware"
-                                    app:neomorph_shadow_color="@color/red_one"
-                                    app:neomorph_shadow_type="outer"
-                                    app:neomorph_view_type="rectangular">
-
-                                    <LinearLayout
-                                        android:id="@+id/login"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="match_parent"
-                                        android:gravity="center"
-                                        android:orientation="horizontal">
-
-                                        <TextView
-                                            android:id="@+id/logintext"
-                                            android:layout_width="0dp"
-                                            android:layout_height="match_parent"
-                                            android:layout_weight="8"
-                                            android:background="@drawable/writer_profile_details"
-                                            android:gravity="center"
-                                            android:textColor="@color/red"
-                                            android:textSize="14sp"
-                                            android:textStyle="bold" />
-
-
-                                    </LinearLayout>
-
-
-                                </com.anyNews.anynews.Ui.NeomorphFrameLayout>
-
-                                <TextView
-                                    android:id="@+id/user_login_number"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:gravity="center"
-                                    android:text="+91 9703596929"
-                                    android:textColor="@color/on_brand_text"
-                                    android:textSize="18sp"
-                                    android:textStyle="bold"
-                                    android:visibility="gone" />
-
-                            </LinearLayout>
                         <LinearLayout
-                            android:id="@+id/progressMainLayout"
+                            android:id="@+id/login_button"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:visibility="gone"
-                            android:orientation="vertical">
-                            <com.skydoves.progressview.ProgressView
-                                android:id="@+id/progressView1"
+                            android:layout_marginTop="3dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/user_login_number"
                                 android:layout_width="match_parent"
-                                android:layout_height="@dimen/_15sdp"
-                                android:layout_marginStart="@dimen/_25sdp"
-                                android:layout_marginTop="@dimen/_3sdp"
-                                android:layout_marginEnd="@dimen/_25sdp"
-                                app:progressView_autoAnimate="true"
-                                app:progressView_colorBackground="@color/white"
-                                app:progressView_colorProgress="@color/payment_history_border_green"
-                                app:progressView_labelColorInner="@color/white"
-                                app:progressView_labelColorOuter="@color/black"
-                                app:progressView_labelSize="13sp"
-                                app:progressView_labelSpace="10dp"
-                                app:progressView_labelTypeface="bold"
-                                app:progressView_max="100"
-                                app:progressView_min="15"
-                                android:visibility="visible"
-                                app:progressView_padding="1dp"
-                                app:progressView_progressFromPrevious="true"
-                                app:progressView_radius="12dp" />
-
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:maxLines="2"
+                                android:text="@string/profile_guest_subtitle"
+                                android:textColor="@color/profile_way2_guest_sub"
+                                android:textSize="12sp"
+                                android:visibility="visible" />
                         </LinearLayout>
 
+                        <!-- Verified (reporter) -->
+                        <LinearLayout
+                            android:id="@+id/layout_profile_verified"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:visibility="gone">
 
+                            <TextView
+                                android:id="@+id/profile_verified_label"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:text="@string/profile_verified"
+                                android:textColor="@color/profile_verified_green"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <ImageView
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:layout_marginStart="4dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_reporter_verified_check" />
                         </LinearLayout>
 
-                    </FrameLayout>
-                </RelativeLayout>
+                        <TextView
+                            android:id="@+id/local_distic_name"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/profile_way2_label"
+                            android:textSize="12sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
 
+                    <!-- Login pill (guest) — also hosts legacy login ids -->
+                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                        android:id="@+id/login_neomorph_layout"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:visibility="visible"
+                        app:neomorph_background_color="@android:color/transparent"
+                        app:neomorph_corner_radius="22dp"
+                        app:neomorph_elevation="0dp"
+                        app:neomorph_highlight_color="@android:color/transparent"
+                        app:neomorph_layer_type="hardware"
+                        app:neomorph_shadow_color="@android:color/transparent"
+                        app:neomorph_shadow_type="outer"
+                        app:neomorph_view_type="rectangular">
 
+                        <LinearLayout
+                            android:id="@+id/login"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_profile_login_pill"
+                            android:gravity="center"
+                            android:minWidth="82dp"
+                            android:orientation="horizontal"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp">
+
+                            <TextView
+                                android:id="@+id/logintext"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:text="@string/profile_login_cta"
+                                android:textColor="@color/profile_way2_login_text"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                </LinearLayout>
+
+                <!-- Privacy check rows kept for photo upload (collapsed) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <CheckBox
+                        android:id="@+id/checkBox2"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="@color/profile_way2_menu_text"
+                        android:checked="true"
+                        android:textColor="@color/profile_way2_menu_text"
+                        android:textSize="@dimen/_12sdp" />
+
+                    <TextView
+                        android:id="@+id/check_box"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/terms_conditions"
+                        android:textColor="@color/profile_way2_menu_text"
+                        android:textSize="@dimen/_12sdp" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- Reporter: orange progress + Complete Profile (mock) -->
+            <LinearLayout
+                android:id="@+id/progressMainLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="22dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_reporter_progress_track">
+
+                    <View
+                        android:id="@+id/reporter_progress_fill"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_reporter_progress_fill" />
+
+                    <TextView
+                        android:id="@+id/reporter_progress_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:text="0% profile completed"
+                        android:textColor="@color/profile_way2_menu_text"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <!-- Legacy ProgressView id retained for API/label code paths -->
+                    <com.skydoves.progressview.ProgressView
+                        android:id="@+id/progressView1"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone"
+                        app:progressView_max="100"
+                        app:progressView_min="0" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_complete_profile"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="2dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="0dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/complete_profile_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:includeFontPadding="false"
+                        android:maxWidth="120dp"
+                        android:text="@string/profile_complete_profile"
+                        android:textColor="@color/brand_orange"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <ImageView
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_profile_chevron_right"
+                        app:tint="@color/brand_orange" />
+                </LinearLayout>
             </LinearLayout>
+
+            <!-- Hub always shown for all users (not nested under reporter-only reportLayout).
+                 Includes Language / Following / Follow / Share / Delete with uniform spacing. -->
+            <include layout="@layout/include_profile_hub" />
+
+            <!-- Legacy anchor kept for code paths that toggle userLayout; menu rows live in hub. -->
             <LinearLayout
                 android:id="@+id/userLayout"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="-50dp"
+                android:layout_height="0dp"
                 android:orientation="vertical"
-                android:visibility="gone"
-                android:background="@color/whitewithblack"
-                android:gravity="center">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="bottom"
-                    android:orientation="vertical">
-                    <androidx.cardview.widget.CardView
-                        android:layout_width="match_parent"
-                        android:layout_height="@dimen/_50sdp"
-                        android:background="@drawable/next"
-                        android:elevation="@dimen/_10sdp"
-                        android:layout_margin="@dimen/_10sdp"
-                        app:cardBackgroundColor="@color/white"
-                        app:cardCornerRadius="@dimen/_16sdp"
-                        android:orientation="horizontal">
-                        <LinearLayout
-                            android:id="@+id/layoutChangeLang"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:padding="@dimen/_5sdp"
-                            android:gravity="center|left">
-
-                            <ImageView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginLeft="@dimen/_10sdp"
-                                android:src="@drawable/ic_profile_language" />
-
-                            <TextView
-                                android:id="@+id/textViewLanguageNameUser"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textSize="@dimen/_14sdp"
-                                android:textColor="@color/profile_card_text"
-                                android:paddingLeft="@dimen/_16sdp"
-                                android:text="Language"/>
-                        </LinearLayout>
-
-
-                    </androidx.cardview.widget.CardView>
-                    <androidx.cardview.widget.CardView
-                        android:layout_width="match_parent"
-                        android:layout_height="@dimen/_50sdp"
-                        android:background="@drawable/next"
-                        android:elevation="@dimen/_10sdp"
-                        android:layout_margin="@dimen/_10sdp"
-                        app:cardBackgroundColor="@color/white"
-                        app:cardCornerRadius="@dimen/_16sdp"
-                        android:orientation="horizontal">
-                        <LinearLayout
-                            android:id="@+id/layoutFollowing"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:padding="@dimen/_5sdp"
-                            android:gravity="center|left">
-
-                            <ImageView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginLeft="@dimen/_10sdp"
-                                android:src="@drawable/ic_profile_following"/>
-
-                            <TextView
-                                android:id="@+id/textViewFollowingUser"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textSize="@dimen/_14sdp"
-                                android:textColor="@color/profile_card_text"
-                                android:paddingLeft="@dimen/_16sdp"
-                                android:text="Following"/>
-                        </LinearLayout>
-
-
-                    </androidx.cardview.widget.CardView>
-                    <androidx.cardview.widget.CardView
-                        android:layout_width="match_parent"
-                        android:layout_height="@dimen/_50sdp"
-                        android:background="@drawable/next"
-                        android:elevation="@dimen/_10sdp"
-                        android:layout_margin="@dimen/_10sdp"
-                        app:cardBackgroundColor="@color/white"
-                        app:cardCornerRadius="@dimen/_16sdp"
-                        android:orientation="horizontal">
-                        <LinearLayout
-                            android:id="@+id/layoutFollowMore"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:padding="@dimen/_5sdp"
-                            android:gravity="center|left">
-
-                            <ImageView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginLeft="@dimen/_10sdp"
-                                android:src="@drawable/ic_profile_followmore"/>
-
-                            <TextView
-                                android:id="@+id/textViewFollowMore"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textSize="@dimen/_14sdp"
-                                android:textColor="@color/profile_card_text"
-                                android:paddingLeft="@dimen/_16sdp"
-                                android:text="Follow More"/>
-                        </LinearLayout>
-                    </androidx.cardview.widget.CardView>
-                    <androidx.cardview.widget.CardView
-                        android:layout_width="match_parent"
-                        android:layout_height="@dimen/_50sdp"
-                        android:background="@drawable/next"
-                        android:elevation="@dimen/_10sdp"
-                        android:layout_margin="@dimen/_10sdp"
-                        app:cardBackgroundColor="@color/white"
-                        app:cardCornerRadius="@dimen/_16sdp"
-                        android:orientation="horizontal">
-                        <LinearLayout
-                            android:id="@+id/layoutAppShare"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:padding="@dimen/_5sdp"
-                            android:gravity="center|left">
-
-                            <ImageView
-                                android:layout_width="wrap_content"
-                                android:layout_height="@dimen/_38sdp"
-                                android:layout_marginLeft="@dimen/_10sdp"
-                                android:src="@drawable/ic_profile_share"/>
-
-                            <TextView
-                                android:id="@+id/textViewShareEarnUser"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textSize="@dimen/_14sdp"
-                                android:textColor="@color/profile_card_text"
-                                android:paddingLeft="@dimen/_16sdp"
-                                android:text="Share &amp; Earn"/>
-                        </LinearLayout>
-
-
-                    </androidx.cardview.widget.CardView>
-                    <androidx.cardview.widget.CardView
-                        android:layout_width="match_parent"
-                        android:layout_height="@dimen/_50sdp"
-                        android:background="@drawable/next"
-                        android:elevation="@dimen/_10sdp"
-                        android:layout_margin="@dimen/_10sdp"
-                        app:cardBackgroundColor="@color/white"
-                        app:cardCornerRadius="@dimen/_16sdp"
-                        android:orientation="horizontal">
-                        <LinearLayout
-                            android:id="@+id/layoutAppDelete"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:padding="@dimen/_5sdp"
-                            android:gravity="center|left">
-
-                            <ImageView
-                                android:layout_width="wrap_content"
-                                android:layout_height="@dimen/_38sdp"
-                                android:layout_marginLeft="@dimen/_10sdp"
-                                android:src="@drawable/ic_delete_account"/>
-
-                            <TextView
-                                android:id="@+id/textViewAppDelete"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textSize="@dimen/_14sdp"
-                                android:textColor="@color/profile_card_text"
-                                android:paddingLeft="@dimen/_16sdp"
-                                android:text="Delete Account"/>
-                        </LinearLayout>
-
-
-                    </androidx.cardview.widget.CardView>
-
-                </LinearLayout>
-            </LinearLayout>
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/reportLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="-50dp"
-                android:visibility="visible"
-                android:background="@color/whitewithblack"
+                android:layout_marginTop="0dp"
+                android:visibility="gone"
+                android:background="@color/profile_hub_scrim"
                 android:orientation="vertical">
 
                 <LinearLayout
@@ -509,10 +621,11 @@
                     android:layout_height="@dimen/_80sdp"
                     android:gravity="center">
 
-                    <LinearLayout
-                        android:id="@+id/payment_layout"
-                        android:layout_width="match_parent"
-                        android:layout_height="@dimen/_80sdp">
+                <LinearLayout
+                    android:id="@+id/payment_layout"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/_80sdp"
+                    android:visibility="gone">
 
 
                         <LinearLayout
@@ -535,7 +648,7 @@
                                     <LinearLayout
                                         android:layout_width="match_parent"
                                         android:layout_height="match_parent"
-                                        android:background="@drawable/next"
+                                        android:background="@drawable/bg_glass_menu_row"
                                         android:gravity="center"
                                         android:orientation="horizontal">
 
@@ -629,7 +742,7 @@
                                     android:id="@+id/next_payment"
                                     android:layout_width="match_parent"
                                     android:layout_height="match_parent"
-                                    android:background="@drawable/next"
+                                    android:background="@drawable/bg_glass_menu_row"
                                     android:gravity="center"
                                     android:orientation="horizontal">
 
@@ -779,7 +892,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -863,7 +976,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -957,7 +1070,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -1041,7 +1154,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -1137,7 +1250,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -1222,7 +1335,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -1280,7 +1393,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -1326,7 +1439,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -1378,7 +1491,7 @@
                             android:layout_width="0dp"
                             android:layout_height="@dimen/_75sdp"
                             android:layout_weight="1"
-                            android:background="@drawable/next"
+                            android:background="@drawable/bg_glass_menu_row"
                             android:gravity="center"
                             android:visibility="gone"
                             android:orientation="horizontal">
@@ -1426,7 +1539,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -1486,7 +1599,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
@@ -1531,7 +1644,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="@dimen/_75sdp"
                                 android:layout_weight="1"
-                                android:background="@drawable/next"
+                                android:background="@drawable/bg_glass_menu_row"
                                 android:gravity="center"
                                 android:visibility="gone"
                                 android:orientation="horizontal">
@@ -1654,3 +1767,10 @@
         </LinearLayout>
     </LinearLayout>
 </ScrollView>
+
+    <include layout="@layout/include_profile_footer_nav" />
+    </LinearLayout>
+
+    <!-- Approved-reporter create FAB overlays footer (Twitter-style end, AnyNews orange). -->
+    <include layout="@layout/include_profile_reporter_fab" />
+</FrameLayout>

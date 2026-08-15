@@ -1,18 +1,29 @@
 package com.anyNews.anynews.Activities;
 
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-
+import android.Manifest;
+import android.content.ActivityNotFoundException;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.os.CountDownTimer;
+import android.provider.Settings;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
-import com.anyNews.anynews.Adapters.SettingAdopterData;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SwitchCompat;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
+
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.GetSettingsResponse;
@@ -23,12 +34,22 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.NightModeHelper;
+import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
-import com.anyNews.anynews.models.SettingsModel;
+import com.bumptech.glide.Glide;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.nostra13.universalimageloader.core.ImageLoader;
+import com.permissionx.guolindev.PermissionX;
+import com.permissionx.guolindev.callback.ExplainReasonCallback;
+import com.permissionx.guolindev.callback.ForwardToSettingsCallback;
+import com.permissionx.guolindev.callback.RequestCallback;
+import com.permissionx.guolindev.request.ExplainScope;
+import com.permissionx.guolindev.request.ForwardScope;
 
-import java.util.ArrayList;
+import java.io.File;
+import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -38,140 +59,642 @@ import static com.anyNews.anynews.Utils.AppHelper.showLog;
 import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
+/**
+ * Settings screen matching light/dark mocks: banner, 4-toggle card, action pair, contact rows.
+ * Pref keys live on {@link Constants} under PREF_NAME ("my_pref").
+ * Night mode via {@link NightModeHelper} (smooth switch, no freeze).
+ * Toggle-column visibility from admin {@link ProfileHubConfigHelper} splash flags.
+ */
 public class Settings_Scrren extends AppCompatActivity {
 
-    ArrayList<SettingsModel>List_name;
-    LinearLayoutManager linearLayoutManager;
-    SettingAdopterData settingsAdopter;
-    RecyclerView recyclerView;
-    ImageView go_back;
-    CountDownTimer countDownTimer;
+    private ImageView goBack;
+    private TextView appVersionId;
+    private TextView settingsTitle;
+    private SwitchCompat switchNotifications;
+    private SwitchCompat switchAutoplay;
+    private SwitchCompat switchNight;
+    private SwitchCompat switchLocal;
 
-    LanguageModelResponse languageModelResponse;
-    Allsharedpreference prefShare;
+    private LanguageModelResponse languageModelResponse;
+    private Allsharedpreference prefShare;
+    private boolean suppressToggleCallbacks;
+    /** User turned notifications ON while system permission was off — re-check on resume. */
+    private boolean pendingEnableNotifications;
 
-    String version_name;
-    TextView app_version_id;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(ContextCompat.getColor(this, R.color.settings_page_bg));
+        getWindow().setNavigationBarColor(ContextCompat.getColor(this, R.color.settings_page_bg));
         setContentView(R.layout.activity_settings__scrren);
-        go_back=findViewById(R.id.go_back);
-        recyclerView=findViewById(R.id.settings_details);
-        app_version_id=findViewById(R.id.app_version_id);
-        List_name=new ArrayList<>();
 
-        go_back.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                finish();
-            }
-        });
-
-        setStaticdata();
-
+        bindViews();
+        applyToggleVisibility();
+        applyLocalizedLabels();
+        setVersionLabel();
+        wireClicks();
+        loadLocalToggleState();
         getSettingsApi();
-
     }
 
-    private void setStaticdata() {
-        prefShare = new Allsharedpreference(Settings_Scrren.this);
-        Gson gson = new Gson();
-        String Translation = prefShare.getShared_String(Allsharedpreference.Translator);
-        languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (pendingEnableNotifications && isSystemNotificationsEnabled()) {
+            pendingEnableNotifications = false;
+            persistNotificationPreference(true);
+            updateNotificationApi(true);
+        }
+        // System tray can change while activity is paused — never show ON without OS consent.
+        applyNotificationSwitchState();
+    }
 
-        PackageManager manager = getApplicationContext().getPackageManager();
+    /** Real phone Settings → App notifications (POST_NOTIFICATIONS / channel master). */
+    private boolean isSystemNotificationsEnabled() {
         try {
-            PackageInfo info = manager.getPackageInfo(
-                    getApplicationContext().getPackageName(), 0);
+            return NotificationManagerCompat.from(this).areNotificationsEnabled();
+        } catch (Exception e) {
+            return true;
+        }
+    }
 
+    private boolean isUserNotificationPrefEnabled() {
+        return SharedPrefsData.getBool(
+                this, Constants.NOTIFICATION_ENABLED, Constants.PREF_NAME, true);
+    }
 
-            version_name = info.versionName;
+    /**
+     * Toggle reflects both user preference and system permission: OS off ⇒ switch off.
+     */
+    private void applyNotificationSwitchState() {
+        if (switchNotifications == null) return;
+        suppressToggleCallbacks = true;
+        boolean showOn = isSystemNotificationsEnabled() && isUserNotificationPrefEnabled();
+        switchNotifications.setChecked(showOn);
+        suppressToggleCallbacks = false;
+    }
 
-            app_version_id.setText(" "+languageModelResponse.getData().getVersion()+"  "+version_name);
+    private void persistNotificationPreference(boolean enabled) {
+        SharedPrefsData.putBool(
+                this, Constants.NOTIFICATION_ENABLED, enabled, Constants.PREF_NAME);
+        SharedPrefsData.putBool(
+                this, Constants.switchNotification, enabled, Constants.PREF_NAME);
+    }
 
+    private void openAppNotificationSettings() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                intent.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+                startActivity(intent);
+                return;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, getPackageName(), Toast.LENGTH_SHORT).show();
+        }
+    }
 
+    private void bindViews() {
+        goBack = findViewById(R.id.go_back);
+        appVersionId = findViewById(R.id.app_version_id);
+        settingsTitle = findViewById(R.id.settings_title);
+        switchNotifications = findViewById(R.id.switch_notifications);
+        switchAutoplay = findViewById(R.id.switch_autoplay);
+        switchNight = findViewById(R.id.switch_night);
+        switchLocal = findViewById(R.id.switch_local);
+    }
+
+    /**
+     * Admin flags hide toggle columns; GONE cells drop out of the weight row so 2–3
+     * remaining columns fill without empty holes (weightSum = visible count).
+     */
+    private void applyToggleVisibility() {
+        View cellNotif = findViewById(R.id.cell_notifications);
+        View cellAutoplay = findViewById(R.id.cell_autoplay);
+        View cellNight = findViewById(R.id.cell_night);
+        View cellLocal = findViewById(R.id.cell_local);
+        setCellVisible(cellNotif, ProfileHubConfigHelper.isSettingsShowNotifications(this));
+        setCellVisible(cellAutoplay, ProfileHubConfigHelper.isSettingsShowVideoAutoplay(this));
+        setCellVisible(cellNight, ProfileHubConfigHelper.isSettingsShowNightMode(this));
+        setCellVisible(cellLocal, ProfileHubConfigHelper.isSettingsShowLocalStories(this));
+
+        LinearLayout row = findViewById(R.id.row_settings_toggles);
+        if (row == null) return;
+        int visible = 0;
+        for (int i = 0; i < row.getChildCount(); i++) {
+            if (row.getChildAt(i).getVisibility() == View.VISIBLE) visible++;
+        }
+        if (visible <= 0) {
+            row.setVisibility(View.GONE);
+        } else {
+            row.setVisibility(View.VISIBLE);
+            row.setWeightSum(visible);
+        }
+    }
+
+    private static void setCellVisible(View cell, boolean show) {
+        if (cell != null) {
+            cell.setVisibility(show ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void applyLocalizedLabels() {
+        prefShare = new Allsharedpreference(this);
+        try {
+            String translation = prefShare.getShared_String(Allsharedpreference.Translator);
+            languageModelResponse = new Gson().fromJson(translation, LanguageModelResponse.class);
+        } catch (Exception ignored) {
+            languageModelResponse = null;
+        }
+
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+
+        if (settingsTitle != null) {
+            settingsTitle.setText(
+                    firstNonEmpty(
+                            d != null ? d.getSettings() : null, getString(R.string.settings_title)));
+        }
+
+        setText(R.id.banner_missing_link, getString(R.string.settings_missing_notifications));
+        setText(R.id.banner_missing_sub, getString(R.string.settings_missing_notifications_sub));
+        setText(R.id.banner_know_more, getString(R.string.settings_know_more));
+
+        setText(
+                R.id.label_notifications,
+                firstNonEmpty(
+                        d != null ? d.getNotifications() : null,
+                        getString(R.string.settings_notifications)));
+        setText(R.id.label_autoplay, getString(R.string.settings_video_autoplay));
+        setText(R.id.label_night, getString(R.string.settings_night_mode));
+        setText(
+                R.id.label_local,
+                firstNonEmpty(
+                        d != null ? d.getLocal() : null, getString(R.string.settings_local_stories)));
+
+        setText(R.id.label_bookmarks, getString(R.string.settings_bookmarks));
+        setText(R.id.label_clear_cache, getString(R.string.settings_clear_cache));
+
+        bindLinkRow(
+                R.id.row_rate,
+                firstNonEmpty(
+                        d != null ? d.getRateThisApp() : null,
+                        getString(R.string.settings_rate_app)));
+        bindLinkRow(
+                R.id.row_terms,
+                firstNonEmpty(
+                        d != null ? d.getTermsAndConditions() : null,
+                        getString(R.string.settings_terms)));
+        bindLinkRow(
+                R.id.row_privacy,
+                firstNonEmpty(
+                        d != null ? d.getPrivacy() : null, getString(R.string.settings_privacy)));
+        bindLinkRow(
+                R.id.row_contact,
+                firstNonEmpty(
+                        d != null ? d.getContactUs() : null, getString(R.string.settings_contact)));
+
+        TextView section = findViewById(R.id.section_contact);
+        if (section != null) {
+            section.setText(
+                    firstNonEmpty(
+                            d != null ? d.getContactUs() : null,
+                            getString(R.string.settings_contact_section)));
+        }
+    }
+
+    private void setText(int id, String value) {
+        TextView tv = findViewById(id);
+        if (tv != null && value != null) tv.setText(value);
+    }
+
+    private void bindLinkRow(int includeId, String label) {
+        View row = findViewById(includeId);
+        if (row == null) return;
+        TextView tv = row.findViewById(R.id.settings_link_label);
+        if (tv != null) tv.setText(label);
+    }
+
+    private static boolean notEmpty(String s) {
+        return s != null && !s.trim().isEmpty() && !"null".equalsIgnoreCase(s.trim());
+    }
+
+    private static String firstNonEmpty(String a, String b) {
+        return notEmpty(a) ? a.trim() : b;
+    }
+
+    private void setVersionLabel() {
+        String version = "";
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            version = info.versionName != null ? info.versionName : "";
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
         }
-       // Toast.makeText(Settings_Scrren.this, ""+languageModelResponse.getData().getVersion(), Toast.LENGTH_SHORT).show();
-
+        if (languageModelResponse != null
+                && languageModelResponse.getData() != null
+                && notEmpty(languageModelResponse.getData().getVersion())) {
+            String prefix = languageModelResponse.getData().getVersion().trim();
+            if (prefix.regionMatches(true, 0, "App Version", 0, "App Version".length())) {
+                appVersionId.setText(getString(R.string.settings_app_version, version));
+            } else {
+                appVersionId.setText(prefix + " " + version);
+            }
+        } else {
+            appVersionId.setText(getString(R.string.settings_app_version, version));
+        }
     }
 
+    private void loadLocalToggleState() {
+        suppressToggleCallbacks = true;
+        boolean autoplay =
+                SharedPrefsData.getBool(this, Constants.VIDEO_AUTOPLAY, Constants.PREF_NAME, true);
+        boolean night = NightModeHelper.isEnabled(this);
+        boolean local =
+                SharedPrefsData.getBool(this, Constants.LOCAL_STORIES, Constants.PREF_NAME, false);
 
-    private JsonObject set_setting_detailes() {
+        if (switchAutoplay != null) switchAutoplay.setChecked(autoplay);
+        if (switchNight != null) switchNight.setChecked(night);
+        if (switchLocal != null) switchLocal.setChecked(local);
+        suppressToggleCallbacks = false;
+        applyNotificationSwitchState();
+    }
 
+    private void wireClicks() {
+        goBack.setOnClickListener(v -> finish());
+
+        View.OnClickListener openHelp =
+                v -> startActivity(new Intent(Settings_Scrren.this, NotificationHelpActivity.class));
+        View banner = findViewById(R.id.banner_missing_notifications);
+        if (banner != null) banner.setOnClickListener(openHelp);
+        View bannerLink = findViewById(R.id.banner_missing_link);
+        if (bannerLink != null) bannerLink.setOnClickListener(openHelp);
+        View knowMore = findViewById(R.id.banner_know_more);
+        if (knowMore != null) knowMore.setOnClickListener(openHelp);
+
+        if (switchNotifications != null) {
+            switchNotifications.setOnCheckedChangeListener(
+                    (buttonView, isChecked) -> {
+                        if (suppressToggleCallbacks) return;
+                        if (isChecked) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                                    && ContextCompat.checkSelfPermission(
+                                                    this, Manifest.permission.POST_NOTIFICATIONS)
+                                            != PackageManager.PERMISSION_GRANTED) {
+                                pendingEnableNotifications = true;
+                                applyNotificationSwitchState();
+                                PermissionX.init(this)
+                                        .permissions(Manifest.permission.POST_NOTIFICATIONS)
+                                        .onExplainRequestReason(
+                                                new ExplainReasonCallback() {
+                                                    @Override
+                                                    public void onExplainReason(
+                                                            @NonNull ExplainScope scope,
+                                                            @NonNull List<String> deniedList) {
+                                                        scope.showRequestReasonDialog(
+                                                                deniedList,
+                                                                "Please allow notifications",
+                                                                "OK",
+                                                                "Cancel");
+                                                    }
+                                                })
+                                        .onForwardToSettings(
+                                                new ForwardToSettingsCallback() {
+                                                    @Override
+                                                    public void onForwardToSettings(
+                                                            @NonNull ForwardScope scope,
+                                                            @NonNull List<String> deniedList) {
+                                                        scope.showForwardToSettingsDialog(
+                                                                deniedList,
+                                                                "Please allow notifications in system settings",
+                                                                "OK",
+                                                                "Cancel");
+                                                    }
+                                                })
+                                        .request(
+                                                new RequestCallback() {
+                                                    @Override
+                                                    public void onResult(
+                                                            boolean allGranted,
+                                                            @NonNull List<String> grantedList,
+                                                            @NonNull List<String> deniedList) {
+                                                        if (allGranted
+                                                                && isSystemNotificationsEnabled()) {
+                                                            pendingEnableNotifications = false;
+                                                            persistNotificationPreference(true);
+                                                            updateNotificationApi(true);
+                                                            applyNotificationSwitchState();
+                                                        } else if (!allGranted
+                                                                && !isSystemNotificationsEnabled()) {
+                                                            openAppNotificationSettings();
+                                                        } else {
+                                                            applyNotificationSwitchState();
+                                                        }
+                                                    }
+                                                });
+                                return;
+                            }
+                            if (!isSystemNotificationsEnabled()) {
+                                // Cannot pretend enabled — open phone Settings and re-check on return.
+                                pendingEnableNotifications = true;
+                                applyNotificationSwitchState();
+                                openAppNotificationSettings();
+                                return;
+                            }
+                            pendingEnableNotifications = false;
+                            persistNotificationPreference(true);
+                            updateNotificationApi(true);
+                        } else {
+                            pendingEnableNotifications = false;
+                            persistNotificationPreference(false);
+                            updateNotificationApi(false);
+                        }
+                    });
+        }
+
+        if (switchAutoplay != null) {
+            switchAutoplay.setOnCheckedChangeListener(
+                    (buttonView, isChecked) -> {
+                        if (suppressToggleCallbacks) return;
+                        SharedPrefsData.putBool(
+                                this, Constants.VIDEO_AUTOPLAY, isChecked, Constants.PREF_NAME);
+                    });
+        }
+
+        if (switchNight != null) {
+            switchNight.setOnCheckedChangeListener(
+                    (buttonView, isChecked) -> {
+                        if (suppressToggleCallbacks) return;
+                        NightModeHelper.setUserNightModeFromSettings(Settings_Scrren.this, isChecked);
+                    });
+        }
+
+        if (switchLocal != null) {
+            switchLocal.setOnCheckedChangeListener(
+                    (buttonView, isChecked) -> {
+                        if (suppressToggleCallbacks) return;
+                        SharedPrefsData.putBool(
+                                this, Constants.LOCAL_STORIES, isChecked, Constants.PREF_NAME);
+                    });
+        }
+
+        View btnBookmarks = findViewById(R.id.btn_bookmarks);
+        if (btnBookmarks != null) {
+            btnBookmarks.setOnClickListener(
+                    v ->
+                            startActivity(
+                                    new Intent(Settings_Scrren.this, BookmarksActivity.class)));
+        }
+
+        View btnClear = findViewById(R.id.btn_clear_cache);
+        if (btnClear != null) {
+            btnClear.setOnClickListener(v -> clearAppCache());
+        }
+
+        View rowRate = findViewById(R.id.row_rate);
+        if (rowRate != null) rowRate.setOnClickListener(v -> openPlayStoreRate());
+        View rowTerms = findViewById(R.id.row_terms);
+        if (rowTerms != null) rowTerms.setOnClickListener(v -> openLegalWeb("1"));
+        View rowPrivacy = findViewById(R.id.row_privacy);
+        if (rowPrivacy != null) rowPrivacy.setOnClickListener(v -> openLegalWeb("2"));
+        View rowContact = findViewById(R.id.row_contact);
+        if (rowContact != null) rowContact.setOnClickListener(v -> openContactDialog());
+    }
+
+    private void openPlayStoreRate() {
+        final String appPackageName = getPackageName();
+        try {
+            Intent market =
+                    new Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("market://details?id=" + appPackageName));
+            market.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(market);
+        } catch (ActivityNotFoundException e) {
+            try {
+                startActivity(
+                        new Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse(
+                                        "https://play.google.com/store/apps/details?id="
+                                                + appPackageName)));
+            } catch (ActivityNotFoundException ignored) {
+                Toast.makeText(this, appPackageName, Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private void openLegalWeb(String sessionId) {
+        Intent intent = new Intent(this, TermsAndCondition.class);
+        intent.putExtra("EXTRA_SESSION_ID", sessionId);
+        startActivity(intent);
+    }
+
+    private void openContactDialog() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        String title =
+                firstNonEmpty(
+                        d != null ? d.getContactUs() : null, getString(R.string.settings_contact));
+        String optCrash =
+                firstNonEmpty(
+                        d != null ? d.getReportCrash() : null,
+                        getString(R.string.settings_contact_report_crash));
+        String optLang =
+                firstNonEmpty(
+                        d != null ? d.getLanguageIssue() : null,
+                        getString(R.string.settings_contact_language_issue));
+        String optFeedback =
+                firstNonEmpty(
+                        d != null ? d.getFeedback() : null, getString(R.string.settings_feedback));
+        final String[] options = {optCrash, optLang, optFeedback};
+
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setItems(
+                        options,
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                String subject =
+                                        which >= 0 && which < options.length
+                                                ? options[which]
+                                                : title;
+                                openMailto(subject + " — AnyNews");
+                            }
+                        })
+                .show();
+    }
+
+    private void openMailto(String subject) {
+        String to = ProfileHubConfigHelper.getContactEmail(this);
+        try {
+            Intent intent = new Intent(Intent.ACTION_SENDTO);
+            intent.setData(Uri.parse("mailto:" + to));
+            intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+            startActivity(Intent.createChooser(intent, getString(R.string.profile_contact_us)));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, to, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void clearAppCache() {
+        try {
+            Glide.get(this).clearMemory();
+        } catch (Exception ignored) {
+        }
+        new Thread(
+                        () -> {
+                            try {
+                                Glide.get(getApplicationContext()).clearDiskCache();
+                            } catch (Exception ignored) {
+                            }
+                            try {
+                                if (ImageLoader.getInstance().isInited()) {
+                                    ImageLoader.getInstance().clearDiskCache();
+                                    ImageLoader.getInstance().clearMemoryCache();
+                                }
+                            } catch (Exception ignored) {
+                            }
+                            deleteDir(getCacheDir());
+                            File external = getExternalCacheDir();
+                            if (external != null) deleteDir(external);
+                            runOnUiThread(
+                                    () ->
+                                            Toast.makeText(
+                                                            Settings_Scrren.this,
+                                                            R.string.settings_cache_cleared,
+                                                            Toast.LENGTH_SHORT)
+                                                    .show());
+                        })
+                .start();
+    }
+
+    private static boolean deleteDir(File dir) {
+        if (dir == null || !dir.exists()) return false;
+        if (dir.isDirectory()) {
+            File[] children = dir.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteDir(child);
+                }
+            }
+        }
+        return dir.delete();
+    }
+
+    private JsonObject buildSettingsBody() {
         LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
-
-        requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
-
-        String jsonString = new com.google.gson.Gson().toJson(requestModel);
-        String encrpt_data = null;
-        /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            encrpt_data = encrypt(jsonString);
-        }*/
-        encrpt_data = encrypt(jsonString);
-        showLog("API REQUEST E" + jsonString.toString());
-        EncritonRequestData Encriton_Request=new EncritonRequestData();
-        Encriton_Request.setData(encrpt_data);
-        return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
-
+        requestModel.setDraftId(
+                SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
+        String jsonString = new Gson().toJson(requestModel);
+        String encrpt_data = encrypt(jsonString);
+        showLog("API REQUEST E" + jsonString);
+        EncritonRequestData body = new EncritonRequestData();
+        body.setData(encrpt_data);
+        return new Gson().toJsonTree(body).getAsJsonObject();
     }
-    public void getSettingsApi(){
 
-        JsonObject otp = set_setting_detailes();
-        showLog("API REQ   "+otp.toString());
+    private JsonObject buildUpdateNotificationBody(boolean value) {
+        LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
+        requestModel.setDraftId(
+                SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+        requestModel.setProperty("notification_flag");
+        requestModel.setValue(value);
+        // Explicit only while still due (server also converts when shown_at already set).
+        if (value
+                && SharedPrefsData.getBool(
+                        this, Constants.NOTIFICATION_REPROMPT_DUE, Constants.PREF_NAME, false)) {
+            requestModel.setViaReprompt(true);
+        }
+        String jsonString = new Gson().toJson(requestModel);
+        String encrpt_data = encrypt(jsonString);
+        EncritonRequestData body = new EncritonRequestData();
+        body.setData(encrpt_data);
+        return new Gson().toJsonTree(body).getAsJsonObject();
+    }
+
+    public void getSettingsApi() {
         APIService apiService = RestApiClient.getClient().create(APIService.class);
-        Call<EncreptionRequest> apiResponse = apiService.get_settings("v3",otp);
-
-        apiResponse.enqueue(new Callback<EncreptionRequest>() {
-            @Override
-            public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-
-                EncreptionRequest encreptionRequest=response.body();
-                showLog("RES"+response.body().getData());
-                showLog("API REQUEST R"+decrypt(response.body().getData()));
-                String encrpt_data = null;
-                /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    encrpt_data = decrypt(encreptionRequest.getData());
-                }*/
-                encrpt_data = decrypt(encreptionRequest.getData());
-
-                showLog("ENCRYPT"+encrpt_data);
-
-                Gson gsonObj = new Gson();
-                GetSettingsResponse languageModel= gsonObj.fromJson(encrpt_data, GetSettingsResponse.class);
-
-
-                    if (languageModel.getSuccess()) {
-
-
-                            linearLayoutManager=new LinearLayoutManager(Settings_Scrren.this);
-
-                        //    List_name.add(new SettingsModel(languageModelResponse.getData().getLanguage(),1));
-                            List_name.add(new SettingsModel(languageModelResponse.getData().getNotifications(),2));
-                            List_name.add(new SettingsModel(languageModelResponse.getData().getRateThisApp(),3));
-                            List_name.add(new SettingsModel(languageModelResponse.getData().getTermsAndConditions(),4));
-                            List_name.add(new SettingsModel(languageModelResponse.getData().getPrivacy(),5));
-                            List_name.add(new SettingsModel(languageModelResponse.getData().getContactUs(),6));
-
-                            settingsAdopter=new SettingAdopterData(Settings_Scrren.this,List_name,languageModel.getData().getNotificationFlag());
-                            recyclerView.setLayoutManager(linearLayoutManager);
-                            recyclerView.setAdapter(settingsAdopter);
-
-
+        Call<EncreptionRequest> apiResponse = apiService.get_settings("v3", buildSettingsBody());
+        apiResponse.enqueue(
+                new Callback<EncreptionRequest>() {
+                    @Override
+                    public void onResponse(
+                            Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                        try {
+                            if (response.body() == null || response.body().getData() == null)
+                                return;
+                            String plain = decrypt(response.body().getData());
+                            GetSettingsResponse model =
+                                    new Gson().fromJson(plain, GetSettingsResponse.class);
+                            if (model != null
+                                    && model.getSuccess()
+                                    && model.getData() != null
+                                    && model.getData().getNotificationFlag() != null) {
+                                boolean on =
+                                        Boolean.TRUE.equals(
+                                                model.getData().getNotificationFlag());
+                                // Server opt-in preference; switch still respects system permission.
+                                persistNotificationPreference(on);
+                                applyNotificationSwitchState();
+                                if (model.getData().getNotificationRepromptDue() != null) {
+                                    SharedPrefsData.putBool(
+                                            Settings_Scrren.this,
+                                            Constants.NOTIFICATION_REPROMPT_DUE,
+                                            Boolean.TRUE.equals(
+                                                    model.getData().getNotificationRepromptDue()),
+                                            Constants.PREF_NAME);
+                                }
+                                if (model.getData().getNotificationRepromptEnabled() != null) {
+                                    SharedPrefsData.putBool(
+                                            Settings_Scrren.this,
+                                            Constants.NOTIFICATION_REPROMPT_ENABLED,
+                                            Boolean.TRUE.equals(
+                                                    model.getData()
+                                                            .getNotificationRepromptEnabled()),
+                                            Constants.PREF_NAME);
+                                }
+                            }
+                        } catch (Exception e) {
+                            showLog("settings parse error " + e.getMessage());
+                        }
                     }
 
-
-                }
-
-
-            @Override
-            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
-            }
-        });
+                    @Override
+                    public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                        showLog(
+                                "settings get failed "
+                                        + (t != null ? t.getMessage() : ""));
+                    }
+                });
     }
 
+    private void updateNotificationApi(boolean value) {
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        Call<EncreptionRequest> apiResponse =
+                apiService.update_settings("v3", buildUpdateNotificationBody(value));
+        apiResponse.enqueue(
+                new Callback<EncreptionRequest>() {
+                    @Override
+                    public void onResponse(
+                            Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                        // server ack only
+                    }
+
+                    @Override
+                    public void onFailure(Call<EncreptionRequest> call, Throwable t) {}
+                });
+    }
+
+    public static void applyStoredNightMode(Context context) {
+        NightModeHelper.applyStoredPreference(context);
+    }
 }

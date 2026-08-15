@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/telugu_calendar_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:fitsSystemWindows="false">
+
+    <!-- Same article-style FlipView as HomePage (vertical page fold), not ViewPager 3D. -->
+    <com.anyNews.anynews.flipview.FlipView
+        android:id="@+id/telugu_calendar_flip_pager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000" />
+
+    <!--
+      Same blue circular Share as Special/full posts (FlipperAdapter full_image_share_bg
+      → R.drawable.ic_share_full). Slow blink via R.anim.blink_share in controller.
+      Bottom-right of content, above the HomePage footer tab bar.
+      Sheets below this node in z-order cover it while open.
+    -->
+    <ImageView
+        android:id="@+id/telugu_calendar_blink_share"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="@dimen/_20sdp"
+        android:layout_marginBottom="64dp"
+        android:contentDescription="@string/telugu_calendar_share_day"
+        android:padding="12dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_share_full" />
+
+    <!-- Festivals bottom sheet -->
+    <FrameLayout
+        android:id="@+id/telugu_calendar_sheet_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/telugu_calendar_sheet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_calendar_sheet"
+            android:elevation="8dp"
+            android:orientation="vertical"
+            android:paddingBottom="16dp">
+
+            <ImageView
+                android:id="@+id/telugu_calendar_sheet_close"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_calendar_close_circle"
+                android:contentDescription="@string/cancel"
+                android:padding="8dp"
+                android:src="@drawable/ic_calendar_close" />
+
+            <TextView
+                android:id="@+id/telugu_calendar_festivals_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/telugu_calendar_festivals_title"
+                android:textColor="#111111"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="280dp"
+                android:layout_marginTop="8dp"
+                android:fillViewport="false">
+
+                <LinearLayout
+                    android:id="@+id/telugu_calendar_festival_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="8dp" />
+            </ScrollView>
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Find-your-raasi form sheet (white modal style); IME-safe via NestedScrollView + controller padding -->
+    <FrameLayout
+        android:id="@+id/telugu_calendar_raasi_form_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/raasi_form_sheet_column"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/raasi_form_close"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_calendar_close_circle"
+                android:contentDescription="@string/cancel"
+                android:padding="8dp"
+                android:src="@drawable/ic_calendar_close" />
+
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/raasi_form_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipToPadding="false"
+                android:fillViewport="false"
+                android:overScrollMode="ifContentScrolls"
+                android:scrollbars="vertical">
+
+                <LinearLayout
+                    android:id="@+id/telugu_calendar_raasi_form"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/bg_raasi_sheet"
+                    android:elevation="10dp"
+                    android:orientation="vertical"
+                    android:paddingStart="16dp"
+                    android:paddingTop="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="24dp">
+
+                    <TextView
+                        android:id="@+id/raasi_form_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="start"
+                        android:text="@string/telugu_calendar_know_raasi_title"
+                        android:textColor="#111111"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/raasi_form_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="14dp"
+                        android:background="@drawable/bg_raasi_form_field"
+                        android:hint="@string/telugu_calendar_full_name"
+                        android:imeOptions="actionNext"
+                        android:inputType="textPersonName"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:textColor="#111111"
+                        android:textColorHint="#888888"
+                        android:textSize="14sp" />
+
+                    <EditText
+                        android:id="@+id/raasi_form_dob"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_raasi_form_field"
+                        android:clickable="true"
+                        android:focusable="false"
+                        android:hint="@string/telugu_calendar_dob_time"
+                        android:inputType="none"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:textColor="#111111"
+                        android:textColorHint="#888888"
+                        android:textSize="14sp" />
+
+                    <EditText
+                        android:id="@+id/raasi_form_place"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_raasi_form_field"
+                        android:hint="@string/telugu_calendar_birth_place"
+                        android:imeOptions="actionDone"
+                        android:inputType="text"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:textColor="#111111"
+                        android:textColorHint="#888888"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/raasi_form_submit"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="8dp"
+                        android:background="@drawable/bg_raasi_form_submit"
+                        android:gravity="center"
+                        android:text="@string/telugu_calendar_submit"
+                        android:textColor="#FFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Full raasi detail modal (competitor-style dark sheet) -->
+    <FrameLayout
+        android:id="@+id/telugu_calendar_raasi_detail_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:paddingBottom="0dp">
+
+            <ImageView
+                android:id="@+id/raasi_detail_close"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/bg_calendar_close_circle"
+                android:contentDescription="@string/cancel"
+                android:padding="8dp"
+                android:src="@drawable/ic_calendar_close" />
+
+            <LinearLayout
+                android:id="@+id/telugu_calendar_raasi_detail_sheet"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_raasi_detail_sheet"
+                android:elevation="10dp"
+                android:maxHeight="560dp"
+                android:orientation="vertical"
+                android:paddingStart="18dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="18dp"
+                android:paddingBottom="20dp">
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fillViewport="false"
+                    android:overScrollMode="ifContentScrolls">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingBottom="8dp">
+
+                        <TextView
+                            android:id="@+id/raasi_detail_sign_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FFFFFF"
+                            android:textSize="20sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/raasi_detail_phalalu_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/raasi_detail_body"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:lineSpacingExtra="4dp"
+                            android:textColor="#E8E8E8"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/raasi_detail_lucky_heading"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="@string/telugu_calendar_lucky_heading"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/raasi_detail_lucky_line1"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:textColor="#E8E8E8"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/raasi_detail_lucky_line2"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:textColor="#E8E8E8"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/raasi_detail_full_jatakam"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:text="@string/telugu_calendar_full_jatakam"
+                            android:textColor="#4DA3FF"
+                            android:textSize="14sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </ScrollView>
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

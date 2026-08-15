@@ -26,6 +26,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.MediaUrl;
+import com.anyNews.anynews.Utils.SelfFollowGuard;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.FollowersProfileModel;
 import com.google.gson.Gson;
@@ -150,7 +151,12 @@ public class FollowersProfileDetailes extends AppCompatActivity {
                     if (languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess())
                             && languageModel.getData() != null && !languageModel.getData().isEmpty()) {
 
-                        followersProfileModels.addAll(languageModel.getData());
+                        followersProfileModels.addAll(SelfFollowGuard.withoutSelfSuggestions(
+                                FollowersProfileDetailes.this, languageModel.getData()));
+                        if (followersProfileModels.isEmpty()) {
+                            showEmpty();
+                            return;
+                        }
                         for (FollowersProfileModel.Datum item : followersProfileModels) {
                             MediaUrl.normalizeFollowProfile(item);
                         }

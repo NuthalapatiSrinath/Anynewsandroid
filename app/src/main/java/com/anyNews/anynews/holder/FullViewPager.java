@@ -394,7 +394,17 @@ public class FullViewPager extends AppCompatActivity implements SwipeRefreshLayo
 
         requestModel.setUserId((long) SharedPrefsData.getLong(getApplicationContext(), Constants.USER_ID, Constants.PREF_NAME));
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
-        requestModel.setMobileNumber(SharedPrefsData.getString(getApplicationContext(), Constants.Selected_Phone_Number, Constants.PREF_NAME));
+        String mobile = SharedPrefsData.getString(getApplicationContext(), Constants.Selected_Phone_Number, Constants.PREF_NAME);
+        if (mobile == null || mobile.trim().isEmpty() || "null".equalsIgnoreCase(mobile.trim())) {
+            mobile = "";
+        } else {
+            String digits = mobile.replaceAll("\\D", "");
+            if (digits.length() > 10) {
+                digits = digits.substring(digits.length() - 10);
+            }
+            mobile = digits.length() >= 10 ? digits : mobile.trim();
+        }
+        requestModel.setMobileNumber(mobile);
         requestModel.setPostStatus((long) value);
         requestModel.setSkip((long) page);
         requestModel.setFirstPostId((long) limit);

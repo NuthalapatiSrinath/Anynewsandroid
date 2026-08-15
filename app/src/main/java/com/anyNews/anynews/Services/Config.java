@@ -18,8 +18,14 @@ public class Config {
 
     public static final String YOUTUBE_API_KEY = "YOUR_YOUTUBE_API_KEY";
 
-    public static final String LINK_PRIVACY_POLICY = "https://anynews.co.in/2019/04/privacy-policy.html"; //your privacy_policy
-    public static final String LINK_CONTACT_EMAIL = "support@anynews.co.in"; //your email for contact
+    /** Legal / About WebView targets (same as legacy Settings → TermsAndCondition). */
+    public static final String LINK_TERMS_AND_CONDITIONS =
+            "https://anynews.co.in/2019/04/terms-and-conditions.html";
+    public static final String LINK_PRIVACY_POLICY =
+            "https://anynews.co.in/2019/04/privacy-policy.html";
+    public static final String LINK_ABOUT_US = "https://anynews.co.in/";
+    /** Fallback Contact/Feedback mailto when admin contact_email is absent. */
+    public static final String LINK_CONTACT_EMAIL = "support@anynews.co.in";
 
 
     public static final boolean SHOW_ADMOB_ADS = true; //show ads

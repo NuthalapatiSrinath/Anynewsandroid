@@ -96,6 +96,57 @@ public class ListAllArticlesRequest implements Serializable {
     @Expose
     private boolean special_posts;
 
+    /**
+     * When true, server returns only {@code normal_video} + {@code full_video}
+     * (mutually exclusive with {@link #special_posts} on the API path).
+     */
+    @SerializedName("video_posts")
+    @Expose
+    private boolean video_posts;
+
+    /**
+     * Profile Status Videos hub: one Redis-backed pack of {@code full_video}
+     * posts published in the last ~5 days for the language (up to ~30 items).
+     * Prefer over multi-page special_posts crawl.
+     */
+    @SerializedName("status_videos")
+    @Expose
+    private boolean status_videos;
+
+    /**
+     * Optional (new clients only): recent local read post_ids so the server can
+     * return a full page of unread main-feed cards. Old Play Store apps omit this
+     * and keep the historic List_All_Articles behavior.
+     * Comma-separated post_id list (capped client-side); server also truncates.
+     */
+    @SerializedName("exclude_post_ids")
+    @Expose
+    private String exclude_post_ids;
+
+    public boolean isVideo_posts() {
+        return video_posts;
+    }
+
+    public void setVideo_posts(boolean video_posts) {
+        this.video_posts = video_posts;
+    }
+
+    public boolean isStatus_videos() {
+        return status_videos;
+    }
+
+    public void setStatus_videos(boolean status_videos) {
+        this.status_videos = status_videos;
+    }
+
+    public String getExclude_post_ids() {
+        return exclude_post_ids;
+    }
+
+    public void setExclude_post_ids(String exclude_post_ids) {
+        this.exclude_post_ids = exclude_post_ids;
+    }
+
     public String getApp_version_name() {
         return app_version_name;
     }

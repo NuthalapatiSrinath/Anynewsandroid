@@ -32,12 +32,44 @@ public class GetSettingsResponse {
         @Expose
         private Boolean notificationFlag;
 
+        @SerializedName("notification_reprompt_due")
+        @Expose
+        private Boolean notificationRepromptDue;
+
+        @SerializedName("notification_reprompt_wave")
+        @Expose
+        private Integer notificationRepromptWave;
+
+        @SerializedName("notification_reprompt_converted")
+        @Expose
+        private Boolean notificationRepromptConverted;
+
+        @SerializedName("notification_reprompt_enabled")
+        @Expose
+        private Boolean notificationRepromptEnabled;
+
         public Boolean getNotificationFlag() {
             return notificationFlag;
         }
 
         public void setNotificationFlag(Boolean notificationFlag) {
             this.notificationFlag = notificationFlag;
+        }
+
+        public Boolean getNotificationRepromptDue() {
+            return notificationRepromptDue;
+        }
+
+        public Integer getNotificationRepromptWave() {
+            return notificationRepromptWave;
+        }
+
+        public Boolean getNotificationRepromptConverted() {
+            return notificationRepromptConverted;
+        }
+
+        public Boolean getNotificationRepromptEnabled() {
+            return notificationRepromptEnabled;
         }
 
     }

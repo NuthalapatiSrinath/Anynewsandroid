@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soft L→R highlight across skeleton bones (media + text lines). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="0"
+        android:centerColor="@color/feed_shimmer_highlight_center"
+        android:endColor="@android:color/transparent"
+        android:startColor="@android:color/transparent"
+        android:type="linear" />
+</shape>

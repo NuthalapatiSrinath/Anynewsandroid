@@ -51,6 +51,7 @@ import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
+import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.ReadArticleStore;
 import com.anyNews.anynews.Utils.DeviceLocationHelper;
@@ -98,6 +99,8 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 import static com.facebook.FacebookSdk.setAutoLogAppEventsEnabled;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -166,6 +169,10 @@ public class StartingActivity extends AppCompatActivity {
             ReadArticleStore.commitSessionViewedToReadOncePerProcess(getApplicationContext());
         } catch (Exception ignored) {
         }
+        try {
+            FeedAdConfig.warmFromPrefs(getApplicationContext());
+        } catch (Exception ignored) {
+        }
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
 //        showLog("android.os.Build.VERSION.SDK_INT::::"+android.os.Build.VERSION.SDK_INT);
 //        showLog("Build.VERSION_CODES.M::::::::"+Build.VERSION_CODES.M);
@@ -229,6 +236,7 @@ public class StartingActivity extends AppCompatActivity {
             showLog("data%%::" + data.toString());
             extractData(data);
             maybeResolveLegacyPageLink(data);
+            maybeResolveShareShortCode(data);
         }
 
         // Instant open for returning users (after intent/deep-link parse so share ids pass through).
@@ -548,10 +556,13 @@ public class StartingActivity extends AppCompatActivity {
                 // Share / App Link opens must use SHARE_REDIRECT_ID + share_post_id only.
                 // Do NOT set TITLE=articleId — TITLE is the FCM push sticky (push_post_id).
                 // Dual-assigning made server take the push_open branch, skip share pin, and
-                // left already-read shares stripped on News top instead of Chadivinavi.
+                // left already-read shares stripped on News without pinning the
+                // exact card. SHARE_REDIRECT_ID + share_post_id is the share path.
                 // Persist as a one-shot so the exact post still opens even when a
                 // splash routing branch launches HomePage without the
                 // SHARE_REDIRECT_ID extra (e.g. returning-user static-data path).
+                // Cross-language: do not change LanguageID from the shared article's
+                // language — Home sends user LanguageID; server pins any-language post.
                 SharedPrefsData.putString(getApplicationContext(),
                         Constants.PENDING_SHARE_POST, articleId2, Constants.PREF_NAME);
             } else {
@@ -562,7 +573,8 @@ public class StartingActivity extends AppCompatActivity {
         }
     }
 
-    /** Parse post id from /p/{id}, /post/{id}, anynews://post/{id}, or /{id} (anws.in). */
+    /** Parse post id from /p/{id}, /post/{id}, anynews://post/{id}, /{id} (anws.in), or /p/{id} on share host.
+     * Alphanumeric short codes on share.anynews.co.in are resolved async via maybeResolveShareShortCode. */
     private String articleIdFromPath(Uri uri) {
         if (uri == null) {
             return null;
@@ -607,7 +619,98 @@ public class StartingActivity extends AppCompatActivity {
                 }
             }
         }
+        // share.anynews.co.in/{digits} only — alphanumeric codes need HTTP resolve
+        if (host != null && host.equalsIgnoreCase("share.anynews.co.in")) {
+            for (String seg : segments) {
+                if (seg != null && seg.matches("\\d+")) {
+                    return seg;
+                }
+            }
+        }
         return null;
+    }
+
+    /**
+     * Resolve https://share.anynews.co.in/{code} → numeric post_id via ?format=json.
+     * App Links open the short URL directly; landing HTML is not loaded.
+     */
+    private void maybeResolveShareShortCode(Uri data) {
+        if (data == null) {
+            return;
+        }
+        String host = data.getHost();
+        if (host == null || !host.equalsIgnoreCase("share.anynews.co.in")) {
+            return;
+        }
+        if (articleId1 != null && !articleId1.isEmpty()) {
+            return;
+        }
+        String path = data.getPath();
+        if (path == null || path.isEmpty() || "/".equals(path)) {
+            return;
+        }
+        String code = path.startsWith("/") ? path.substring(1) : path;
+        int slash = code.indexOf('/');
+        if (slash >= 0) {
+            code = code.substring(0, slash);
+        }
+        // Skip /p/{id} (already handled) and pure digits
+        if (code.isEmpty() || code.equals("p") || code.matches("\\d+")) {
+            return;
+        }
+        if (!code.matches("[A-Za-z0-9]{5,12}") || code.matches("\\d+")) {
+            return;
+        }
+        final String shortCode = code;
+        final String resolveUrl = "https://share.anynews.co.in/" + shortCode + "?format=json";
+        backgroundExecutor.execute(() -> {
+            String resolvedId = null;
+            HttpURLConnection conn = null;
+            BufferedReader reader = null;
+            try {
+                URL url = new URL(resolveUrl);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setInstanceFollowRedirects(true);
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Accept", "application/json");
+                int status = conn.getResponseCode();
+                if (status >= 200 && status < 300) {
+                    reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    JsonObject obj = new Gson().fromJson(sb.toString(), JsonObject.class);
+                    if (obj != null && obj.has("post_id") && !obj.get("post_id").isJsonNull()) {
+                        resolvedId = String.valueOf(obj.get("post_id").getAsLong());
+                    }
+                }
+            } catch (Exception e) {
+                Logone.w(TAG, "share short code resolve failed", e);
+            } finally {
+                try {
+                    if (reader != null) {
+                        reader.close();
+                    }
+                } catch (Exception ignored) {
+                }
+                if (conn != null) {
+                    conn.disconnect();
+                }
+            }
+            if (resolvedId != null && !resolvedId.isEmpty()) {
+                final String id = resolvedId;
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    articleId1 = id;
+                    SharedPrefsData.putString(getApplicationContext(),
+                            Constants.PENDING_SHARE_POST, id, Constants.PREF_NAME);
+                    showLog("CHECK POINT share.anynews resolved articleId:" + id);
+                });
+            }
+        });
     }
 
     private void applyDeepLinkParams(Uri uri) {
@@ -694,6 +797,7 @@ public class StartingActivity extends AppCompatActivity {
         if (intent != null && intent.getData() != null) {
             extractData(intent.getData());
             maybeResolveLegacyPageLink(intent.getData());
+            maybeResolveShareShortCode(intent.getData());
         }
     }
 
@@ -1331,6 +1435,17 @@ public class StartingActivity extends AppCompatActivity {
                             }
                         } catch (Exception ignored) {
                         }
+                        Boolean prevFooter = null;
+                        try {
+                            String rawFooter = SharedPrefsData.getString(
+                                    getApplicationContext(),
+                                    Constants.CRICKET_FOOTER_TAB_ENABLED,
+                                    Constants.PREF_NAME);
+                            if (rawFooter != null && !rawFooter.isEmpty()) {
+                                prevFooter = "true".equalsIgnoreCase(rawFooter.trim());
+                            }
+                        } catch (Exception ignored) {
+                        }
                         CricketSurfaceConfigHelper.saveMiniPlayerEnabled(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getCricketMiniPlayerEnabled()
@@ -1339,6 +1454,12 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getCricketFooterTabEnabled()
                         );
+                        if (startActivityReqModel.getData().getReferralEnabled() != null) {
+                            SharedPrefsData.putBool(getApplicationContext(),
+                                    Constants.REFERRAL_PROGRAM_ENABLED,
+                                    startActivityReqModel.getData().getReferralEnabled(),
+                                    Constants.PREF_NAME);
+                        }
                         // Profile hub / More + home footer slot flags (null = leave cache / defaults).
                         ProfileHubConfigHelper.saveFromSplash(
                                 getApplicationContext(),
@@ -1488,9 +1609,23 @@ public class StartingActivity extends AppCompatActivity {
                         ReadHistoryConfig.saveHoursFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getReadHistoryHours());
+                        // Feed ad cadence + Android prefetch/concurrency + impression flush.
+                        FeedAdConfig.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getFeedAdEveryN(),
+                                startActivityReqModel.getData().getAdPrefetchLookahead(),
+                                startActivityReqModel.getData().getMaxNativeAdLoadsInFlight(),
+                                startActivityReqModel.getData().getAdImprFlushEveryN());
+                        FeedAdConfig.warmFromPrefs(getApplicationContext());
                         Boolean newMini = startActivityReqModel.getData()
                                 .getCricketMiniPlayerEnabled();
-                        if (newMini != null && prevMini != null && prevMini != newMini) {
+                        Boolean newFooter = startActivityReqModel.getData()
+                                .getCricketFooterTabEnabled();
+                        boolean miniFlipped = newMini != null && prevMini != null
+                                && prevMini != newMini;
+                        boolean footerFlipped = newFooter != null && prevFooter != null
+                                && prevFooter != newFooter;
+                        if (miniFlipped || footerFlipped) {
                             try {
                                 androidx.localbroadcastmanager.content.LocalBroadcastManager
                                         .getInstance(getApplicationContext())
@@ -1550,6 +1685,14 @@ public class StartingActivity extends AppCompatActivity {
                         }
 
                         showLog("SplashUpdateMenu::::"+ startActivityReqModel.getData().getUpdateMenuStatus());
+                        // Admin update-banner subtitle (empty → Home uses hardcoded fallback).
+                        String splashUpdateSubtitle =
+                                startActivityReqModel.getData().getUpdateBannerSubtitle();
+                        SharedPrefsData.putString(
+                                getApplicationContext(),
+                                Constants.UPDATE_BANNER_SUBTITLE,
+                                splashUpdateSubtitle != null ? splashUpdateSubtitle.trim() : "",
+                                Constants.PREF_NAME);
 
                         if(startActivityReqModel.getData().getPost_id()!=null){
                             showLog("POST_ID::"+startActivityReqModel.getData().getPost_id());

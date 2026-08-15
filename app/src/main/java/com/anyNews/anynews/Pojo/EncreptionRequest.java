@@ -46,6 +46,13 @@ public class EncreptionRequest {
     @Expose
     private Integer updateMenuStatus;
 
+    /**
+     * Admin Home update-banner subtitle. Empty/null → hardcoded string fallback.
+     */
+    @SerializedName("update_banner_subtitle")
+    @Expose
+    private String update_banner_subtitle;
+
     @SerializedName("callAppEvents")
     @Expose
     private boolean callAppEvents;
@@ -178,6 +185,34 @@ public class EncreptionRequest {
     @Expose
     private Integer content_block_offset_dp;
 
+    @SerializedName("pn_show_article_image")
+    @Expose
+    private Boolean pn_show_article_image;
+
+    @SerializedName("pn_style_mode")
+    @Expose
+    private String pn_style_mode;
+
+    @SerializedName("pn_large_icon_url")
+    @Expose
+    private String pn_large_icon_url;
+
+    @SerializedName("push_include_logo_default")
+    @Expose
+    private Boolean push_include_logo_default;
+
+    @SerializedName("pn_left_icon_size_dp")
+    @Expose
+    private Integer pn_left_icon_size_dp;
+
+    @SerializedName("pn_thumb_size_dp")
+    @Expose
+    private Integer pn_thumb_size_dp;
+
+    @SerializedName("pn_title_size_sp")
+    @Expose
+    private Integer pn_title_size_sp;
+
     public boolean isAllow_screen_capture() {
         return allow_screen_capture;
     }
@@ -242,6 +277,62 @@ public class EncreptionRequest {
         this.content_block_offset_dp = content_block_offset_dp;
     }
 
+    public Boolean getPn_show_article_image() {
+        return pn_show_article_image;
+    }
+
+    public void setPn_show_article_image(Boolean pn_show_article_image) {
+        this.pn_show_article_image = pn_show_article_image;
+    }
+
+    public String getPn_style_mode() {
+        return pn_style_mode;
+    }
+
+    public void setPn_style_mode(String pn_style_mode) {
+        this.pn_style_mode = pn_style_mode;
+    }
+
+    public String getPn_large_icon_url() {
+        return pn_large_icon_url;
+    }
+
+    public void setPn_large_icon_url(String pn_large_icon_url) {
+        this.pn_large_icon_url = pn_large_icon_url;
+    }
+
+    public Boolean getPush_include_logo_default() {
+        return push_include_logo_default;
+    }
+
+    public void setPush_include_logo_default(Boolean push_include_logo_default) {
+        this.push_include_logo_default = push_include_logo_default;
+    }
+
+    public Integer getPn_left_icon_size_dp() {
+        return pn_left_icon_size_dp;
+    }
+
+    public void setPn_left_icon_size_dp(Integer pn_left_icon_size_dp) {
+        this.pn_left_icon_size_dp = pn_left_icon_size_dp;
+    }
+
+    public Integer getPn_thumb_size_dp() {
+        return pn_thumb_size_dp;
+    }
+
+    public void setPn_thumb_size_dp(Integer pn_thumb_size_dp) {
+        this.pn_thumb_size_dp = pn_thumb_size_dp;
+    }
+
+    public Integer getPn_title_size_sp() {
+        return pn_title_size_sp;
+    }
+
+    public void setPn_title_size_sp(Integer pn_title_size_sp) {
+        this.pn_title_size_sp = pn_title_size_sp;
+    }
+
     public String getEngagement_badge_color() {
         return engagement_badge_color;
     }
@@ -272,6 +363,14 @@ public class EncreptionRequest {
 
     public void setUpdateMenuStatus(Integer updateMenuStatus) {
         this.updateMenuStatus = updateMenuStatus;
+    }
+
+    public String getUpdate_banner_subtitle() {
+        return update_banner_subtitle;
+    }
+
+    public void setUpdate_banner_subtitle(String update_banner_subtitle) {
+        this.update_banner_subtitle = update_banner_subtitle;
     }
 
     public boolean isCallAppEvents() {

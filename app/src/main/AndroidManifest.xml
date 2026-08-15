@@ -143,6 +143,8 @@
             android:noHistory="false"
             android:name=".Activities.newProfileDetails"
             android:theme="@style/AppTheme"
+            android:launchMode="singleTop"
+            android:configChanges="uiMode"
             android:screenOrientation="portrait" />
         <activity
             android:name=".Activities.TermsAndCondition"
@@ -177,6 +179,13 @@
             android:screenOrientation="portrait"
             android:launchMode="singleTask"
             android:theme="@style/AppThemeSplash">
+            <!-- Isolated referral links; /r/ avoids the existing short-code namespace. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="share.anynews.co.in" android:pathPrefix="/r/" />
+            </intent-filter>
             <!-- Legacy Firebase Dynamic Links (page.link) — still may open app if installed -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -227,6 +236,16 @@
                     android:host="anws.in"
                     android:pathPattern="/.*" />
             </intent-filter>
+            <!-- Firebase-style short share host: https://share.anynews.co.in/{code} -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="share.anynews.co.in"
+                    android:pathPattern="/.*" />
+            </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -252,6 +271,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".referral.ReferralActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity
             android:name=".Activities.TestingClass"
             android:theme="@style/AppTheme"
@@ -290,6 +310,16 @@
             android:theme="@style/AppTheme"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".Activities.BookmarksActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+        <activity
+            android:name=".Activities.BookmarkReaderActivity"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+        <activity
             android:name=".Activities.PostArticles"
             android:theme="@style/AppTheme"
             android:screenOrientation="portrait"
@@ -311,6 +341,17 @@
             android:exported="false"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".Activities.StatusVideosActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.StatusVideoPlayerActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".Activities.LoginActivityDetails"
             android:theme="@style/AppTheme"
             android:screenOrientation="portrait" />
@@ -320,6 +361,11 @@
             android:launchMode="singleTask"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".Activities.NotificationHelpActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".Activities.RecyclerViewActivity"
             android:theme="@style/AppTheme"
             android:screenOrientation="portrait" />
@@ -327,7 +373,14 @@
             android:noHistory="false"
             android:name=".Activities.HomePage"
             android:theme="@style/AppTheme"
+            android:configChanges="uiMode"
             android:screenOrientation="portrait"/>
+        <activity
+            android:name=".Activities.TeluguCalendarActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".Activities.Districs"
             android:theme="@style/AppTheme"

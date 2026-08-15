@@ -25,6 +25,7 @@ import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
@@ -674,15 +675,15 @@ public class FlipView extends FrameLayout {
                 final float yDiff = Math.abs(dy);
                 if ((mIsFlippingVertically && yDiff > mTouchSlop && yDiff > xDiff)
                         || (!mIsFlippingVertically && xDiff > mTouchSlop && xDiff > yDiff)) {
-                    // if(yDiff>100){
-                    mIsFlipping = true;
-                    mLastX = x;
-                    mLastY = y;
-//                    if (mOnFlipAppeared != null) {
-//                        mOnFlipAppeared.onFlippedToAppear(FlipView.this);
-//                    }
-        
-                    // }
+                    // Let NestedScrollView / ScrollView consume vertical drag when
+                    // content can still scroll in that direction (raasi lucky panel).
+                    if (mIsFlippingVertically && canCurrentPageScrollVertically(dy < 0 ? 1 : -1)) {
+                        mIsUnableToFlip = true;
+                    } else {
+                        mIsFlipping = true;
+                        mLastX = x;
+                        mLastY = y;
+                    }
                 } else if ((mIsFlippingVertically && xDiff > mTouchSlop)
                         || (!mIsFlippingVertically && yDiff > mTouchSlop)) {
                     mIsUnableToFlip = true;
@@ -690,10 +691,9 @@ public class FlipView extends FrameLayout {
         
                 break;
             case MotionEvent.ACTION_DOWN:
-                mActivePointerId = ev.getAction()
-                        & MotionEvent.ACTION_POINTER_INDEX_MASK;
-                mLastX = MotionEventCompat.getX(ev, mActivePointerId);
-                mLastY = MotionEventCompat.getY(ev, mActivePointerId);
+                mActivePointerId = MotionEventCompat.getPointerId(ev, 0);
+                mLastX = MotionEventCompat.getX(ev, 0);
+                mLastY = MotionEventCompat.getY(ev, 0);
                 mIsFlipping = !mScroller.isFinished() | mPeakAnim != null;
                 mIsUnableToFlip = false;
                 mLastTouchAllowed = true;
@@ -753,10 +753,15 @@ public class FlipView extends FrameLayout {
                     yDiff = Math.abs(y - mLastY);
                     if ((mIsFlippingVertically && yDiff > mTouchSlop && yDiff > xDiff)
                             || (!mIsFlippingVertically && xDiff > mTouchSlop && xDiff > yDiff)) {
-                        mIsFlipping = true;
-                        mLastX = x;
-                        mLastY = y;
-
+                        float moveDy = y - mLastY;
+                        if (mIsFlippingVertically
+                                && canCurrentPageScrollVertically(moveDy < 0 ? 1 : -1)) {
+                            // Child still scrolling — do not start page flip.
+                        } else {
+                            mIsFlipping = true;
+                            mLastX = x;
+                            mLastY = y;
+                        }
                     }
                 }
                 // if (yDiff > 300) {
@@ -1585,6 +1590,60 @@ public class FlipView extends FrameLayout {
 
     public int getCurrentPage() {
         return mCurrentPageIndex;
+    }
+
+    /**
+     * True while a flip gesture/animation is in progress (touch, scroller, or peak).
+     * Callers must not {@code notifyDataSetChanged} / recycle pages during this window.
+     */
+    public boolean isFlipAnimating() {
+        try {
+            return mIsFlipping
+                    || (mScroller != null && !mScroller.isFinished())
+                    || mPeakAnim != null;
+        } catch (Exception e) {
+            return mIsFlipping;
+        }
+    }
+
+    /**
+     * True if the current page has a real vertical {@link ScrollView} /
+     * {@link NestedScrollView} that can still scroll in {@code direction}.
+     * Used so calendar/raasi nested pages can scroll without starting a FlipView
+     * fold.
+     *
+     * <p><b>Must not</b> treat arbitrary {@link View#canScrollVertically} as a
+     * flip blocker — WebView (YouTube), PlayerView, ads, and many article
+     * descendants report true and froze News/Special/Video flipping after the
+     * calendar nested-scroll fix.
+     */
+    private boolean canCurrentPageScrollVertically(int direction) {
+        View page = mCurrentPage != null && mCurrentPage.valid ? mCurrentPage.v : null;
+        return page != null && canDedicatedVerticalScrollContainerScroll(page, direction);
+    }
+
+    private static boolean canDedicatedVerticalScrollContainerScroll(
+            View view, int direction) {
+        if (view == null) return false;
+        if (isDedicatedVerticalScrollContainer(view)
+                && view.canScrollVertically(direction)) {
+            return true;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (canDedicatedVerticalScrollContainerScroll(
+                        group.getChildAt(i), direction)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isDedicatedVerticalScrollContainer(View view) {
+        return view instanceof android.widget.ScrollView
+                || view instanceof androidx.core.widget.NestedScrollView;
     }
 
     public void flipTo(int page) {

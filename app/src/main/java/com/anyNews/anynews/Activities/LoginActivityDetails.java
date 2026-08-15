@@ -75,6 +75,9 @@ import soup.neumorphism.NeumorphCardView;
 
 public class LoginActivityDetails extends AppCompatActivity {
 
+    /** When true, after OTP success reopen Profile (single login entry from Profile hub). */
+    public static final String EXTRA_RETURN_TO_PROFILE = "extra_return_to_profile";
+
     NeumorphCardView neumorph_next;
     EditText username_et, mobile_et,emailIdEdittext;
     EditText otp_1, otp_2, otp_3, otp_4;
@@ -482,11 +485,87 @@ public class LoginActivityDetails extends AppCompatActivity {
 
                     allsharedpreference.setEmailID(emailIdEdittext.getText().toString());
                     SharedPrefsData.putBool(getApplicationContext(), Constants.is_login, true, Constants.PREF_NAME);
+                    SharedPrefsData.putBool(getApplicationContext(), Constants.FORCE_LOGGED_OUT, false, Constants.PREF_NAME);
+                    // Persist phone at OTP success so get_user_posts has mobile after reinstall
+                    // before profile API returns (Selected_Phone_Number used by Articles list).
+                    String loginMobile = num != null ? String.valueOf(num).trim() : "";
+                    if (loginMobile.isEmpty() && mobile_et != null) {
+                        loginMobile = mobile_et.getText() != null
+                                ? mobile_et.getText().toString().trim() : "";
+                    }
+                    if (!loginMobile.isEmpty() && !"null".equalsIgnoreCase(loginMobile)) {
+                        SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Phone_Number,
+                                loginMobile, Constants.PREF_NAME);
+                    }
+                    try {
+                        String loginName = username_et != null && username_et.getText() != null
+                                ? username_et.getText().toString().trim() : "";
+                        if (!loginName.isEmpty()) {
+                            SharedPrefsData.putString(getApplicationContext(), Constants.USER_NAME,
+                                    loginName, Constants.PREF_NAME);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        String loginEmail = emailIdEdittext != null && emailIdEdittext.getText() != null
+                                ? emailIdEdittext.getText().toString().trim() : "";
+                        if (loginEmail.contains("@")) {
+                            SharedPrefsData.putString(getApplicationContext(), Constants.Email,
+                                    loginEmail, Constants.PREF_NAME);
+                        }
+                        // Instant "% Achieved" from login fields (before get_user_profile).
+                        int loginPct = com.anyNews.anynews.Utils.ProfileAchievementHelper
+                                .computePctFromPrefs(getApplicationContext());
+                        if (loginPct > 0) {
+                            SharedPrefsData.putString(getApplicationContext(),
+                                    Constants.PROFILE_ACHIEVED_PCT,
+                                    String.valueOf(loginPct), Constants.PREF_NAME);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    // Instant Verified on Profile: persist is_reporter from OTP payload
+                    // (do not wait for get_user_profile).
+                    try {
+                        ValidateOtpResponse.Data loginData = validateUserOtp.getData();
+                        if (loginData != null && loginData.getUserId() != null && loginData.getUserId() > 0) {
+                            SharedPrefsData.putLong(getApplicationContext(), Constants.USER_ID,
+                                    loginData.getUserId().longValue(), Constants.PREF_NAME);
+                        }
+                        if (loginData != null && Boolean.TRUE.equals(loginData.getIsReporter())) {
+                            SharedPrefsData.putBoolImmediate(getApplicationContext(),
+                                    Constants.is_reporter, true, Constants.PREF_NAME);
+                        } else if (loginData != null && Boolean.FALSE.equals(loginData.getIsReporter())) {
+                            SharedPrefsData.putBoolImmediate(getApplicationContext(),
+                                    Constants.is_reporter, false, Constants.PREF_NAME);
+                        }
+                        if (loginData != null && loginData.getProfilePic() != null
+                                && !loginData.getProfilePic().trim().isEmpty()) {
+                            SharedPrefsData.putString(getApplicationContext(), Constants.PROFILE_PIC_URL,
+                                    loginData.getProfilePic().trim(), Constants.PREF_NAME);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        com.anyNews.anynews.Utils.ReporterProfilePrefetcher.prefetchIfPossible(
+                                getApplicationContext());
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        // Warm article/payment history disk cache while Redis warms server-side.
+                        com.anyNews.anynews.Utils.WalletHistoryPrefetcher.prefetchIfPossible(
+                                getApplicationContext());
+                    } catch (Exception ignored) {
+                    }
 
                     Toast.makeText(LoginActivityDetails.this, "" + languageModelResponse.getData().getLoginSuccesfully(), Toast.LENGTH_SHORT).show();
 
+                    boolean returnToProfile = getIntent() != null
+                            && getIntent().getBooleanExtra(EXTRA_RETURN_TO_PROFILE, false);
                     Intent intent = new Intent(LoginActivityDetails.this, HomePage.class);
                     intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    if (returnToProfile) {
+                        intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_profile);
+                    }
 
                     if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
                        startActivity(intent);

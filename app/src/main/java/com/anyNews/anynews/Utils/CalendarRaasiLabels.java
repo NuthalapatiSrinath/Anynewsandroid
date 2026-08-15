@@ -1,0 +1,392 @@
+package com.anyNews.anynews.Utils;
+
+import android.content.Context;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.anyNews.anynews.R;
+import com.anyNews.anynews.panchang.RaasiContent;
+
+/**
+ * Localized chrome labels for Telugu Calendar + Raasi flip (not device Locale).
+ * Uses {@link Constants#LanguageID}: 1 ML, 2 HI, 3 TE, 4 TA, 5 KN, 6 OR, else EN.
+ * Traditional tithi/panchang data may stay Telugu; user-facing chrome follows app language.
+ */
+public final class CalendarRaasiLabels {
+
+    private CalendarRaasiLabels() {}
+
+    public static String swipeHint(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "താഴേക്ക് സ്വൈപ്പ് · രാശിഫലം";
+            case 2: return "नीचे स्वाइप · राशिफल";
+            case 3: return "రాశి ఫలాలు";
+            case 4: return "கீழே ஸ்வைப் · ராசிபலன்";
+            case 5: return "ಕೆಳಗೆ ಸ್ವೈಪ್ · ರಾಶಿಫಲ";
+            case 6: return "ତଳକୁ ସ୍ୱାଇପ୍ · ରାଶିଫଳ";
+            default: return str(context, R.string.telugu_calendar_swipe_hint, "Raasi Phalalu");
+        }
+    }
+
+    public static String pickRaasi(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "നിങ്ങളുടെ രാശി തിരഞ്ഞെടുക്കുക";
+            case 2: return "अपनी राशि चुनें";
+            case 3: return "మీ రాశిని ఎంచుకోండి";
+            case 4: return "உங்கள் ராசியைத் தேர்ந்தெடுக்கவும்";
+            case 5: return "ನಿಮ್ಮ ರಾಶಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ";
+            case 6: return "ଆପଣଙ୍କ ରାଶି ବାଛନ୍ତୁ";
+            default: return str(context, R.string.telugu_calendar_pick_raasi, "Choose your rashi");
+        }
+    }
+
+    public static String knowRaasi(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "നിങ്ങളുടെ രാശി അറിയുക >";
+            case 2: return "अपनी राशि जानें >";
+            case 3: return "మీ రాశి తెలుసుకోండి >";
+            case 4: return "உங்கள் ராசியை அறிய >";
+            case 5: return "ನಿಮ್ಮ ರಾಶಿ ತಿಳಿಯಿರಿ >";
+            case 6: return "ଆପଣଙ୍କ ରାଶି ଜାଣନ୍ତୁ >";
+            default: return str(context, R.string.telugu_calendar_know_raasi, "Find your rashi >");
+        }
+    }
+
+    public static String knowRaasiTitle(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "നിങ്ങളുടെ രാശി അറിയുക";
+            case 2: return "अपनी राशि जानें";
+            case 3: return "మీ రాశి తెలుసుకోండి";
+            case 4: return "உங்கள் ராசியை அறியுங்கள்";
+            case 5: return "ನಿಮ್ಮ ರಾಶಿ ತಿಳಿಯಿರಿ";
+            case 6: return "ଆପଣଙ୍କ ରାଶି ଜାଣନ୍ତୁ";
+            default: return str(context, R.string.telugu_calendar_know_raasi_title, "Find your rashi");
+        }
+    }
+
+    public static String fullName(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "പൂർണ്ണ നാമം";
+            case 2: return "पूरा नाम";
+            case 3: return "పూర్తి పేరు";
+            case 4: return "முழுப் பெயர்";
+            case 5: return "ಪೂರ್ಣ ಹೆಸರು";
+            case 6: return "ପୂର୍ଣ୍ଣ ନାମ";
+            default: return str(context, R.string.telugu_calendar_full_name, "Full name");
+        }
+    }
+
+    public static String dobTime(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ജനന തിയതി (DD/MM/YYYY) / സമയം";
+            case 2: return "जन्म तिथि (DD/MM/YYYY) / समय";
+            case 3: return "పుట్టిన తేదీ (DD/MM/YYYY) / సమయం";
+            case 4: return "பிறந்த தேதி (DD/MM/YYYY) / நேரம்";
+            case 5: return "ಜನ್ಮ ದಿನಾಂಕ (DD/MM/YYYY) / ಸಮಯ";
+            case 6: return "ଜନ୍ମ ତାରିଖ (DD/MM/YYYY) / ସମୟ";
+            default: return str(context, R.string.telugu_calendar_dob_time, "DOB (DD/MM/YYYY) / time");
+        }
+    }
+
+    public static String birthPlace(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ജനന സ്ഥലം";
+            case 2: return "जन्म स्थान";
+            case 3: return "పుట్టిన ప్రదేశం";
+            case 4: return "பிறந்த இடம்";
+            case 5: return "ಜನ್ಮ ಸ್ಥಳ";
+            case 6: return "ଜନ୍ମ ସ୍ଥାନ";
+            default: return str(context, R.string.telugu_calendar_birth_place, "Place of birth");
+        }
+    }
+
+    public static String submit(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "സമർപ്പിക്കുക";
+            case 2: return "जमा करें";
+            case 3: return "సమర్పించు";
+            case 4: return "சமர்ப்பி";
+            case 5: return "ಸಲ್ಲಿಸಿ";
+            case 6: return "ଦାଖଲ କରନ୍ତୁ";
+            default: return str(context, R.string.telugu_calendar_submit, "Submit");
+        }
+    }
+
+    public static String more(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "…കൂടുതൽ";
+            case 2: return "…और";
+            case 3: return "…మరిన్ని";
+            case 4: return "…மேலும்";
+            case 5: return "…ಇನ್ನಷ್ಟು";
+            case 6: return "…ଅଧିକ";
+            default: return str(context, R.string.telugu_calendar_more, "…more");
+        }
+    }
+
+    public static String less(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "കുറവ്";
+            case 2: return "कम";
+            case 3: return "తక్కువ";
+            case 4: return "குறைவு";
+            case 5: return "ಕಡಿಮೆ";
+            case 6: return "କମ୍";
+            default: return str(context, R.string.telugu_calendar_less, "Less");
+        }
+    }
+
+    public static String luckyHeading(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഭാഗ്യ സൂചകങ്ങൾ";
+            case 2: return "भाग्य सूचक";
+            case 3: return "అదృష్ట సూచక అంశాలు";
+            case 4: return "அதிர்ஷ்ட அம்சங்கள்";
+            case 5: return "ಅದೃಷ್ಟ ಸೂಚಕಗಳು";
+            case 6: return "ଭାଗ୍ୟ ସୂଚକ";
+            default: return str(context, R.string.telugu_calendar_lucky_heading, "Lucky factors");
+        }
+    }
+
+    public static String luckyColor(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "നിറം";
+            case 2: return "रंग";
+            case 3: return "రంగు";
+            case 4: return "நிறம்";
+            case 5: return "ಬಣ್ಣ";
+            case 6: return "ରଙ୍ଗ";
+            default: return str(context, R.string.telugu_calendar_lucky_color, "Color");
+        }
+    }
+
+    public static String luckyNumbers(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "അക്കങ്ങൾ";
+            case 2: return "अंक";
+            case 3: return "సంఖ్యలు";
+            case 4: return "எண்கள்";
+            case 5: return "ಸಂಖ್ಯೆಗಳು";
+            case 6: return "ସଂଖ୍ୟା";
+            default: return str(context, R.string.telugu_calendar_lucky_numbers, "Numbers");
+        }
+    }
+
+    public static String luckyDirection(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ദിശ";
+            case 2: return "दिशा";
+            case 3: return "దిక్కు";
+            case 4: return "திசை";
+            case 5: return "ದಿಕ್ಕು";
+            case 6: return "ଦିଗ";
+            default: return str(context, R.string.telugu_calendar_lucky_direction, "Direction");
+        }
+    }
+
+    public static String fullJatakam(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "പൂർണ്ണ ജാതകം അറിയുക";
+            case 2: return "पूर्ण कुंडली जानें";
+            case 3: return "పూర్తి జాతకం తెలుసుకోండి";
+            case 4: return "முழு ஜாதகம் அறிய";
+            case 5: return "ಪೂರ್ಣ ಜಾತಕ ತಿಳಿಯಿರಿ";
+            case 6: return "ପୂର୍ଣ୍ଣ ଜାତକ ଜାଣନ୍ତୁ";
+            default: return str(context, R.string.telugu_calendar_full_jatakam, "Know full jatakam");
+        }
+    }
+
+    public static String festivalsTitle(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഉത്സവങ്ങൾ";
+            case 2: return "त्योहार";
+            case 3: return "పండుగలు";
+            case 4: return "விழாக்கள்";
+            case 5: return "ಹಬ್ಬಗಳು";
+            case 6: return "ପର୍ବ";
+            default: return str(context, R.string.telugu_calendar_festivals_title, "Festivals");
+        }
+    }
+
+    public static String noFestivals(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഈ മാസം ഉത്സവങ്ങളില്ല";
+            case 2: return "इस महीने कोई त्योहार नहीं";
+            case 3: return "ఈ నెలలో పండుగలు లేవు";
+            case 4: return "இம்மாதம் விழாக்கள் இல்லை";
+            case 5: return "ಈ ತಿಂಗಳು ಹಬ್ಬಗಳಿಲ್ಲ";
+            case 6: return "ଏହି ମାସରେ ପର୍ବ ନାହିଁ";
+            default: return str(context, R.string.telugu_calendar_no_festivals, "No festivals this month");
+        }
+    }
+
+    public static String raasiSaved(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "രാശി സംരക്ഷിച്ചു";
+            case 2: return "राशि सहेजी गई";
+            case 3: return "రాశి సేవ్ అయింది";
+            case 4: return "ராசி சேமிக்கப்பட்டது";
+            case 5: return "ರಾಶಿ ಉಳಿಸಲಾಗಿದೆ";
+            case 6: return "ରାଶି ସେଭ୍ ହେଲା";
+            default: return str(context, R.string.telugu_calendar_raasi_saved, "Rashi saved");
+        }
+    }
+
+    /** Shown when Find-your-rashi submit has empty/unparseable DOB. */
+    public static String dobRequired(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ദയവായി ജനന തിയതി തിരഞ്ഞെടുക്കുക (DD/MM/YYYY)";
+            case 2: return "कृपया जन्म तिथि चुनें (DD/MM/YYYY)";
+            case 3: return "దయచేసి పుట్టిన తేదీ ఎంచుకోండి (DD/MM/YYYY)";
+            case 4: return "பிறந்த தேதியைத் தேர்ந்தெடுக்கவும் (DD/MM/YYYY)";
+            case 5: return "ದಯವಿಟ್ಟು ಜನ್ಮ ದಿನಾಂಕ ಆಯ್ಕೆಮಾಡಿ (DD/MM/YYYY)";
+            case 6: return "ଦୟାକରି ଜନ୍ମ ତାରିଖ ବାଛନ୍ତୁ (DD/MM/YYYY)";
+            default: return "Please select date of birth (DD/MM/YYYY)";
+        }
+    }
+
+    public static String whatsappMissing(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "WhatsApp നമ്പർ അഡ്മിനിൽ സജ്ജമാക്കിയിട്ടില്ല";
+            case 2: return "WhatsApp नंबर एडमिन में सेट नहीं है";
+            case 3: return "WhatsApp నంబర్ అడ్మిన్‌లో సెట్ చేయలేదు";
+            case 4: return "WhatsApp எண் அட்மினில் அமைக்கப்படவில்லை";
+            case 5: return "WhatsApp ಸಂಖ್ಯೆ ನಿರ್ವಾಹಕರಲ್ಲಿ ಹೊಂದಿಸಿಲ್ಲ";
+            case 6: return "WhatsApp ନମ୍ବର ଆଡମିନରେ ସେଟ୍ ହୋଇନାହିଁ";
+            default: return str(context, R.string.telugu_calendar_whatsapp_missing,
+                    "WhatsApp number not configured in admin");
+        }
+    }
+
+    /** e.g. "1 of 2 Pages" — kept for completeness; UI hides these counters. */
+    public static String pagesOf(@Nullable Context context, int current1Based, int total) {
+        switch (languageId(context)) {
+            case 1: return current1Based + " / " + total + " പേജുകൾ";
+            case 2: return current1Based + " / " + total + " पृष्ठ";
+            case 3: return current1Based + " / " + total + " పేజీలు";
+            case 4: return current1Based + " / " + total + " பக்கங்கள்";
+            case 5: return current1Based + " / " + total + " ಪುಟಗಳು";
+            case 6: return current1Based + " / " + total + " ପୃଷ୍ଠା";
+            default: return current1Based + " of " + total + " Pages";
+        }
+    }
+
+    public static String pagesOf(int current1Based, int total) {
+        return pagesOf(null, current1Based, total);
+    }
+
+    public static String shareDay(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ദിവസ സമയങ്ങൾ പങ്കിടുക";
+            case 2: return "दिन का समय साझा करें";
+            case 3: return "రోజు సమయాలు షేర్ చేయండి";
+            case 4: return "நாள் நேரங்களைப் பகிரவும்";
+            case 5: return "ದಿನದ ಸಮಯಗಳನ್ನು ಹಂಚಿಕೊಳ್ಳಿ";
+            case 6: return "ଦିନର ସମୟ ସେଆର୍ କରନ୍ତୁ";
+            default: return str(context, R.string.telugu_calendar_share_day, "Share day timings");
+        }
+    }
+
+    public static String shareRaasi(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "രാശിഫലം പങ്കിടുക";
+            case 2: return "राशिफल साझा करें";
+            case 3: return "రాశి ఫలాలు షేర్ చేయండి";
+            case 4: return "ராசிபலன் பகிரவும்";
+            case 5: return "ರಾಶಿಫಲ ಹಂಚಿಕೊಳ್ಳಿ";
+            case 6: return "ରାଶିଫଳ ସେଆର୍ କରନ୍ତୁ";
+            default: return str(context, R.string.telugu_calendar_share_raasi, "Share rashi phalalu");
+        }
+    }
+
+    public static String shareChooser(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "പങ്കിടുക";
+            case 2: return "साझा करें";
+            case 3: return "షేర్";
+            case 4: return "பகிர்";
+            case 5: return "ಹಂಚಿಕೊಳ್ಳಿ";
+            case 6: return "ସେଆର୍";
+            default: return str(context, R.string.telugu_calendar_share_chooser, "Share");
+        }
+    }
+
+    @NonNull
+    public static String rashiName(@Nullable Context context, int rashiId0) {
+        int id = RaasiContent.clampId(rashiId0);
+        switch (languageId(context)) {
+            case 1: {
+                String[] n = {"മേഷം", "വൃഷഭം", "മിഥുനം", "കർക്കടകം", "സിംഹം", "കന്യ",
+                        "തുലാം", "വൃശ്ചികം", "ധനു", "മകരം", "കുംഭം", "മീനം"};
+                return n[id];
+            }
+            case 2: {
+                String[] n = {"मेष", "वृषभ", "मिथुन", "कर्क", "सिंह", "कन्या",
+                        "तुला", "वृश्चिक", "धनु", "मकर", "कुंभ", "मीन"};
+                return n[id];
+            }
+            case 3:
+                return RaasiContent.NAMES_TE[id];
+            case 4: {
+                String[] n = {"மேஷம்", "ரிஷபம்", "மிதுனம்", "கடகம்", "சிம்மம்", "கன்னி",
+                        "துலாம்", "விருச்சிகம்", "தனுசு", "மகரம்", "கும்பம்", "மீனம்"};
+                return n[id];
+            }
+            case 5: {
+                String[] n = {"ಮೇಷ", "ವೃಷಭ", "ಮಿಥುನ", "ಕರ್ಕಾಟಕ", "ಸಿಂಹ", "ಕನ್ಯಾ",
+                        "ತುಲಾ", "ವೃಶ್ಚಿಕ", "ಧನು", "ಮಕರ", "ಕುಂಭ", "ಮೀನ"};
+                return n[id];
+            }
+            case 6: {
+                String[] n = {"ମେଷ", "ବୃଷ", "ମିଥୁନ", "କର୍କଟ", "ସିଂହ", "କନ୍ୟା",
+                        "ତୁଳା", "ବିଛା", "ଧନୁ", "ମକର", "କୁମ୍ଭ", "ମୀନ"};
+                return n[id];
+            }
+            default: {
+                String[] n = {"Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+                        "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"};
+                return n[id];
+            }
+        }
+    }
+
+    public static String phalaluTitle(@Nullable Context context, int rashiId0, String dateDisp) {
+        String name = rashiName(context, rashiId0);
+        switch (languageId(context)) {
+            case 1: return name + " രാശിഫലം (" + dateDisp + ")";
+            case 2: return name + " राशिफल (" + dateDisp + ")";
+            case 3: return name + " రాశి ఫలితాలు (" + dateDisp + ")";
+            case 4: return name + " ராசிபலன் (" + dateDisp + ")";
+            case 5: return name + " ರಾಶಿಫಲ (" + dateDisp + ")";
+            case 6: return name + " ରାଶିଫଳ (" + dateDisp + ")";
+            default: return name + " horoscope (" + dateDisp + ")";
+        }
+    }
+
+    public static String signLineWithEnglish(@Nullable Context context, int rashiId0) {
+        String name = rashiName(context, rashiId0);
+        String en = RaasiContent.NAMES_EN[RaasiContent.clampId(rashiId0)];
+        return name + " (" + en + ")";
+    }
+
+    private static int languageId(@Nullable Context context) {
+        if (context == null) return 0;
+        try {
+            return SharedPrefsData.getInt(
+                    context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private static String str(@Nullable Context context, int resId, String fallback) {
+        if (context != null) {
+            try {
+                return context.getString(resId);
+            } catch (Exception ignored) {
+            }
+        }
+        return fallback;
+    }
+}

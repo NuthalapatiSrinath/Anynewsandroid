@@ -62,9 +62,8 @@ public class MatchCenterActivity extends AppCompatActivity {
     public static final String EXTRA_MATCH = "extra_active_match";
 
     // Detail + header both refresh on this cadence while the screen is open.
-    // Reads are served from the backend DB snapshot (no per-request CREX call),
-    // so a few seconds keeps the score/commentary live without hammering CREX.
-    private static final int DETAIL_POLL_MS = 3000;
+    // Reads are served from Redis score snapshot (not Mongo every poll).
+    // Cadence is admin-only — no client 20s hard floor.
 
     private ActiveMatch match;
     private CricketMatchDetailResponse.Detail detail;
@@ -92,13 +91,31 @@ public class MatchCenterActivity extends AppCompatActivity {
     private final Runnable detailPoll = new Runnable() {
         @Override
         public void run() {
-            // Keep BOTH the header (active_match) and the tab detail live on the
-            // same cadence so the orange header never lags the Summary/Live tabs.
+            long ms = detailPollIntervalMs();
+            if (ms <= 0) {
+                // Wait for splash/session cadence — no invented client floor.
+                handler.postDelayed(this, 1500L);
+                return;
+            }
+            // Header active_match only when mini poll is allowed; detail always
+            // while viewing Match Center (user-initiated, not Home background).
             refresh();
             fetchDetail();
-            handler.postDelayed(this, DETAIL_POLL_MS);
+            handler.postDelayed(this, ms);
         }
     };
+
+    /** Align Match Center polls with admin mini-player interval only. */
+    private long detailPollIntervalMs() {
+        try {
+            int sec = com.anyNews.anynews.Utils.CricketSurfaceConfigHelper
+                    .getPollIntervalSeconds(this);
+            if (sec <= 0) return 0;
+            return sec * 1000L;
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
 
     /** Whole-pill opacity blink for header + centre LIVE chips while match is live. */
     private ObjectAnimator headerLiveBlink;
@@ -107,6 +124,11 @@ public class MatchCenterActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Match Center is reachable from mini or footer cricket tab.
+        if (!com.anyNews.anynews.Utils.CricketSurfaceConfigHelper.isAnyCricketSurfaceEnabled(this)) {
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_match_center);
 
         applyWindowInsets();
@@ -153,9 +175,15 @@ public class MatchCenterActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Hard-stop if admin turned both cricket surfaces off while user was elsewhere.
+        if (!com.anyNews.anynews.Utils.CricketSurfaceConfigHelper.isAnyCricketSurfaceEnabled(this)) {
+            finish();
+            return;
+        }
         com.anyNews.anynews.Utils.CricketMiniPlayerManager.setGlobalIsViewing(true);
         handler.removeCallbacks(detailPoll);
-        handler.postDelayed(detailPoll, DETAIL_POLL_MS);
+        // Start immediately; runnable waits for admin cadence if not yet cached.
+        handler.post(detailPoll);
     }
 
     @Override
@@ -2231,6 +2259,13 @@ public class MatchCenterActivity extends AppCompatActivity {
     // ---- Networking ---------------------------------------------------------
 
     private void refresh() {
+        // Continuous active_match only while mini master is ON (footer is display-only).
+        if (!com.anyNews.anynews.Utils.CricketSurfaceConfigHelper.isCricketPollAllowed(this)) {
+            return;
+        }
+        if (match == null || TextUtils.isEmpty(match.getMatch_id())) {
+            return;
+        }
         try {
             APIService api = RestApiClient.getClient().create(APIService.class);
             api.cricketActiveMatch("v3").enqueue(new Callback<CricketActiveMatchResponse>() {

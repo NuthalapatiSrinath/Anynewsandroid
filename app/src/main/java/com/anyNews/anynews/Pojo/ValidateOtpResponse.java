@@ -30,6 +30,9 @@ public class ValidateOtpResponse implements Serializable {
         @SerializedName("profile_pic")
         @Expose
         private String profilePic;
+        @SerializedName("is_reporter")
+        @Expose
+        private Boolean isReporter;
         private final static long serialVersionUID = -5867418139714542685L;
 
         public Integer getUserId() {
@@ -78,6 +81,14 @@ public class ValidateOtpResponse implements Serializable {
 
         public void setProfilePic(String profilePic) {
             this.profilePic = profilePic;
+        }
+
+        public Boolean getIsReporter() {
+            return isReporter;
+        }
+
+        public void setIsReporter(Boolean isReporter) {
+            this.isReporter = isReporter;
         }
     }
 
@@ -150,6 +161,10 @@ public class ValidateOtpResponse implements Serializable {
     @SerializedName("extras")
     @Expose
     private Extras extras;
+    /** OTP validate payload: { success, msg, data: { …, is_reporter } }. */
+    @SerializedName("data")
+    @Expose
+    private Data data;
     private final static long serialVersionUID = 2882389038047626877L;
 
     public Boolean getSuccess() {
@@ -166,6 +181,14 @@ public class ValidateOtpResponse implements Serializable {
 
     public void setExtras(Extras extras) {
         this.extras = extras;
+    }
+
+    public Data getData() {
+        return data;
+    }
+
+    public void setData(Data data) {
+        this.data = data;
     }
 
 

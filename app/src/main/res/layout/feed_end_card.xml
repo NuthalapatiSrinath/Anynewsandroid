@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Full FlipView page when the feed has no further articles. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/feed_end_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/feed_shimmer_surface"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/_24sdp"
+        android:paddingEnd="@dimen/_24sdp">
+
+        <View
+            android:layout_width="@dimen/_48sdp"
+            android:layout_height="@dimen/_4sdp"
+            android:layout_marginBottom="@dimen/_20sdp"
+            android:background="@color/feed_shimmer_bone" />
+
+        <TextView
+            android:id="@+id/feed_end_message"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:text="@string/feed_end_no_articles"
+            android:textColor="@color/colorTextSecondary"
+            android:textSize="@dimen/_16sdp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/feed_end_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_10sdp"
+            android:gravity="center"
+            android:text="@string/feed_end_hint"
+            android:textColor="@color/colorTextSecondary"
+            android:textSize="@dimen/_12sdp" />
+    </LinearLayout>
+</FrameLayout>

@@ -40,11 +40,14 @@ import retrofit2.Response;
  *
  * <ul>
  *   <li>Flip settle only enqueues — no per-flip network.</li>
- *   <li>Foreground flush timer every {@link #FLUSH_INTERVAL_MS}.</li>
+ *   <li>Foreground flush timer every {@link #FLUSH_INTERVAL_MS} (product durability).</li>
  *   <li>Immediate flush on background / screen-off / trim / process death paths.</li>
+ *   <li>Session close can attach a rollup via {@link #snapshotActivitySummary()} —
+ *       mid-session heartbeats are not used for view analytics.</li>
  * </ul>
  *
- * Session heartbeat stays on {@link SessionAnalyticsTracker} (~45s) separately.
+ * Session presence is open + close on {@link SessionAnalyticsTracker};
+ * mid-session heartbeats only when admin true-live is ON.
  */
 public final class ViewsBatchTracker {
 
@@ -126,6 +129,44 @@ public final class ViewsBatchTracker {
         });
     }
 
+    /**
+     * Non-destructive rollup of buffered events for session close.
+     * Does not remove events — {@link #flush} still owns delivery to /views/batch.
+     */
+    @Nullable
+    public JSONObject snapshotActivitySummary() {
+        synchronized (lock) {
+            if (pending.isEmpty()) return null;
+            try {
+                int impressions = 0;
+                int dwellEvents = 0;
+                long dwellSeconds = 0L;
+                java.util.HashSet<Long> unique = new java.util.HashSet<>();
+                for (JSONObject e : pending) {
+                    if (e == null) continue;
+                    long postId = e.optLong("post_id", 0L);
+                    if (postId > 0) unique.add(postId);
+                    if (e.has("duration_seconds")) {
+                        dwellEvents++;
+                        dwellSeconds += Math.max(0L, e.optLong("duration_seconds", 0L));
+                    } else {
+                        impressions++;
+                    }
+                }
+                JSONObject summary = new JSONObject();
+                summary.put("impressions", impressions);
+                summary.put("dwell_events", dwellEvents);
+                summary.put("dwell_seconds_total", dwellSeconds);
+                summary.put("unique_posts", unique.size());
+                // Rollup only on close — product view/dwell rows go via /views/batch.
+                // Avoid attaching events[] here to prevent double-count when batch also lands.
+                return summary;
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+    }
+
     /** View open (impression) — local queue only. */
     public void enqueueImpression(
             Context context,
@@ -138,9 +179,19 @@ public final class ViewsBatchTracker {
             JSONObject e = new JSONObject();
             e.put("draft_id", draftId);
             e.put("post_id", postId);
-            e.put("opened_at", System.currentTimeMillis());
+            long openedAt = System.currentTimeMillis();
+            e.put("opened_at", openedAt);
             if (sessionId != null) e.put("session_id", sessionId);
             if (postType != null) e.put("post_type", postType);
+            boolean offline = false;
+            try {
+                offline = context != null && !BookmarkStore.isNetworkAvailable(context);
+            } catch (Exception ignored) {
+            }
+            if (offline) {
+                e.put("offline", true);
+                e.put("offline_at", openedAt);
+            }
             addEvent(context, e);
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -163,6 +214,13 @@ public final class ViewsBatchTracker {
             e.put("duration_seconds", Math.max(1L, durationSeconds));
             if (sessionId != null) e.put("session_id", sessionId);
             if (postType != null) e.put("post_type", postType);
+            try {
+                if (context != null && !BookmarkStore.isNetworkAvailable(context)) {
+                    e.put("offline", true);
+                    e.put("offline_at", System.currentTimeMillis());
+                }
+            } catch (Exception ignored) {
+            }
             addEvent(context, e);
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -178,6 +236,16 @@ public final class ViewsBatchTracker {
                 ? context.getApplicationContext()
                 : appContext;
         if (appCtx == null) return;
+        // Keep offline views on disk until online — avoid spinning failed POSTs.
+        try {
+            if (!BookmarkStore.isNetworkAvailable(appCtx)) {
+                synchronized (lock) {
+                    persistBackupLocked(appCtx);
+                }
+                return;
+            }
+        } catch (Exception ignored) {
+        }
 
         final List<JSONObject> batch;
         synchronized (lock) {

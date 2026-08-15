@@ -30,7 +30,8 @@ public final class PostDwellTracker {
         if (type != null) {
             String t = type.toLowerCase();
             if (t.equals("ad") || t.equals("share_app") || t.equals("ratings")
-                    || t.equals("web_ads") || t.equals("web")) {
+                    || t.equals("web_ads") || t.equals("web")
+                    || t.equals(FeedEndHelper.POST_TYPE)) {
                 flush(context, false);
                 postId = 0L;
                 startedAtMs = 0L;

@@ -23,7 +23,7 @@ public class CricketActiveMatchResponse implements Serializable {
 
     /**
      * Admin toggle for the floating mini player. Null (missing / old server) →
-     * treated as enabled so current behavior is preserved.
+     * treated as disabled (no mini / safe default).
      */
     @SerializedName("cricket_mini_player_enabled")
     @Expose
@@ -49,9 +49,9 @@ public class CricketActiveMatchResponse implements Serializable {
         return mini_player_position;
     }
 
-    /** Missing → true (mini player enabled by default, matches current behavior). */
+    /** Missing → false (mini player off by default; zero cricket polls until ON). */
     public boolean isMiniPlayerEnabled() {
-        return cricket_mini_player_enabled == null || cricket_mini_player_enabled;
+        return cricket_mini_player_enabled != null && cricket_mini_player_enabled;
     }
 
     /** Missing → false (footer tab off by default; footer stays unchanged). */

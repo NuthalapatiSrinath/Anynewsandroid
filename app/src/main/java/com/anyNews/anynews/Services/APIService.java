@@ -34,6 +34,7 @@ import okhttp3.MultipartBody;
 import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.GET;
+import retrofit2.http.Header;
 import retrofit2.http.Multipart;
 import retrofit2.http.POST;
 import retrofit2.http.Part;
@@ -56,6 +57,15 @@ public interface APIService {
     Call<com.anyNews.anynews.Pojo.CricketMatchDetailResponse> cricketMatchDetail(
             @Path("version") String version,
             @retrofit2.http.Query("crex_key") String crexKey);
+
+    /** Full Telugu panchang year pack (cacheable forever for year+lat/lng). */
+    @GET("app/{version}/calendar/year/{year}")
+    Call<com.anyNews.anynews.panchang.PanchangModels.YearPack> calendarYear(
+            @Path("version") String version,
+            @Path("year") int year,
+            @retrofit2.http.Query("lat") double lat,
+            @retrofit2.http.Query("lng") double lng,
+            @retrofit2.http.Query("tz") String tz);
 
     //Shops
     @POST("app/{version}/Update_Device_FCM_Token")                  //  ok
@@ -263,6 +273,16 @@ public interface APIService {
     @POST("app/{version}/update_like")                  //  ok
     Call<EncreptionRequest> update_like(@Path("version") String version, @Body JsonObject shop);
 
+    // Bookmarks (encrypted v3 — draft_id + post_id)
+    @POST("app/{version}/add_bookmark")
+    Call<EncreptionRequest> add_bookmark(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/remove_bookmark")
+    Call<EncreptionRequest> remove_bookmark(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/list_bookmarks")
+    Call<EncreptionRequest> list_bookmarks(@Path("version") String version, @Body JsonObject body);
+
 
     //Shops
     @POST("app/{version}/update_post_count")                  //  ok
@@ -305,6 +325,10 @@ public interface APIService {
     @POST("app/{version}/get_follow_list")                  //  ok
     Call<EncreptionRequest> get_follow_list(@Path("version") String version, @Body JsonObject shop);
 
+    /** People who follow this reporter (writer). */
+    @POST("app/{version}/list_followers")
+    Call<EncreptionRequest> list_followers(@Path("version") String version, @Body JsonObject body);
+
     @POST("app/{version}/follow_more")   // get_districts
     Call<EncreptionRequest>follow_more(@Path("version") String version, @Body JsonObject langgg);
 
@@ -335,6 +359,9 @@ public interface APIService {
 
     @POST("app/{version}/update_settings")   // get_districts
     Call<EncreptionRequest>update_settings(@Path("version") String version, @Body JsonObject langgg);
+
+    @POST("app/{version}/ack_notification_reprompt")
+    Call<EncreptionRequest>ack_notification_reprompt(@Path("version") String version, @Body JsonObject body);
 
 
     @POST("app/{version}/get_static_data")
@@ -393,8 +420,26 @@ public interface APIService {
     @POST("app/{version}/views/batch")
     Call<JsonObject> post_views_batch(@Path("version") String version, @Body JsonObject payload);
 
+    /** Soft-accounting: public OCI / object media opens (MediaAccessReporter). */
+    @POST("app/{version}/report_media_access")
+    Call<JsonObject> report_media_access(@Path("version") String version, @Body JsonObject payload);
+
+    /** Batched real native-ad impressions (AdImpressionReporter) — no per-ad calls. */
+    @POST("app/{version}/report_ad_impressions")
+    Call<JsonObject> report_ad_impressions(@Path("version") String version, @Body JsonObject payload);
+
     @POST("app/{version}/session")
     Call<JsonObject> post_session(@Path("version") String version, @Body JsonObject session);
+
+    /** Isolated, OTP-session-bound referral programme endpoints. */
+    @POST("app/v3/referral/integrity-nonce")
+    Call<JsonObject> referralIntegrityNonce(@Header("x-referral-session") String referralSession, @Body JsonObject body);
+
+    @POST("app/v3/referral/claim-install")
+    Call<JsonObject> referralClaimInstall(@Header("x-referral-session") String referralSession, @Body JsonObject body);
+
+    @POST("app/v3/referral/create-link")
+    Call<JsonObject> referralCreateLink(@Header("x-referral-session") String referralSession, @Body JsonObject body);
 
     @POST("app/{version}/regions")   // get_districts
     Call<EncreptionRequest>get_regions_requiest(@Path("version") String version, @Body JsonObject langgg);

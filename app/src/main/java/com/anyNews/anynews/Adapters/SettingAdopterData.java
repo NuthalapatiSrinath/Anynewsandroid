@@ -233,44 +233,21 @@ public class SettingAdopterData extends RecyclerView.Adapter<SettingAdopterData.
         builder.setItems(options, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
+                String email = com.anyNews.anynews.Utils.ProfileHubConfigHelper.getContactEmail(context);
+                Intent mailto = new Intent(Intent.ACTION_VIEW, Uri.parse("mailto:" + email));
+                mailto.putExtra(Intent.EXTRA_SUBJECT, "your_subject");
+                mailto.putExtra(Intent.EXTRA_TEXT, "your_text");
                 switch (which) {
                     case 0:
-                        // Toast.makeText(context, "Report", Toast.LENGTH_SHORT).show();
-                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("mailto:" + "support@anynews.co.in"));
-                        intent.putExtra(Intent.EXTRA_SUBJECT, "your_subject");
-                        intent.putExtra(Intent.EXTRA_TEXT, "your_text");
-                        if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                            context.startActivity(intent);
-                        }
-
-
                     case 1:
-                        //  Toast.makeText(context, "language", Toast.LENGTH_SHORT).show();
-
-                        Intent intent1 = new Intent(Intent.ACTION_VIEW, Uri.parse("mailto:" + "support@anynews.co.in"));
-                        intent1.putExtra(Intent.EXTRA_SUBJECT, "your_subject");
-                        intent1.putExtra(Intent.EXTRA_TEXT, "your_text");
-                        if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                            context.startActivity(intent1);
-                        }
-
-
                     case 2:
-                        //Toast.makeText(context, "Feedback", Toast.LENGTH_SHORT).show();
-
-                        Intent intent2 = new Intent(Intent.ACTION_VIEW, Uri.parse("mailto:" + "support@anynews.co.in"));
-                        intent2.putExtra(Intent.EXTRA_SUBJECT, "your_subject");
-                        intent2.putExtra(Intent.EXTRA_TEXT, "your_text");
                         if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                            context.startActivity(intent2);
+                            context.startActivity(mailto);
                         }
-
-
+                        break;
                     case 3:
-
                   //      SkypeDialog();
-
-
+                        break;
                 }
             }
         });

@@ -74,6 +74,10 @@
     <item name="anynews_text_row_weight" format="float" type="dimen">0.25</item>
     <item name="anynews_media_view_weight" format="float" type="dimen">1.0</item>
     <item name="anynews_medium_template_top_weight" format="float" type="dimen">0.2</item>
+    <!-- Profile header globe opacity (light: softer premium; night: full punch) -->
+    <item name="profile_header_globe_alpha" format="float" type="dimen">0.58</item>
+    <item name="profile_header_globe_glow_alpha" format="float" type="dimen">0.42</item>
+    <item name="profile_header_orbit_alpha" format="float" type="dimen">0.45</item>
     <dimen name="anynews_default_margin">10dp</dimen>
     <dimen name="anynews_small_margin">5dp</dimen>
     <dimen name="anynews_text_size_small">12sp</dimen>

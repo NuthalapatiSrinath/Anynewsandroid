@@ -45,25 +45,20 @@ import retrofit2.converter.gson.GsonConverterFactory;
 /**
  * Tracks app foreground sessions and posts open/close to /app/v3/session.
  *
- * Time counts only while the process is in the foreground AND the screen is on
- * (interactive). Sources:
- * - ProcessLifecycleOwner ON_START / ON_STOP
- * - ActivityLifecycleCallbacks (start/stop/destroy + userLeaveHint)
- * - ACTION_SCREEN_OFF → close immediately
- * - ACTION_SCREEN_ON / USER_PRESENT → reopen only if still foreground + interactive
- * - SessionFlushService.onTaskRemoved → Recents swipe last-chance flush
+ * True-live presence (admin controlled via splash):
+ * - session_live_enabled OFF / heartbeat 0 → open once + close; no mid-session pings
+ * - ON → pulse every session_heartbeat_interval_seconds (min 5, default 30) while FG
  *
- * Close persists to SharedPrefs and flushes on a worker thread (never blocks the
- * main thread — Lifecycle/SCREEN_OFF would ANR). Critical close paths use a short
- * OkHttp timeout + SessionFlushService so swipe-kill can still POST. Heartbeats
- * stop on background. Pending prefs + server stale auto-close cover residual loss.
+ * Time counts only while foreground AND screen on (interactive).
+ * Close prefs + server stale auto-close cover kill loss without sticky 45-min “live”.
  */
 public final class SessionAnalyticsTracker {
 
     private static final String PREF_APP_SESSION_ID = "app_session_analytics_id";
     private static final String PREF_PENDING_CLOSE = "app_session_pending_close_json";
     private static final long ACTIVITY_CLOSE_DELAY_MS = 300L;
-    private static long HEARTBEAT_INTERVAL_MS = 45_000L;
+    /** Used only when admin opts into mid-session heartbeat (interval &gt; 0). */
+    private static long HEARTBEAT_INTERVAL_MS = 0L;
     private static final long CLOSE_FLUSH_WAIT_MS = 2_500L;
     private static final long CLOSE_HTTP_TIMEOUT_SEC = 3L;
     public static final String ACTION_CRICKET_STATE_CHANGED = "com.anyNews.anynews.ACTION_CRICKET_STATE_CHANGED";
@@ -245,18 +240,17 @@ public final class SessionAnalyticsTracker {
 
     /**
      * Activity.onUserLeaveHint — user leaving to Recents / another app.
-     * Stop heartbeats immediately (so admin cannot climb) and snapshot a pending close
-     * for kill recovery. Do NOT POST close yet — user may return from Recents.
-     * Real close: ProcessLifecycle ON_STOP / onTaskRemoved / finishing destroy.
+     * Snapshot a pending close (with activity rollup) for kill recovery.
+     * Do NOT POST close yet — user may return from Recents.
      */
     public synchronized void onUserLeaveHint(Context context) {
         if (!sessionOpen || sessionId == null) return;
         if (startedCount > 1) return;
         stopHeartbeat();
-        // Snapshot only — flush happens on actual background / task removed.
         long closeAt = System.currentTimeMillis();
         long duration = Math.max(0L, closeAt - openAtMs);
-        persistPendingClose(context.getApplicationContext(), sessionId, openAtMs, closeAt, duration);
+        JSONObject activity = peekActivitySummary(context);
+        persistPendingClose(context.getApplicationContext(), sessionId, openAtMs, closeAt, duration, activity);
     }
 
     /** Recents swipe — Service.onTaskRemoved. Close + blocking flush on worker. */
@@ -271,11 +265,12 @@ public final class SessionAnalyticsTracker {
                     PostDwellTracker.get().onScreenOff(appCtx);
                 } catch (Exception ignored) {
                 }
+                JSONObject activity = peekActivitySummary(appCtx);
                 try {
                     ViewsBatchTracker.get().flush(appCtx, true);
                 } catch (Exception ignored) {
                 }
-                closeSession(appCtx, false);
+                closeSession(appCtx, false, activity);
             }
         }
         // Block briefly on a non-main thread so the POST can land before kill.
@@ -333,25 +328,26 @@ public final class SessionAnalyticsTracker {
     }
 
     /**
-     * Home resume / foreground nudge: if a session is open and GPS throttle allows,
-     * POST a heartbeat with last-known lat/lng (non-blocking).
+     * Home resume nudge: only posts GPS when mid-session heartbeat is admin opt-in.
+     * Default open/close path attaches GPS on open/close only.
      */
     public void maybeRefreshDeviceLocation(Context context) {
+        if (!CricketSurfaceConfigHelper.isHeartbeatEnabled(context)) return;
         refreshDeviceLocation(context, false);
     }
 
     /**
-     * After soft LOCATION grant: bypass heartbeat throttle and send lat/lng ASAP.
-     * Also schedules short retries — last-known can be empty right after the prompt.
+     * After soft LOCATION grant: one-shot lat/lng (not a recurring timer).
+     * When heartbeat is off, still allows a single force attach if GPS available.
      */
     public void forceRefreshDeviceLocation(Context context) {
         if (context == null) return;
         final Context appCtx = context.getApplicationContext();
         refreshDeviceLocation(appCtx, true);
-        // Cold cache after first grant — retry a few times without prompting again.
+        if (!CricketSurfaceConfigHelper.isHeartbeatEnabled(appCtx)) return;
         final long[] delaysMs = {2_000L, 6_000L, 15_000L};
         for (long delayMs : delaysMs) {
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+            new Handler(Looper.getMainLooper()).postDelayed(
                     () -> refreshDeviceLocation(appCtx, true),
                     delayMs);
         }
@@ -365,12 +361,13 @@ public final class SessionAnalyticsTracker {
         synchronized (this) {
             if (!sessionOpen || sessionId == null) return;
             if (!force && !DeviceLocationHelper.shouldAttachGpsOnHeartbeat(appCtx)) return;
+            if (!force && !CricketSurfaceConfigHelper.isHeartbeatEnabled(appCtx)) return;
             sid = sessionId;
             opened = openAtMs;
         }
         NET_EXEC.execute(() -> {
-            // Use "open" attach rules when forcing (bypass heartbeat GPS throttle).
-            JSONObject body = buildSessionBody(appCtx, force ? "open" : "heartbeat", sid, opened, 0L, 0L);
+            JSONObject body = buildSessionBody(
+                    appCtx, force ? "open" : "heartbeat", sid, opened, 0L, 0L, null);
             if (body == null || !body.has("latitude")) return;
             try {
                 body.put("action", "heartbeat");
@@ -388,12 +385,13 @@ public final class SessionAnalyticsTracker {
             PostDwellTracker.get().flush(context.getApplicationContext());
         } catch (Exception ignored) {
         }
+        JSONObject activity = peekActivitySummary(context);
         try {
             ViewsBatchTracker.get().flush(context.getApplicationContext(), true);
         } catch (Exception ignored) {
         }
         if (sessionOpen) {
-            closeSession(context.getApplicationContext(), true);
+            closeSession(context.getApplicationContext(), true, activity);
         }
         stopWatchService(context.getApplicationContext());
     }
@@ -407,7 +405,12 @@ public final class SessionAnalyticsTracker {
             if (!sessionOpen) {
                 openSession(context);
             }
-            startHeartbeat(context);
+            // Periodic heartbeat only when admin live monitoring ON + interval > 0.
+            if (CricketSurfaceConfigHelper.isHeartbeatEnabled(context)) {
+                startHeartbeat(context);
+            } else {
+                stopHeartbeat();
+            }
         } else {
             stopHeartbeat();
             if (sessionOpen) {
@@ -415,12 +418,23 @@ public final class SessionAnalyticsTracker {
                     PostDwellTracker.get().onScreenOff(context);
                 } catch (Exception ignored) {
                 }
+                // Snapshot before views flush drains the buffer.
+                JSONObject activity = peekActivitySummary(context);
                 try {
                     ViewsBatchTracker.get().flush(context, true);
                 } catch (Exception ignored) {
                 }
-                closeSession(context, awaitCloseFlush);
+                closeSession(context, awaitCloseFlush, activity);
             }
+        }
+    }
+
+    @Nullable
+    private static JSONObject peekActivitySummary(Context context) {
+        try {
+            return ViewsBatchTracker.get().snapshotActivitySummary();
+        } catch (Exception ignored) {
+            return null;
         }
     }
 
@@ -462,14 +476,14 @@ public final class SessionAnalyticsTracker {
         final long opened = openAtMs;
         NET_EXEC.execute(() -> {
             flushPendingCloseBlocking(context);
-            JSONObject body = buildSessionBody(context, "open", sid, opened, 0L, 0L);
+            JSONObject body = buildSessionBody(context, "open", sid, opened, 0L, 0L, null);
             if (body != null) {
                 executeSessionCall(context, body, false, false);
             }
         });
     }
 
-    private void closeSession(Context context, boolean awaitFlush) {
+    private void closeSession(Context context, boolean awaitFlush, @Nullable JSONObject activitySummary) {
         if (!sessionOpen || sessionId == null) return;
         long closeAt = System.currentTimeMillis();
         long duration = Math.max(0L, closeAt - openAtMs);
@@ -479,8 +493,9 @@ public final class SessionAnalyticsTracker {
         sessionId = null;
         openAtMs = 0L;
         SharedPrefsData.putString(context, PREF_APP_SESSION_ID, "", Constants.PREF_NAME);
-        persistPendingClose(context, sid, opened, closeAt, duration);
-        final JSONObject body = buildSessionBody(context, "close", sid, opened, closeAt, duration);
+        persistPendingClose(context, sid, opened, closeAt, duration, activitySummary);
+        final JSONObject body = buildSessionBody(
+                context, "close", sid, opened, closeAt, duration, activitySummary);
         stopWatchService(context);
         if (body == null) {
             SessionFlushService.enqueueFlush(context);
@@ -520,7 +535,17 @@ public final class SessionAnalyticsTracker {
 
     private void startHeartbeat(Context context) {
         if (heartbeatRunnable != null) return;
+        if (!CricketSurfaceConfigHelper.isHeartbeatEnabled(context)) return;
         final Context appCtx = context.getApplicationContext();
+        try {
+            int hbSec = CricketSurfaceConfigHelper.getHeartbeatIntervalSeconds(appCtx);
+            if (hbSec <= 0) return;
+            HEARTBEAT_INTERVAL_MS = Math.max(
+                    CricketSurfaceConfigHelper.HEARTBEAT_MIN_SECONDS * 1000L,
+                    (long) hbSec * 1000L);
+        } catch (Exception ignored) {
+            return;
+        }
         heartbeatRunnable = new Runnable() {
             @Override
             public void run() {
@@ -529,15 +554,33 @@ public final class SessionAnalyticsTracker {
                         heartbeatRunnable = null;
                         return;
                     }
+                    if (!CricketSurfaceConfigHelper.isHeartbeatEnabled(appCtx)) {
+                        heartbeatRunnable = null;
+                        return;
+                    }
                     final String sid = sessionId;
                     final long opened = openAtMs;
                     NET_EXEC.execute(() -> {
-                        JSONObject body = buildSessionBody(appCtx, "heartbeat", sid, opened, 0L, 0L);
+                        JSONObject body = buildSessionBody(
+                                appCtx, "heartbeat", sid, opened, 0L, 0L, null);
                         if (body != null) {
                             executeSessionCall(appCtx, body, false, false);
                         }
                     });
-                    mainHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS);
+                    long next = HEARTBEAT_INTERVAL_MS;
+                    try {
+                        int hbSec = CricketSurfaceConfigHelper.getHeartbeatIntervalSeconds(appCtx);
+                        if (hbSec <= 0) {
+                            heartbeatRunnable = null;
+                            return;
+                        }
+                        next = Math.max(
+                                CricketSurfaceConfigHelper.HEARTBEAT_MIN_SECONDS * 1000L,
+                                (long) hbSec * 1000L);
+                        HEARTBEAT_INTERVAL_MS = next;
+                    } catch (Exception ignored) {
+                    }
+                    mainHandler.postDelayed(this, next);
                 }
             }
         };
@@ -551,9 +594,16 @@ public final class SessionAnalyticsTracker {
         }
     }
 
-    private void persistPendingClose(Context context, String sid, long openAt, long closeAt, long durationMs) {
+    private void persistPendingClose(
+            Context context,
+            String sid,
+            long openAt,
+            long closeAt,
+            long durationMs,
+            @Nullable JSONObject activitySummary) {
         try {
-            JSONObject body = buildSessionBody(context, "close", sid, openAt, closeAt, durationMs);
+            JSONObject body = buildSessionBody(
+                    context, "close", sid, openAt, closeAt, durationMs, activitySummary);
             if (body == null) return;
             SharedPrefsData.putString(context, PREF_PENDING_CLOSE, body.toString(), Constants.PREF_NAME);
         } catch (Exception e) {
@@ -584,7 +634,13 @@ public final class SessionAnalyticsTracker {
 
     @Nullable
     private JSONObject buildSessionBody(
-            Context context, String action, String sid, long openAt, long closeAt, long durationMs) {
+            Context context,
+            String action,
+            String sid,
+            long openAt,
+            long closeAt,
+            long durationMs,
+            @Nullable JSONObject activitySummary) {
         try {
             int draftId = SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME);
             if (draftId <= 0) return null;
@@ -600,6 +656,9 @@ public final class SessionAnalyticsTracker {
             if (closeAt > 0) body.put("close_at", closeAt);
             if ("close".equals(action)) {
                 body.put("duration_ms", Math.max(0L, durationMs));
+                if (activitySummary != null && activitySummary.length() > 0) {
+                    body.put("activity_summary", activitySummary);
+                }
             } else if (durationMs > 0) {
                 body.put("duration_ms", durationMs);
             }
@@ -626,7 +685,7 @@ public final class SessionAnalyticsTracker {
 
     /**
      * Attach quiet last-known GPS for device_drafts.
-     * Always on open/close; throttled on heartbeat (~3 min).
+     * Always on open/close; throttled on optional heartbeat.
      */
     private void attachDeviceGps(Context context, JSONObject body, String action) {
         try {
@@ -683,25 +742,137 @@ public final class SessionAnalyticsTracker {
                 }
                 JsonObject resBody = response.body();
                 if (resBody != null) {
+                    boolean cricketSurfaceFlipped = false;
                     if (resBody.has("cricket_mini_player_enabled")) {
                         boolean newVal = resBody.get("cricket_mini_player_enabled").getAsBoolean();
                         boolean oldVal = CricketSurfaceConfigHelper.isMiniPlayerEnabled(context);
                         CricketSurfaceConfigHelper.saveMiniPlayerEnabled(context, newVal);
-                        if (!oldVal && newVal) {
-                            androidx.localbroadcastmanager.content.LocalBroadcastManager
-                                    .getInstance(context)
-                                    .sendBroadcast(new Intent(ACTION_CRICKET_STATE_CHANGED));
+                        cricketSurfaceFlipped = oldVal != newVal;
+                    }
+                    if (resBody.has("cricket_footer_tab_enabled")
+                            && !resBody.get("cricket_footer_tab_enabled").isJsonNull()) {
+                        boolean newFooter = resBody.get("cricket_footer_tab_enabled").getAsBoolean();
+                        boolean oldFooter = CricketSurfaceConfigHelper.isFooterTabEnabled(context);
+                        CricketSurfaceConfigHelper.saveFooterTabEnabled(context, newFooter);
+                        if (oldFooter != newFooter) {
+                            cricketSurfaceFlipped = true;
                         }
+                    }
+                    // Notify on surface flip so Home updates mini/footer UI.
+                    // Background polls only start when mini is ON and an active
+                    // mini-player match is seeded (footer alone never polls).
+                    if (cricketSurfaceFlipped) {
+                        androidx.localbroadcastmanager.content.LocalBroadcastManager
+                                .getInstance(context)
+                                .sendBroadcast(new Intent(ACTION_CRICKET_STATE_CHANGED));
                     }
                     if (resBody.has("cricket_mini_player_poll_interval_seconds")) {
                         CricketSurfaceConfigHelper.savePollIntervalSeconds(context, 
                                 resBody.get("cricket_mini_player_poll_interval_seconds").getAsInt());
                     }
-                    if (resBody.has("session_heartbeat_interval_seconds")) {
-                        int hb = resBody.get("session_heartbeat_interval_seconds").getAsInt();
-                        if (hb >= 10) {
-                            CricketSurfaceConfigHelper.saveHeartbeatIntervalSeconds(context, hb);
-                            HEARTBEAT_INTERVAL_MS = hb * 1000L;
+                    if (resBody.has("cricket_mini_player_idle_poll_interval_seconds")
+                            && !resBody.get("cricket_mini_player_idle_poll_interval_seconds").isJsonNull()) {
+                        try {
+                            CricketSurfaceConfigHelper.saveIdlePollIntervalSeconds(
+                                    context,
+                                    resBody.get("cricket_mini_player_idle_poll_interval_seconds").getAsInt());
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("offline_news_pack_max")
+                            && !resBody.get("offline_news_pack_max").isJsonNull()) {
+                        try {
+                            OfflineFeedStore.savePackMaxFromServer(
+                                    context, resBody.get("offline_news_pack_max").getAsInt());
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("home_mode_chrome_auto_hide_seconds")
+                            && !resBody.get("home_mode_chrome_auto_hide_seconds").isJsonNull()) {
+                        try {
+                            HomeModeChromeConfig.saveAutoHideSecondsFromServer(
+                                    context,
+                                    resBody.get("home_mode_chrome_auto_hide_seconds").getAsInt());
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("read_history_hours")
+                            && !resBody.get("read_history_hours").isJsonNull()) {
+                        try {
+                            ReadHistoryConfig.saveHoursFromServer(
+                                    context, resBody.get("read_history_hours").getAsInt());
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    Integer feedEveryN = null;
+                    Integer adPrefetch = null;
+                    Integer maxInFlight = null;
+                    Integer flushEveryN = null;
+                    if (resBody.has("feed_ad_every_n")
+                            && !resBody.get("feed_ad_every_n").isJsonNull()) {
+                        try {
+                            feedEveryN = resBody.get("feed_ad_every_n").getAsInt();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("ad_prefetch_lookahead")
+                            && !resBody.get("ad_prefetch_lookahead").isJsonNull()) {
+                        try {
+                            adPrefetch = resBody.get("ad_prefetch_lookahead").getAsInt();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("max_native_ad_loads_in_flight")
+                            && !resBody.get("max_native_ad_loads_in_flight").isJsonNull()) {
+                        try {
+                            maxInFlight = resBody.get("max_native_ad_loads_in_flight").getAsInt();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("ad_impr_flush_every_n")
+                            && !resBody.get("ad_impr_flush_every_n").isJsonNull()) {
+                        try {
+                            flushEveryN = resBody.get("ad_impr_flush_every_n").getAsInt();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (feedEveryN != null
+                            || adPrefetch != null
+                            || maxInFlight != null
+                            || flushEveryN != null) {
+                        FeedAdConfig.saveFromServer(
+                                context, feedEveryN, adPrefetch, maxInFlight, flushEveryN);
+                    }
+                    if (resBody.has("session_live_enabled")
+                            || resBody.has("session_heartbeat_interval_seconds")
+                            || resBody.has("session_live_window_seconds")) {
+                        Boolean liveEn = null;
+                        Integer hb = null;
+                        Integer win = null;
+                        if (resBody.has("session_live_enabled")
+                                && !resBody.get("session_live_enabled").isJsonNull()) {
+                            liveEn = resBody.get("session_live_enabled").getAsBoolean();
+                        }
+                        if (resBody.has("session_heartbeat_interval_seconds")
+                                && !resBody.get("session_heartbeat_interval_seconds").isJsonNull()) {
+                            hb = Math.max(0, resBody.get("session_heartbeat_interval_seconds").getAsInt());
+                        }
+                        if (resBody.has("session_live_window_seconds")
+                                && !resBody.get("session_live_window_seconds").isJsonNull()) {
+                            win = Math.max(0, resBody.get("session_live_window_seconds").getAsInt());
+                        }
+                        CricketSurfaceConfigHelper.applyPresenceFromServer(context, liveEn, hb, win);
+                        int effective =
+                                CricketSurfaceConfigHelper.getHeartbeatIntervalSeconds(context);
+                        HEARTBEAT_INTERVAL_MS = effective > 0 ? (long) effective * 1000L : 0L;
+                        if (effective <= 0) {
+                            mainHandler.post(this::stopHeartbeat);
+                        } else if (sessionOpen && processForeground && screenOn) {
+                            // Interval may have changed while session open — restart schedule.
+                            mainHandler.post(() -> {
+                                stopHeartbeat();
+                                startHeartbeat(context);
+                            });
                         }
                     }
                 }

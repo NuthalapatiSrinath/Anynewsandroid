@@ -28,6 +28,8 @@ public final class WriterStripStyleHelper {
 
     private static final String TAG = "AnyNewsWriterStyle";
     private static final Gson GSON = new Gson();
+    /** Admin location offset is clamped so the district pill cannot slide off-screen. */
+    private static final float MAX_LOCATION_OFFSET_DP = 24f;
 
     private WriterStripStyleHelper() {
     }
@@ -68,18 +70,27 @@ public final class WriterStripStyleHelper {
             applyThemeColor(context, name);
             applyThemeColor(context, designation);
             applyThemeColor(context, time);
-            applyThemeColor(context, location);
+            applyLocationTheme(context, location, locationPill);
             return;
         }
         styleText(context, name, cfg.getNameSizeSdp(), cfg.isNameBold(), cfg.getNameFontFamily(), cfg.getNameColor());
         styleText(context, designation, cfg.getDesignationSizeSdp(), cfg.isDesignationBold(), cfg.getDesignationFontFamily(), cfg.getDesignationColor());
         styleText(context, time, cfg.getTimeSizeSdp(), cfg.isTimeBold(), cfg.getTimeFontFamily(), cfg.getTimeColor());
-        // Location pill: no bold flag (the my_feed TextView is not bold by default).
-        styleText(context, location, cfg.getLocationSizeSdp(), null, cfg.getLocationFontFamily(), cfg.getLocationColor());
+        // Location: size/font from admin, but colour always theme-aware. The
+        // pill surface is black (night) / white (day); an admin literal like
+        // "#000000" or a dark grey is invisible after night toggle / recreate.
+        styleText(context, location, cfg.getLocationSizeSdp(), null, cfg.getLocationFontFamily(), null);
+        applyLocationTheme(context, location, locationPill);
 
         if (locationPill != null) {
             try {
-                float px = cfg.getLocationRightOffsetDp() * context.getResources().getDisplayMetrics().density;
+                float offsetDp = cfg.getLocationRightOffsetDp();
+                if (offsetDp > MAX_LOCATION_OFFSET_DP) {
+                    offsetDp = MAX_LOCATION_OFFSET_DP;
+                } else if (offsetDp < -MAX_LOCATION_OFFSET_DP) {
+                    offsetDp = -MAX_LOCATION_OFFSET_DP;
+                }
+                float px = offsetDp * context.getResources().getDisplayMetrics().density;
                 locationPill.setTranslationX(px);
             } catch (Exception e) {
                 Log.e(TAG, "location offset failed", e);
@@ -124,6 +135,27 @@ public final class WriterStripStyleHelper {
     }
 
     /**
+     * Forces district pill label colour + visibility so pin-only / transparent
+     * text cannot occur after day↔night recreate or view recycle.
+     */
+    private static void applyLocationTheme(Context context, TextView location, View locationPill) {
+        if (location != null) {
+            applyThemeColor(context, location);
+            location.setVisibility(View.VISIBLE);
+            location.setAlpha(1f);
+            try {
+                location.setMaxLines(1);
+                location.setEllipsize(TextUtils.TruncateAt.END);
+            } catch (Exception ignored) {
+            }
+        }
+        if (locationPill != null) {
+            locationPill.setVisibility(View.VISIBLE);
+            locationPill.setAlpha(1f);
+        }
+    }
+
+    /**
      * Applies the day/night-aware {@code text_color_primary} (black in light
      * mode, white in dark mode) so writer-strip text is always readable.
      */
@@ -132,14 +164,20 @@ public final class WriterStripStyleHelper {
             return;
         }
         try {
-            tv.setTextColor(ContextCompat.getColor(context, R.color.text_color_primary));
-        } catch (Exception ignored) {
+            // Prefer the day/night-aware @color/black (flips white in night) so
+            // the label matches the rest of the writer strip / pill.
+            tv.setTextColor(ContextCompat.getColor(context, R.color.black));
+        } catch (Exception e) {
+            try {
+                tv.setTextColor(ContextCompat.getColor(context, R.color.text_color_primary));
+            } catch (Exception ignored) {
+            }
         }
     }
 
     /**
      * Returns {@code true} when the colour should be ignored in favour of the
-     * theme-aware default: either unset/blank, unparseable, or plain black
+     * theme-aware default: either unset/blank, unparseable, or plain/near black
      * (the shipped default) which would be invisible in dark mode.
      */
     private static boolean isThemeDefaultColor(String color) {
@@ -148,8 +186,9 @@ public final class WriterStripStyleHelper {
         }
         try {
             int c = Color.parseColor(color.trim());
-            // Ignore alpha; treat any fully-opaque/!opaque pure black as default.
-            return (c & 0x00FFFFFF) == 0x000000;
+            int rgb = c & 0x00FFFFFF;
+            // Pure black or near-black defaults from admin.
+            return rgb <= 0x00181818;
         } catch (IllegalArgumentException e) {
             return true;
         }

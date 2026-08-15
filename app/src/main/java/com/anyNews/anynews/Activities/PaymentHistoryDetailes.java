@@ -1,21 +1,14 @@
 package com.anyNews.anynews.Activities;
 
-import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
-import android.app.Activity;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
 import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.anyNews.anynews.Adapters.PaymentHistoryAdopter;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
@@ -26,16 +19,15 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.SharedPrefsData;
-import com.anyNews.anynews.models.PaymentHistoryModel;
-import com.anyNews.anynews.testing.MainActivity;
+import com.anyNews.anynews.Utils.WalletHistoryCache;
 import com.anyNews.anynews.testing.PaginationListener;
 import com.anyNews.anynews.testing.PostItem;
-import com.anyNews.anynews.testing.PostRecyclerAdapter;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -48,32 +40,30 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 import static com.anyNews.anynews.testing.PaginationListener.PAGE_START;
 
+/**
+ * Legacy payment history screen — same instant cache + soft-refresh path as testing.MainActivity.
+ */
 public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRefreshLayout.OnRefreshListener {
 
     @BindView(R.id.recyclerView)
     RecyclerView mRecyclerView;
     @BindView(R.id.swipeRefresh)
     SwipeRefreshLayout swipeRefresh;
-    LinearLayoutManager linearLayoutManager;
     PaymentHistoryAdopter adapter;
     private int currentPage = PAGE_START;
-    ArrayList<PaymentHistoryModel.Datum>  paymentHistoryModel = new ArrayList<PaymentHistoryModel.Datum>();
-    LinearLayout txtNoData,loading;
+    LinearLayout txtNoData, loading;
     NeomorphFrameLayout neomorphFrameLayout_approved_un_selected, neomorphFrameLayout_approved_selected,
             neomorphFrameLayout_pending_un_selected, neomorphFrameLayout_pending_selected;
-    LinearLayout back_button;
-    private Activity Activity;
     TextView payment_total_amount;
-    NestedScrollView nested_scrollview_detailes;
-    ProgressBar progress_bar;
 
-    long page=0; long limit=0;
+    long page = 0;
+    long limit = 0;
     private int totalPage = 10;
     private boolean isLoading = false;
-    int itemCount = 0;
     public int article_refersh = 1;
-
     private boolean isLastPage = false;
+    private Call<EncreptionRequest> activeCall;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -84,82 +74,36 @@ public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRe
         loading = findViewById(R.id.loading);
         txtNoData = findViewById(R.id.txtNoData);
 
-
         swipeRefresh.setOnRefreshListener(this);
-
         mRecyclerView.setHasFixedSize(true);
-
 
         neomorphFrameLayout_approved_selected = findViewById(R.id.neomorphFrameLayout_approved_selected);
         neomorphFrameLayout_approved_un_selected = findViewById(R.id.neomorphFrameLayout_approved_un_selected);
         neomorphFrameLayout_pending_un_selected = findViewById(R.id.neomorphFrameLayout_pending_un_selected);
         neomorphFrameLayout_pending_selected = findViewById(R.id.neomorphFrameLayout_pending_selected);
-        nested_scrollview_detailes = findViewById(R.id.nested_scrollview_detailes);
 
-        loading.setVisibility(View.VISIBLE);
+        loading.setVisibility(View.GONE);
         txtNoData.setVisibility(View.GONE);
-        mRecyclerView.setVisibility(View.GONE);
-
 
         neomorphFrameLayout_approved_un_selected.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
-                neomorphFrameLayout_approved_selected.setVisibility(View.VISIBLE);
-                neomorphFrameLayout_approved_un_selected.setVisibility(View.GONE);
-                neomorphFrameLayout_pending_selected.setVisibility(View.GONE);
-                neomorphFrameLayout_pending_un_selected.setVisibility(View.VISIBLE);
-
-                loading.setVisibility(View.VISIBLE);
-                txtNoData.setVisibility(View.GONE);
-                swipeRefresh.setVisibility(View.GONE);
-                adapter.clear();
-                page = 0;
-                limit = 0;
-                currentPage = 1;
-                article_refersh = 1;
-                totalPage = 10;
-
-                doApiCall(1, page, limit);
+                switchArticle();
             }
         });
 
         neomorphFrameLayout_pending_un_selected.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
-                neomorphFrameLayout_approved_selected.setVisibility(View.GONE);
-                neomorphFrameLayout_approved_un_selected.setVisibility(View.VISIBLE);
-                neomorphFrameLayout_pending_selected.setVisibility(View.VISIBLE);
-                neomorphFrameLayout_pending_un_selected.setVisibility(View.GONE);
-
-                loading.setVisibility(View.VISIBLE);
-                txtNoData.setVisibility(View.GONE);
-                swipeRefresh.setVisibility(View.GONE);
-                page = 0;
-                limit = 0;
-                adapter.clear();
-                article_refersh = 2;
-                currentPage = 1;
-                totalPage = 10;
-
-
-                get_redeem_transactions(2, page, limit);
-
+                switchRedeem();
             }
         });
 
-        neomorphFrameLayout_approved_selected.setVisibility(View.VISIBLE);
-        neomorphFrameLayout_approved_un_selected.setVisibility(View.GONE);
-        neomorphFrameLayout_pending_selected.setVisibility(View.GONE);
-        neomorphFrameLayout_pending_un_selected.setVisibility(View.VISIBLE);
-        // use a linear layout manager
         LinearLayoutManager layoutManager = new LinearLayoutManager(this);
         mRecyclerView.setLayoutManager(layoutManager);
 
         adapter = new PaymentHistoryAdopter(PaymentHistoryDetailes.this, new ArrayList<>());
         mRecyclerView.setAdapter(adapter);
-        doApiCall(1, page, limit);
 
         mRecyclerView.addOnScrollListener(new PaginationListener(layoutManager) {
             @Override
@@ -167,12 +111,10 @@ public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRe
                 isLoading = true;
                 currentPage++;
                 if (article_refersh == 1) {
-
-                    doApiCall(1, page, limit);
+                    doApiCall();
                 } else {
-                    get_redeem_transactions(2, page, limit);
+                    get_redeem_transactions();
                 }
-
             }
 
             @Override
@@ -186,224 +128,255 @@ public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRe
             }
         });
 
+        String cachedTotal = WalletHistoryCache.loadTotalPointsDisplay(this);
+        if (cachedTotal != null && !cachedTotal.isEmpty()) {
+            payment_total_amount.setText("\u20B9" + cachedTotal);
+        }
 
-        swipeRefresh.setVisibility(View.GONE);
-        mRecyclerView.setVisibility(View.GONE);
+        switchArticle();
     }
 
-    /**
-     * do api call here to fetch data from server
-     * In example i'm adding data manually
-     */
+    private void switchArticle() {
+        cancelActiveCall();
+        neomorphFrameLayout_approved_selected.setVisibility(View.VISIBLE);
+        neomorphFrameLayout_approved_un_selected.setVisibility(View.GONE);
+        neomorphFrameLayout_pending_selected.setVisibility(View.GONE);
+        neomorphFrameLayout_pending_un_selected.setVisibility(View.VISIBLE);
+        resetPaging();
+        article_refersh = 1;
+        if (!paintCache(WalletHistoryCache.TYPE_ARTICLE)) {
+            showSoftEmpty();
+        }
+        doApiCall();
+    }
 
-    private void doApiCall(int value, long page1, long limit1) {
+    private void switchRedeem() {
+        cancelActiveCall();
+        neomorphFrameLayout_approved_selected.setVisibility(View.GONE);
+        neomorphFrameLayout_approved_un_selected.setVisibility(View.VISIBLE);
+        neomorphFrameLayout_pending_selected.setVisibility(View.VISIBLE);
+        neomorphFrameLayout_pending_un_selected.setVisibility(View.GONE);
+        resetPaging();
+        article_refersh = 2;
+        if (!paintCache(WalletHistoryCache.TYPE_REDEEM)) {
+            showSoftEmpty();
+        }
+        get_redeem_transactions();
+    }
 
+    private void resetPaging() {
+        page = 0;
+        limit = 0;
+        currentPage = PAGE_START;
+        totalPage = 10;
+        isLastPage = false;
+        isLoading = false;
+        adapter.clear();
+    }
 
-        JsonObject otp = set_transaction(page1, limit1);
+    private boolean paintCache(String type) {
+        PostItem cached = WalletHistoryCache.load(this, type);
+        if (cached == null || cached.getData() == null || cached.getData().isEmpty()) {
+            return false;
+        }
+        if (cached.getTotalPoints() != null) {
+            payment_total_amount.setText("\u20B9" + cached.getTotalPoints());
+        }
+        if (cached.getSkip() != null) page = cached.getSkip();
+        if (cached.getFirstTransactionId() != null) limit = cached.getFirstTransactionId();
+        adapter.setItems(new ArrayList<>(cached.getData()));
+        showList();
+        safeRefreshing(true);
+        return true;
+    }
 
+    private void showSoftEmpty() {
+        loading.setVisibility(View.GONE);
+        txtNoData.setVisibility(View.GONE);
+        swipeRefresh.setVisibility(View.VISIBLE);
+        mRecyclerView.setVisibility(View.VISIBLE);
+        safeRefreshing(true);
+    }
+
+    private void showList() {
+        loading.setVisibility(View.GONE);
+        txtNoData.setVisibility(View.GONE);
+        swipeRefresh.setVisibility(View.VISIBLE);
+        mRecyclerView.setVisibility(View.VISIBLE);
+    }
+
+    private void showEmpty() {
+        loading.setVisibility(View.GONE);
+        txtNoData.setVisibility(View.VISIBLE);
+        mRecyclerView.setVisibility(View.GONE);
+        swipeRefresh.setVisibility(View.GONE);
+        safeRefreshing(false);
+        isLoading = false;
+    }
+
+    private void safeRefreshing(boolean r) {
+        if (swipeRefresh != null) swipeRefresh.setRefreshing(r);
+    }
+
+    private void doApiCall() {
+        JsonObject otp = set_transaction(page, limit);
         APIService apiService = RestApiClient.getClient().create(APIService.class);
-        Call<EncreptionRequest> apiResponse = apiService.get_article_transactions("v3", otp);
-
-        apiResponse.enqueue(new Callback<EncreptionRequest>() {
-            //@RequiresApi(api = Build.VERSION_CODES.O)
+        cancelActiveCall();
+        activeCall = apiService.get_article_transactions("v3", otp);
+        final int requestPage = currentPage;
+        activeCall.enqueue(new Callback<EncreptionRequest>() {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-
-                EncreptionRequest encreptionRequest = response.body();
-                String encrpt_data = null;
-                /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-
-                    encrpt_data = decrypt(encreptionRequest.getData());
-                }
-                */
-                encrpt_data = decrypt(encreptionRequest.getData());
-
-
-                Gson gsonObj = new Gson();
-                PostItem languageModel = gsonObj.fromJson(encrpt_data, PostItem.class);
-
-                payment_total_amount.setText("\u20B9" + languageModel.getTotalPoints());
-
-
-                page = languageModel.getSkip();
-                limit = languageModel.getFirstTransactionId();
-
-                if (languageModel.getSuccess()) {
-
-                    final ArrayList<PostItem.Datum> items = new ArrayList<>();
-
-                    if (languageModel.getData().size() > 0) {
-
-
-                        new Handler().postDelayed(new Runnable() {
-
-                            @Override
-                            public void run() {
-
-                                items.addAll(languageModel.getData());
-
-                                Toast.makeText(PaymentHistoryDetailes.this, "VVV"+items.size(), Toast.LENGTH_SHORT).show();
-
-                                if (currentPage != PAGE_START) {
-
-                                    showLog("CURRENT_PAGE DATA" + currentPage + " ,  " + PAGE_START);
-
-                                }
-                                if (currentPage != PAGE_START) adapter.removeLoading();
-                                adapter.addItems(items);
-                                swipeRefresh.setRefreshing(false);
-
-
-                                swipeRefresh.setVisibility(View.VISIBLE);
-                                txtNoData.setVisibility(View.GONE);
-                                mRecyclerView.setVisibility(View.VISIBLE);
-                                loading.setVisibility(View.GONE);
-
-                                // check weather is last page or not
-                                if (currentPage < totalPage) {
-                                    adapter.addLoading();
-                                } else {
-                                    isLastPage = true;
-                                }
-                                isLoading = false;
-                            }
-                        }, 1500);
-
-
-                    } else {
-
-                    }
-
-                }
+                if (isFinishing() || call.isCanceled()) return;
+                applyResponse(response, WalletHistoryCache.TYPE_ARTICLE, requestPage);
             }
-
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
+                if (isFinishing() || call.isCanceled()) return;
+                onNetworkFail();
             }
         });
-
-
     }
 
-    private JsonObject set_transaction(long page, long limit) {
+    private void get_redeem_transactions() {
+        JsonObject otp = set_transaction(page, limit);
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        cancelActiveCall();
+        activeCall = apiService.get_redeem_transactions("v3", otp);
+        final int requestPage = currentPage;
+        activeCall.enqueue(new Callback<EncreptionRequest>() {
+            @Override
+            public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                if (isFinishing() || call.isCanceled()) return;
+                applyResponse(response, WalletHistoryCache.TYPE_REDEEM, requestPage);
+            }
 
+            @Override
+            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                if (isFinishing() || call.isCanceled()) return;
+                onNetworkFail();
+            }
+        });
+    }
+
+    private void applyResponse(Response<EncreptionRequest> response, String cacheType, int requestPage) {
+        try {
+            if (response == null || response.body() == null || response.body().getData() == null) {
+                onNetworkFail();
+                return;
+            }
+            PostItem languageModel = new Gson().fromJson(decrypt(response.body().getData()), PostItem.class);
+            if (languageModel == null) {
+                onNetworkFail();
+                return;
+            }
+            if (languageModel.getTotalPoints() != null) {
+                payment_total_amount.setText("\u20B9" + languageModel.getTotalPoints());
+            }
+            if (languageModel.getSkip() != null) page = languageModel.getSkip();
+            if (languageModel.getFirstTransactionId() != null) limit = languageModel.getFirstTransactionId();
+
+            if (!Boolean.TRUE.equals(languageModel.getSuccess())) {
+                onNetworkFail();
+                return;
+            }
+
+            List<PostItem.Datum> data = languageModel.getData();
+            if (data == null) data = new ArrayList<>();
+
+            if (requestPage == PAGE_START) {
+                WalletHistoryCache.save(this, cacheType, languageModel);
+            }
+            if (requestPage != PAGE_START) {
+                adapter.removeLoading();
+            }
+
+            if (data.isEmpty()) {
+                if (requestPage == PAGE_START) {
+                    adapter.clear();
+                    showEmpty();
+                } else {
+                    isLastPage = true;
+                    showList();
+                    safeRefreshing(false);
+                }
+                isLoading = false;
+                return;
+            }
+
+            if (requestPage == PAGE_START) {
+                adapter.setItems(new ArrayList<>(data));
+            } else {
+                adapter.addItems(new ArrayList<>(data));
+            }
+            showList();
+            safeRefreshing(false);
+            if (currentPage < totalPage && data.size() >= 10) {
+                adapter.addLoading();
+            } else {
+                isLastPage = true;
+                adapter.removeLoading();
+            }
+            isLoading = false;
+        } catch (Exception e) {
+            showLog("PaymentHistoryDetailes parse: " + e.getMessage());
+            onNetworkFail();
+        }
+    }
+
+    private void onNetworkFail() {
+        safeRefreshing(false);
+        isLoading = false;
+        if (adapter != null && adapter.getItemCount() > 0) {
+            showList();
+            return;
+        }
+        String type = article_refersh == 1
+                ? WalletHistoryCache.TYPE_ARTICLE
+                : WalletHistoryCache.TYPE_REDEEM;
+        if (paintCache(type)) {
+            safeRefreshing(false);
+            return;
+        }
+        showEmpty();
+    }
+
+    private JsonObject set_transaction(long pageVal, long limitVal) {
         PaymentHistoryRequest requestModel = new PaymentHistoryRequest();
-
-        requestModel.setUserId((long) 763);
-        requestModel.setDraftId(49221);
-        requestModel.setSkip((long) page);
-        requestModel.setFirstTransactionId((long) limit);
-
-        String jsonString = new com.google.gson.Gson().toJson(requestModel);
-        String encrpt_data = null;
-
-        encrpt_data = encrypt(jsonString);
-        showLog("API REQUEST E" + jsonString.toString());
+        requestModel.setUserId(SharedPrefsData.getLong(getApplicationContext(), Constants.USER_ID, Constants.PREF_NAME));
+        requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
+        requestModel.setSkip(pageVal);
+        requestModel.setFirstTransactionId(limitVal);
+        String jsonString = new Gson().toJson(requestModel);
         EncritonRequestData Encriton_Request = new EncritonRequestData();
-        Encriton_Request.setData(encrpt_data);
+        Encriton_Request.setData(encrypt(jsonString));
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
     }
 
-    private void get_redeem_transactions(int value, long page1, long limit1) {
+    private void cancelActiveCall() {
+        if (activeCall != null && !activeCall.isCanceled()) {
+            activeCall.cancel();
+        }
+        activeCall = null;
+    }
 
-
-        JsonObject otp = set_transaction(page1, limit1);
-
-        APIService apiService = RestApiClient.getClient().create(APIService.class);
-        Call<EncreptionRequest> apiResponse = apiService.get_redeem_transactions("v3", otp);
-
-        apiResponse.enqueue(new Callback<EncreptionRequest>() {
-            //@RequiresApi(api = Build.VERSION_CODES.O)
-            @Override
-            public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-
-                EncreptionRequest encreptionRequest = response.body();
-                String encrpt_data = null;
-                /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-
-                    encrpt_data = decrypt(encreptionRequest.getData());
-                }*/
-                encrpt_data = decrypt(encreptionRequest.getData());
-
-
-                Gson gsonObj = new Gson();
-                PostItem languageModel = gsonObj.fromJson(encrpt_data, PostItem.class);
-
-                payment_total_amount.setText("\u20B9" + languageModel.getTotalPoints());
-
-                page = languageModel.getSkip();
-                limit = languageModel.getFirstTransactionId();
-                if (languageModel.getSuccess()) {
-
-                    final ArrayList<PostItem.Datum> items = new ArrayList<>();
-
-                    showLog("AKKISETTY_NARASIMHA" + languageModel.getData().size());
-                    if (languageModel.getData().size() > 0) {
-
-
-                        new Handler().postDelayed(new Runnable() {
-
-                            @Override
-                            public void run() {
-                                items.addAll(languageModel.getData());
-
-                                showLog("CURRENT_PAGE_NARASIMHA" + currentPage + "  ,  " + PAGE_START);
-
-
-                                if (currentPage != PAGE_START) adapter.removeLoading();
-                                adapter.addItems(items);
-                                swipeRefresh.setRefreshing(false);
-
-
-                                swipeRefresh.setVisibility(View.VISIBLE);
-                                txtNoData.setVisibility(View.GONE);
-                                mRecyclerView.setVisibility(View.VISIBLE);
-                                loading.setVisibility(View.GONE);
-                                // check weather is last page or not
-                                if (currentPage < totalPage) {
-                                    adapter.addLoading();
-                                } else {
-                                    isLastPage = true;
-                                }
-                                isLoading = false;
-                            }
-                        }, 1500);
-
-
-                    } else {
-
-                    }
-
-                }
-            }
-
-            @Override
-            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-            }
-        });
-
+    @Override
+    protected void onDestroy() {
+        cancelActiveCall();
+        super.onDestroy();
     }
 
     @Override
     public void onRefresh() {
-        itemCount = 0;
         currentPage = PAGE_START;
         isLastPage = false;
-        adapter.clear();
         page = 0;
         limit = 0;
-
         if (article_refersh == 1) {
-
-            doApiCall(1, page, limit);
-
+            doApiCall();
         } else {
-
-            get_redeem_transactions(1, page, limit);
+            get_redeem_transactions();
         }
     }
 }

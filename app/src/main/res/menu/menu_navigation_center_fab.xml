@@ -10,25 +10,25 @@
         android:checked="true"
         android:id="@+id/navigation_home"
         android:icon="@drawable/refresh_icon"
-        android:title="@string/Home" />
+        android:title="@string/news_back" />
 
     <item
-
         android:id="@+id/navigation_catagiries"
+        android:icon="@drawable/ic_footer_special"
         android:title="@string/Events" />
-    <!--android:icon="@drawable/ic_events"-->
-    <!--must set the item title to empty-->
+    <!-- Center: Calendar (embedded in HomePage content host above footer). -->
     <item
-
         android:id="@+id/navigation_stricker"
-        android:title="" />
+        android:icon="@drawable/ic_footer_calendar"
+        android:title="@string/home_chrome_calendar" />
 
+    <!-- Slot after center Calendar (bookmarks stay top-pill only; never shown in footer). -->
     <item
         android:id="@+id/navigation_status"
-        android:icon="@drawable/ic_category"
-        android:title="@string/Category" />
+        android:icon="@drawable/ic_footer_video_news"
+        android:title="@string/video_news" />
     <item
         android:id="@+id/navigation_profile"
-        android:icon="@drawable/ic_profile"
+        android:icon="@drawable/ic_nav_profile"
         android:title="@string/Profile" />
 </menu>

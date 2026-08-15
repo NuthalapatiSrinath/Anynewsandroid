@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Profile header — full-strength orange globe for dark mock match -->
+    <item name="profile_header_globe_alpha" format="float" type="dimen">0.98</item>
+    <item name="profile_header_globe_glow_alpha" format="float" type="dimen">0.9</item>
+    <item name="profile_header_orbit_alpha" format="float" type="dimen">0.85</item>
+</resources>

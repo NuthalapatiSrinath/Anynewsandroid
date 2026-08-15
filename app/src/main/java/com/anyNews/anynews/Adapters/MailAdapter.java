@@ -16,10 +16,9 @@ import com.anyNews.anynews.Pojo.ListOfCommentsResponse;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppHelper;
+import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.MediaUrl;
-
-import com.squareup.picasso.Picasso;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -242,12 +241,7 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         holder.comment_time.setText(commonMethods.getHrsFormatfromDate(datum.getCommentTime()));
         holder.comment_details.setText(datum.getComment());
 
-        if ((datum.getUser_profile_pic().isEmpty()
-                || datum.getUser_profile_pic().equals("")
-                || datum.getUser_profile_pic().equals(null)
-                || datum.getUser_profile_pic().equals("null"))) {
-            Picasso.get().load(MediaUrl.resolve(datum.getUser_profile_pic())).into(holder.circular_image);
-        }
+        AvatarImageHelper.loadPicasso(holder.circular_image, datum.getUser_profile_pic());
 
         AppHelper.showLog("EMAIL ID SERVER:" + datum.getEmail());
         AppHelper.showLog("EMAIL ID LOCAL:" + allsharedpreference.getEmailId());

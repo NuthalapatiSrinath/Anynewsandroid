@@ -17,13 +17,13 @@ import com.anyNews.anynews.Pojo.LikeSelectionRequest;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
+import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.Constants;
-import com.anyNews.anynews.Utils.MediaUrl;
+import com.anyNews.anynews.Utils.SelfFollowGuard;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.FollowingMenderModel;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.squareup.picasso.Picasso;
 
 import java.util.ArrayList;
 
@@ -58,19 +58,25 @@ public class FollowingMemberAdopter extends RecyclerView.Adapter<FollowingMember
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         FollowingMenderModel.Datum item = followersProfileModel.get(position);
-        if (item.getProfilePic() != null) {
-            Picasso.get().load(MediaUrl.resolve(item.getProfilePic())).into(holder.follower_images);
-        }
+        AvatarImageHelper.loadPicasso(holder.follower_images, item.getProfilePic());
         holder.follower_menber_name.setText(item.getWriterName());
         holder.follower_menber_designation.setText(item.getRole());
         holder.follower_menber_location.setText(item.getLocation());
+        final boolean self = SelfFollowGuard.isSelf(context, item.getWriterId());
+        if (self) {
+            holder.neumorph_follow.setVisibility(View.GONE);
+            holder.neumorph_follower.setVisibility(View.GONE);
+            holder.follower_menber_follow.setOnClickListener(null);
+            holder.follower_menber_follow_er.setOnClickListener(null);
+            return;
+        }
         bindFollowState(holder, item);
 
         holder.follower_menber_follow.setOnClickListener(v -> {
             int pos = holder.getAdapterPosition();
             if (pos == RecyclerView.NO_POSITION || pos >= followersProfileModel.size()) return;
             FollowingMenderModel.Datum datum = followersProfileModel.get(pos);
-            if (datum.getWriterId() == null) return;
+            if (datum.getWriterId() == null || SelfFollowGuard.isSelf(context, datum.getWriterId())) return;
             datum.setIsFollow(1);
             bindFollowState(holder, datum);
             set_follow_un_follow(datum.getWriterId(), 1, pos, holder);
@@ -79,7 +85,7 @@ public class FollowingMemberAdopter extends RecyclerView.Adapter<FollowingMember
             int pos = holder.getAdapterPosition();
             if (pos == RecyclerView.NO_POSITION || pos >= followersProfileModel.size()) return;
             FollowingMenderModel.Datum datum = followersProfileModel.get(pos);
-            if (datum.getWriterId() == null) return;
+            if (datum.getWriterId() == null || SelfFollowGuard.isSelf(context, datum.getWriterId())) return;
             datum.setIsFollow(0);
             bindFollowState(holder, datum);
             set_follow_un_follow(datum.getWriterId(), 0, pos, holder);

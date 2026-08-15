@@ -11,6 +11,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.anyNews.anynews.Activities.PostArticles;
@@ -26,13 +27,30 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<PostsStatusAdopter.
     Context context;
     ArrayList<PostsModel.Datum>postsModels;
     int VALUE=0;
+    /** likes | comments | views | empty = articles status list */
+    String metricMode = "";
     View view;
     CommonMethods commonMethods;
-    public PostsStatusAdopter(Activity activity,Context context, ArrayList<PostsModel.Datum> postsModels, int VALUE) {
-        this.context = context;
-        this.postsModels = postsModels;
-        this.VALUE=VALUE;
-        commonMethods = new CommonMethods(activity);
+    public PostsStatusAdopter(Activity activity, Context context, ArrayList<PostsModel.Datum> postsModels, int VALUE) {
+        this(activity, context, postsModels, VALUE, "");
+    }
+
+    public PostsStatusAdopter(Activity activity, Context context,
+                              ArrayList<PostsModel.Datum> postsModels, int VALUE, String metricMode) {
+        this.context = context != null ? context : activity;
+        this.postsModels = postsModels != null ? postsModels : new ArrayList<PostsModel.Datum>();
+        this.VALUE = VALUE;
+        this.metricMode = metricMode != null ? metricMode : "";
+        // Prefer the real Activity when provided; fall back to activity cast of context.
+        Activity host = activity;
+        if (host == null && this.context instanceof Activity) {
+            host = (Activity) this.context;
+        }
+        commonMethods = new CommonMethods(host);
+    }
+
+    public void setMetricMode(String metricMode) {
+        this.metricMode = metricMode != null ? metricMode : "";
     }
 
     @NonNull
@@ -51,10 +69,23 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<PostsStatusAdopter.
 
         final PostsModel.Datum datum=postsModels.get(position);
 
-        holder.post_discrepton.setText(datum.getDescription());
-        holder.post_title.setText(datum.getTitle());
-        holder.post_time.setText(""+commonMethods.getHrsFormatfromDate(datum.getCreatedAt()));
-        holder.post_reject.setText( ""+datum.getReason());
+        holder.post_discrepton.setText(datum.getDescription() != null ? datum.getDescription() : "");
+        holder.post_title.setText(datum.getTitle() != null ? datum.getTitle() : "");
+        Long createdAt = datum.getCreatedAt();
+        holder.post_time.setText(createdAt != null ? "" + commonMethods.getHrsFormatfromDate(createdAt) : "");
+
+        boolean metricList = metricMode != null && !metricMode.isEmpty();
+        if (metricList) {
+            holder.post_reject.setText(formatMetricLine(datum));
+            holder.post_reject.setTextColor(
+                    ContextCompat.getColor(context, R.color.payment_history_border_title));
+            holder.reject.setBackgroundResource(R.drawable.post_green_detailes);
+            holder.btn_edit_resubmit.setVisibility(View.GONE);
+            holder.btn_edit_resubmit.setOnClickListener(null);
+            return;
+        }
+
+        holder.post_reject.setText(datum.getReason() != null ? datum.getReason() : "");
 
         long status = datum.getPost_status() == null ? -1 : datum.getPost_status();
 
@@ -98,9 +129,25 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<PostsStatusAdopter.
 
     }
 
+    private String formatMetricLine(PostsModel.Datum datum) {
+        int likes = datum.getLikes() != null ? datum.getLikes() : 0;
+        int comments = datum.getComments() != null ? datum.getComments() : 0;
+        int views = datum.getViews() != null ? datum.getViews() : 0;
+        if ("likes".equalsIgnoreCase(metricMode)) {
+            return likes + " likes";
+        }
+        if ("comments".equalsIgnoreCase(metricMode)) {
+            return comments + " comments";
+        }
+        if ("views".equalsIgnoreCase(metricMode)) {
+            return views + " views";
+        }
+        return likes + " likes · " + comments + " comments · " + views + " views";
+    }
+
     @Override
     public int getItemCount() {
-        return postsModels.size();
+        return postsModels == null ? 0 : postsModels.size();
     }
 
     public class ViewHolder extends RecyclerView.ViewHolder {

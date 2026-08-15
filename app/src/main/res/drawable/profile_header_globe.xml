@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wireframe/dot globe watermark for Profile header (tinted via ImageView). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="180dp"
+    android:height="180dp"
+    android:viewportWidth="180"
+    android:viewportHeight="180">
+    <!-- Outer sphere -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M90,18c-39.8,0 -72,32.2 -72,72s32.2,72 72,72 72,-32.2 72,-72 -32.2,-72 -72,-72z"
+        android:strokeWidth="1.4"
+        android:strokeColor="#EF4923" />
+    <!-- Meridians -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M90,18c-18,20 -28,44 -28,72s10,52 28,72"
+        android:strokeWidth="1.1"
+        android:strokeColor="#EF4923" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M90,18c18,20 28,44 28,72s-10,52 -28,72"
+        android:strokeWidth="1.1"
+        android:strokeColor="#EF4923" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M90,18c-32,22 -48,46 -48,72s16,50 48,72"
+        android:strokeWidth="0.9"
+        android:strokeColor="#EF4923" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M90,18c32,22 48,46 48,72s-16,50 -48,72"
+        android:strokeWidth="0.9"
+        android:strokeColor="#EF4923" />
+    <!-- Latitude rings -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M28,90h124"
+        android:strokeWidth="1.2"
+        android:strokeColor="#EF4923" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M36,58c16,-10 34,-14 54,-14s38,4 54,14"
+        android:strokeWidth="1"
+        android:strokeColor="#EF4923" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M36,122c16,10 34,14 54,14s38,-4 54,-14"
+        android:strokeWidth="1"
+        android:strokeColor="#EF4923" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M48,42c12,-6 26,-10 42,-10s30,4 42,10"
+        android:strokeWidth="0.8"
+        android:strokeColor="#EF4923" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M48,138c12,6 26,10 42,10s30,-4 42,-10"
+        android:strokeWidth="0.8"
+        android:strokeColor="#EF4923" />
+    <!-- Dots mesh -->
+    <path android:fillColor="#EF4923" android:pathData="M90,24m-1.6,0a1.6,1.6 0,1 1,3.2 0a1.6,1.6 0,1 1,-3.2 0" />
+    <path android:fillColor="#EF4923" android:pathData="M70,32m-1.3,0a1.3,1.3 0,1 1,2.6 0a1.3,1.3 0,1 1,-2.6 0" />
+    <path android:fillColor="#EF4923" android:pathData="M110,32m-1.3,0a1.3,1.3 0,1 1,2.6 0a1.3,1.3 0,1 1,-2.6 0" />
+    <path android:fillColor="#EF4923" android:pathData="M50,48m-1.4,0a1.4,1.4 0,1 1,2.8 0a1.4,1.4 0,1 1,-2.8 0" />
+    <path android:fillColor="#EF4923" android:pathData="M130,48m-1.4,0a1.4,1.4 0,1 1,2.8 0a1.4,1.4 0,1 1,-2.8 0" />
+    <path android:fillColor="#EF4923" android:pathData="M38,70m-1.2,0a1.2,1.2 0,1 1,2.4 0a1.2,1.2 0,1 1,-2.4 0" />
+    <path android:fillColor="#EF4923" android:pathData="M142,70m-1.2,0a1.2,1.2 0,1 1,2.4 0a1.2,1.2 0,1 1,-2.4 0" />
+    <path android:fillColor="#EF4923" android:pathData="M62,70m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path android:fillColor="#EF4923" android:pathData="M90,70m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path android:fillColor="#EF4923" android:pathData="M118,70m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path android:fillColor="#EF4923" android:pathData="M28,90m-1.6,0a1.6,1.6 0,1 1,3.2 0a1.6,1.6 0,1 1,-3.2 0" />
+    <path android:fillColor="#EF4923" android:pathData="M52,90m-1.4,0a1.4,1.4 0,1 1,2.8 0a1.4,1.4 0,1 1,-2.8 0" />
+    <path android:fillColor="#EF4923" android:pathData="M90,90m-1.8,0a1.8,1.8 0,1 1,3.6 0a1.8,1.8 0,1 1,-3.6 0" />
+    <path android:fillColor="#EF4923" android:pathData="M128,90m-1.4,0a1.4,1.4 0,1 1,2.8 0a1.4,1.4 0,1 1,-2.8 0" />
+    <path android:fillColor="#EF4923" android:pathData="M152,90m-1.6,0a1.6,1.6 0,1 1,3.2 0a1.6,1.6 0,1 1,-3.2 0" />
+    <path android:fillColor="#EF4923" android:pathData="M38,110m-1.2,0a1.2,1.2 0,1 1,2.4 0a1.2,1.2 0,1 1,-2.4 0" />
+    <path android:fillColor="#EF4923" android:pathData="M62,110m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path android:fillColor="#EF4923" android:pathData="M90,110m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path android:fillColor="#EF4923" android:pathData="M118,110m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <path android:fillColor="#EF4923" android:pathData="M142,110m-1.2,0a1.2,1.2 0,1 1,2.4 0a1.2,1.2 0,1 1,-2.4 0" />
+    <path android:fillColor="#EF4923" android:pathData="M50,132m-1.4,0a1.4,1.4 0,1 1,2.8 0a1.4,1.4 0,1 1,-2.8 0" />
+    <path android:fillColor="#EF4923" android:pathData="M130,132m-1.4,0a1.4,1.4 0,1 1,2.8 0a1.4,1.4 0,1 1,-2.8 0" />
+    <path android:fillColor="#EF4923" android:pathData="M70,148m-1.3,0a1.3,1.3 0,1 1,2.6 0a1.3,1.3 0,1 1,-2.6 0" />
+    <path android:fillColor="#EF4923" android:pathData="M110,148m-1.3,0a1.3,1.3 0,1 1,2.6 0a1.3,1.3 0,1 1,-2.6 0" />
+    <path android:fillColor="#EF4923" android:pathData="M90,156m-1.6,0a1.6,1.6 0,1 1,3.2 0a1.6,1.6 0,1 1,-3.2 0" />
+    <!-- Soft orbit arcs -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M22,100c18,36 50,58 78,58"
+        android:strokeWidth="0.7"
+        android:strokeColor="#EF4923" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M158,80c-18,-36 -50,-58 -78,-58"
+        android:strokeWidth="0.7"
+        android:strokeColor="#EF4923" />
+</vector>

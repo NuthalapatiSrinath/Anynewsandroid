@@ -57,6 +57,14 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
         initViews(customPlayerUi);
     }
 
+    private Runnable onUserPausePlayback;
+    private Runnable onUserResumePlayback;
+
+    public void setUserPlaybackCallbacks(Runnable onUserPause, Runnable onUserResume) {
+        this.onUserPausePlayback = onUserPause;
+        this.onUserResumePlayback = onUserResume;
+    }
+
     private void initViews(View playerUi) {
         panel = playerUi.findViewById(R.id.panel);
         progressbar = playerUi.findViewById(R.id.progressbar);
@@ -76,9 +84,15 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
             if (playerTracker.getState() == PlayerConstants.PlayerState.PLAYING) {
                 playPauseButton.setImageResource(R.drawable.ic_video_play);
                 youTubePlayer.pause();
+                if (onUserPausePlayback != null) {
+                    onUserPausePlayback.run();
+                }
             } else {
                 playPauseButton.setImageResource(R.drawable.ic_custom_video_pause);
                 youTubePlayer.play();
+                if (onUserResumePlayback != null) {
+                    onUserResumePlayback.run();
+                }
             }
         });
         AppHelper.showLog("isShowFullScreenOption:" + isShowFullScreenOption);

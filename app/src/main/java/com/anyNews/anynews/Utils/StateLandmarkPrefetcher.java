@@ -5,6 +5,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 
+import androidx.annotation.Nullable;
+
 import com.anyNews.anynews.models.StatesModel;
 import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
@@ -32,14 +34,13 @@ public final class StateLandmarkPrefetcher {
 
     public static void prefetch(Context context,
                                 List<StatesModel.Datum> states,
-                                OnCompleteListener listener) {
-        if (listener == null) {
-            return;
-        }
+                                @Nullable OnCompleteListener listener) {
         final Context appContext = context != null ? context.getApplicationContext() : null;
         List<String> urls = collectIconUrls(states);
         if (urls.isEmpty() || appContext == null) {
-            listener.onComplete();
+            if (listener != null) {
+                listener.onComplete();
+            }
             return;
         }
 
@@ -47,12 +48,14 @@ public final class StateLandmarkPrefetcher {
         final AtomicBoolean finished = new AtomicBoolean(false);
         final Handler mainHandler = new Handler(Looper.getMainLooper());
         final Runnable finishOnce = () -> {
-            if (finished.compareAndSet(false, true)) {
+            if (finished.compareAndSet(false, true) && listener != null) {
                 listener.onComplete();
             }
         };
 
-        mainHandler.postDelayed(finishOnce, TIMEOUT_MS);
+        if (listener != null) {
+            mainHandler.postDelayed(finishOnce, TIMEOUT_MS);
+        }
 
         for (String url : urls) {
             Picasso.get()
@@ -61,7 +64,9 @@ public final class StateLandmarkPrefetcher {
                         @Override
                         public void onSuccess() {
                             if (remaining.decrementAndGet() <= 0) {
-                                mainHandler.removeCallbacks(finishOnce);
+                                if (listener != null) {
+                                    mainHandler.removeCallbacks(finishOnce);
+                                }
                                 finishOnce.run();
                             }
                         }
@@ -69,7 +74,9 @@ public final class StateLandmarkPrefetcher {
                         @Override
                         public void onError(Exception e) {
                             if (remaining.decrementAndGet() <= 0) {
-                                mainHandler.removeCallbacks(finishOnce);
+                                if (listener != null) {
+                                    mainHandler.removeCallbacks(finishOnce);
+                                }
                                 finishOnce.run();
                             }
                         }

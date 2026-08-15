@@ -84,6 +84,21 @@ public class FlipGoogleNativeAds {
     }
 
     boolean isAdRequested;
+
+    /**
+     * True after this creative is painted into a flip seat. Claimed ads must not be
+     * rebound onto a second screen (AdMob NativeAd single-view rule). Unclaimed
+     * ready creatives form the transferable pool for failed / empty seats.
+     */
+    public boolean isClaimed() {
+        return claimed;
+    }
+
+    public void setClaimed(boolean claimed) {
+        this.claimed = claimed;
+    }
+
+    boolean claimed;
 }
 
 

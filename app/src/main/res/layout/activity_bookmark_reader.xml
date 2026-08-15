@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/reader_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_color"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RelativeLayout
+            android:id="@+id/reader_header"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@color/brand_orange"
+            android:paddingStart="8dp"
+            android:paddingEnd="12dp">
+
+            <ImageView
+                android:id="@+id/reader_back"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_centerVertical="true"
+                android:contentDescription="@string/cancel"
+                android:padding="8dp"
+                android:src="@drawable/ic_arrowwhite_back" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:text="@string/anynews"
+                android:textColor="@android:color/white"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:id="@+id/reader_bookmark_toggle"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:contentDescription="@string/bookmark"
+                android:padding="8dp"
+                android:src="@drawable/ic_action_bookmark" />
+        </RelativeLayout>
+
+        <ImageView
+            android:id="@+id/reader_image"
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:background="#DDDDDD"
+            android:contentDescription="@string/bookmarks"
+            android:scaleType="centerCrop" />
+
+        <TextView
+            android:id="@+id/reader_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingTop="16dp"
+            android:paddingEnd="16dp"
+            android:textColor="@color/title_color"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/reader_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="16dp"
+            android:textColor="@color/colorBookmarksInfo"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/reader_body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingExtra="4dp"
+            android:padding="16dp"
+            android:textColor="@color/title_color"
+            android:textSize="15sp" />
+    </LinearLayout>
+</ScrollView>

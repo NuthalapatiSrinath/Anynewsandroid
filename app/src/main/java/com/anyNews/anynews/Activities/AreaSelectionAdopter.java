@@ -28,6 +28,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -164,8 +165,8 @@ public class AreaSelectionAdopter extends RecyclerView.Adapter<AreaSelectionAdop
                 if (languageModel.getSuccess()) {
 
                     Intent intent = new Intent(context, HomePage.class);
-                    SharedPrefsData.putString(context, Constants.Selected_Distric_Name,name,  Constants.PREF_NAME);
-                    SharedPrefsData.putString(context, Constants.Selected_Distric_Name1,name,  Constants.PREF_NAME);
+                    // Region onboarding name is the display label (not always a district id).
+                    DistrictLabelHelper.saveName(context, name);
 
                     intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
                     intent.putExtra("EXTRA_SESSION_ID", "0");

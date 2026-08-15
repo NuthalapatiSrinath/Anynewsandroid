@@ -1,15 +1,11 @@
 package com.anyNews.anynews.Activities;
 
 import androidx.annotation.Keep;
-import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
@@ -19,8 +15,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.anyNews.anynews.Adapters.DistricsAdopter;
-import com.anyNews.anynews.Adapters.LanguageAdopter;
-import com.anyNews.anynews.Adapters.StatesAdopter;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.LanguageModelResponse;
@@ -32,10 +26,9 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
+import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.DistricsModel;
-import com.anyNews.anynews.models.LanguageModel;
-import com.anyNews.anynews.models.StatesModel;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.IgnoreExtraProperties;
@@ -43,6 +36,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -58,7 +52,7 @@ public class Districs extends AppCompatActivity {
     LinearLayoutManager linearLayoutManager;
     DistricsAdopter districsAdopter;
     ArrayList<DistricsModel.Datum> arrayList;
-    LinearLayout layout_with_data,layout_with_out_data;
+    LinearLayout layout_with_data, layout_with_out_data;
 
     LanguageModelResponse languageModelResponse;
     TextView select_distic;
@@ -69,45 +63,44 @@ public class Districs extends AppCompatActivity {
     FirebaseDatabase database = FirebaseDatabase.getInstance();
     DatabaseReference myRef = database.getReference();
     String type_firebase_district = "district_selection";
-    int draft_id_firebase_district = 0 ;
+    int draft_id_firebase_district = 0;
+
+    private boolean paintedFromCache = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_districs);
-        layout_with_out_data=findViewById(R.id.layout_with_out_data);
-        layout_with_data=findViewById(R.id.layout_with_data);
-        select_distic=findViewById(R.id.select_distic);
-        img_back=findViewById(R.id.img_back);
+        layout_with_out_data = findViewById(R.id.layout_with_out_data);
+        layout_with_data = findViewById(R.id.layout_with_data);
+        select_distic = findViewById(R.id.select_distic);
+        img_back = findViewById(R.id.img_back);
 
-        layout_with_out_data.setVisibility(View.VISIBLE);
-        layout_with_data.setVisibility(View.GONE);
-        recycleLayoutManager=findViewById(R.id.Districs_Details);
-        arrayList=new ArrayList<>();
+        recycleLayoutManager = findViewById(R.id.Districs_Details);
+        arrayList = new ArrayList<>();
         linearLayoutManager = new LinearLayoutManager(Districs.this);
         recycleLayoutManager.setLayoutManager(linearLayoutManager);
 
         setStaticdata();
 
+        paintFromCacheIfAvailable();
         getDisrics();
 
         img_back.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                int back_value = SharedPrefsData.getInt(getApplicationContext(), Constants.Back_Button_Move, Constants.PREF_NAME);
+
+                if (back_value == 1) {
 
 
-              int back_value=  SharedPrefsData.getInt(getApplicationContext(), Constants.Back_Button_Move, Constants.PREF_NAME);
-
-              if(back_value==1){
-
-
-              }else if(back_value==2){
-                  Intent intent=new Intent(Districs.this,States.class);
-                  startActivity(intent);
-              }else {
-                  Intent intent=new Intent(Districs.this,LanguageActivity.class);
-                  startActivity(intent);
-              }
+                } else if (back_value == 2) {
+                    Intent intent = new Intent(Districs.this, States.class);
+                    startActivity(intent);
+                } else {
+                    Intent intent = new Intent(Districs.this, LanguageActivity.class);
+                    startActivity(intent);
+                }
 
             }
         });
@@ -116,8 +109,7 @@ public class Districs extends AppCompatActivity {
         long current_time_firebase_lang = System.currentTimeMillis();
         String device_id_firebase = SharedPrefsData.getString(getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
 
-        writeDistrictSelection("User",type_firebase_district ,draft_id_firebase_district , device_id_firebase, current_time_firebase_lang);
-
+        writeDistrictSelection("User", type_firebase_district, draft_id_firebase_district, device_id_firebase, current_time_firebase_lang);
     }
 
     private void setStaticdata() {
@@ -140,77 +132,123 @@ public class Districs extends AppCompatActivity {
         AppLanguagesFonts.setTypeFace(select_distic);
         int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
         FontSettingsHelper.applySelectionHeader(getApplicationContext(), languageId > 0 ? languageId : 1, select_distic);
-
-
     }
-    private JsonObject set_districs() {
 
+    private void paintFromCacheIfAvailable() {
+        int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        int stateId = SharedPrefsData.getInt(getApplicationContext(), Constants.StateID, Constants.PREF_NAME);
+        List<DistricsModel.Datum> cached = SelectionListCache.loadDistricts(this, languageId, stateId);
+        if (cached == null || cached.isEmpty()) {
+            showContentShellWithoutSpinner();
+            return;
+        }
+        arrayList.clear();
+        arrayList.addAll(cached);
+        bindDistrictList(false);
+        paintedFromCache = true;
+    }
+
+    private void showContentShellWithoutSpinner() {
+        if (layout_with_out_data != null) {
+            layout_with_out_data.setVisibility(View.GONE);
+        }
+        if (layout_with_data != null) {
+            layout_with_data.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void bindDistrictList(boolean forceNewAdapter) {
+        if (districsAdopter == null || forceNewAdapter) {
+            districsAdopter = new DistricsAdopter(Districs.this, arrayList);
+            recycleLayoutManager.setAdapter(districsAdopter);
+        } else {
+            districsAdopter.notifyDataSetChanged();
+        }
+        showContentShellWithoutSpinner();
+    }
+
+    private JsonObject set_districs() {
         LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
 
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
         requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
         requestModel.setStateId(SharedPrefsData.getInt(getApplicationContext(), Constants.StateID, Constants.PREF_NAME));
-        String jsonString = new com.google.gson.Gson().toJson(requestModel);
-        String encrpt_data = null;
-        encrpt_data = encrypt(jsonString);
-        showLog("API REQUEST E" + jsonString.toString());
-        EncritonRequestData Encriton_Request=new EncritonRequestData();
+        String jsonString = new Gson().toJson(requestModel);
+        String encrpt_data = encrypt(jsonString);
+        showLog("API REQUEST E" + jsonString);
+        EncritonRequestData Encriton_Request = new EncritonRequestData();
         Encriton_Request.setData(encrpt_data);
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
     }
-    public void getDisrics(){
 
+    public void getDisrics() {
         JsonObject otp = set_districs();
 
-        showLog("API REQ   "+otp.toString());
-
+        showLog("API REQ   " + otp.toString());
 
         APIService apiService = RestApiClient.getClient().create(APIService.class);
-        Call<EncreptionRequest> apiResponse = apiService.Get_districts("v3",otp);
+        Call<EncreptionRequest> apiResponse = apiService.Get_districts("v3", otp);
 
         apiResponse.enqueue(new Callback<EncreptionRequest>() {
-            //@RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-
-
-                if (response == null || !response.isSuccessful() || response.body() == null || response.body().getData() == null) {
-                    recoverToLanguagePicker("Unable to load districts. Please select another language.");
+                if (response == null || !response.isSuccessful() || response.body() == null
+                        || response.body().getData() == null) {
+                    if (!paintedFromCache) {
+                        recoverToLanguagePicker("Unable to load districts. Please select another language.");
+                    }
                     return;
                 }
-                EncreptionRequest encreptionRequest=response.body();
-                showLog("API RES   "+encreptionRequest.getData());
-                String encrpt_data =  decrypt(encreptionRequest.getData());
+                try {
+                    EncreptionRequest encreptionRequest = response.body();
+                    showLog("API RES   " + encreptionRequest.getData());
+                    String encrpt_data = decrypt(encreptionRequest.getData());
 
+                    Gson gsonObj = new Gson();
+                    DistricsModel languageModel = gsonObj.fromJson(encrpt_data, DistricsModel.class);
 
-                Gson gsonObj = new Gson();
-                DistricsModel languageModel  = gsonObj.fromJson(encrpt_data, DistricsModel.class);
+                    boolean success = languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess());
+                    boolean hasData = languageModel != null
+                            && languageModel.getData() != null
+                            && languageModel.getData().size() > 0;
+                    int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+                    int stateId = SharedPrefsData.getInt(getApplicationContext(), Constants.StateID, Constants.PREF_NAME);
 
-                arrayList.clear();
+                    if (success && hasData) {
+                        boolean unchanged = paintedFromCache
+                                && SelectionListCache.districtsUnchanged(Districs.this, languageId, stateId, languageModel);
+                        SelectionListCache.saveDistricts(Districs.this, languageId, stateId, languageModel);
+                        if (unchanged) {
+                            return;
+                        }
 
-                boolean success = languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess());
-                boolean hasData = languageModel != null
-                        && languageModel.getData() != null
-                        && languageModel.getData().size() > 0;
+                        arrayList.clear();
+                        arrayList.addAll(languageModel.getData());
+                        paintedFromCache = true;
+                        bindDistrictList(true);
+                        return;
+                    }
 
-                if (success && hasData) {
-                    arrayList.addAll(languageModel.getData());
-                    districsAdopter = new DistricsAdopter(Districs.this, arrayList);
-                    recycleLayoutManager.setAdapter(districsAdopter);
-                    layout_with_out_data.setVisibility(View.GONE);
-                    layout_with_data.setVisibility(View.VISIBLE);
-                    return;
+                    if (paintedFromCache) {
+                        return;
+                    }
+                    String msg = languageModel != null ? languageModel.getMsg() : null;
+                    if (TextUtils.isEmpty(msg)) {
+                        msg = "No districts available for this language. Please select another language.";
+                    }
+                    recoverToLanguagePicker(msg);
+                } catch (Exception e) {
+                    if (!paintedFromCache) {
+                        recoverToLanguagePicker("Unable to load districts. Please select another language.");
+                    }
                 }
-
-                String msg = languageModel != null ? languageModel.getMsg() : null;
-                if (TextUtils.isEmpty(msg)) {
-                    msg = "No districts available for this language. Please select another language.";
-                }
-                recoverToLanguagePicker(msg);
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                if (paintedFromCache) {
+                    return;
+                }
                 recoverToLanguagePicker(
                         t != null && t.getMessage() != null
                                 ? t.getMessage()
@@ -236,11 +274,12 @@ public class Districs extends AppCompatActivity {
         finish();
     }
 
-    public void writeDistrictSelection(String userId,String type_firebase ,int draft_id ,String device_id ,long current_time) {
-        DistrictSelection appOpen = new DistrictSelection(type_firebase ,draft_id ,device_id, current_time);
+    public void writeDistrictSelection(String userId, String type_firebase, int draft_id, String device_id, long current_time) {
+        DistrictSelection appOpen = new DistrictSelection(type_firebase, draft_id, device_id, current_time);
 
         myRef.child("Events").push().setValue(appOpen);
     }
+
     @IgnoreExtraProperties
     @Keep
     public class DistrictSelection {
@@ -255,7 +294,7 @@ public class Districs extends AppCompatActivity {
             // Default constructor required for calls to DataSnapshot.getValue(User.class)
         }
 
-        public DistrictSelection(String type_firebase,  int draft_id,String device_id, long current_time) {
+        public DistrictSelection(String type_firebase, int draft_id, String device_id, long current_time) {
             this.type = type_firebase;
             this.draft_id = draft_id;
             this.device_id = device_id;
@@ -267,15 +306,15 @@ public class Districs extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         super.onBackPressed();
-        int back_value=  SharedPrefsData.getInt(getApplicationContext(), Constants.Back_Button_Move, Constants.PREF_NAME);
+        int back_value = SharedPrefsData.getInt(getApplicationContext(), Constants.Back_Button_Move, Constants.PREF_NAME);
 
-        if(back_value==1){
+        if (back_value == 1) {
 
-        }else if(back_value==2){
-            Intent intent=new Intent(Districs.this,States.class);
+        } else if (back_value == 2) {
+            Intent intent = new Intent(Districs.this, States.class);
             startActivity(intent);
-        }else {
-            Intent intent=new Intent(Districs.this,LanguageActivity.class);
+        } else {
+            Intent intent = new Intent(Districs.this, LanguageActivity.class);
             startActivity(intent);
         }
     }

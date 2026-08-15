@@ -36,16 +36,20 @@ import java.util.concurrent.Executors;
  * Client-local read/seen store for online News | Read News.
  *
  * <p><b>Session vs committed:</b> flip settle only appends to a durable
- * <i>session viewed</i> (pending) set — News list is never stripped for those ids
- * mid-session. On process start, {@link #commitSessionViewedToReadOncePerProcess}
- * merges pending into the committed read set; News then filters with committed only.
+ * <i>session viewed</i> (pending) set. On process start,
+ * {@link #commitSessionViewedToReadOncePerProcess} merges pending into the
+ * committed read set used by the Read tab.
+ *
+ * <p><b>News:</b> main online News is a full chronological List_All_Articles feed
+ * (Play Store-era UX). Already-read posts stay in News; they are not stripped
+ * and the server is not asked to densify via exclude_post_ids.
  *
  * <p><b>Read tab window:</b> list + badge only include last-read times within
  * {@link ReadHistoryConfig} (admin {@code read_history_hours}, default 24h).
- * Older committed reads still strip from News and still fill exclude_post_ids.
+ * Read paints local postcard cache only — no densify / fill-unread API.
  *
  * <p>No per-mark network or DB calls. Also updates {@link ArticleOpenLog} for offline
- * unread-first ranking when the user settles on a card. Caps growth with max ID count and
+ * ranking when the user settles on a card. Caps growth with max ID count and
  * optional TTL. Lightweight postcard JSON is cached when marking so Read tab does
  * not re-fetch the feed.
  *
@@ -68,7 +72,7 @@ public final class ReadArticleStore {
     /**
      * Cap for {@code exclude_post_ids} on List_All_Articles (new clients only).
      * Newest-read first so server densify can skip every locally committed read
-     * (must match {@link #MAX_IDS} - a smaller cap left older committed ids off
+     * (must match {@link #MAX_IDS} — a smaller cap left older committed ids off
      * the wire, server re-served them, and client strip emptied the page).
      */
     public static final int EXCLUDE_IDS_SEND_CAP = MAX_IDS;
@@ -473,16 +477,43 @@ public final class ReadArticleStore {
 
     /**
      * Real-article cadence for client-side ad re-placement after unread strip.
-     * Matches server page>0 inject when postIndex == 4 (ad at 0-based index 4,
-     * then every 4 real cards again: 4, 9, 14, ...).
+     * Matches server {@code feed_ad_every_n} (default 4 → seats at 4, 9, 14, …).
+     * Prefer {@link #getAdEveryNReal()} — admin may override via splash/session.
      */
-    public static final int AD_EVERY_N_REAL = 4;
+    public static final int DEFAULT_AD_EVERY_N_REAL = FeedAdConfig.DEFAULT_EVERY_N;
+
+    /**
+     * @deprecated Use {@link #getAdEveryNReal()} so admin overrides apply.
+     * Kept as compile-time default (=4) for javadoc / legacy references.
+     */
+    @Deprecated
+    public static final int AD_EVERY_N_REAL = DEFAULT_AD_EVERY_N_REAL;
+
+    /** Admin-driven cadence (default 4). Safe without Context after splash. */
+    public static int getAdEveryNReal() {
+        return FeedAdConfig.getEveryN();
+    }
+
+    public static int getAdEveryNReal(@Nullable Context context) {
+        return FeedAdConfig.getEveryN(context);
+    }
 
     /**
      * Max one {@code share_app} shell per this many real articles after unread strip.
      * Unread filtering densifies server injects + failed-ad share fallbacks — cap spam.
      */
     public static final int SHARE_EVERY_N_REAL = 12;
+
+    /**
+     * In-feed "Rate AnyNews" stars card: place after this many real articles.
+     * With ads every {@link #getAdEveryNReal()}, that lands around flip index ~10
+     * (still early in the feed). Server historic inject used brittle
+     * {@code overallSkip + postIndex == 23} and often never surfaced early.
+     */
+    public static final int RATING_AFTER_N_REAL = 8;
+
+    /** Synthetic id from server {@code ratings-data.json} — stable across pages. */
+    public static final long RATING_POST_ID = 901009L;
 
     /**
      * Strip articles in the <b>committed</b> read set only (main online News load /
@@ -653,8 +684,34 @@ public final class ReadArticleStore {
     }
 
     /**
-     * Ads at every {@link #AD_EVERY_N_REAL} reals + share_app throttle in one pass.
+     * Soft-timeout demotion keeps {@code ad_code} / {@code ad_req_position} on the
+     * share_app row so a late fill can restore it. Organic share promos have no unit.
+     */
+    public static boolean isDemotedAdShareShell(@Nullable ModelClass.Datum d) {
+        if (!isShareFeedSlot(d)) return false;
+        try {
+            String code = d.getAd_code();
+            if (code == null || code.trim().isEmpty()) {
+                code = d.getNext_req_ad_code();
+            }
+            return code != null && !code.trim().isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** True when this row is the in-feed Rate AnyNews (stars) card. */
+    public static boolean isRatingsFeedSlot(@Nullable ModelClass.Datum d) {
+        if (d == null) return false;
+        String type = d.getPostType();
+        return type != null && type.equalsIgnoreCase("ratings");
+    }
+
+    /**
+     * Ads at every {@link #getAdEveryNReal()} reals + share_app throttle in one pass.
      * Prefer this after unread strip / soft-remove / tab restore.
+     * Does not place ratings — callers should use {@link #ensureRatingsSlot} after
+     * (needs Context for rated / daily-seen prefs).
      */
     public static boolean rebalanceFeedSlots(
             @Nullable List<ModelClass.Datum> items,
@@ -662,6 +719,146 @@ public final class ReadArticleStore {
         boolean adChanged = rebalanceAdSlots(items, adTemplate);
         boolean shareChanged = throttleShareSlots(items);
         return adChanged || shareChanged;
+    }
+
+    /**
+     * Ensure one {@code post_type=ratings} card sits after {@link #RATING_AFTER_N_REAL}
+     * real articles. Moves a server-injected late ratings row up; invents a shell
+     * when the API never sent one.
+     *
+     * <p>Skips when the user already submitted a rating, or already saw the card
+     * today (local day key — mirrors server ViewsModel same-day gate). Removes
+     * leftover ratings rows when ineligible.
+     *
+     * @return true if list mutated
+     */
+    public static boolean ensureRatingsSlot(
+            @Nullable Context context, @Nullable List<ModelClass.Datum> items) {
+        if (items == null || items.isEmpty()) return false;
+
+        final boolean eligible = context != null && isRatingsPromptEligible(context);
+
+        ArrayList<ModelClass.Datum> existing = new ArrayList<>(2);
+        for (int i = items.size() - 1; i >= 0; i--) {
+            ModelClass.Datum d = items.get(i);
+            if (isRatingsFeedSlot(d)) {
+                existing.add(0, d);
+                items.remove(i);
+            }
+        }
+
+        if (!eligible) {
+            // Drop any server/late ratings when user already rated or saw today.
+            return !existing.isEmpty();
+        }
+
+        int paintableTotal = countPaintableArticles(items);
+        // Need at least one full ad-block of stories before showing the rate card.
+        final int adEveryN = getAdEveryNReal(context);
+        final int minPaintables = Math.min(RATING_AFTER_N_REAL, adEveryN);
+        if (paintableTotal < minPaintables) {
+            // Not enough content yet — put any server row back (before feed_end)
+            // so pagination can move it to the target once paintables grow.
+            if (existing.isEmpty()) {
+                return false;
+            }
+            int at = items.size();
+            for (int i = 0; i < items.size(); i++) {
+                if (FeedEndHelper.isFeedEnd(items.get(i))) {
+                    at = i;
+                    break;
+                }
+            }
+            items.add(Math.min(at, items.size()), existing.get(0));
+            return true;
+        }
+
+        ModelClass.Datum shell = !existing.isEmpty() ? existing.get(0) : newRatingsShell();
+        if (shell == null) return !existing.isEmpty();
+
+        // Prefer after the 8th story. On a short first page, place after the last
+        // paintable; later pages move it up to N.
+        final int targetAfter = Math.min(RATING_AFTER_N_REAL, paintableTotal);
+
+        int insertAt = items.size();
+        int paintablesSeen = 0;
+        for (int i = 0; i < items.size(); i++) {
+            ModelClass.Datum d = items.get(i);
+            if (d == null) continue;
+            if (FeedEndHelper.isFeedEnd(d)) {
+                insertAt = i;
+                break;
+            }
+            // Count normal + sticky stories (same as user-visible news cards).
+            // Ads/share/ratings are synthetic and do not advance the cadence.
+            if (!isSyntheticFeedSlot(d)
+                    && d.getPostId() != null
+                    && d.getPostId() > 0) {
+                paintablesSeen++;
+                if (paintablesSeen >= targetAfter) {
+                    insertAt = i + 1;
+                    break;
+                }
+            }
+        }
+        if (insertAt > items.size()) {
+            insertAt = items.size();
+        }
+        items.add(Math.min(insertAt, items.size()), shell);
+        return true;
+    }
+
+    /** Local eligibility: not submitted, and not shown earlier today. */
+    public static boolean isRatingsPromptEligible(@NonNull Context context) {
+        try {
+            if (SharedPrefsData.getBool(
+                    context, Constants.APP_RATING_SUBMITTED, Constants.PREF_NAME)) {
+                return false;
+            }
+            String seenDay = SharedPrefsData.getString(
+                    context, Constants.APP_RATING_SEEN_DAY, Constants.PREF_NAME);
+            String today = currentLocalDayKey();
+            return seenDay == null || seenDay.isEmpty() || !today.equals(seenDay);
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /** Mark in-feed ratings card as shown for the local calendar day. */
+    public static void markRatingsPromptSeen(@Nullable Context context) {
+        if (context == null) return;
+        try {
+            SharedPrefsData.putString(
+                    context,
+                    Constants.APP_RATING_SEEN_DAY,
+                    currentLocalDayKey(),
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @NonNull
+    private static String currentLocalDayKey() {
+        try {
+            java.text.SimpleDateFormat fmt =
+                    new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
+            return fmt.format(new java.util.Date());
+        } catch (Exception e) {
+            return String.valueOf(System.currentTimeMillis() / 86_400_000L);
+        }
+    }
+
+    @NonNull
+    private static ModelClass.Datum newRatingsShell() {
+        ModelClass.Datum d = new ModelClass.Datum();
+        d.setPostId(RATING_POST_ID);
+        d.setSubPostId(1L);
+        d.setPostType("ratings");
+        d.setTitle("Rate AnyNews");
+        d.setDescription("");
+        d.setMediaType("1");
+        d.setStickyPosition(-1);
+        return d;
     }
 
     /**
@@ -734,7 +931,8 @@ public final class ReadArticleStore {
             }
         }
         // Ensure one promo when we had shares but never hit the window yet.
-        if (sharesPlaced == 0 && !shares.isEmpty() && realTotal >= AD_EVERY_N_REAL) {
+        final int adEveryN = getAdEveryNReal();
+        if (sharesPlaced == 0 && !shares.isEmpty() && realTotal >= adEveryN) {
             int r = 0;
             int insertAt = rebuilt.size();
             for (int i = 0; i < rebuilt.size(); i++) {
@@ -745,7 +943,7 @@ public final class ReadArticleStore {
                         && d.getPostId() != null
                         && d.getPostId() > 0) {
                     r++;
-                    if (r >= AD_EVERY_N_REAL) {
+                    if (r >= adEveryN) {
                         insertAt = i + 1;
                         break;
                     }
@@ -776,7 +974,8 @@ public final class ReadArticleStore {
 
     /**
      * After unread filter / soft strip collapses the list, re-insert ad slots at the
-     * product cadence (every {@link #AD_EVERY_N_REAL} real cards → first ad at index 4).
+     * product cadence (every {@link #getAdEveryNReal()} real cards → first ad at
+     * index N).
      * Keeps original ad metadata ({@code ad_req_position}, codes) so already-loaded
      * native ads still match. Clones the template when needed so skip-ahead pages
      * that discarded later ads still get a full cadence.
@@ -797,6 +996,14 @@ public final class ReadArticleStore {
             if (d == null) continue;
             if (isAdFeedSlot(d)) {
                 adPool.add(d);
+            } else if (isDemotedAdShareShell(d)) {
+                // Soft fill-timeout left share_app with unit meta — reclaim as ad
+                // so pagination rebalance restores income seats instead of keeping Share.
+                try {
+                    d.setPostType("ad");
+                } catch (Exception ignored) {
+                }
+                adPool.add(d);
             } else {
                 content.add(d);
             }
@@ -812,8 +1019,9 @@ public final class ReadArticleStore {
         }
 
         int realCount = countRealArticles(content);
-        // Need at least one full block of reals to place an ad (position 4 pattern).
-        if (realCount < AD_EVERY_N_REAL) {
+        final int adEveryN = getAdEveryNReal();
+        // Need at least one full block of reals to place an ad (every-N pattern).
+        if (realCount < adEveryN) {
             // Still drop stacked leading/trailing ads if strip left only clumped ads.
             if (adPool.isEmpty() && items.size() == content.size()) {
                 return false;
@@ -827,7 +1035,7 @@ public final class ReadArticleStore {
             return true;
         }
 
-        ArrayList<ModelClass.Datum> rebuilt = new ArrayList<>(content.size() + realCount / AD_EVERY_N_REAL + 2);
+        ArrayList<ModelClass.Datum> rebuilt = new ArrayList<>(content.size() + realCount / adEveryN + 2);
         int realsSeen = 0;
         int adUsed = 0;
         for (ModelClass.Datum d : content) {
@@ -836,7 +1044,7 @@ public final class ReadArticleStore {
             if (d != null && !isSyntheticFeedSlot(d) && !isStickyArticle(d)
                     && d.getPostId() != null && d.getPostId() > 0) {
                 realsSeen++;
-                if (realsSeen % AD_EVERY_N_REAL == 0) {
+                if (realsSeen % adEveryN == 0) {
                     ModelClass.Datum slot;
                     if (adUsed < adPool.size()) {
                         slot = adPool.get(adUsed);
@@ -850,7 +1058,7 @@ public final class ReadArticleStore {
                         try {
                             int at = rebuilt.size();
                             slot.setAd_req_position(at);
-                            slot.setNext_ad_req_position(at + AD_EVERY_N_REAL + 1);
+                            slot.setNext_ad_req_position(at + adEveryN + 1);
                         } catch (Exception ignored) {
                         }
                         rebuilt.add(slot);
@@ -936,7 +1144,8 @@ public final class ReadArticleStore {
                 || type.equalsIgnoreCase("ratings")
                 || type.equalsIgnoreCase("web_ads")
                 || type.equalsIgnoreCase("web")
-                || type.equalsIgnoreCase("google_vasttag");
+                || type.equalsIgnoreCase("google_vasttag")
+                || type.equalsIgnoreCase(FeedEndHelper.POST_TYPE);
     }
 
     @NonNull

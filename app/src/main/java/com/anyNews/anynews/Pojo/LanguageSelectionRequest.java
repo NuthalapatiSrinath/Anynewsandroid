@@ -48,6 +48,23 @@ public class LanguageSelectionRequest implements Serializable {
     @Expose
     private Boolean value;
 
+    /** When true, server marks notification_reprompt_converted on enable. */
+    @SerializedName("via_reprompt")
+    @Expose
+    private Boolean viaReprompt;
+
+    @SerializedName("converted")
+    @Expose
+    private Boolean converted;
+
+    @SerializedName("already_enabled")
+    @Expose
+    private Boolean alreadyEnabled;
+
+    @SerializedName("notification_flag")
+    @Expose
+    private Boolean notificationFlag;
+
     public Integer getRegion_id() {
         return region_id;
     }
@@ -70,6 +87,38 @@ public class LanguageSelectionRequest implements Serializable {
 
     public void setValue(Boolean value) {
         this.value = value;
+    }
+
+    public Boolean getViaReprompt() {
+        return viaReprompt;
+    }
+
+    public void setViaReprompt(Boolean viaReprompt) {
+        this.viaReprompt = viaReprompt;
+    }
+
+    public Boolean getConverted() {
+        return converted;
+    }
+
+    public void setConverted(Boolean converted) {
+        this.converted = converted;
+    }
+
+    public Boolean getAlreadyEnabled() {
+        return alreadyEnabled;
+    }
+
+    public void setAlreadyEnabled(Boolean alreadyEnabled) {
+        this.alreadyEnabled = alreadyEnabled;
+    }
+
+    public Boolean getNotificationFlag() {
+        return notificationFlag;
+    }
+
+    public void setNotificationFlag(Boolean notificationFlag) {
+        this.notificationFlag = notificationFlag;
     }
 
     public Integer getDistId() {

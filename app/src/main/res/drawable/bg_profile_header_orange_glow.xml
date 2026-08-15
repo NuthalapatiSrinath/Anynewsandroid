@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Large soft bloom behind the 3D globe for depth. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:centerX="0.5"
+        android:centerY="0.42"
+        android:endColor="#00EF4923"
+        android:gradientRadius="110dp"
+        android:startColor="#88FF6B00"
+        android:type="radial" />
+    <size
+        android:width="240dp"
+        android:height="240dp" />
+</shape>

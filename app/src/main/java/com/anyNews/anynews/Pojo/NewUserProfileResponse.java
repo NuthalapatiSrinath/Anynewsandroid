@@ -22,7 +22,12 @@ public class NewUserProfileResponse {
 
         @SerializedName("approval_rates")
         @Expose
-        private String approval_rates;
+        private Object approval_rates;
+
+        /** 0–100 profile field completion; preferred for "% Achieved" UI. */
+        @SerializedName("profile_completion")
+        @Expose
+        private Object profileCompletion;
 
         @SerializedName("profile_pic")
         @Expose
@@ -64,6 +69,32 @@ public class NewUserProfileResponse {
         @SerializedName("likes")
         @Expose
         private Long likes;
+
+        /** Optional; server may omit — client shows 0. */
+        @SerializedName("comments")
+        @Expose
+        private Long comments;
+
+        /** Optional; server may omit — client shows 0. Accepts total_views or views. */
+        @SerializedName(value = "total_views", alternate = {"views", "totalViews"})
+        @Expose
+        private Long totalViews;
+
+        public Long getComments() {
+            return comments != null ? comments : 0L;
+        }
+
+        public void setComments(Long comments) {
+            this.comments = comments;
+        }
+
+        public Long getTotalViews() {
+            return totalViews != null ? totalViews : 0L;
+        }
+
+        public void setTotalViews(Long totalViews) {
+            this.totalViews = totalViews;
+        }
 
         public String getEmail() {
             return email;
@@ -215,11 +246,25 @@ public class NewUserProfileResponse {
         }
 
         public String getApproval_rates() {
-            return approval_rates;
+            return objectToPctString(approval_rates);
         }
 
         public void setApproval_rates(String approval_rates) {
             this.approval_rates = approval_rates;
+        }
+
+        public String getProfileCompletion() {
+            return objectToPctString(profileCompletion);
+        }
+
+        public void setProfileCompletion(Object profileCompletion) {
+            this.profileCompletion = profileCompletion;
+        }
+
+        private static String objectToPctString(Object raw) {
+            if (raw == null) return null;
+            String s = String.valueOf(raw).replace("%", "").trim();
+            return s.isEmpty() || "null".equalsIgnoreCase(s) ? null : s;
         }
     }
 

@@ -70,10 +70,33 @@ public class Constants {
 
     public static String switchNotification = "switchNotification";
 
+    /** User prefs on Settings screen (SharedPreferences {@link #PREF_NAME}). */
+    public static String VIDEO_AUTOPLAY = "settings_video_autoplay";
+    public static String NIGHT_MODE = "settings_night_mode";
+    public static String LOCAL_STORIES = "settings_local_stories";
+    public static String PARENTAL_CONTROL = "settings_parental_control";
+    public static String NOTIFICATION_ENABLED = "settings_notification_enabled";
+
+    /**
+     * Last app versionCode that showed the install/update POST_NOTIFICATIONS dialog.
+     * Missing key → never asked this install; ask on first Home after install/update.
+     */
+    public static String NOTIFICATION_RUNTIME_ASK_VERSION = "notification_runtime_ask_version_code";
+
+    /** True after any POST_NOTIFICATIONS runtime dialog was shown (install or re-prompt). */
+    public static String NOTIFICATION_RUNTIME_EVER_ASKED = "notification_runtime_ever_asked";
+
+    /** Admin wave: show OS permission once on next open (cleared after show/ack). */
+    public static String NOTIFICATION_REPROMPT_DUE = "notification_reprompt_due";
+    public static String NOTIFICATION_REPROMPT_ENABLED = "notification_reprompt_enabled";
+    public static String NOTIFICATION_REPROMPT_WAVE = "notification_reprompt_wave";
+
     public static String WalletAmount = "Wallet_Amount" ;
 
     public static String Email = "Email";
     public static String USER_NAME = "USER_NAME";
+    /** Last known own profile photo URL for instant Profile paint. */
+    public static String PROFILE_PIC_URL = "PROFILE_PIC_URL";
 
     //
     public static String Lang = "LanName";
@@ -98,7 +121,14 @@ public class Constants {
     public static String StaticDataApi="staticDataApi";
 
     public static String is_login="is_login";
+    /**
+     * After user taps Logout, splash must not re-apply server is_login (mobile still on draft)
+     * until the next successful OTP login clears this flag.
+     */
+    public static String FORCE_LOGGED_OUT = "force_logged_out";
     public static String is_reporter="is_reporter";
+    /** Last known "% Achieved" (profile completion) for instant Profile paint. */
+    public static String PROFILE_ACHIEVED_PCT = "profile_achieved_pct";
     public static String reporter_language_id="reporter_language_id";
     public static String REPORTER_STATUS_CHANGED = "REPORTER_STATUS_CHANGED";
     public static String dist_name="dist_name";
@@ -106,6 +136,16 @@ public class Constants {
 
     public static String Selected_Distric_Name="Selected_Distric_Name";
     public static String Selected_Distric_Name1="Selected_Distric_Name1";
+    /**
+     * Server district id for the selected geography. Display names are language-dependent;
+     * keep id stable and re-resolve labels for the current {@link #LanguageID}.
+     */
+    public static String Selected_Distric_Id = "Selected_Distric_Id";
+    /**
+     * Language id for which {@link #Selected_Distric_Name1} / {@link #Selected_Distric_Name}
+     * was last stored. Used so resume/offline paint never re-apply a Telugu label when UI is Hindi.
+     */
+    public static String Selected_Distric_Name_LangId = "Selected_Distric_Name_LangId";
     public static String MOVE_NEXT_SCREEN="MOVE_NEXT_SCREEN";
     public static String REFERRER_POST="referrer_post";
 
@@ -120,7 +160,13 @@ public class Constants {
     public static String ARTICLE_ID="ARTICLE_ID";
     public static String  PRD_ID="PRD_ID";
 
-    public static String USER_ID="Selected_Distric_Name";
+    /**
+     * Logged-in user id (Long). Must never share a prefs key with string fields
+     * like {@link #Selected_Distric_Name} — that caused ClassCastException on Home launch.
+     * Legacy builds used key "Selected_Distric_Name"; {@link SharedPrefsData#getLong}
+     * / {@link SharedPrefsData#putLong} migrate and clear the collision.
+     */
+    public static String USER_ID = "user_id";
 
     public static String Back_Button_Move="Back_Button_Move";
 
@@ -155,18 +201,130 @@ public class Constants {
     public static String FLIP_RESTORE_AT = "flip_restore_at";
     /** JSON of {@link com.anyNews.anynews.Pojo.CricketMiniPlayerPosition} from splash / poll. */
     public static String CRICKET_MINI_PLAYER_POSITION = "cricket_mini_player_position";
-    /** "true"/"false" admin toggle for the floating cricket mini player (default true). */
+    /** "true"/"false" admin toggle for the floating cricket mini player (default false). */
     public static String CRICKET_MINI_PLAYER_ENABLED = "cricket_mini_player_enabled";
     public static String CRICKET_MINI_PLAYER_POLL_INTERVAL_SECONDS = "cricket_mini_player_poll_interval_seconds";
+    /** Idle Home cricket poll when mini ON but no live match (admin; splash/session). */
+    public static String CRICKET_MINI_PLAYER_IDLE_POLL_INTERVAL_SECONDS =
+            "cricket_mini_player_idle_poll_interval_seconds";
     public static String SESSION_HEARTBEAT_INTERVAL_SECONDS = "session_heartbeat_interval_seconds";
+    /** "true"/"false" admin true-live presence monitoring (default false). */
+    public static String SESSION_LIVE_ENABLED = "session_live_enabled";
+    /** Presence window seconds (interval × 2) from splash — informational for client. */
+    public static String SESSION_LIVE_WINDOW_SECONDS = "session_live_window_seconds";
+    /**
+     * Max articles for Offline News pack (splash/runtime; default 24, hard 8–50).
+     * Used as MAIN_CAP + thrifty prefetch target.
+     */
+    public static String OFFLINE_NEWS_PACK_MAX = "offline_news_pack_max";
+    /**
+     * Seconds before auto-hide of top News|Read chrome after each show (splash/runtime).
+     * Default 3; 0 = disable; clamped 0–30.
+     */
+    public static String HOME_MODE_CHROME_AUTO_HIDE_SECONDS =
+            "home_mode_chrome_auto_hide_seconds";
+    /**
+     * Hours of last-read articles shown under Read / చదివినవి (splash/runtime).
+     * Default 24; clamped 1–168. Older reads stay out of Read but News still strips them.
+     */
+    public static String READ_HISTORY_HOURS = "read_history_hours";
+    /**
+     * In-feed native ad after every N real articles (splash/runtime; default 4, 2–10).
+     */
+    public static String FEED_AD_EVERY_N = "feed_ad_every_n";
+    /** Flip positions ahead to prefetch next native ad (default 6, 3–12). */
+    public static String AD_PREFETCH_LOOKAHEAD = "ad_prefetch_lookahead";
+    /** Max simultaneous native ad loads (default 3, 1–5). */
+    public static String MAX_NATIVE_AD_LOADS_IN_FLIGHT = "max_native_ad_loads_in_flight";
+    /**
+     * Flush batched real-ad impressions after every N painted ads (default 3, 1–50).
+     * Admin: Configuration → Performance Tuning → Ad impression flush every N.
+     */
+    public static String AD_IMPR_FLUSH_EVERY_N = "ad_impr_flush_every_n";
     /** "true"/"false" admin toggle for the bottom-footer cricket tab (default false). */
     public static String CRICKET_FOOTER_TAB_ENABLED = "cricket_footer_tab_enabled";
+
+    // Profile hub / More (splash-delivered; defaults applied in ProfileHubConfigHelper).
+    /** When true, Categories stay in footer. Default false = profile hub only. */
+    public static String CATEGORIES_IN_FOOTER = "categories_in_footer";
+    public static String SHOW_HEADER_PROFILE_ICON = "show_header_profile_icon";
+    public static String ENABLE_STATUS_VIDEOS = "enable_status_videos";
+    /** Profile hub: hide Status Videos "New" badge after user opens Status Videos once. */
+    public static String STATUS_VIDEOS_BADGE_SEEN = "status_videos_badge_seen";
+    public static String PROFILE_SHOW_BOOKMARKS = "profile_show_bookmarks";
+    public static String PROFILE_SHOW_REFERRAL = "profile_show_referral";
+    public static String REFERRAL_PROGRAM_ENABLED = "referral_program_enabled";
+    public static String PROFILE_SHOW_SETTINGS_ROW = "profile_show_settings_row";
+    public static String PROFILE_HEADER_ICON_SIZE_DP = "profile_header_icon_size_dp";
+    public static String PROFILE_CATEGORY_ICON_SIZE_DP = "profile_category_icon_size_dp";
+    public static String PROFILE_MENU_TEXT_SIZE_SP = "profile_menu_text_size_sp";
+    /** Home footer center "+" FAB diameter (dp). Splash-delivered; default 42. */
+    public static String FOOTER_PLUS_ICON_SIZE_DP = "footer_plus_icon_size_dp";
+    // Home bottom-nav slot visibility (admin Root_Settings; defaults true except categories).
+    public static String FOOTER_SHOW_RELOAD = "footer_show_reload";
+    public static String FOOTER_SHOW_SPECIAL = "footer_show_special";
+    public static String FOOTER_SHOW_PLUS = "footer_show_plus";
+    public static String FOOTER_SHOW_PROFILE = "footer_show_profile";
+    public static String FOOTER_SHOW_BOOKMARKS = "footer_show_bookmarks";
+    /** Home footer Video News tab. Default true. */
+    public static String FOOTER_SHOW_VIDEOS = "footer_show_videos";
+    // Settings panel toggle visibility (admin Root_Settings; defaults true / false as noted).
+    public static String SETTINGS_SHOW_NOTIFICATIONS = "settings_show_notifications";
+    public static String SETTINGS_SHOW_VIDEO_AUTOPLAY = "settings_show_video_autoplay";
+    public static String SETTINGS_SHOW_NIGHT_MODE = "settings_show_night_mode";
+    public static String SETTINGS_SHOW_LOCAL_STORIES = "settings_show_local_stories";
+    /** Contact Us mailto target from admin Root_Settings; fallback support@anynews.co.in. */
+    public static String CONTACT_EMAIL = "contact_email";
+    /**
+     * Home update-banner subtitle from admin App update prompt (splash + feed).
+     * Empty → Android uses R.string.app_update_available_subtitle.
+     */
+    public static String UPDATE_BANNER_SUBTITLE = "update_banner_subtitle";
+    /** Full jatakam WhatsApp digits (country code) from admin; empty = CTA disabled. */
+    public static String FULL_JATAKAM_WHATSAPP = "full_jatakam_whatsapp";
+    /**
+     * Default raasi for calendar flip page (0-based 0–11 after parse).
+     * Splash {@code default_rashi_id}: 1–12, 0–11, or mesha…meena.
+     */
+    public static String DEFAULT_RASHI_ID = "default_rashi_id";
+    public static String DEFAULT_RASHI_ID_SET = "default_rashi_id_set";
+
+    /**
+     * Push tray appearance (admin Configuration → splash / articles config).
+     * Layout changes require a Play update; these knobs apply once that APK is installed.
+     */
+    /** Default true: show article image as left thumb / expanded image. */
+    public static String PN_SHOW_ARTICLE_IMAGE = "pn_show_article_image";
+    /** "compact_with_image" | "text_only" */
+    public static String PN_STYLE_MODE = "pn_style_mode";
+    /** Optional remote red brand logo URL; empty + include_logo → bundled red logo. */
+    public static String PN_LARGE_ICON_URL = "pn_large_icon_url";
+    /** Global default: inject brand logo when FCM omits include_logo. Default false. */
+    public static String PN_INCLUDE_LOGO_DEFAULT = "push_include_logo_default";
+    /** Left branding ImageView size (dp). */
+    public static String PN_LEFT_ICON_SIZE_DP = "pn_left_icon_size_dp";
+    /** Article tile size (dp). */
+    public static String PN_THUMB_SIZE_DP = "pn_thumb_size_dp";
+    /** Headline text size (sp). */
+    public static String PN_TITLE_SIZE_SP = "pn_title_size_sp";
     // One-shot post id parsed from a shared deep link (/p/{id}, anynews://post/{id},
     // anws.in/{id}, ...). Persisted by StartingActivity and consumed+cleared by
     // HomePage so the exact post opens even on splash routes that don't forward
     // the SHARE_REDIRECT_ID intent extra (returning-user paths).
+    // Cross-language: opening a Hindi share while LanguageID=Telugu must show the
+    // Hindi post once, then continue the Telugu feed — never rewrite LanguageID.
     public static String PENDING_SHARE_POST = "pending_share_post_id";
     public static String PROFILE_CACHE = "reporter_profile_cache_json";
+    /** Last active key for {@link ReporterProfileCache} (draft+phone/email scoped). */
+    public static String PROFILE_CACHE_KEY = "reporter_profile_cache_key";
+
+    // Open-path / push-stampede client cache (epoch ms stamps + disk feed file).
+    /** Last successful Splash_Screen apply. */
+    public static String OPEN_PATH_SPLASH_AT = "open_path_splash_at";
+    /** Last successful get_static_data apply. */
+    public static String OPEN_PATH_STATIC_AT = "open_path_static_at";
+    /** Last successful List_All_Articles page-0 network fetch. */
+    public static String OPEN_PATH_FEED_NET_AT = "open_path_feed_net_at";
     public static String Selected_YES_PERCENT="Selected_YES_PERCENT";
     public static String Selected_NO_PERCENT="Selected_NO_PERCENT";
     public static String Selected_YES_COUNT="Selected_YES_COUNT";
@@ -183,7 +341,11 @@ public class Constants {
     public static String button_name_profile = "profile";
     public static String APP_RATING_SUBMITTED = "app_rating_submitted";
     public static String APP_RATING = "app_rating";
+    /** Calendar day (yyyy-MM-dd, Asia/Kolkata-aligned local) when in-feed ratings card was shown. */
+    public static String APP_RATING_SEEN_DAY = "app_rating_seen_day";
     public static String isUnreadPostsSelected = "isunreadpostsselected";
+    /** Video News footer tab: List_All_Articles video_posts=true (half+full video only). */
+    public static String isVideoPostsSelected = "isvideopostsselected";
     public final static String AD_REGULAR = "regular";
     public final static String AD_FULL_IMAGE  = "fullImage";
     public final static String AD_MEDIUM  = "medium";

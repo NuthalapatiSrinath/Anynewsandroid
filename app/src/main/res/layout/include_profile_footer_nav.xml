@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same News|Special|Calendar|Video|Profile footer as HomePage — Profile content scrolls above. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/profile_page_navigation"
+    android:layout_width="match_parent"
+    android:layout_height="50dp"
+    android:background="@drawable/bg_bottom_nav_glass">
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/profile_nav_view"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_bottom_nav_glass"
+        app:elevation="0dp"
+        app:itemHorizontalTranslationEnabled="false"
+        app:itemIconTint="@color/selector_item_primary_color"
+        app:itemTextAppearanceActive="@style/BottomNavLabelActive"
+        app:itemTextAppearanceInactive="@style/BottomNavLabelInactive"
+        app:itemTextColor="@color/selector_item_primary_color"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/menu_navigation_center_fab"
+        app:theme="@style/Theme.MaterialComponents" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

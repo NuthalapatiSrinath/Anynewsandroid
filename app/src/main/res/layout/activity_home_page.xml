@@ -171,11 +171,16 @@
                 </LinearLayout>
 
 
+                <!-- Feed + loading stacked so L→R reveal overlays without weight split -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="9">
+
                 <LinearLayout
                     android:id="@+id/layout_with_data"
                     android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="9"
+                    android:layout_height="match_parent"
                     android:orientation="vertical">
 
                     <LinearLayout
@@ -199,14 +204,17 @@
                             android:layout_height="0dp"
                             android:layout_weight="9"
                             android:background="@drawable/transparent"
+                            android:clickable="true"
+                            android:focusable="true"
                             android:gravity="bottom"
                             android:visibility="gone">
 
                             <LinearLayout
                                 android:id="@+id/floating_action_button"
                                 android:layout_width="match_parent"
-                                android:layout_height="0dp"
-                                android:layout_weight="9"
+                                android:layout_height="match_parent"
+                                android:clickable="true"
+                                android:focusable="true"
                                 android:gravity="bottom"
                                 android:orientation="vertical">
 
@@ -390,14 +398,56 @@
                 <LinearLayout
                     android:id="@+id/layout_with_out_data"
                     android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="9"
+                    android:layout_height="match_parent"
+                    android:background="@color/feed_shimmer_surface"
+                    android:clickable="true"
+                    android:focusable="true"
                     android:gravity="center"
+                    android:orientation="vertical"
                     android:visibility="gone">
 
-                    <include layout="@layout/layout_loading"></include>
+                    <com.anyNews.anynews.Ui.HomeFeedRevealView
+                        android:id="@+id/home_feed_reveal"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
 
                 </LinearLayout>
+
+                <!-- In-place Bookmarks list (top toggle right segment). Above feed. -->
+                <include
+                    android:id="@+id/include_home_bookmarks_panel"
+                    layout="@layout/layout_home_bookmarks_panel"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <!-- Footer Calendar mode: Telugu calendar FlipView (2 pages) above bottom nav. -->
+                <FrameLayout
+                    android:id="@+id/home_calendar_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#000000"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:visibility="gone" />
+
+                <!-- Offline-only Offline News | Bookmarks toggle (hidden online). -->
+                <include
+                    android:id="@+id/include_home_news_bookmarks_toggle"
+                    layout="@layout/layout_home_news_bookmarks_toggle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top" />
+
+                <!-- Legacy Calendar|Reload overlay — permanently GONE; Calendar is footer center. -->
+                <include
+                    android:id="@+id/include_home_action_chrome"
+                    layout="@layout/layout_home_action_chrome"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom"
+                    android:visibility="gone" />
+
+                </FrameLayout>
 
                 <!--  Cricket footer tab (admin-controlled, APK 3.40.79+). GONE by
                       default so the footer is EXACTLY as before until enabled AND
@@ -470,12 +520,13 @@
                         android:layout_width="match_parent"
                         android:layout_height="50dp"
                         android:layout_gravity="bottom"
-                        android:background="@color/bottom_navigation_view_color"
+                        android:background="@drawable/bg_bottom_nav_glass"
                         app:itemIconTint="@color/selector_item_primary_color"
                         app:itemTextColor="@color/selector_item_primary_color"
                         app:itemTextAppearanceActive="@style/BottomNavLabelActive"
                         app:itemTextAppearanceInactive="@style/BottomNavLabelInactive"
                         app:labelVisibilityMode="labeled"
+                        app:itemHorizontalTranslationEnabled="false"
                         app:elevation="0dp"
                         app:menu="@menu/menu_navigation_center_fab"
                         app:theme="@style/Theme.MaterialComponents"/>
@@ -532,6 +583,7 @@
                             android:textColor="@color/selector_item_primary_color" />
                     </LinearLayout>
 
+                    <!-- Product: center + / WhatsApp always off — start GONE; HomePage keeps it hidden. -->
                     <com.google.android.material.floatingactionbutton.FloatingActionButton
                         android:id="@+id/fab"
                         android:layout_width="wrap_content"
@@ -542,7 +594,7 @@
                         app:elevation="0dp"
                         app:borderWidth="0dp"
                         app:fabCustomSize="42dp"
-                        android:visibility="visible"
+                        android:visibility="gone"
                         app:layout_anchor="@+id/nav_view"
                         app:layout_anchorGravity="center"
                         app:maxImageSize="30dp" />
@@ -863,6 +915,31 @@
 
             </androidx.percentlayout.widget.PercentRelativeLayout>
 
+            <!-- Top-left profile chip (default GONE — use bottom footer Profile tab). -->
+            <FrameLayout
+                android:id="@+id/layout_home_glass_header"
+                android:layout_width="wrap_content"
+                android:layout_height="56dp"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentStart="true"
+                android:background="@drawable/bg_home_glass_header"
+                android:clickable="false"
+                android:elevation="10dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="12dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/btn_home_profile"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_glass_profile_icon"
+                    android:contentDescription="@string/Profile"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_profile_glass" />
+            </FrameLayout>
 
         </RelativeLayout>
 
