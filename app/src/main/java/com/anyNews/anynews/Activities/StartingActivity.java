@@ -52,7 +52,11 @@ import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
+import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
+import com.anyNews.anynews.Utils.TtdConfigHelper;
+import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
+import com.anyNews.anynews.Utils.DailyUpdatesConfigHelper;
 import com.anyNews.anynews.Utils.ReadArticleStore;
 import com.anyNews.anynews.Utils.DeviceLocationHelper;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
@@ -1111,6 +1115,13 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     private void routeReturningUser() {
+        // Existing Play / reporter devices with language already chosen: never interrupt.
+        if (OpenPathCache.shouldSkipLanguageOnboarding(this)) {
+            showLog("OpenPath: returning user skip language → home");
+            openHomeFromSplash();
+            return;
+        }
+
         String nextScreen = SharedPrefsData.getString(this, Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
         if (nextScreen == null) {
             nextScreen = "";
@@ -1132,6 +1143,11 @@ public class StartingActivity extends AppCompatActivity {
             return;
         }
         if ("language".equalsIgnoreCase(nextScreen)) {
+            // Stale MOVE_NEXT_SCREEN=language must not override completed onboarding.
+            if (OpenPathCache.shouldSkipLanguageOnboarding(this)) {
+                openHomeFromSplash();
+                return;
+            }
             startActivity(new Intent(StartingActivity.this, LanguageActivity.class));
             finish();
             return;
@@ -1147,6 +1163,15 @@ public class StartingActivity extends AppCompatActivity {
         // dead/fake network + empty first-run prefs used to leave the logo splash stuck.
         if (!splashNetworkInFlight && splashNetworkFailCount == 0) {
             callSplashRequest(false);
+            return;
+        }
+        // Prefer home when device already has an ID + any prior identity; only true
+        // first-run cold devices go to language after splash failure.
+        String storedDeviceId = SharedPrefsData.getString(this, Constants.DeviceID, Constants.PREF_NAME);
+        int draftId = SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
+        if (storedDeviceId != null && !storedDeviceId.isEmpty() && draftId > 0) {
+            showLog("OpenPath: splash failure with stored device+draft → home");
+            openHomeFromSplash();
             return;
         }
         showLog("OpenPath: no cached route after splash failure → Language");
@@ -1214,9 +1239,18 @@ public class StartingActivity extends AppCompatActivity {
                         // if getting null then uninstall app
 
                         SharedPrefsData.putInt(getApplicationContext(), Constants.DraftID, startActivityReqModel.getData().getDraftId(), Constants.PREF_NAME);
+                        // Never wipe a returning user's remembered language with server 0 —
+                        // that re-forced "Select Content Language" for Play Store devices.
+                        int previousLangId = SharedPrefsData.getInt(
+                                getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
                         int splashLangId = startActivityReqModel.getData().getLanguageId() != null
                                 ? startActivityReqModel.getData().getLanguageId()
                                 : 0;
+                        if (splashLangId <= 0 && previousLangId > 0) {
+                            splashLangId = previousLangId;
+                            showLog("OpenPath: preserve local LanguageID=" + previousLangId
+                                    + " (server returned 0)");
+                        }
                         SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID, splashLangId, Constants.PREF_NAME);
                         SessionAnalyticsTracker.get().onIdentityReady(getApplicationContext());
                         SharedPrefsData.putInt(getApplicationContext(), Constants.Show_Animation, startActivityReqModel.getData().getShowAnimation(), Constants.PREF_NAME);
@@ -1235,8 +1269,35 @@ public class StartingActivity extends AppCompatActivity {
                                 splashLangId,
                                 splashDistId,
                                 startActivityReqModel.getData().getDistName());
-                        SharedPrefsData.putString(getApplicationContext(), Constants.MOVE_NEXT_SCREEN, startActivityReqModel.getData().getNextScreen(), Constants.PREF_NAME);
-                        markOnboardingCompleteIfNeeded(startActivityReqModel.getData().getNextScreen());
+                        try {
+                            Integer splashStateId = startActivityReqModel.getData().getStateId();
+                            if (splashStateId != null && splashStateId > 0) {
+                                SharedPrefsData.putInt(
+                                        getApplicationContext(),
+                                        Constants.StateID,
+                                        splashStateId,
+                                        Constants.PREF_NAME);
+                            } else if (splashDistId > 0) {
+                                int found = SelectionListCache.findStateIdForDistrict(
+                                        getApplicationContext(), splashLangId, splashDistId);
+                                if (found > 0) {
+                                    SharedPrefsData.putInt(
+                                            getApplicationContext(),
+                                            Constants.StateID,
+                                            found,
+                                            Constants.PREF_NAME);
+                                }
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        String splashNext = startActivityReqModel.getData().getNextScreen();
+                        if ("language".equalsIgnoreCase(splashNext)
+                                && OpenPathCache.shouldSkipLanguageOnboarding(getApplicationContext())) {
+                            splashNext = "main";
+                            showLog("OpenPath: coerce next_screen language → main for returning user");
+                        }
+                        SharedPrefsData.putString(getApplicationContext(), Constants.MOVE_NEXT_SCREEN, splashNext, Constants.PREF_NAME);
+                        markOnboardingCompleteIfNeeded(splashNext);
 
                         SharedPrefsData.putBool(getApplicationContext(), Constants.is_login,
                                 !SharedPrefsData.getBool(getApplicationContext(), Constants.FORCE_LOGGED_OUT, Constants.PREF_NAME)
@@ -1454,12 +1515,6 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getCricketFooterTabEnabled()
                         );
-                        if (startActivityReqModel.getData().getReferralEnabled() != null) {
-                            SharedPrefsData.putBool(getApplicationContext(),
-                                    Constants.REFERRAL_PROGRAM_ENABLED,
-                                    startActivityReqModel.getData().getReferralEnabled(),
-                                    Constants.PREF_NAME);
-                        }
                         // Profile hub / More + home footer slot flags (null = leave cache / defaults).
                         ProfileHubConfigHelper.saveFromSplash(
                                 getApplicationContext(),
@@ -1467,7 +1522,7 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getShowHeaderProfileIcon(),
                                 startActivityReqModel.getData().getEnableStatusVideos(),
                                 startActivityReqModel.getData().getProfileShowBookmarks(),
-                                startActivityReqModel.getData().getProfileShowReferral(),
+                                false,
                                 startActivityReqModel.getData().getProfileShowSettingsRow(),
                                 startActivityReqModel.getData().getProfileHeaderIconSizeDp(),
                                 startActivityReqModel.getData().getProfileCategoryIconSizeDp(),
@@ -1483,6 +1538,9 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getSettingsShowNightMode(),
                                 startActivityReqModel.getData().getSettingsShowLocalStories()
                         );
+                        ProfileHubConfigHelper.saveBecomeAReporterEnabled(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getEnableBecomeAReporter());
                         // Contact Us mailto target from Root_Settings (null/blank keeps cache).
                         ProfileHubConfigHelper.saveContactEmail(
                                 getApplicationContext(),
@@ -1493,6 +1551,45 @@ public class StartingActivity extends AppCompatActivity {
                         ProfileHubConfigHelper.saveDefaultRashiId(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getDefaultRashiId());
+                        ProfileHubConfigHelper.saveCalendarPanchangSource(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getCalendarPanchangSource());
+                        CalendarUiConfigHelper.saveFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getCalendarDetailCardMinHeightDp(),
+                                startActivityReqModel.getData().getCalendarDetailTitleSizeSp(),
+                                startActivityReqModel.getData().getCalendarDetailItemSizeSp(),
+                                startActivityReqModel.getData().getCalendarDetailItemPadDp(),
+                                startActivityReqModel.getData().getCalendarMonthHeightFraction(),
+                                startActivityReqModel.getData()
+                                        .getCalendarSelectedCircleRadiusPercent());
+                        TtdConfigHelper.saveFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getTtd());
+                        LocalUpdatesConfigHelper.saveWeatherFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getWeather());
+                        LocalUpdatesConfigHelper.saveFuelFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getFuel());
+                        LocalUpdatesConfigHelper.saveGoldFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getGold());
+                        LocalUpdatesConfigHelper.saveJobsFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getJobs());
+                        DailyUpdatesConfigHelper.saveFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getDailyUpdates());
+                        DailyUpdatesConfigHelper.saveStockSummaryFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getStockMarket());
+                        DailyUpdatesConfigHelper.saveFlashHeadlinesFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getFlashNews());
+                        DailyUpdatesConfigHelper.saveLocalHeadlinesFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getLocalHeadlines());
                         // Admin notification re-prompt (one OS ask next open when due).
                         if (startActivityReqModel.getData().getNotificationRepromptEnabled() != null) {
                             SharedPrefsData.putBool(
@@ -1717,7 +1814,10 @@ public class StartingActivity extends AppCompatActivity {
 
                             int language_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
 
-                            if (language_id==0) {
+                            if (language_id == 0 && OpenPathCache.shouldSkipLanguageOnboarding(getApplicationContext())) {
+                                // Returning user with IS_LANGUAGE_SELECTED / main route but lang wiped — home.
+                                openHomeFromSplash();
+                            } else if (language_id == 0) {
                                 navigateAfterSplash(startActivityReqModel);
                             } else {
                                 // Prefer cached translator; only fetch static when stale or missing.
@@ -1842,12 +1942,27 @@ public class StartingActivity extends AppCompatActivity {
 
     private void navigateAfterSplash(StartActivityReqModel startActivityReqModel) {
         try {
+            if (OpenPathCache.shouldSkipLanguageOnboarding(getApplicationContext())) {
+                openHomeFromSplash();
+                return;
+            }
+
             scrren = startActivityReqModel.getData().getNextScreen();
             if (scrren == null) {
                 scrren = "main";
             }
+            // Prefer coerced prefs (may have forced language → main for returning users).
+            String prefsNext = SharedPrefsData.getString(
+                    getApplicationContext(), Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
+            if (prefsNext != null && !prefsNext.isEmpty()) {
+                scrren = prefsNext;
+            }
 
             if (scrren.equals("language")) {
+                if (OpenPathCache.shouldSkipLanguageOnboarding(getApplicationContext())) {
+                    openHomeFromSplash();
+                    return;
+                }
                 Intent intent = new Intent(StartingActivity.this, LanguageActivity.class);
                 startActivity(intent);
                 finish();
@@ -1906,6 +2021,20 @@ public class StartingActivity extends AppCompatActivity {
         StartingAppRequest requestModel = new StartingAppRequest();
         requestModel.setAppVersion((Integer.valueOf(versionid)));
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
+        // Always send DeviceID on returning splash — Play second-open used to omit it,
+        // which broke orphan/Mongo rebind and forced language select for existing devices.
+        String returningDeviceId = DeviceID;
+        if (returningDeviceId == null || returningDeviceId.isEmpty()) {
+            returningDeviceId = SharedPrefsData.getString(
+                    getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
+        }
+        if (returningDeviceId == null || returningDeviceId.isEmpty()) {
+            returningDeviceId = Settings.Secure.getString(
+                    getApplicationContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+            SharedPrefsData.putString(
+                    getApplicationContext(), Constants.DeviceID, returningDeviceId, Constants.PREF_NAME);
+        }
+        requestModel.setDeviceID(returningDeviceId);
         requestModel.setReferralLink("" + SharedPrefsData.getString(getApplicationContext(), Constants.REFERAL_LINK, Constants.PREF_NAME));  //
         requestModel.setReferralLink2("" + SharedPrefsData.getString(getApplicationContext(), Constants.REFERAL_LINK2, Constants.PREF_NAME));  //
         requestModel.setReferredBy(SharedPrefsData.getLong(getApplicationContext(), Constants.CUSST_ID, Constants.PREF_NAME));  //
@@ -2091,10 +2220,14 @@ public class StartingActivity extends AppCompatActivity {
                             scrren=  SharedPrefsData.getString(getApplicationContext(), Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
 
                             if (scrren.equals("language")) {
-
+                                if (OpenPathCache.shouldSkipLanguageOnboarding(getApplicationContext())) {
+                                    showLog("CHECK POINT HOMEPAGE 8 skip language");
+                                    openHomeFromSplash();
+                                } else {
                                 Intent intent = new Intent(StartingActivity.this, LanguageActivity.class);
                                 startActivity(intent);
                                 finish();
+                                }
 
                             } else if (scrren.equals("state")) {
 
@@ -2171,10 +2304,14 @@ public class StartingActivity extends AppCompatActivity {
                                             scrren=  SharedPrefsData.getString(getApplicationContext(), Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
 
                                             if (scrren.equals("language")) {
-
+                                                if (OpenPathCache.shouldSkipLanguageOnboarding(getApplicationContext())) {
+                                                    showLog("CHECK POINT HOMEPAGE 9 skip language");
+                                                    openHomeFromSplash();
+                                                } else {
                                                 Intent intent = new Intent(StartingActivity.this, LanguageActivity.class);
                                                 startActivity(intent);
                                                 finish();
+                                                }
 
                                             } else if (scrren.equals("state")) {
 

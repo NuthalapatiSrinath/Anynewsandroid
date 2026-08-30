@@ -154,6 +154,28 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
 
     private void LanguageSelection(int language_id, String language_name) {
 
+        int draftId = SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME);
+        if (draftId <= 0) {
+            // Splash must create/store draft before language update works. Without this,
+            // tap shows "Draft id is required." and looks like a broken language screen.
+            SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
+            SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+            Toast.makeText(context,
+                    "Setting up your device… please wait a moment and try again.",
+                    Toast.LENGTH_LONG).show();
+            index = -1;
+            notifyDataSetChanged();
+            try {
+                Intent restart = new Intent(context, com.anyNews.anynews.Activities.StartingActivity.class);
+                restart.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        | Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(restart);
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+
         JsonObject otp = SetUpdateLanguage(language_id);
 
         showLog("API REQUEST E "+otp.toString());

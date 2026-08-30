@@ -249,8 +249,14 @@ public class Constants {
     public static String CATEGORIES_IN_FOOTER = "categories_in_footer";
     public static String SHOW_HEADER_PROFILE_ICON = "show_header_profile_icon";
     public static String ENABLE_STATUS_VIDEOS = "enable_status_videos";
+    /** Profile hub Become a Reporter row (splash hiring toggle). Default true. */
+    public static String ENABLE_BECOME_A_REPORTER = "enable_become_a_reporter";
+    /** Login source flag: reopen applicant flow after OTP. */
+    public static String LOGIN_SOURCE_BECOME_REPORTER = "login_source_become_a_reporter";
     /** Profile hub: hide Status Videos "New" badge after user opens Status Videos once. */
     public static String STATUS_VIDEOS_BADGE_SEEN = "status_videos_badge_seen";
+    /** Profile hub: Become a Reporter orange NEW badge (hide after first open). */
+    public static String BECOME_REPORTER_BADGE_SEEN = "become_reporter_badge_seen";
     public static String PROFILE_SHOW_BOOKMARKS = "profile_show_bookmarks";
     public static String PROFILE_SHOW_REFERRAL = "profile_show_referral";
     public static String REFERRAL_PROGRAM_ENABLED = "referral_program_enabled";
@@ -288,6 +294,89 @@ public class Constants {
      */
     public static String DEFAULT_RASHI_ID = "default_rashi_id";
     public static String DEFAULT_RASHI_ID_SET = "default_rashi_id_set";
+    /**
+     * Splash {@code calendar_panchang_source}:
+     * {@code prokerala_hyderabad} (default, Way2-like) or {@code astronomical_hyderabad}.
+     */
+    public static String CALENDAR_PANCHANG_SOURCE = "calendar_panchang_source";
+    public static final String CALENDAR_SOURCE_PROKERALA = "prokerala_hyderabad";
+    public static final String CALENDAR_SOURCE_ASTRONOMICAL = "astronomical_hyderabad";
+    /**
+     * Telugu calendar detail-card UI knobs (Root_Settings → splash).
+     * Defaults applied in {@link CalendarUiConfigHelper} when unset.
+     */
+    public static String CALENDAR_DETAIL_CARD_MIN_HEIGHT_DP = "calendar_detail_card_min_height_dp";
+    public static String CALENDAR_DETAIL_TITLE_SIZE_SP = "calendar_detail_title_size_sp";
+    public static String CALENDAR_DETAIL_ITEM_SIZE_SP = "calendar_detail_item_size_sp";
+    public static String CALENDAR_DETAIL_ITEM_PAD_DP = "calendar_detail_item_pad_dp";
+    /** Month grid height share (stored as percent 35–70 for SharedPreferences). */
+    public static String CALENDAR_MONTH_HEIGHT_FRACTION = "calendar_month_height_fraction";
+    /** Selected-day circle diameter as % of base 26dp (40–100). */
+    public static String CALENDAR_SELECTED_CIRCLE_RADIUS_PERCENT =
+            "calendar_selected_circle_radius_percent";
+
+    /** TTD feature (splash {@code ttd} object). */
+    public static String TTD_CONFIG_SET = "ttd_config_set";
+    public static String TTD_ENABLED = "ttd_enabled";
+    public static String TTD_BOOKING_ENABLED = "ttd_booking_enabled";
+    public static String TTD_BOOKING_DAYS = "ttd_booking_days";
+    public static String TTD_OFFICIAL_URL = "ttd_official_url";
+    public static String TTD_BOOKING_URL = "ttd_booking_url";
+    public static String TTD_EDARSHAN_URL = "ttd_edarshan_url";
+    public static String TTD_APP_URL = "ttd_app_url";
+    public static String TTD_SHOW_QUICK = "ttd_show_quick";
+    public static String TTD_SHOW_DARSHAN = "ttd_show_darshan";
+    public static String TTD_SHOW_SEVAS = "ttd_show_sevas";
+    public static String TTD_SHOW_NEWS = "ttd_show_news";
+    public static String TTD_SHOW_LINKS = "ttd_show_links";
+    public static String TTD_HERO_TITLE = "ttd_hero_title";
+    public static String TTD_HERO_SUBTITLE = "ttd_hero_subtitle";
+    public static String TTD_BLESSING = "ttd_blessing";
+
+    /** Weather / Fuel / Gold — splash root_settings blobs for Daily Updates. */
+    public static String WEATHER_CONFIG_SET = "weather_config_set";
+    public static String WEATHER_ENABLED = "weather_enabled";
+    public static String WEATHER_CONFIG_JSON = "weather_config_json";
+    public static String FUEL_CONFIG_SET = "fuel_config_set";
+    public static String FUEL_ENABLED = "fuel_enabled";
+    public static String FUEL_CONFIG_JSON = "fuel_config_json";
+    public static String GOLD_CONFIG_SET = "gold_config_set";
+    public static String GOLD_ENABLED = "gold_enabled";
+    public static String GOLD_CONFIG_JSON = "gold_config_json";
+
+    /** Jobs hub from splash {@code jobs} (Mongo collection + stats). */
+    public static String JOBS_CONFIG_SET = "jobs_config_set";
+    public static String JOBS_ENABLED = "jobs_enabled";
+    public static String JOBS_CONFIG_JSON = "jobs_config_json";
+
+    /**
+     * Daily Updates hub (splash {@code daily_updates}): Panchangam / Mana Zilla /
+     * Flash News kill switches + card background art offset.
+     */
+    public static String DAILY_UPDATES_CONFIG_SET = "daily_updates_config_set";
+    public static String DAILY_UPDATES_CONFIG_JSON = "daily_updates_config_json";
+    public static String DU_PANCHANGAM_ENABLED = "du_panchangam_enabled";
+    public static String DU_MANA_ZILLA_ENABLED = "du_mana_zilla_enabled";
+    public static String DU_FLASH_NEWS_ENABLED = "du_flash_news_enabled";
+    /** Stock Market row kill switch (splash daily_updates.stock_enabled). */
+    public static String DU_STOCK_ENABLED = "du_stock_enabled";
+    public static String DU_STOCK_TITLE = "du_stock_title";
+    public static String DU_STOCK_SUBTITLE = "du_stock_subtitle";
+    public static String DU_STOCK_OFFSET_Y_DP = "du_stock_offset_y_dp";
+    /** Cached splash stock summary JSON (nifty/sensex) — real prices only. */
+    public static String DU_STOCK_SUMMARY_JSON = "du_stock_summary_json";
+    /** dp; negative shifts card bg art left. */
+    public static String DU_CARD_IMAGE_OFFSET_DP = "du_card_image_offset_dp";
+    /** CSV of language ids allowed for Mana Zilla (default "3" = Telugu). */
+    public static String DU_MANA_ZILLA_LANGUAGE_IDS = "du_mana_zilla_language_ids";
+    public static String DU_MANA_HEADLINE_OFFSET_X_DP = "du_mana_headline_offset_x_dp";
+    public static String DU_MANA_HEADLINE_OFFSET_Y_DP = "du_mana_headline_offset_y_dp";
+    public static String DU_MANA_HEADLINE_TEXT_SIZE_SP = "du_mana_headline_text_size_sp";
+    /** Splash Redis/memory Flash ticker headlines JSON array. */
+    public static String DU_FLASH_HEADLINES_JSON = "du_flash_headlines_json";
+    /** Splash Redis/memory Mana Zilla local titles JSON array. */
+    public static String DU_LOCAL_HEADLINES_JSON = "du_local_headlines_json";
+    public static String DU_LOCAL_HEADLINES_DIST = "du_local_headlines_dist";
 
     /**
      * Push tray appearance (admin Configuration → splash / articles config).

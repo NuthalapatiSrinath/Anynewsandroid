@@ -38,6 +38,9 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("dist_id")
         @Expose
         private Integer distId;
+        @SerializedName("state_id")
+        @Expose
+        private Integer stateId;
         @SerializedName("is_login")
         @Expose
         private Boolean isLogin;
@@ -381,6 +384,10 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean enableStatusVideos;
 
+        @SerializedName("enable_become_a_reporter")
+        @Expose
+        private Boolean enableBecomeAReporter;
+
         @SerializedName("profile_show_bookmarks")
         @Expose
         private Boolean profileShowBookmarks;
@@ -471,6 +478,88 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Object defaultRashiId; // Integer or String from JSON
 
+        /**
+         * Admin calendar year-pack source:
+         * prokerala_hyderabad | astronomical_hyderabad. Null = keep cache / default.
+         */
+        @SerializedName("calendar_panchang_source")
+        @Expose
+        private String calendarPanchangSource;
+
+        /** Detail card min height (dp). Null = keep cache / app default. */
+        @SerializedName("calendar_detail_card_min_height_dp")
+        @Expose
+        private Integer calendarDetailCardMinHeightDp;
+
+        /** Detail card title text size (sp). Null = keep cache / app default. */
+        @SerializedName("calendar_detail_title_size_sp")
+        @Expose
+        private Integer calendarDetailTitleSizeSp;
+
+        /** Detail card list line text size (sp). Null = keep cache / app default. */
+        @SerializedName("calendar_detail_item_size_sp")
+        @Expose
+        private Integer calendarDetailItemSizeSp;
+
+        /** Vertical pad between detail list lines (dp). Null = keep cache / app default. */
+        @SerializedName("calendar_detail_item_pad_dp")
+        @Expose
+        private Integer calendarDetailItemPadDp;
+
+        /** Month grid height fraction (0.35–0.70). Null = keep cache / app default. */
+        @SerializedName("calendar_month_height_fraction")
+        @Expose
+        private Float calendarMonthHeightFraction;
+
+        /** Selected-day circle diameter % of base 32dp (40–100). Null = keep cache. */
+        @SerializedName("calendar_selected_circle_radius_percent")
+        @Expose
+        private Integer calendarSelectedCircleRadiusPercent;
+
+        /** TTD feature config object from Root_Settings. Null = keep cache. */
+        @SerializedName("ttd")
+        @Expose
+        private Object ttd;
+
+        /** Weather Special config from Root_Settings. Null = keep cache. */
+        @SerializedName("weather")
+        @Expose
+        private Object weather;
+
+        /** Fuel Prices Special config from Root_Settings. Null = keep cache. */
+        @SerializedName("fuel")
+        @Expose
+        private Object fuel;
+
+        /** Gold & Silver Special config from Root_Settings. Null = keep cache. */
+        @SerializedName("gold")
+        @Expose
+        private Object gold;
+
+        /** Jobs hub payload (stats + items) from splash. Null = keep cache. */
+        @SerializedName("jobs")
+        @Expose
+        private Object jobs;
+
+        /** Daily Updates hub flags + art offset. Null = keep cache. */
+        @SerializedName("daily_updates")
+        @Expose
+        private Object dailyUpdates;
+
+        /** Stock Market splash summary (Yahoo indices) — real prices only. */
+        @SerializedName("stock_market")
+        @Expose
+        private Object stockMarket;
+
+        /** Flash News headlines pack (Redis/memory) for Daily Updates ticker. */
+        @SerializedName("flash_news")
+        @Expose
+        private Object flashNews;
+
+        /** Mana Zilla local district headlines (Redis/memory). */
+        @SerializedName("local_headlines")
+        @Expose
+        private Object localHeadlines;
 
         // Admin one-time notification re-prompt (opt-in recovery).
         @SerializedName("notification_reprompt_enabled")
@@ -598,6 +687,10 @@ public class StartActivityReqModel implements Serializable {
             return enableStatusVideos;
         }
 
+        public Boolean getEnableBecomeAReporter() {
+            return enableBecomeAReporter;
+        }
+
         public Boolean getProfileShowBookmarks() {
             return profileShowBookmarks;
         }
@@ -676,6 +769,70 @@ public class StartActivityReqModel implements Serializable {
 
         public Object getDefaultRashiId() {
             return defaultRashiId;
+        }
+
+        public String getCalendarPanchangSource() {
+            return calendarPanchangSource;
+        }
+
+        public Integer getCalendarDetailCardMinHeightDp() {
+            return calendarDetailCardMinHeightDp;
+        }
+
+        public Integer getCalendarDetailTitleSizeSp() {
+            return calendarDetailTitleSizeSp;
+        }
+
+        public Integer getCalendarDetailItemSizeSp() {
+            return calendarDetailItemSizeSp;
+        }
+
+        public Integer getCalendarDetailItemPadDp() {
+            return calendarDetailItemPadDp;
+        }
+
+        public Float getCalendarMonthHeightFraction() {
+            return calendarMonthHeightFraction;
+        }
+
+        public Integer getCalendarSelectedCircleRadiusPercent() {
+            return calendarSelectedCircleRadiusPercent;
+        }
+
+        public Object getTtd() {
+            return ttd;
+        }
+
+        public Object getWeather() {
+            return weather;
+        }
+
+        public Object getFuel() {
+            return fuel;
+        }
+
+        public Object getGold() {
+            return gold;
+        }
+
+        public Object getJobs() {
+            return jobs;
+        }
+
+        public Object getDailyUpdates() {
+            return dailyUpdates;
+        }
+
+        public Object getStockMarket() {
+            return stockMarket;
+        }
+
+        public Object getFlashNews() {
+            return flashNews;
+        }
+
+        public Object getLocalHeadlines() {
+            return localHeadlines;
         }
 
         public Boolean getNotificationRepromptEnabled() {
@@ -788,6 +945,14 @@ public class StartActivityReqModel implements Serializable {
 
         public void setDistId(Integer distId) {
             this.distId = distId;
+        }
+
+        public Integer getStateId() {
+            return stateId;
+        }
+
+        public void setStateId(Integer stateId) {
+            this.stateId = stateId;
         }
 
         public Boolean getIsLogin() {

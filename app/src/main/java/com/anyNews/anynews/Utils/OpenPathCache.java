@@ -118,6 +118,24 @@ public final class OpenPathCache {
                 || SharedPrefsData.getBool(context, Constants.IS_LANGUAGE_SELECTED, Constants.PREF_NAME);
     }
 
+    /**
+     * Play Store / returning users must not be forced through "Select Content Language".
+     * True when local prefs already prove onboarding completed (language chosen, main route,
+     * or draft+language identity). Does NOT treat "draft just created with language_id=0"
+     * as complete — those users still see language pick.
+     */
+    public static boolean shouldSkipLanguageOnboarding(Context context) {
+        if (context == null) return false;
+        int lang = SharedPrefsData.getInt(context, Constants.LanguageID, Constants.PREF_NAME);
+        if (lang > 0) return true;
+        if (SharedPrefsData.getBool(context, Constants.IS_LANGUAGE_SELECTED, Constants.PREF_NAME)) {
+            return true;
+        }
+        String next = SharedPrefsData.getString(context, Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
+        if ("main".equalsIgnoreCase(next)) return true;
+        return canFastOpenHome(context);
+    }
+
     public static boolean shouldBlockOnSplash(Context context) {
         if (!hasUsableIdentity(context)) return true;
         long last = SharedPrefsData.getLong(context, Constants.OPEN_PATH_SPLASH_AT, Constants.PREF_NAME);

@@ -5,8 +5,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -20,6 +23,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
+import com.anyNews.anynews.Utils.OpenPathCache;
 import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.LanguageModel;
@@ -57,8 +61,18 @@ public class LanguageActivity extends AppCompatActivity {
     String type_firebase_language = "language_selection";
     int draft_id_firebase_lang = 0;
 
-    /** True when we already painted from cache; network only soft-refreshes. */
-    private boolean paintedFromCache = false;
+    /** True once any non-empty list is on screen (cache or bundled). */
+    private boolean paintedWithItems = false;
+
+    /** True after List_All_Languages returned a non-empty list this session. */
+    private boolean paintedFromLiveApi = false;
+
+    /** Fresh-install soft-refresh retries — never block UI with a spinner. */
+    private int languageFetchAttempts = 0;
+    private static final int MAX_LANGUAGE_FETCH_ATTEMPTS = 4;
+    private final Handler retryHandler = new Handler(Looper.getMainLooper());
+    private boolean destroyed = false;
+    private boolean fetchInFlight = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,8 +91,20 @@ public class LanguageActivity extends AppCompatActivity {
         setStaticData();
         FontSettingsHelper.applySelectionHeader(getApplicationContext(), 1, select_language);
 
-        // Instant paint from disk/memory; never block with Loading... when cache exists.
-        paintFromCacheIfAvailable();
+        // Safety net: existing Play / reporter devices with language already chosen
+        // must never sit on this screen (stale MOVE_NEXT_SCREEN=language paths).
+        if (OpenPathCache.shouldSkipLanguageOnboarding(this)) {
+            showLog("LanguageActivity: skip for returning device → HomePage");
+            Intent home = new Intent(LanguageActivity.this, HomePage.class);
+            home.putExtra("EXTRA_SESSION_ID", "0");
+            startActivity(home);
+            finish();
+            return;
+        }
+
+        // Instant paint: cache if present, else bundled ML/HI/TE/TA/KN/OD.
+        // NEVER blank title-only shell. NEVER blocking Loading spinner.
+        paintInstantLanguageList();
         getLangageDetails();
 
         draft_id_firebase_lang = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
@@ -88,6 +114,13 @@ public class LanguageActivity extends AppCompatActivity {
         writeLanguageSelection("User", type_firebase_language, draft_id_firebase_lang, device_id_firebase, current_time_firebase_lang);
     }
 
+    @Override
+    protected void onDestroy() {
+        destroyed = true;
+        retryHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
+    }
+
     private void setStaticData() {
         prefShare = new Allsharedpreference(this);
         Gson gson = new Gson();
@@ -95,30 +128,28 @@ public class LanguageActivity extends AppCompatActivity {
         languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
     }
 
-    private void paintFromCacheIfAvailable() {
+    /**
+     * Paint languages on the first frame — SelectionListCache when non-empty,
+     * otherwise the bundled production language set. Content shell stays visible;
+     * loading layout stays gone.
+     */
+    private void paintInstantLanguageList() {
+        ensureContentVisible();
         List<LanguageModel.Datum> cached = SelectionListCache.loadLanguages(this);
-        if (cached == null || cached.isEmpty()) {
-            // Cold: show shell (title) without full-screen spinner if possible.
-            showContentShellWithoutSpinner();
+        if (cached != null && !cached.isEmpty()) {
+            arrayList.clear();
+            arrayList.addAll(cached);
+            bindLanguageList();
+            paintedWithItems = true;
+            showLog("LanguageActivity: instant paint from SelectionListCache size=" + arrayList.size());
             return;
         }
-        arrayList.clear();
-        arrayList.addAll(cached);
-        bindLanguageList();
-        paintedFromCache = true;
-        showContentHideLoading();
+        paintBundledFallbackLanguages();
+        showLog("LanguageActivity: instant paint from bundled fallback size=" + arrayList.size());
     }
 
-    private void showContentShellWithoutSpinner() {
-        if (layout_with_out_data != null) {
-            layout_with_out_data.setVisibility(View.GONE);
-        }
-        if (layout_with_data != null) {
-            layout_with_data.setVisibility(View.VISIBLE);
-        }
-    }
-
-    private void showContentHideLoading() {
+    /** Keep the picker content visible; never flip to the old Loading include. */
+    private void ensureContentVisible() {
         if (layout_with_out_data != null) {
             layout_with_out_data.setVisibility(View.GONE);
         }
@@ -136,17 +167,67 @@ public class LanguageActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Known-good production language IDs (ML=1 … OD=6). Used for fresh install
+     * first paint and as the lasting UI if the network never returns a list.
+     */
+    private void paintBundledFallbackLanguages() {
+        arrayList.clear();
+        arrayList.add(new LanguageModel.Datum(1, "മലയാളം"));
+        arrayList.add(new LanguageModel.Datum(2, "हिन्दी"));
+        arrayList.add(new LanguageModel.Datum(3, "తెలుగు"));
+        arrayList.add(new LanguageModel.Datum(4, "தமிழ்"));
+        arrayList.add(new LanguageModel.Datum(5, "ಕನ್ನಡ"));
+        arrayList.add(new LanguageModel.Datum(6, "ଓଡ଼ିଆ"));
+        bindLanguageList();
+        paintedWithItems = true;
+        ensureContentVisible();
+        // Seed disk so a cold reopen is also instant even before API succeeds.
+        SelectionListCache.saveLanguages(this, arrayList);
+    }
+
+    private void handleLanguagesLoadFailure(String reason) {
+        if (destroyed) {
+            return;
+        }
+        showLog("LanguageActivity soft-refresh failed: " + reason
+                + " attempt=" + languageFetchAttempts
+                + " itemsOnScreen=" + (arrayList != null ? arrayList.size() : 0));
+        // List already on screen (cache or bundled). Never show Loading.
+        ensureContentVisible();
+        if (paintedFromLiveApi) {
+            return;
+        }
+        if (languageFetchAttempts < MAX_LANGUAGE_FETCH_ATTEMPTS) {
+            long delayMs = Math.min(800L * Math.max(1, languageFetchAttempts), 4000L);
+            retryHandler.postDelayed(() -> {
+                if (!destroyed && !paintedFromLiveApi) {
+                    getLangageDetails();
+                }
+            }, delayMs);
+        }
+    }
+
     private void getLangageDetails() {
+        if (destroyed || fetchInFlight) {
+            return;
+        }
+        languageFetchAttempts++;
+        fetchInFlight = true;
+        // Soft-refresh only — do not hide items or show a spinner.
+
         APIService apiService = RestApiClient.getClient().create(APIService.class);
         Call<EncreptionRequest> apiResponse = apiService.Languages_All_Languages("v3");
 
         apiResponse.enqueue(new Callback<EncreptionRequest>() {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                fetchInFlight = false;
+                if (destroyed) {
+                    return;
+                }
                 if (response.body() == null || response.body().getData() == null) {
-                    if (!paintedFromCache) {
-                        showContentShellWithoutSpinner();
-                    }
+                    handleLanguagesLoadFailure("null body");
                     return;
                 }
                 try {
@@ -161,9 +242,11 @@ public class LanguageActivity extends AppCompatActivity {
                     if (languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess())
                             && languageModel.getData() != null && languageModel.getData().size() > 0) {
 
-                        boolean unchanged = paintedFromCache
+                        boolean unchanged = paintedWithItems
                                 && SelectionListCache.languagesUnchanged(LanguageActivity.this, languageModel);
                         SelectionListCache.saveLanguages(LanguageActivity.this, languageModel);
+                        paintedFromLiveApi = true;
+                        languageFetchAttempts = 0;
                         if (unchanged) {
                             // Already painted same data — skip rebuild.
                             return;
@@ -176,23 +259,23 @@ public class LanguageActivity extends AppCompatActivity {
                                     languageModel.getData().get(i).getName()));
                         }
                         bindLanguageList();
-                        paintedFromCache = true;
-                        showContentHideLoading();
-                    } else if (!paintedFromCache) {
-                        showContentShellWithoutSpinner();
+                        paintedWithItems = true;
+                        ensureContentVisible();
+                    } else {
+                        handleLanguagesLoadFailure("empty or unsuccessful list");
                     }
                 } catch (Exception e) {
-                    if (!paintedFromCache) {
-                        showContentShellWithoutSpinner();
-                    }
+                    handleLanguagesLoadFailure("parse: " + e.getMessage());
                 }
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-                if (!paintedFromCache) {
-                    showContentShellWithoutSpinner();
+                fetchInFlight = false;
+                if (destroyed) {
+                    return;
                 }
+                handleLanguagesLoadFailure(t != null ? t.getMessage() : "network");
             }
         });
     }

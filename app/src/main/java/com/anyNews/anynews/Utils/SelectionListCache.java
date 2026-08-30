@@ -213,6 +213,86 @@ public final class SelectionListCache {
         saveDistricts(context, languageId, stateId, model);
     }
 
+    /**
+     * Find which state owns {@code distId} by scanning language-keyed district caches.
+     * Used when splash saved district but never persisted {@link Constants#StateID}.
+     */
+    public static int findStateIdForDistrict(
+            @Nullable Context context, int languageId, int distId) {
+        if (context == null || languageId <= 0 || distId <= 0) {
+            return 0;
+        }
+        Context app = context.getApplicationContext();
+        // 1) Prefetch current StateID list if present.
+        int knownState = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
+        if (knownState > 0) {
+            List<DistricsModel.Datum> list = loadDistricts(app, languageId, knownState);
+            if (listContainsDistrict(list, distId)) {
+                return knownState;
+            }
+        }
+        // 2) Scan disk cache files: selection_districts_lang_{lang}_state_{state}.json
+        try {
+            File dir = app.getCacheDir();
+            if (dir == null || !dir.isDirectory()) {
+                return 0;
+            }
+            String prefix = "selection_districts_lang_" + languageId + "_state_";
+            String suffix = ".json";
+            File[] files = dir.listFiles();
+            if (files == null) {
+                return 0;
+            }
+            for (File f : files) {
+                if (f == null || !f.isFile()) continue;
+                String name = f.getName();
+                if (!name.startsWith(prefix) || !name.endsWith(suffix)) continue;
+                String mid = name.substring(prefix.length(), name.length() - suffix.length());
+                int stateId;
+                try {
+                    stateId = Integer.parseInt(mid.trim());
+                } catch (Exception e) {
+                    continue;
+                }
+                if (stateId <= 0) continue;
+                List<DistricsModel.Datum> list = loadDistricts(app, languageId, stateId);
+                if (listContainsDistrict(list, distId)) {
+                    return stateId;
+                }
+            }
+        } catch (Exception e) {
+            Logone.w(e, TAG + " findStateIdForDistrict");
+        }
+        // 3) Scan in-memory states list districts if we have states cached.
+        try {
+            List<StatesModel.Datum> states = loadStates(app, languageId);
+            if (states != null) {
+                for (StatesModel.Datum st : states) {
+                    if (st == null || st.getId() == null || st.getId() <= 0) continue;
+                    List<DistricsModel.Datum> list = loadDistricts(app, languageId, st.getId());
+                    if (listContainsDistrict(list, distId)) {
+                        return st.getId();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
+    }
+
+    private static boolean listContainsDistrict(
+            @Nullable List<DistricsModel.Datum> list, int distId) {
+        if (list == null || list.isEmpty() || distId <= 0) {
+            return false;
+        }
+        for (DistricsModel.Datum d : list) {
+            if (d != null && d.getId() != null && d.getId() == distId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ── Regions / areas (keyed by languageId) ───────────────────────────
 
     @Nullable
