@@ -23,6 +23,9 @@
     <string name="facebook_app_id">235381625264376</string>
     <string name="fb_login_protocol_scheme">fb235381625264376</string>
     <string name="admob_app_id_fallback" translatable="false">ca-app-pub-8562336752221105~9851429858</string>
+    <!-- Native ad unit, not the AdMob application ID above. Used only if malformed
+         remote AdMob metadata would otherwise leave every native seat unrequestable. -->
+    <string name="admob_native_ad_unit_fallback" translatable="false">ca-app-pub-8562336752221105/4901277505</string>
 
 
     <string name="todo">TODO</string>
@@ -74,6 +77,8 @@
     <string name="share">Share</string>
     <string name="total_magazine">Total Magazine</string>
     <string name="if_you_like_the_app_please_rate_us_nwith_5_star">If you like the app, please rate us \nwith 5 star!</string>
+    <string name="enjoying_anynews_leave_a_play_review">Enjoying AnyNews?\nLeave a review on Google Play.</string>
+    <string name="rate_on_google_play">Rate on Google Play</string>
     <string name="thankyou_for_your_feedback">Thank you for your feedback</string>
     <string name="anynews">ANYNEWS</string>
     <string name="share_anynews_with_your_friends">Share AnyNews with your friends</string>
@@ -151,6 +156,73 @@
     <string name="telugu_calendar_share_day">Share day timings</string>
     <string name="telugu_calendar_share_raasi">Share rashi phalalu</string>
     <string name="telugu_calendar_share_chooser">Share</string>
+
+    <!-- Calendar top chrome: Panchangam | Raasi Phalalu (TTD lives in Daily Updates) -->
+    <string name="calendar_seg_panchangam">Panchangam</string>
+    <string name="calendar_seg_raasi_phalalu">Raasi Phalalu</string>
+    <!-- Legacy keys kept for TTD detail chrome / older refs -->
+    <string name="calendar_ttd_seg_calendar">Panchangam</string>
+    <string name="calendar_ttd_seg_ttd">TTD</string>
+    <string name="ttd_eyebrow">TTD · TIRUMALA</string>
+    <string name="ttd_flash_heading">Flash notice</string>
+    <string name="ttd_slotted_heading">Slotted Sarva Darshan</string>
+    <string name="ttd_schedule_heading">Day schedule</string>
+    <string name="ttd_darshan_heading">Darshan</string>
+    <string name="ttd_darshan_info_heading">Darshanam Information</string>
+    <string name="ttd_services_heading">Pilgrim services</string>
+    <string name="ttd_sevas_heading">Services &amp; Offerings</string>
+    <string name="ttd_news_heading">TTD Latest News</string>
+    <string name="ttd_links_heading">Important Links</string>
+    <string name="ttd_open_official">Official site</string>
+    <string name="ttd_open_booking">Open booking</string>
+    <string name="ttd_edarshan">e-Darshan</string>
+    <string name="ttd_app_link">TTD App</string>
+    <string name="ttd_book_darshan">Book Darshanam Ticket</string>
+    <string name="ttd_view_all">View All ›</string>
+    <string name="ttd_more">More ›</string>
+    <string name="ttd_sarva_label">Sarva Darshanam</string>
+    <string name="ttd_special_label">Special Darshanam</string>
+    <string name="ttd_timings_label">Darshanam Timings</string>
+    <string name="ttd_quick_darshan">Darshanam</string>
+    <string name="ttd_quick_darshan_sub">Ticket Booking</string>
+    <string name="ttd_quick_room">Accommodation</string>
+    <string name="ttd_quick_room_sub">Room Booking</string>
+    <string name="ttd_quick_anna">Annaprasadam</string>
+    <string name="ttd_quick_anna_sub">Information</string>
+    <string name="ttd_quick_hundi">Hundi</string>
+    <string name="ttd_quick_hundi_sub">Online Service</string>
+    <string name="ttd_disabled">TTD is turned off</string>
+    <string name="weather_disabled">Weather is turned off</string>
+    <string name="fuel_disabled">Fuel prices are turned off</string>
+    <string name="gold_disabled">Gold &amp; Silver is turned off</string>
+    <string name="local_update_share">Share</string>
+    <string name="weather_title">వాతావరణం</string>
+    <string name="weather_subtitle">మీ ప్రాంత వాతావరణ వివరాలు</string>
+    <string name="fuel_title_default">ఇంధన ధరలు</string>
+    <string name="gold_title_default">బంగారం &amp; వెండి ధరలు</string>
+    <string name="gold_date_label">తేదీ</string>
+    <string name="gold_card_title">బంగారం ధరలు</string>
+    <string name="silver_card_title">వెండి ధరలు</string>
+    <string name="gold_col_details">వివరాలు</string>
+    <string name="gold_col_price">ధర (₹)</string>
+    <string name="gold_col_change">మార్పు</string>
+    <string name="gold_chart_cta">చరిత్రాత్మక ధరల చార్ట్ చూడండి</string>
+    <string name="gold_chart_cta_hide">చార్ట్ దాచండి</string>
+    <string name="gold_chart_empty">చార్ట్ డేటా అందుబాటులో లేదు</string>
+    <string name="gold_date_no_data">ఈ తేదీకి ధరలు అందుబాటులో లేవు</string>
+    <string name="gold_history_title">7 రోజుల ధరల ట్రెండ్</string>
+    <string name="gold_history_title_gold">7 రోజుల ధరల ట్రెండ్ (24K)</string>
+    <string name="gold_history_title_silver">7 రోజుల ధరల ట్రెండ్ (వెండి 999)</string>
+    <string name="gold_weight_1g">1 గ్రాము</string>
+    <string name="gold_weight_8g">8 గ్రాములు</string>
+    <string name="gold_weight_10g">10 గ్రాములు</string>
+    <string name="gold_weight_100g">100 గ్రాములు</string>
+    <string name="gold_weight_1kg">1 కిలో</string>
+    <string name="gold_disclaimer_default">గమనిక: ఈ ధరలు మార్కెట్ పరిస్థితులకు అనుసరించి మారవచ్చు. ఖచ్చితమైన ధరల కోసం స్థానిక ఆభరణాల దుకాణాలను సంప్రదించండి.</string>
+    <string name="gold_rates_unavailable">ధరలు అందుబాటులో లేవు</string>
+    <string name="ttd_share">Share TTD</string>
+    <string name="ttd_open_failed">Could not open link</string>
+    <string name="ttd_source_fmt">Source: %1$s · Updated %2$s</string>
     <string name="no_read_news">No read news yet</string>
     <string name="read_news_hint">Articles you have already opened</string>
     <string name="offline_saved_updated">Saved for offline · updated %1$s</string>
@@ -162,14 +234,34 @@
     <string name="feed_end_hint_te">మీరు చివరి వార్త చదివారు</string>
     <string name="special_requires_internet">Connect to the internet to open Special</string>
     <string name="video_news">Video News</string>
+    <string name="breaking_news">Flash News</string>
+    <string name="daily_updates">Daily Updates</string>
     <!-- Short Telugu footer label when language is Telugu (space-tight nav). -->
     <string name="video_news_te">వీడియో</string>
     <string name="video_news_empty">No videos right now</string>
+    <string name="breaking_news_empty">No flash news right now</string>
     <string name="video_news_offline_empty">No saved videos offline — connect for Video News</string>
+    <string name="breaking_news_offline_empty">Connect to see Flash News</string>
     <string name="offline_action_queued">Saved offline — will sync when online</string>
     <string name="article_menu_title">ANYNEWS</string>
     <string name="report_content">Report</string>
     <string name="status_videos">Status Videos</string>
+    <string name="become_a_reporter">Become a Reporter</string>
+    <string name="become_reporter_profile_section">Complete your reporter profile</string>
+    <string name="become_reporter_add_photo">Add photo (required)</string>
+    <string name="become_reporter_name_hint">Full name (required)</string>
+    <string name="become_reporter_phone_hint">Phone (required)</string>
+    <string name="become_reporter_email_hint">Email (optional)</string>
+    <string name="become_reporter_save_profile">Save profile</string>
+    <string name="become_reporter_posts_section">Your sample articles (max 3)</string>
+    <string name="become_reporter_submit_article">Submit article</string>
+    <string name="become_reporter_title_hint">Headline</string>
+    <string name="become_reporter_body_hint">Article body</string>
+    <string name="become_reporter_pick_image">Pick article image (required)</string>
+    <string name="become_reporter_login_required">Login to apply as a reporter</string>
+    <string name="become_reporter_profile_blocked">Complete name, photo, and phone before posting.</string>
+    <string name="become_reporter_rejected_msg">Your previous Become a Reporter attempt was not successful.</string>
+    <string name="become_reporter_rejected_whatsapp">For queries, contact WhatsApp: %1$s</string>
     <string name="special_badge">Special</string>
     <string name="no_status_videos">No status videos right now</string>
     <string name="no_status_videos_hint">No Special videos for this language yet. Open Special for full posts, or try again later.</string>
@@ -206,6 +298,7 @@
     <string name="profile_reporter_desk_login_hint">Sign in from the top of Profile to continue</string>
     <string name="profile_reporter_desk_login_cta">Login →</string>
     <string name="profile_reporter_desk_pending">Logged in — awaiting reporter approval</string>
+    <string name="profile_reporter_desk_rejected">Reporter application rejected</string>
     <string name="profile_reporter_desk_approved">Approved — create a post</string>
     <string name="profile_reporter_post_article">Article</string>
     <string name="profile_reporter_post_video">Video Post</string>
@@ -233,7 +326,6 @@
     <string name="settings_missing_notifications_sub">To get all news notifications, turn off battery restrictions.</string>
     <string name="settings_know_more">Know More</string>
     <string name="settings_notifications">నోటిఫికేషన్లు</string>
-    <string name="settings_video_autoplay">Video Autoplay</string>
     <string name="settings_night_mode">Night Mode</string>
     <string name="settings_local_stories">Local Stories</string>
     <string name="settings_parental_title">Parental control</string>

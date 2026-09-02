@@ -27,7 +27,7 @@
         android:textColor="@color/content_desc_color"
         android:textSize="@dimen/_14sdp"
         android:gravity="center"
-        android:text="@string/if_you_like_the_app_please_rate_us_nwith_5_star"
+        android:text="@string/enjoying_anynews_leave_a_play_review"
         android:layout_marginTop="@dimen/_15sdp"/>
     <TextView
         android:id="@+id/textViewRatSubTitle"
@@ -41,40 +41,19 @@
         android:layout_marginTop="@dimen/_15sdp"
         android:text="@string/thankyou_for_your_feedback"/>
 
-    <RatingBar
-        android:id="@+id/ratingBarApp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:rating="0"
-        android:stepSize="1"
-        android:layout_marginTop="@dimen/_25sdp"
-        android:theme="@style/RatingBar"/>
-    <EditText
-        android:id="@+id/editTextAppReview"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/_75sdp"
-        android:background="@drawable/reactangle_box_comment"
-        android:gravity="left|top"
-        android:scrollbars="none"
-        android:maxLength="80"
-        android:visibility="gone"
-        android:paddingTop="1dp"
-        android:paddingStart="2dp"
-        android:hint="Please give your feedback..."
-        android:text=""/>
+    <!-- CTA opens Google Play In-App Review (no in-app star picker). -->
     <Button
         android:id="@+id/buttonAppSubmit"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:layout_marginTop="@dimen/_15sdp"
+        android:layout_marginTop="@dimen/_25sdp"
         android:background="@color/whitewithblack"
         android:textColor="@color/red"
         android:paddingTop="@dimen/_5sdp"
-        android:visibility="gone"
         android:paddingBottom="@dimen/_5sdp"
         android:paddingLeft="@dimen/_25sdp"
         android:paddingRight="@dimen/_25sdp"
-        android:text="SUBMIT" />
+        android:text="@string/rate_on_google_play" />
 
 </LinearLayout>

@@ -125,7 +125,6 @@ import com.anyNews.anynews.Pojo.GetReportIssueResponce;
 import com.anyNews.anynews.Pojo.LanguageModelResponse;
 import com.anyNews.anynews.Pojo.LikeDownloadRespouse;
 import com.anyNews.anynews.Pojo.LikeSelectionRequest;
-import com.anyNews.anynews.Pojo.RatingSubmitRequest;
 import com.anyNews.anynews.Pojo.SurveyFeedbackResponse;
 import com.anyNews.anynews.Pojo.SurveyRequestFeedback;
 import com.anyNews.anynews.Pojo.UserProfileRequest;
@@ -133,7 +132,6 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Services.ShadowTransformer;
-import com.anyNews.anynews.interfaces.CallBackListener;
 import com.anyNews.anynews.interfaces.CustomPlayerUiController;
 import com.anyNews.anynews.interfaces.LoaderCommonOption;
 import com.anyNews.anynews.interfaces.ScreenShott;
@@ -2685,125 +2683,51 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         showLog("AD Point Adapter:: END");
                         break;
                     case "ratings":
+                        // Copy + CTA only — no in-app stars (Play forbids pre-selecting them).
                         pauseVideo();
                         ratingScreenViewHolder = new RatingScreenViewHolder();
                         convertView = inflater.inflate(R.layout.rating_screen_layout, parent, false);
-                        EditText editTextAppReview = convertView.findViewById(R.id.editTextAppReview);
-                        Button buttonAppSubmit = convertView.findViewById(R.id.buttonAppSubmit);
-                        RatingBar ratingBarApp = convertView.findViewById(R.id.ratingBarApp);
+                        Button buttonRateOnPlay = convertView.findViewById(R.id.buttonAppSubmit);
                         TextView textViewRatSubTitle = convertView.findViewById(R.id.textViewRatSubTitle);
                         TextView textViewRatingTitle = convertView.findViewById(R.id.textViewRatingTitle);
-                        editTextAppReview.setVisibility(GONE);
-                        buttonAppSubmit.setVisibility(GONE);
-                        textViewRatSubTitle.setVisibility(GONE);
-                        boolean isAppRatingSubmitted = SharedPrefsData.getBool(context, Constants.APP_RATING_SUBMITTED, Constants.PREF_NAME);
+                        boolean isAppRatingSubmitted = SharedPrefsData.getBool(
+                                context, Constants.APP_RATING_SUBMITTED, Constants.PREF_NAME);
                         if (isAppRatingSubmitted) {
                             textViewRatSubTitle.setVisibility(VISIBLE);
                             textViewRatingTitle.setVisibility(GONE);
-                            ratingBarApp.setVisibility(VISIBLE);
-                            editTextAppReview.setVisibility(GONE);
-                            buttonAppSubmit.setVisibility(GONE);
-                            ratingBarApp.setIsIndicator(true);
-                            float rating = SharedPrefsData.getFloat(context, Constants.APP_RATING, Constants.PREF_NAME);
-                            ratingBarApp.setRating(rating);
+                            buttonRateOnPlay.setVisibility(GONE);
                         } else {
                             textViewRatingTitle.setVisibility(VISIBLE);
-                            ratingBarApp.setVisibility(VISIBLE);
-                        }
-                        buttonAppSubmit.setOnClickListener(new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                RatingSubmitRequest requestModel = new RatingSubmitRequest();
-                                requestModel.setDraft_id((long) SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
-                                requestModel.setComments(editTextAppReview.getText().toString());
-                                requestModel.setRating(ratingBarApp.getRating());
-                                String jsonString = new com.google.gson.Gson().toJson(requestModel);
-                                ratingBarApp.setIsIndicator(true);
-                                String encryptData = encrypt(jsonString);
-                                showLog("API REQUEST E" + jsonString.toString());
-                                sendAppRatingSubmitData(encryptData, 1, new CallBackListener() {
-                                    @Override
-                                    public void callBackOnResponse() {
-                                        Toast.makeText(context, "Rating submitted successfully", Toast.LENGTH_SHORT).show();
-                                        SharedPrefsData.putBool(context, Constants.APP_RATING_SUBMITTED, true, Constants.PREF_NAME);
-                                        SharedPrefsData.putFloat(context, Constants.APP_RATING, ratingBarApp.getRating(), Constants.PREF_NAME);
-                                        ReadArticleStore.markRatingsPromptSeen(context);
-                                        textViewRatSubTitle.setVisibility(VISIBLE);
-                                        textViewRatingTitle.setVisibility(GONE);
-                                        editTextAppReview.setVisibility(GONE);
-                                        buttonAppSubmit.setVisibility(GONE);
-                                    }
+                            textViewRatSubTitle.setVisibility(GONE);
+                            buttonRateOnPlay.setVisibility(VISIBLE);
+                            buttonRateOnPlay.setOnClickListener(view -> {
+                                // Mark done before launching so the card does not nag again.
+                                SharedPrefsData.putBool(
+                                        context, Constants.APP_RATING_SUBMITTED, true, Constants.PREF_NAME);
+                                ReadArticleStore.markRatingsPromptSeen(context);
+                                textViewRatSubTitle.setVisibility(VISIBLE);
+                                textViewRatingTitle.setVisibility(GONE);
+                                buttonRateOnPlay.setVisibility(GONE);
 
-                                    @Override
-                                    public void callBackOnError() {
-                                    }
-                                });
-
-                            }
-                        });
-                        ratingBarApp.setOnRatingBarChangeListener(new RatingBar.OnRatingBarChangeListener() {
-                            @Override
-                            public void onRatingChanged(RatingBar ratingBar, float v, boolean b) {
-                                if (!b) {
-                                    return;
+                                Activity host = activity;
+                                if (host == null && context instanceof Activity) {
+                                    host = (Activity) context;
                                 }
-                                if (ratingBar.getRating() <= 3) {
-                                    // Low rating: collect feedback in-app; do not mark submitted yet.
-                                    SharedPrefsData.putBool(context, Constants.APP_RATING_SUBMITTED, false, Constants.PREF_NAME);
-                                    editTextAppReview.setVisibility(VISIBLE);
-                                    buttonAppSubmit.setVisibility(VISIBLE);
+                                if (host != null && !host.isFinishing()) {
+                                    PlayInAppReviewHelper.launch(host, null);
                                 } else {
-                                    // High rating: store analytics stars, mark done (no re-nag), then
-                                    // Google Play In-App Review. Play Store listing URLs cannot
-                                    // pre-select stars — ReviewManager is the supported path.
-                                    final float chosen = ratingBar.getRating();
-                                    SharedPrefsData.putBool(context, Constants.APP_RATING_SUBMITTED, true, Constants.PREF_NAME);
-                                    SharedPrefsData.putFloat(context, Constants.APP_RATING, chosen, Constants.PREF_NAME);
-                                    ReadArticleStore.markRatingsPromptSeen(context);
-                                    textViewRatSubTitle.setVisibility(VISIBLE);
-                                    textViewRatingTitle.setVisibility(GONE);
-                                    editTextAppReview.setVisibility(GONE);
-                                    buttonAppSubmit.setVisibility(GONE);
-                                    ratingBarApp.setIsIndicator(true);
-
-                                    RatingSubmitRequest requestModel = new RatingSubmitRequest();
-                                    requestModel.setDraft_id((long) SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
-                                    requestModel.setComments("Thank you..");
-                                    requestModel.setRating(chosen);
-                                    String jsonString = new com.google.gson.Gson().toJson(requestModel);
-                                    String encryptData = encrypt(jsonString);
-                                    sendAppRatingSubmitData(encryptData, 1, new CallBackListener() {
-                                        @Override
-                                        public void callBackOnResponse() {
-                                        }
-
-                                        @Override
-                                        public void callBackOnError() {
-                                        }
-                                    });
-
-                                    Activity host = activity;
-                                    if (host == null && context instanceof Activity) {
-                                        host = (Activity) context;
-                                    }
-                                    if (host != null && !host.isFinishing()) {
-                                        PlayInAppReviewHelper.launch(host, null);
-                                    } else {
-                                        // No activity — best-effort listing open (stars still not preselectable).
-                                        try {
-                                            final String appPackageName = context.getPackageName();
-                                            context.startActivity(new Intent(Intent.ACTION_VIEW,
-                                                    Uri.parse("market://details?id=" + appPackageName)));
-                                        } catch (android.content.ActivityNotFoundException anfe) {
-                                            context.startActivity(new Intent(Intent.ACTION_VIEW,
-                                                    Uri.parse("https://play.google.com/store/apps/details?id="
-                                                            + context.getPackageName())));
-                                        }
+                                    try {
+                                        final String appPackageName = context.getPackageName();
+                                        context.startActivity(new Intent(Intent.ACTION_VIEW,
+                                                Uri.parse("market://details?id=" + appPackageName)));
+                                    } catch (android.content.ActivityNotFoundException anfe) {
+                                        context.startActivity(new Intent(Intent.ACTION_VIEW,
+                                                Uri.parse("https://play.google.com/store/apps/details?id="
+                                                        + context.getPackageName())));
                                     }
                                 }
-
-                            }
-                        });
+                            });
+                        }
                         break;
                     case "share_app":
                         convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
@@ -3237,28 +3161,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     private void showIntertitialsAds(InterstitialAd interstitialAd) {
         interstitialAd.show((Activity) context);
-
-    }
-
-    private void sendAppRatingSubmitData(String encrpt_data, int from, CallBackListener callBackListener) {
-        EncritonRequestData encritonRequestData = new EncritonRequestData();
-        encritonRequestData.setData(encrpt_data);
-        JsonObject otp=new Gson().toJsonTree(encritonRequestData).getAsJsonObject();
-        APIService apiService = RestApiClient.getClient().create(APIService.class);
-        Call<JsonObject> apiResponse = apiService.submitRating("v3", otp);
-        apiResponse.enqueue(new Callback<JsonObject>() {
-            @Override
-            public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
-                callBackListener.callBackOnResponse();
-            }
-            @Override
-            public void onFailure(Call<JsonObject> call, Throwable t) {
-                callBackListener.callBackOnError();
-                Toast.makeText(context, "Please try after some time ", Toast.LENGTH_SHORT).show();
-
-            }
-        });
-
 
     }
 

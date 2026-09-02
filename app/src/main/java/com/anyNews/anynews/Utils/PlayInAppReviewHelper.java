@@ -17,9 +17,9 @@ import com.google.android.play.core.review.ReviewManagerFactory;
 /**
  * Google Play In-App Review. Google does not allow pre-selecting stars via
  * {@code market://} or Play Store listing URLs — ReviewManager is the supported
- * flow. The dialog (and whether it appears) is controlled by Play; callers should
- * still store the in-app star rating for analytics and mark the prompt submitted
- * so the feed card does not nag again.
+ * flow. The dialog (and whether it appears) is controlled by Play. Callers should
+ * mark the in-feed prompt submitted ({@code APP_RATING_SUBMITTED}) when the user
+ * taps the review CTA so the card does not nag again — do not collect stars in-app.
  */
 public final class PlayInAppReviewHelper {
 
