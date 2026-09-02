@@ -320,12 +320,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     scheduleSafeAdNotify(48L);
                     return;
                 }
-                notifyDataSetChanged();
+                // This runnable is only scheduled for an ad rebind. With no ready
+                // creative there is nothing to rebind; a full FlipView recycle resets
+                // its page to zero and can strand fast-scroll pagination on a house
+                // shell. The visible placeholder remains valid and a later real fill
+                // schedules another in-place paint.
+                showLog("ANYNEWS_ADS rebind skipped: no ready creative");
             } catch (Exception e) {
-                try {
-                    notifyDataSetChanged();
-                } catch (Exception ignored) {
-                }
+                showLog("ANYNEWS_ADS rebind skipped: " + e.getMessage());
             }
         }
     };
@@ -1634,22 +1636,48 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * District / feed label for the location pill.
-     * Prefer the post's server {@code location_label} (post district/state);
-     * fall back to the user's selected district for national posts with no geo.
+     * Prefer the post's server {@code location_label} when it matches the current
+     * language script; under Indic languages, upgrade Latin-only labels (e.g.
+     * English "Anakapalli") to the localized selected-district name.
      */
     private String resolveLocationLabel(@Nullable ModelClass.Datum post) {
+        String selected = DistrictLabelHelper.resolveDisplayLabel(context);
+        int langId = LanguageId;
+        try {
+            langId = SharedPrefsData.getInt(
+                    context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        boolean selectedNative = isUsableLocationLabel(selected)
+                && !DistrictLabelHelper.needsNativeScriptUpgrade(selected, langId);
+
         if (post != null) {
             String postLabel = post.getLocation_label();
             if (isUsableLocationLabel(postLabel)) {
-                return postLabel.trim();
+                String trimmed = postLabel.trim();
+                boolean postNeedsUpgrade =
+                        DistrictLabelHelper.needsNativeScriptUpgrade(trimmed, langId);
+                if (postNeedsUpgrade && selectedNative
+                        && (categery_id == -1
+                        || DistrictLabelHelper.matchesStoredName(context, trimmed))) {
+                    my_feed_name = selected;
+                    return selected;
+                }
+                if (!postNeedsUpgrade
+                        && DistrictLabelHelper.labelCompatibleWithLanguage(trimmed, langId)) {
+                    return trimmed;
+                }
+                if (categery_id == -1 && selectedNative) {
+                    my_feed_name = selected;
+                    return selected;
+                }
+                return trimmed;
             }
         }
-        String resolved = DistrictLabelHelper.resolveDisplayLabel(context);
-        if (isUsableLocationLabel(resolved)) {
-            my_feed_name = resolved;
-            return resolved;
+        if (isUsableLocationLabel(selected)) {
+            my_feed_name = selected;
+            return selected;
         }
-        // Helper intentionally empty (wrong-script cache) — do not reapply frozen ctor.
         my_feed_name = "";
         return "";
     }
@@ -2699,6 +2727,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                         Toast.makeText(context, "Rating submitted successfully", Toast.LENGTH_SHORT).show();
                                         SharedPrefsData.putBool(context, Constants.APP_RATING_SUBMITTED, true, Constants.PREF_NAME);
                                         SharedPrefsData.putFloat(context, Constants.APP_RATING, ratingBarApp.getRating(), Constants.PREF_NAME);
+                                        ReadArticleStore.markRatingsPromptSeen(context);
                                         textViewRatSubTitle.setVisibility(VISIBLE);
                                         textViewRatingTitle.setVisibility(GONE);
                                         editTextAppReview.setVisibility(GONE);
@@ -2715,35 +2744,33 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         ratingBarApp.setOnRatingBarChangeListener(new RatingBar.OnRatingBarChangeListener() {
                             @Override
                             public void onRatingChanged(RatingBar ratingBar, float v, boolean b) {
+                                if (!b) {
+                                    return;
+                                }
                                 if (ratingBar.getRating() <= 3) {
+                                    // Low rating: collect feedback in-app; do not mark submitted yet.
                                     SharedPrefsData.putBool(context, Constants.APP_RATING_SUBMITTED, false, Constants.PREF_NAME);
                                     editTextAppReview.setVisibility(VISIBLE);
                                     buttonAppSubmit.setVisibility(VISIBLE);
-
-
                                 } else {
+                                    // High rating: store analytics stars, mark done (no re-nag), then
+                                    // Google Play In-App Review. Play Store listing URLs cannot
+                                    // pre-select stars — ReviewManager is the supported path.
+                                    final float chosen = ratingBar.getRating();
                                     SharedPrefsData.putBool(context, Constants.APP_RATING_SUBMITTED, true, Constants.PREF_NAME);
-                                    SharedPrefsData.putFloat(context, Constants.APP_RATING, ratingBar.getRating(), Constants.PREF_NAME);
+                                    SharedPrefsData.putFloat(context, Constants.APP_RATING, chosen, Constants.PREF_NAME);
+                                    ReadArticleStore.markRatingsPromptSeen(context);
                                     textViewRatSubTitle.setVisibility(VISIBLE);
                                     textViewRatingTitle.setVisibility(GONE);
                                     editTextAppReview.setVisibility(GONE);
                                     buttonAppSubmit.setVisibility(GONE);
                                     ratingBarApp.setIsIndicator(true);
-                                    final String appPackageName = context.getPackageName();
-                                    try {
-                                        context.startActivity(new Intent(Intent.ACTION_VIEW,
-                                                Uri.parse("market://details?id=" + appPackageName)));
-                                    } catch (android.content.ActivityNotFoundException anfe) {
-                                        context.startActivity(new Intent(Intent.ACTION_VIEW,
-                                                Uri.parse("https://play.google.com/store/apps/details?id="
-                                                        + appPackageName)));
-                                    }
+
                                     RatingSubmitRequest requestModel = new RatingSubmitRequest();
                                     requestModel.setDraft_id((long) SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
                                     requestModel.setComments("Thank you..");
-                                    requestModel.setRating(ratingBarApp.getRating());
+                                    requestModel.setRating(chosen);
                                     String jsonString = new com.google.gson.Gson().toJson(requestModel);
-                                    ratingBarApp.setIsIndicator(true);
                                     String encryptData = encrypt(jsonString);
                                     sendAppRatingSubmitData(encryptData, 1, new CallBackListener() {
                                         @Override
@@ -2755,6 +2782,24 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                         }
                                     });
 
+                                    Activity host = activity;
+                                    if (host == null && context instanceof Activity) {
+                                        host = (Activity) context;
+                                    }
+                                    if (host != null && !host.isFinishing()) {
+                                        PlayInAppReviewHelper.launch(host, null);
+                                    } else {
+                                        // No activity — best-effort listing open (stars still not preselectable).
+                                        try {
+                                            final String appPackageName = context.getPackageName();
+                                            context.startActivity(new Intent(Intent.ACTION_VIEW,
+                                                    Uri.parse("market://details?id=" + appPackageName)));
+                                        } catch (android.content.ActivityNotFoundException anfe) {
+                                            context.startActivity(new Intent(Intent.ACTION_VIEW,
+                                                    Uri.parse("https://play.google.com/store/apps/details?id="
+                                                            + context.getPackageName())));
+                                        }
+                                    }
                                 }
 
                             }
@@ -3462,9 +3507,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (type == null || type.trim().isEmpty()) {
                 type = "google";
             }
-            // No unit id → can never fill. Arm the same true-fail timeout as unfilled
-            // shells (not a sub-second thrash to share).
-            if (code == null || code.trim().isEmpty()) {
+            // Google seats use HomePage's Play Store production native unit, so absent
+            // server metadata is not a reason to abandon a paid request. Other networks
+            // still need their own placement id.
+            boolean googleSeat = "google".equalsIgnoreCase(type)
+                    || "admanager".equalsIgnoreCase(type);
+            if (!googleSeat && (code == null || code.trim().isEmpty())) {
                 showLog("requestNativeAdLoadForSlot: empty ad_code — arm fill timeout");
                 int listPos = list != null ? list.indexOf(slot) : -1;
                 if (listPos < 0 && pos != null && list != null) {
@@ -3994,7 +4042,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
                 intent.putExtra(Intent.EXTRA_TEXT, msg);
-                if(from==1){
+                final boolean galleryWhatsapp = from == 1 || fromWhatsapp;
+                if(galleryWhatsapp){
                     intent.setType("text/plain");
                     intent.setPackage("com.whatsapp");
                 }
@@ -4039,7 +4088,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
 
 
-                Share_Count_Value("share", list.get(position).getPostId());
+                Share_Count_Value(shareCountProperty(galleryWhatsapp), list.get(position).getPostId());
+                fromWhatsapp = false;
             }
         }.start();
 
@@ -4109,10 +4159,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                     context.startActivity(Intent.createChooser(intent, "Share Link"));
                 }
+                boolean magazineWasWhatsapp = fromWhatsapp;
                 fromWhatsapp=false;
 
 
-                Share_Count_Value("share", list.get(position).getPostId());
+                Share_Count_Value(shareCountProperty(magazineWasWhatsapp), list.get(position).getPostId());
             }
         }.start();
 
@@ -4425,7 +4476,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     imageViewYoutubePlayVideo.setVisibility(VISIBLE);
                 }
                 launchScreenshotShareIntent(intent, from);
-                Share_Count_Value("share", list.get(position).getPostId());
+                Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
 
             }
         }.start();
@@ -4475,7 +4526,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         final RelativeLayout exo_play_layout = convertView.findViewById(R.id.exo_play_layout);
         final ImageView thaumbnail_for_video = convertView.findViewById(R.id.thaumbnail_for_video);
         final ImageView imageViewExoVideoPlayVideo = convertView.findViewById(R.id.imageViewVideoPlayVideo);
-        imageViewExoVideoPlayVideo.setImageResource(R.drawable.ic_video_play);
+        imageViewExoVideoPlayVideo.setImageResource(R.drawable.ic_way2_play_circle);
 
         final ImageButton fullscreen_button = convertView.findViewById(R.id.fullscreen_button);
         final ImageButton mute_button = convertView.findViewById(R.id.mute_button);
@@ -4487,6 +4538,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     list.get(position),
                     list.get(position).getThumbnail());
         }
+        fullscreen_button.setTag("force_gone");
         fullscreen_button.setVisibility(GONE);
         mute_button.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -4779,7 +4831,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 intent.setType("image/*");
                 launchScreenshotShareIntent(intent, from);
-                Share_Count_Value("share", list.get(position).getPostId());
+                Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
             }
         }.start();
 
@@ -5081,7 +5133,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(fullImageActivity.full_image_view_details);
 
 
-                JsonObject otp = set_count_request("share", list.get(position).getPostId());
+                JsonObject otp = set_count_request("whatsapp_share", list.get(position).getPostId());
 
                 APIService apiService = RestApiClient.getClient().create(APIService.class);
                 Call<EncreptionRequest> apiResponse = apiService.update_post_count("v3", otp);
@@ -5207,7 +5259,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                     context.startActivity(Intent.createChooser(intent, "Share Link"));
                 }
-                Share_Count_Value("share", list.get(position).getPostId());
+                Share_Count_Value("whatsapp_share", list.get(position).getPostId());
             }
         }.start();
     }
@@ -5888,7 +5940,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         showLog("Halfshare"+ context + "First" + context.getPackageName() + "Second" + BuildConfig.APPLICATION_ID);
                         context.startActivity(Intent.createChooser(intent, "Share Link"));
                     }
-                    Share_Count_Value("share", list.get(customPosition).getPostId());
+                    Share_Count_Value(shareCountProperty(from == 1), list.get(customPosition).getPostId());
                 }
             }.start();
 
@@ -7455,8 +7507,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     public void Share_Count_Value(String share, long post_id) {
 
+        String property = share == null ? "share" : share.trim();
+        boolean isWhatsapp =
+                "whatsapp_share".equalsIgnoreCase(property)
+                        || "whatsapp".equalsIgnoreCase(property);
+        if (isWhatsapp) {
+            property = "whatsapp_share";
+        }
+
         int postIndex = findPostIndex(post_id);
-        if (postIndex >= 0 && "share".equalsIgnoreCase(share)) {
+        // Only bump the on-card Share count for normal shares — WA is separate.
+        if (postIndex >= 0 && "share".equalsIgnoreCase(property)) {
             ModelClass.Datum item = list.get(postIndex);
             int shares = item.getShares() != null ? item.getShares() : 0;
             item.setShares(shares + 1);
@@ -7466,7 +7527,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         JsonObject jsonObject = new JsonObject();
         jsonObject.addProperty("draft_id", SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME));
         jsonObject.addProperty("post_id", post_id);
-        jsonObject.addProperty("property", share);
+        jsonObject.addProperty("property", property);
 
 
         showLog("share params:"+ "" + jsonObject);
@@ -7487,7 +7548,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     LikeDownloadRespouse likeDownloadRespouse = gsonObj.fromJson(encrpt_data, LikeDownloadRespouse.class);
 
                     if (likeDownloadRespouse.getSuccess()) {
-                        syncEngagementFromServer(post_id, null, null, null, likeDownloadRespouse.getShares());
+                        if (!isWhatsapp) {
+                            syncEngagementFromServer(post_id, null, null, null, likeDownloadRespouse.getShares());
+                        }
                     }
 
                 } else {
@@ -7504,6 +7567,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         });
 
+    }
+
+    /** Property for Update_Post_Counts — WhatsApp button vs normal share sheet. */
+    private String shareCountProperty(boolean whatsapp) {
+        return whatsapp ? "whatsapp_share" : "share";
     }
 
     @Override
@@ -9062,6 +9130,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (centerPlay != null) {
                     centerPlay.setVisibility(View.GONE);
                 }
+            } else {
+                // Paused mid-playback: keep last frame; center play is in Way2 controller.
+                if (centerPlay != null) {
+                    centerPlay.setVisibility(View.GONE);
+                }
             }
         } else if (playbackState == Player.STATE_ENDED) {
             if (progress != null) {
@@ -9181,15 +9254,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Keeps the custom controller's center icons in a single correct state.
-     *
-     * The custom controller layout ({@code player_custom_ui.xml}) uses the legacy separate
-     * {@code exo_play}/{@code exo_pause} buttons, but Media3 1.1.0's PlayerControlView only
-     * manages a single {@code exo_play_pause} button. As a result Media3 never toggles these
-     * buttons and both stay visible ("visible" in XML) at the same time. We drive their
-     * visibility manually from the player state so exactly one icon shows:
-     * Playing -> pause only, Paused -> play only, Ended -> neither (the big center play button
-     * over the thumbnail acts as replay).
+     * Way2News chrome: play circle when idle/paused; mute + fullscreen + thin red line when
+     * playing; no center pause, no ±10, no timestamp. Media3 1.1.0 does not drive legacy
+     * {@code exo_play}/{@code exo_pause}, so we manage visibility from player state.
      */
     private void updateExoCenterControlIcons(PlayerView playerView) {
         if (playerView == null) {
@@ -9197,23 +9264,89 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         View playBtn = playerView.findViewById(R.id.exo_play);
         View pauseBtn = playerView.findViewById(R.id.exo_pause);
-        if (playBtn == null || pauseBtn == null) {
-            return;
-        }
+        View muteBtn = playerView.findViewById(R.id.mute_button);
+        View fullscreenBtn = playerView.findViewById(R.id.fullscreen_button);
+        View progressBar = playerView.findViewById(R.id.exo_progress);
+
         int state = exoPlayer != null ? exoPlayer.getPlaybackState() : Player.STATE_IDLE;
         boolean ended = state == Player.STATE_ENDED;
-        boolean playing = exoPlayer != null && exoPlayer.getPlayWhenReady() && !ended;
-        if (ended) {
-            // Replay affordance is the big center play button (imageViewVideoPlayVideo) shown
-            // over the thumbnail; hide both controller icons to avoid stacked icons.
-            playBtn.setVisibility(GONE);
+        boolean buffering = state == Player.STATE_BUFFERING
+                || (state == Player.STATE_IDLE && exoPlayer != null && exoPlayer.getPlayWhenReady());
+        boolean playing = exoPlayer != null
+                && exoPlayer.getPlayWhenReady()
+                && !ended
+                && state == Player.STATE_READY;
+
+        if (pauseBtn != null) {
             pauseBtn.setVisibility(GONE);
+        }
+
+        if (buffering) {
+            // Image 3: spinner (outside controller) replaces play; hide playing chrome briefly.
+            if (playBtn != null) {
+                playBtn.setVisibility(GONE);
+            }
+            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, false);
         } else if (playing) {
-            pauseBtn.setVisibility(VISIBLE);
-            playBtn.setVisibility(GONE);
+            // Image 4: mute + fullscreen + thin red line only.
+            if (playBtn != null) {
+                playBtn.setVisibility(GONE);
+            }
+            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, true);
+            try {
+                playerView.showController();
+            } catch (Exception ignored) {
+            }
+        } else if (ended) {
+            // Replay is the overlay center play (imageViewVideoPlayVideo).
+            if (playBtn != null) {
+                playBtn.setVisibility(GONE);
+            }
+            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, false);
         } else {
-            playBtn.setVisibility(VISIBLE);
-            pauseBtn.setVisibility(GONE);
+            // Image 2: idle / paused — large play circle only.
+            if (playBtn != null) {
+                playBtn.setVisibility(VISIBLE);
+            }
+            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, false);
+            try {
+                playerView.showController();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void setWay2PlayingChromeVisible(View muteBtn, View fullscreenBtn, View progressBar,
+                                             boolean visible) {
+        int vis = visible ? VISIBLE : GONE;
+        if (muteBtn != null) {
+            muteBtn.setVisibility(vis);
+        }
+        if (fullscreenBtn != null) {
+            // Full-bleed article video hides fullscreen in existing product logic.
+            if (visible && fullscreenBtn.getTag() != null
+                    && "force_gone".equals(String.valueOf(fullscreenBtn.getTag()))) {
+                fullscreenBtn.setVisibility(GONE);
+            } else {
+                fullscreenBtn.setVisibility(vis);
+            }
+        }
+        if (progressBar != null) {
+            progressBar.setVisibility(vis);
+        }
+    }
+
+    /** Keep Way2 chrome always available (no auto-hide strip / dark overlay flash). */
+    private void applyWay2ControllerPolicy(PlayerView playerView) {
+        if (playerView == null) {
+            return;
+        }
+        playerView.setControllerShowTimeoutMs(0);
+        playerView.setControllerHideOnTouch(false);
+        playerView.setControllerAutoShow(true);
+        try {
+            playerView.showController();
+        } catch (Exception ignored) {
         }
     }
 
@@ -9225,6 +9358,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (playerView == null || exoPlayer == null) {
             return;
         }
+        applyWay2ControllerPolicy(playerView);
         exoPlayer.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
@@ -9245,37 +9379,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Wires the half (inline feed) video controller's play/pause buttons so tapping them
-     * actually toggles playback. Media3 does not manage these legacy buttons, so without this
-     * the half video could not be paused by tapping. Also keeps the center icon state correct.
+     * Wires half (inline feed) Way2 chrome: play button starts; tap empty video area pauses;
+     * playing shows mute + fullscreen + thin progress.
      */
     private void wireHalfVideoExoPauseControl(PlayerView playerView) {
         if (playerView == null) {
             return;
         }
-        View pauseBtn = playerView.findViewById(R.id.exo_pause);
-        View playBtn = playerView.findViewById(R.id.exo_play);
-        if (pauseBtn != null) {
-            pauseBtn.setOnClickListener(v -> {
-                if (exoPlayer != null) {
-                    markUserPausedVideoAutoplay();
-                    exoPlayer.setPlayWhenReady(false);
-                    exoPlayer.pause();
-                }
-                updateExoCenterControlIcons(playerView);
-            });
-        }
-        if (playBtn != null) {
-            playBtn.setOnClickListener(v -> {
-                if (exoPlayer != null) {
-                    if (exoPlayer.getPlaybackState() == Player.STATE_ENDED) {
-                        exoPlayer.seekTo(0);
-                    }
-                    forceSharedExoPlay();
-                }
-                updateExoCenterControlIcons(playerView);
-            });
-        }
+        applyWay2ControllerPolicy(playerView);
+        wireWay2PlayPauseControls(playerView, null);
         updateExoCenterControlIcons(playerView);
     }
 
@@ -9283,22 +9395,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (playerView == null || convertView == null) {
             return;
         }
-        View pauseBtn = playerView.findViewById(R.id.exo_pause);
+        applyWay2ControllerPolicy(playerView);
+        // Full-card layout historically hides the fullscreen control (already full bleed).
+        View fullscreenBtn = playerView.findViewById(R.id.fullscreen_button);
+        if (fullscreenBtn != null) {
+            fullscreenBtn.setTag("force_gone");
+            fullscreenBtn.setVisibility(GONE);
+        }
+        wireWay2PlayPauseControls(playerView, convertView);
+        updateExoCenterControlIcons(playerView);
+    }
+
+    private void wireWay2PlayPauseControls(PlayerView playerView, View convertView) {
         View playBtn = playerView.findViewById(R.id.exo_play);
-        if (pauseBtn != null) {
-            pauseBtn.setOnClickListener(v -> {
-                if (exoPlayer != null) {
-                    markUserPausedVideoAutoplay();
-                    exoPlayer.setPlayWhenReady(false);
-                    exoPlayer.pause();
-                }
-                updateExoCenterControlIcons(playerView);
-                LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
-                if (sideMenu != null) {
-                    sideMenu.setVisibility(View.VISIBLE);
-                    sideMenu.bringToFront();
-                }
-            });
+        View root = playerView.findViewById(R.id.exo_controller_root);
+        if (root == null) {
+            root = playerView;
         }
         if (playBtn != null) {
             playBtn.setOnClickListener(v -> {
@@ -9311,22 +9423,41 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 updateExoCenterControlIcons(playerView);
             });
         }
-        updateExoCenterControlIcons(playerView);
+        // Tap empty area while playing → pause (Image 2 play circle returns).
+        root.setOnClickListener(v -> {
+            if (exoPlayer == null) {
+                return;
+            }
+            int state = exoPlayer.getPlaybackState();
+            boolean ended = state == Player.STATE_ENDED;
+            boolean playing = exoPlayer.getPlayWhenReady() && !ended && state == Player.STATE_READY;
+            if (playing) {
+                markUserPausedVideoAutoplay();
+                exoPlayer.setPlayWhenReady(false);
+                exoPlayer.pause();
+                updateExoCenterControlIcons(playerView);
+                if (convertView != null) {
+                    LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
+                    if (sideMenu != null) {
+                        sideMenu.setVisibility(View.VISIBLE);
+                        sideMenu.bringToFront();
+                    }
+                }
+            }
+        });
     }
 
     /**
      * Sync Like/Comment/Share (video_side_menu) with ExoPlayer controller visibility.
-     * Tap the playing video to show controls + engagement row; they auto-hide after the
-     * controller timeout. Fixes share being unreachable until the user left and returned.
+     * Way2 keeps mute/fs/progress always on while playing; engagement row still toggles
+     * with controller show/hide when applicable.
      */
     private void wireFullVideoExoSideMenuWithController(PlayerView playerView, View convertView) {
         if (playerView == null || convertView == null) {
             return;
         }
         final LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
-        playerView.setControllerShowTimeoutMs(3500);
-        playerView.setControllerHideOnTouch(true);
-        playerView.setControllerAutoShow(true);
+        applyWay2ControllerPolicy(playerView);
         // Explicit type — Media3 PlayerView overloads VisibilityListener + ControllerVisibilityListener
         playerView.setControllerVisibilityListener(
                 (PlayerView.ControllerVisibilityListener) visibility -> {
@@ -9334,9 +9465,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return;
             }
             if (visibility == View.VISIBLE) {
-                sideMenu.setVisibility(View.VISIBLE);
-                sideMenu.bringToFront();
-                sideMenu.setClickable(true);
+                boolean playing = exoPlayer != null && exoPlayer.isPlaying();
+                // While playing, Way2 hides engagement chrome; show again when paused.
+                sideMenu.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
+                if (!playing) {
+                    sideMenu.bringToFront();
+                    sideMenu.setClickable(true);
+                }
             } else {
                 boolean playing = exoPlayer != null && exoPlayer.isPlaying();
                 sideMenu.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
@@ -9355,8 +9490,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 Toast.makeText(context, "Video is not available to share", Toast.LENGTH_SHORT).show();
                 return;
             }
+            final boolean waShare = mode == VideoShareHelper.ShareMode.WHATSAPP_CHAT
+                    || mode == VideoShareHelper.ShareMode.WHATSAPP_STATUS;
             VideoShareHelper.shareVideo(context, activity, videoUrl, item.getTitle(), item.getShareLink(), mode,
-                    () -> Share_Count_Value("share", item.getPostId()));
+                    () -> Share_Count_Value(shareCountProperty(waShare), item.getPostId()));
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(context, "Unable to share video", Toast.LENGTH_SHORT).show();
@@ -9781,10 +9918,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         intent.putExtra(Intent.EXTRA_STREAM, pdfUri);
         intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
         intent.putExtra(Intent.EXTRA_TEXT, msg);
+        boolean pdfWasWhatsapp = fromWhatsapp;
         applyWhatsappTarget(intent);
         grantShareUriPermissions(intent, Collections.singletonList(pdfUri));
         startShareActivity(intent, "Share Magazine");
-        Share_Count_Value("share", list.get(position).getPostId());
+        Share_Count_Value(shareCountProperty(pdfWasWhatsapp), list.get(position).getPostId());
         fromWhatsapp = false;
     }
 
@@ -9803,10 +9941,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
         intent.putExtra(Intent.EXTRA_TEXT, msg);
+        boolean imagesWasWhatsapp = fromWhatsapp;
         applyWhatsappTarget(intent);
         grantShareUriPermissions(intent, uris);
         startShareActivity(intent, "Share Magazine");
-        Share_Count_Value("share", list.get(position).getPostId());
+        Share_Count_Value(shareCountProperty(imagesWasWhatsapp), list.get(position).getPostId());
         fromWhatsapp = false;
     }
 
@@ -10228,7 +10367,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 intent.setType("image/*");
                 launchScreenshotShareIntent(intent, from);
-                Share_Count_Value("share", list.get(position).getPostId());
+                Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
 
             }
         }.start();
@@ -10308,7 +10447,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 intent.setType("image/*");
                 launchScreenshotShareIntent(intent, from);
-                Share_Count_Value("share", list.get(position).getPostId());
+                Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
 
             }
         }.start();
