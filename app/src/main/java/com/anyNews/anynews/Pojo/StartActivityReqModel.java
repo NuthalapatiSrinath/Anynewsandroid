@@ -578,6 +578,11 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean notificationRepromptConverted;
 
+        /** Continuous: ask OS notif permission on every app open while admin flag ON. */
+        @SerializedName("prompt_notifications_on_open")
+        @Expose
+        private Boolean promptNotificationsOnOpen;
+
         @SerializedName("notification_flag")
         @Expose
         private Boolean notificationFlag;
@@ -849,6 +854,10 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getNotificationRepromptConverted() {
             return notificationRepromptConverted;
+        }
+
+        public Boolean getPromptNotificationsOnOpen() {
+            return promptNotificationsOnOpen;
         }
 
         public Boolean getNotificationFlag() {

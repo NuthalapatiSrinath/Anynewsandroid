@@ -1599,6 +1599,14 @@ public class StartingActivity extends AppCompatActivity {
                                             startActivityReqModel.getData().getNotificationRepromptEnabled()),
                                     Constants.PREF_NAME);
                         }
+                        if (startActivityReqModel.getData().getPromptNotificationsOnOpen() != null) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.PROMPT_NOTIFICATIONS_ON_OPEN,
+                                    Boolean.TRUE.equals(
+                                            startActivityReqModel.getData().getPromptNotificationsOnOpen()),
+                                    Constants.PREF_NAME);
+                        }
                         if (startActivityReqModel.getData().getNotificationRepromptDue() != null) {
                             SharedPrefsData.putBool(
                                     getApplicationContext(),

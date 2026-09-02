@@ -1566,8 +1566,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Home open: (1) admin re-prompt when due, (2) first open after install/update
-     * for POST_NOTIFICATIONS. Location soft-ask remains {@link #maybeSoftRequestDraftGpsPermission}.
+     * Home open: (1) admin wave re-prompt when due, (2) continuous ask-on-open when
+     * admin flag ON and OS notifications still off, (3) first open after
+     * install/update for POST_NOTIFICATIONS. Location soft-ask remains
+     * {@link #maybeSoftRequestDraftGpsPermission}.
      */
     private void maybeRequestInstallAndRepromptPermissions() {
         if (isFinishing() || isDestroyed()) return;
@@ -1575,7 +1577,51 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             showNotificationAlert(false);
             return;
         }
+        if (isPromptNotificationsOnOpenEnabled()) {
+            maybePromptNotificationsOnOpen();
+            return;
+        }
         maybeRequestInstallNotificationPermission();
+    }
+
+    private boolean isPromptNotificationsOnOpenEnabled() {
+        return SharedPrefsData.getBool(
+                getApplicationContext(),
+                Constants.PROMPT_NOTIFICATIONS_ON_OPEN,
+                Constants.PREF_NAME,
+                false);
+    }
+
+    /**
+     * Admin continuous flag: once per process, if system notifications (or
+     * POST_NOTIFICATIONS) are off → same OS dialog / settings path as wave.
+     * Deny does not block the feed; next app launch asks again while flag stays ON.
+     */
+    private void maybePromptNotificationsOnOpen() {
+        if (notificationRepromptHandledThisProcess || installNotificationPermHandledThisProcess) {
+            return;
+        }
+        boolean systemOn = isSystemNotificationsEnabledSafe();
+        boolean runtimeOk = hasPostNotificationsPermission();
+        if (systemOn && runtimeOk) {
+            // Already fully on — no prompt; align opt-in pref quietly.
+            notificationRepromptHandledThisProcess = true;
+            installNotificationPermHandledThisProcess = true;
+            ensureNotificationPrefAlignedWithSystem(false);
+            return;
+        }
+        notificationRepromptHandledThisProcess = true;
+        installNotificationPermHandledThisProcess = true;
+        getWindow().getDecorView().postDelayed(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (!isPromptNotificationsOnOpenEnabled()) return;
+            if (isSystemNotificationsEnabledSafe() && hasPostNotificationsPermission()) {
+                ensureNotificationPrefAlignedWithSystem(false);
+                return;
+            }
+            // force=true → permanent deny opens app notification settings (same as wave).
+            requestNotificationPermission(true);
+        }, 450L);
     }
 
     /**

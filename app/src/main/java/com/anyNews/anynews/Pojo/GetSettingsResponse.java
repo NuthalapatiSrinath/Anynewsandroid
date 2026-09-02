@@ -48,6 +48,10 @@ public class GetSettingsResponse {
         @Expose
         private Boolean notificationRepromptEnabled;
 
+        @SerializedName("prompt_notifications_on_open")
+        @Expose
+        private Boolean promptNotificationsOnOpen;
+
         public Boolean getNotificationFlag() {
             return notificationFlag;
         }
@@ -70,6 +74,10 @@ public class GetSettingsResponse {
 
         public Boolean getNotificationRepromptEnabled() {
             return notificationRepromptEnabled;
+        }
+
+        public Boolean getPromptNotificationsOnOpen() {
+            return promptNotificationsOnOpen;
         }
 
     }

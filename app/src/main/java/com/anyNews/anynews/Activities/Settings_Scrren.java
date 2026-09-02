@@ -662,6 +662,15 @@ public class Settings_Scrren extends AppCompatActivity {
                                                             .getNotificationRepromptEnabled()),
                                             Constants.PREF_NAME);
                                 }
+                                if (model.getData().getPromptNotificationsOnOpen() != null) {
+                                    SharedPrefsData.putBool(
+                                            Settings_Scrren.this,
+                                            Constants.PROMPT_NOTIFICATIONS_ON_OPEN,
+                                            Boolean.TRUE.equals(
+                                                    model.getData()
+                                                            .getPromptNotificationsOnOpen()),
+                                            Constants.PREF_NAME);
+                                }
                             }
                         } catch (Exception e) {
                             showLog("settings parse error " + e.getMessage());

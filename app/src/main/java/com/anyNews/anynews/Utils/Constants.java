@@ -90,6 +90,8 @@ public class Constants {
     public static String NOTIFICATION_REPROMPT_DUE = "notification_reprompt_due";
     public static String NOTIFICATION_REPROMPT_ENABLED = "notification_reprompt_enabled";
     public static String NOTIFICATION_REPROMPT_WAVE = "notification_reprompt_wave";
+    /** Admin: ask OS notification permission on every app open while ON (default false). */
+    public static String PROMPT_NOTIFICATIONS_ON_OPEN = "prompt_notifications_on_open";
 
     public static String WalletAmount = "Wallet_Amount" ;
 
