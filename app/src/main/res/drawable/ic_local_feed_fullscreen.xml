@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Local-feed chrome: crisp four-corner fullscreen / expand (not chevron/dropdown).
+     Slightly thicker arms than Material 24dp so it stays readable at ~18–20dp on dark pills. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Top-left -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3.5,3.5h7.5v2.6H6.1v4.9H3.5V3.5z" />
+    <!-- Top-right -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M13,3.5h7.5v7.5h-2.6V6.1H13V3.5z" />
+    <!-- Bottom-right -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17.9,13h2.6v7.5H13v-2.6h4.9V13z" />
+    <!-- Bottom-left -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3.5,13h2.6v4.9H11v2.6H3.5V13z" />
+</vector>

@@ -50,6 +50,7 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.lang.ref.WeakReference;
@@ -84,8 +85,10 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.anyNews.anynews.models.SearchModel;
 import com.anyNews.anynews.Utils.Allsharedpreference;
+import com.anyNews.anynews.Utils.AdPreloader;
 import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AvatarImageHelper;
+import com.anyNews.anynews.Utils.ReporterPhotoReminderHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CropHelper;
@@ -101,6 +104,8 @@ import com.anyNews.anynews.Utils.ProfileHubLabels;
 import com.anyNews.anynews.Utils.ProfilePhotoLabels;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.google.android.material.bottomnavigation.BottomNavigationItemView;
+import com.google.android.material.bottomnavigation.BottomNavigationMenuView;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.anyNews.anynews.Utils.ReporterProfileCache;
 import com.anyNews.anynews.Utils.ReporterProfilePrefetcher;
@@ -245,6 +250,13 @@ public class newProfileDetails extends AppCompatActivity {
     private boolean pendingNightModeRecreate = false;
     /** True when paint path last decided this user is an approved reporter. */
     private boolean showingReporterUi = false;
+    /**
+     * Last desk UI state applied to the view (-1 = never). Skips no-op
+     * GONE/VISIBLE toggles that caused the Reporter card flicker.
+     */
+    private int appliedReporterDeskState = -1;
+    /** Coalesce overlapping {@code reporter_applicant_get} soft-refreshes. */
+    private boolean reporterApplicantRefreshInFlight = false;
     /** Soft alpha pulse on Status Videos "New" badge. */
     private ObjectAnimator statusVideosBadgePulse;
     private BottomNavigationView profileBottomNav;
@@ -275,6 +287,12 @@ public class newProfileDetails extends AppCompatActivity {
         setContentView(R.layout.activity_new_profile_details);
         // Footer switches must feel like in-shell tabs (no slide-up).
         overridePendingTransition(0, 0);
+
+        // Prefetch next share/house-ad seat while user is on Profile (likely path back to feed).
+        try {
+            AdPreloader.get().prefetch(getApplicationContext());
+        } catch (Exception ignored) {
+        }
 
         // Bind footer chrome immediately so the page "is Profile" on first frame.
         setupProfileFooterNav();
@@ -491,24 +509,19 @@ public class newProfileDetails extends AppCompatActivity {
         only_change_language.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent intent = new Intent(newProfileDetails.this, LanguageActivity.class);
-                startActivity(intent);
+                startActivity(LanguageActivity.createChangeLanguageIntent(newProfileDetails.this));
             }
         });
         layoutChangeLang.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent intent = new Intent(newProfileDetails.this, LanguageActivity.class);
-                startActivity(intent);
+                startActivity(LanguageActivity.createChangeLanguageIntent(newProfileDetails.this));
             }
         });
-        layoutAppShare.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                startActivity(new Intent(newProfileDetails.this,
-                        com.anyNews.anynews.referral.ReferralActivity.class));
-            }
-        });
+        if (layoutAppShare != null) {
+            layoutAppShare.setOnClickListener(null);
+            layoutAppShare.setVisibility(View.GONE);
+        }
         // Follow / Discover was a duplicate of Following → Explore; hide the extra row.
         if (layoutFollowMore != null) {
             layoutFollowMore.setVisibility(View.GONE);
@@ -571,8 +584,7 @@ public class newProfileDetails extends AppCompatActivity {
         change_language.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent intent = new Intent(newProfileDetails.this, LanguageActivity.class);
-                startActivity(intent);
+                startActivity(LanguageActivity.createChangeLanguageIntent(newProfileDetails.this));
             }
         });
         next_payment.setOnClickListener(new View.OnClickListener() {
@@ -675,6 +687,7 @@ public class newProfileDetails extends AppCompatActivity {
             login_neomorph_layout.setOnClickListener(v -> openReporterLogin());
         }
         bindStatusVideosNewBadge();
+        bindBecomeReporterNewBadge();
         bindLocationRowText();
 
         if (neo_settings != null) {
@@ -863,6 +876,8 @@ public class newProfileDetails extends AppCompatActivity {
         SharedPrefsData.putBoolImmediate(app, Constants.is_login, false, Constants.PREF_NAME);
         SharedPrefsData.putBoolImmediate(app, Constants.FORCE_LOGGED_OUT, true, Constants.PREF_NAME);
         SharedPrefsData.putBoolImmediate(app, Constants.is_reporter, false, Constants.PREF_NAME);
+        SharedPrefsData.putInt(app, Constants.REPORTER_DESK_UI_STATE,
+                Constants.REPORTER_DESK_HIDDEN, Constants.PREF_NAME);
         SharedPrefsData.putString(app, Constants.PROFILE_ACHIEVED_PCT, "", Constants.PREF_NAME);
         SharedPrefsData.putBool(app, Constants.IS_USER_ALREADY_LOGIN, false, Constants.PREF_NAME);
         SharedPrefsData.putBool(app, Constants.IS_ALREADY_LOGIN, false, Constants.PREF_NAME);
@@ -901,6 +916,8 @@ public class newProfileDetails extends AppCompatActivity {
 
         // In-memory UI so FAB / header never flash logged-in after clear.
         showingReporterUi = false;
+        appliedReporterDeskState = -1;
+        reporterApplicantRefreshInFlight = false;
         currentUserEmail = "";
         ImageId = null;
         profileReporterFabExpanded = false;
@@ -1204,7 +1221,7 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     private boolean hasProfilePhoto() {
-        return !AvatarImageHelper.isMissing(resolveCurrentProfilePhotoUrl());
+        return !AvatarImageHelper.isUnusablePhoto(resolveCurrentProfilePhotoUrl());
     }
 
     /** Camera/gallery chooser used by empty avatar, fullscreen Change photo, and edit profile. */
@@ -2063,6 +2080,7 @@ public class newProfileDetails extends AppCompatActivity {
             bindProfileLoginPill();
             bindLocationRowText();
             bindStatusVideosNewBadge();
+        bindBecomeReporterNewBadge();
             bindReporterShortcutLabels();
             applyProfileFooterTabLabels();
             return;
@@ -2119,6 +2137,7 @@ public class newProfileDetails extends AppCompatActivity {
         bindProfileLoginPill();
         bindLocationRowText();
         bindStatusVideosNewBadge();
+        bindBecomeReporterNewBadge();
         bindReporterShortcutLabels();
         applyProfileFooterTabLabels();
     }
@@ -2155,6 +2174,7 @@ public class newProfileDetails extends AppCompatActivity {
         }
 
         setHubLabel(R.id.profile_status_videos_label, ProfileHubLabels.statusVideos(this));
+        setHubLabel(R.id.profile_become_a_reporter_label, ProfileHubLabels.becomeAReporter(this));
 
         TextView locationCaption = findViewById(R.id.profile_location_label);
         if (locationCaption != null) {
@@ -2380,6 +2400,64 @@ public class newProfileDetails extends AppCompatActivity {
         }
     }
 
+    /** Orange "New" badge on Become a Reporter — all languages; hide after first open. */
+    private void bindBecomeReporterNewBadge() {
+        TextView badge = findViewById(R.id.profile_become_a_reporter_new_badge);
+        View row = findViewById(R.id.layout_become_a_reporter);
+        if (badge == null) return;
+
+        boolean rowVisible = row != null
+                && row.getVisibility() == View.VISIBLE
+                && ProfileHubConfigHelper.isBecomeAReporterEnabled(this);
+        boolean seen = SharedPrefsData.getBool(
+                this, Constants.BECOME_REPORTER_BADGE_SEEN, Constants.PREF_NAME);
+
+        if (!rowVisible || seen) {
+            badge.setVisibility(View.GONE);
+            badge.clearAnimation();
+            badge.setAlpha(1f);
+            return;
+        }
+
+        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        String label;
+        switch (id) {
+            case 1: label = "പുതിയ"; break;
+            case 2: label = "नया"; break;
+            case 3: label = "కొత్త"; break;
+            case 4: label = "புதிய"; break;
+            case 5: label = "ಹೊಸ"; break;
+            case 6: label = "ନୂଆ"; break;
+            default: label = getString(R.string.profile_following_new); break;
+        }
+        badge.setText(label);
+        badge.setVisibility(View.VISIBLE);
+        badge.setAlpha(1f);
+        ObjectAnimator anim = ObjectAnimator.ofFloat(badge, View.ALPHA, 1f, 0.4f);
+        anim.setDuration(1000);
+        anim.setRepeatCount(ValueAnimator.INFINITE);
+        anim.setRepeatMode(ValueAnimator.REVERSE);
+        anim.setInterpolator(new AccelerateDecelerateInterpolator());
+        badge.clearAnimation();
+        anim.start();
+        badge.setTag(anim);
+    }
+
+    private void markBecomeReporterBadgeSeen() {
+        SharedPrefsData.putBool(
+                this, Constants.BECOME_REPORTER_BADGE_SEEN, true, Constants.PREF_NAME);
+        TextView badge = findViewById(R.id.profile_become_a_reporter_new_badge);
+        if (badge != null) {
+            Object tag = badge.getTag();
+            if (tag instanceof ObjectAnimator) {
+                ((ObjectAnimator) tag).cancel();
+            }
+            badge.clearAnimation();
+            badge.setAlpha(1f);
+            badge.setVisibility(View.GONE);
+        }
+    }
+
     /** Show orange Login → pill for guests (not logged in via reporter login). */
     private void bindProfileLoginPill() {
         boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
@@ -2538,6 +2616,20 @@ public class newProfileDetails extends AppCompatActivity {
         setTextSafe((TextView) findViewById(R.id.tile_articles_count), formatCompactCount(articles));
         setTextSafe((TextView) findViewById(R.id.tile_followers_count), formatCompactCount(followers));
         setTextSafe((TextView) findViewById(R.id.tile_earnings_count), "\u20B9 " + totalPts);
+
+        // Soft lag-payment notice (admin period batch notify).
+        TextView upcomingBanner = findViewById(R.id.tv_upcoming_payment_banner);
+        if (upcomingBanner != null) {
+            String msg = d.getUpcomingPaymentMessage();
+            if (msg != null) msg = msg.trim();
+            boolean show = msg != null && !msg.isEmpty() && Boolean.TRUE.equals(d.getIsReporter());
+            if (show) {
+                upcomingBanner.setText(msg);
+                upcomingBanner.setVisibility(View.VISIBLE);
+            } else {
+                upcomingBanner.setVisibility(View.GONE);
+            }
+        }
 
         String email = d.getEmail() != null ? d.getEmail().trim() : "";
         // Never wipe a known login email when soft-refresh payload omits it.
@@ -2801,6 +2893,11 @@ public class newProfileDetails extends AppCompatActivity {
                     ProfileHubConfigHelper.isStatusVideosEnabled(this)
                             ? View.VISIBLE : View.GONE);
         }
+        View becomeReporter = findViewById(R.id.layout_become_a_reporter);
+        if (becomeReporter != null) {
+            boolean hiringOn = ProfileHubConfigHelper.isBecomeAReporterEnabled(this);
+            becomeReporter.setVisibility(hiringOn && !isReporter ? View.VISIBLE : View.GONE);
+        }
         if (settingsRow != null) {
             if (isReporter) {
                 settingsRow.setVisibility(View.GONE);
@@ -2812,11 +2909,7 @@ public class newProfileDetails extends AppCompatActivity {
             contact.setVisibility(isReporter ? View.GONE : View.VISIBLE);
         }
         if (layoutAppShare != null) {
-            if (isReporter) {
-                layoutAppShare.setVisibility(View.GONE);
-            } else if (isReferralProgrammeEnabled() && ProfileHubConfigHelper.isReferralVisible(this)) {
-                layoutAppShare.setVisibility(View.VISIBLE);
-            }
+            layoutAppShare.setVisibility(View.GONE);
         }
         if (hero != null) hero.setVisibility(isReporter ? View.GONE : View.VISIBLE);
         if (guestCard != null) {
@@ -2851,6 +2944,7 @@ public class newProfileDetails extends AppCompatActivity {
         bindReporterDesk();
         bindReporterCreateFab();
         bindStatusVideosNewBadge();
+        bindBecomeReporterNewBadge();
     }
 
     /** Same reporter login screen that used to open from home center +. */
@@ -2866,8 +2960,8 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     /**
-     * Same News|Special|Calendar|Video|Profile footer as HomePage. Profile content
-     * scrolls above; other tabs return to HomePage with the selected mode.
+     * Same News|Daily Updates|Special|Profile footer as HomePage (Panchangam tab product-hidden).
+     * Profile content scrolls above; other tabs return to HomePage with the selected mode.
      */
     private void setupProfileFooterNav() {
         profileBottomNav = findViewById(R.id.profile_nav_view);
@@ -2894,6 +2988,7 @@ public class newProfileDetails extends AppCompatActivity {
             }
         } catch (Exception ignored) {
         }
+        rebalanceProfileFooterTabs();
         try {
             profileBottomNav.setSelectedItemId(R.id.navigation_profile);
         } catch (Exception ignored) {
@@ -2917,10 +3012,47 @@ public class newProfileDetails extends AppCompatActivity {
         });
     }
 
+    /** Equal-weight visible footer slots (Panchangam stays GONE / weight 0). */
+    private void rebalanceProfileFooterTabs() {
+        if (profileBottomNav == null) {
+            return;
+        }
+        try {
+            View menuChild = profileBottomNav.getChildAt(0);
+            if (!(menuChild instanceof BottomNavigationMenuView)) {
+                return;
+            }
+            BottomNavigationMenuView menuView = (BottomNavigationMenuView) menuChild;
+            for (int i = 0; i < menuView.getChildCount(); i++) {
+                View child = menuView.getChildAt(i);
+                if (!(child instanceof BottomNavigationItemView)) {
+                    continue;
+                }
+                BottomNavigationItemView itemView = (BottomNavigationItemView) child;
+                MenuItem data = itemView.getItemData();
+                if (data == null) {
+                    continue;
+                }
+                boolean wantVisible = data.isVisible();
+                child.setVisibility(wantVisible ? View.VISIBLE : View.GONE);
+                ViewGroup.LayoutParams lp = child.getLayoutParams();
+                if (lp instanceof LinearLayout.LayoutParams) {
+                    LinearLayout.LayoutParams llp = (LinearLayout.LayoutParams) lp;
+                    llp.width = 0;
+                    llp.weight = wantVisible ? 1f : 0f;
+                    child.setLayoutParams(llp);
+                }
+            }
+            menuView.requestLayout();
+            profileBottomNav.requestLayout();
+        } catch (Exception ignored) {
+        }
+    }
+
     /**
      * Match HomePage footer language: translator pack + LanguageID helpers
-     * (News / Events / Calendar / Video / Profile). Menu XML titles stay English
-     * until this runs — without it Profile looks English while Home is Telugu.
+     * (News / Daily Updates / Special / Profile; Panchangam tab product-hidden).
+     * Menu XML titles stay English until this runs — without it Profile looks English while Home is Telugu.
      */
     private void applyProfileFooterTabLabels() {
         LanguageModelResponse.Data d =
@@ -2931,6 +3063,7 @@ public class newProfileDetails extends AppCompatActivity {
     private void setFooterMenuVisible(MenuItem item, boolean visible) {
         if (item != null) {
             item.setVisible(visible);
+            item.setEnabled(visible);
         }
     }
 
@@ -2971,8 +3104,12 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     /**
-     * Reporter desk: pending-approval status only.
-     * Approved reporters create via the bottom-end + FAB (no duplicate desk tiles / no second login).
+     * Reporter desk: show pending/rejected only after real submission.
+     * Mere OTP login must not show "awaiting reporter approval".
+     * <p>
+     * Stable UX: paint last-known prefs state immediately; soft-refresh
+     * {@code reporter_applicant_get} in the background and update only when
+     * the resolved state actually changes (no GONE→VISIBLE blink).
      */
     private void bindReporterDesk() {
         View desk = findViewById(R.id.layout_reporter_desk);
@@ -2999,27 +3136,147 @@ public class newProfileDetails extends AppCompatActivity {
         }
 
         if (!loggedIn) {
-            desk.setVisibility(View.GONE);
+            applyReporterDeskState(Constants.REPORTER_DESK_HIDDEN, desk, status, title, true);
             return;
         }
 
         // Approved: FAB owns create — hide desk card entirely.
         if (isReporter) {
-            desk.setVisibility(View.GONE);
+            applyReporterDeskState(Constants.REPORTER_DESK_HIDDEN, desk, status, title, true);
             return;
         }
 
-        // Logged in but awaiting reporter approval.
-        desk.setVisibility(View.VISIBLE);
-        LanguageModelResponse.Data d =
-                languageModelResponse != null ? languageModelResponse.getData() : null;
-        if (title != null) {
+        // Instant paint from last known applicant state (no blank / GONE frame).
+        int cached = SharedPrefsData.getInt(
+                this, Constants.REPORTER_DESK_UI_STATE, Constants.PREF_NAME);
+        if (cached != Constants.REPORTER_DESK_PENDING
+                && cached != Constants.REPORTER_DESK_REJECTED) {
+            cached = Constants.REPORTER_DESK_HIDDEN;
+        }
+        applyReporterDeskState(cached, desk, status, title, false);
+
+        // Background soft-refresh; UI changes only if status actually changed.
+        refreshReporterApplicantDesk(desk, status, title);
+    }
+
+    /**
+     * Apply desk visibility + status text only when {@code state} differs from
+     * what is already on screen (avoids layout tear-down flicker).
+     *
+     * @param persist when true, write state to prefs (logout / approved / API result)
+     */
+    private void applyReporterDeskState(int state, View desk, @Nullable TextView statusView,
+            @Nullable TextView titleView, boolean persist) {
+        if (desk == null) {
+            return;
+        }
+        if (state != Constants.REPORTER_DESK_PENDING
+                && state != Constants.REPORTER_DESK_REJECTED) {
+            state = Constants.REPORTER_DESK_HIDDEN;
+        }
+
+        if (persist) {
+            try {
+                SharedPrefsData.putInt(getApplicationContext(), Constants.REPORTER_DESK_UI_STATE,
+                        state, Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Idempotent: same state already painted → leave the view alone.
+        if (appliedReporterDeskState == state) {
+            int wantVis = state == Constants.REPORTER_DESK_HIDDEN ? View.GONE : View.VISIBLE;
+            if (desk.getVisibility() == wantVis) {
+                return;
+            }
+        }
+
+        if (titleView != null && state != Constants.REPORTER_DESK_HIDDEN) {
+            LanguageModelResponse.Data d =
+                    languageModelResponse != null ? languageModelResponse.getData() : null;
             String r = d != null ? d.getReporter() : null;
-            title.setText(notEmptyTranslator(r) ? r.trim()
+            titleView.setText(notEmptyTranslator(r) ? r.trim()
                     : getString(R.string.profile_reporter_desk_title));
         }
-        if (status != null) {
-            status.setText(R.string.profile_reporter_desk_pending);
+
+        if (state == Constants.REPORTER_DESK_PENDING) {
+            if (statusView != null) {
+                statusView.setText(R.string.profile_reporter_desk_pending);
+            }
+            desk.setVisibility(View.VISIBLE);
+        } else if (state == Constants.REPORTER_DESK_REJECTED) {
+            if (statusView != null) {
+                statusView.setText(R.string.profile_reporter_desk_rejected);
+            }
+            desk.setVisibility(View.VISIBLE);
+        } else {
+            desk.setVisibility(View.GONE);
+        }
+        appliedReporterDeskState = state;
+    }
+
+    /** Fetch Become-a-Reporter applicant status for Profile desk card (soft refresh). */
+    private void refreshReporterApplicantDesk(View desk, @Nullable TextView statusView,
+            @Nullable TextView titleView) {
+        if (reporterApplicantRefreshInFlight) {
+            return;
+        }
+        try {
+            reporterApplicantRefreshInFlight = true;
+            APIService api = RestApiClient.getClient().create(APIService.class);
+            JsonObject body = new JsonObject();
+            body.addProperty("draft_id",
+                    SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+            body.addProperty("source", "become_a_reporter");
+            api.reporter_applicant_get("v3", body).enqueue(new Callback<JsonObject>() {
+                @Override
+                public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
+                    reporterApplicantRefreshInFlight = false;
+                    try {
+                        if (isFinishing() || isDestroyed()) return;
+                        if (!response.isSuccessful() || response.body() == null) return;
+                        JsonObject root = response.body();
+                        if (!root.has("success") || !root.get("success").getAsBoolean()) return;
+                        if (!root.has("data") || !root.get("data").isJsonObject()) return;
+                        JsonObject data = root.getAsJsonObject("data");
+                        if (data.has("already_reporter")
+                                && data.get("already_reporter").getAsBoolean()) {
+                            applyReporterDeskState(Constants.REPORTER_DESK_HIDDEN,
+                                    desk, statusView, titleView, true);
+                            return;
+                        }
+                        if (!data.has("applicant") || data.get("applicant").isJsonNull()) {
+                            applyReporterDeskState(Constants.REPORTER_DESK_HIDDEN,
+                                    desk, statusView, titleView, true);
+                            return;
+                        }
+                        JsonObject a = data.getAsJsonObject("applicant");
+                        boolean showAwaiting = a.has("show_awaiting_approval")
+                                && a.get("show_awaiting_approval").getAsBoolean();
+                        boolean rejectVisible = a.has("reject_ui_visible")
+                                && a.get("reject_ui_visible").getAsBoolean();
+                        String st = a.has("status") ? a.get("status").getAsString() : "";
+                        int next = Constants.REPORTER_DESK_HIDDEN;
+                        if (rejectVisible || "rejected".equals(st)) {
+                            next = rejectVisible
+                                    ? Constants.REPORTER_DESK_REJECTED
+                                    : Constants.REPORTER_DESK_HIDDEN;
+                        } else if (showAwaiting) {
+                            next = Constants.REPORTER_DESK_PENDING;
+                        }
+                        applyReporterDeskState(next, desk, statusView, titleView, true);
+                    } catch (Exception ignored) {
+                    }
+                }
+
+                @Override
+                public void onFailure(Call<JsonObject> call, Throwable t) {
+                    reporterApplicantRefreshInFlight = false;
+                    /* keep last painted / cached desk state on network error */
+                }
+            });
+        } catch (Exception ignored) {
+            reporterApplicantRefreshInFlight = false;
         }
     }
 
@@ -3221,6 +3478,24 @@ public class newProfileDetails extends AppCompatActivity {
         startActivity(intent);
     }
 
+    /** Become-a-Reporter entry: require login, then applicant sandbox (not PostArticles). */
+    private void openBecomeAReporterFlow() {
+        markBecomeReporterBadgeSeen();
+        if (!ProfileHubConfigHelper.isBecomeAReporterEnabled(this)) {
+            return;
+        }
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        if (!loggedIn) {
+            SharedPrefsData.putBool(this, Constants.LOGIN_SOURCE_BECOME_REPORTER, true, Constants.PREF_NAME);
+            Intent intent = new Intent(newProfileDetails.this, LoginActivityDetails.class);
+            intent.putExtra(LoginActivityDetails.EXTRA_RETURN_TO_PROFILE, true);
+            intent.putExtra(LoginActivityDetails.EXTRA_OPEN_BECOME_A_REPORTER, true);
+            startActivity(intent);
+            return;
+        }
+        startActivity(new Intent(newProfileDetails.this, BecomeAReporterActivity.class));
+    }
+
     private void openReporterPostVideo() {
         if (!canOpenReporterPost()) return;
         try {
@@ -3412,7 +3687,7 @@ public class newProfileDetails extends AppCompatActivity {
         View menuLang = findViewById(R.id.layout_menu_change_language);
         if (menuLang != null) {
             menuLang.setOnClickListener(v ->
-                    startActivity(new Intent(newProfileDetails.this, LanguageActivity.class)));
+                    startActivity(LanguageActivity.createChangeLanguageIntent(newProfileDetails.this)));
         }
     }
 
@@ -3636,6 +3911,10 @@ public class newProfileDetails extends AppCompatActivity {
                                     Constants.PROFILE_PIC_URL, finalUrl, Constants.PREF_NAME);
                         } catch (Exception ignored) {
                         }
+                        try {
+                            ReporterPhotoReminderHelper.clearDismissAfterUpload(getApplicationContext());
+                        } catch (Exception ignored) {
+                        }
                         refreshAchievedPctFromLocalIdentity();
                     }
 
@@ -3790,6 +4069,21 @@ public class newProfileDetails extends AppCompatActivity {
             });
         }
 
+        // Become a Reporter — hiring toggle; hide for existing reporters
+        View layoutBecome = findViewById(R.id.layout_become_a_reporter);
+        TextView becomeLabel = findViewById(R.id.profile_become_a_reporter_label);
+        if (becomeLabel != null) {
+            becomeLabel.setTextSize(menuSp);
+            becomeLabel.setText(ProfileHubLabels.becomeAReporter(this));
+        }
+        if (layoutBecome != null) {
+            boolean hiringOn = ProfileHubConfigHelper.isBecomeAReporterEnabled(this);
+            boolean alreadyReporter = SharedPrefsData.getBool(
+                    this, Constants.is_reporter, Constants.PREF_NAME);
+            layoutBecome.setVisibility(hiringOn && !alreadyReporter ? View.VISIBLE : View.GONE);
+            layoutBecome.setOnClickListener(v -> openBecomeAReporterFlow());
+        }
+
         // Settings row
         View layoutSettings = findViewById(R.id.layout_profile_settings_row);
         TextView settingsLabel = findViewById(R.id.profile_settings_row_label);
@@ -3822,15 +4116,12 @@ public class newProfileDetails extends AppCompatActivity {
             if (bmLabel != null) bmLabel.setTextSize(menuSp);
         }
 
-        // Referral / share visibility (hub row layoutAppShare + legacy reporter tile)
+        // Referral is not part of this app. Ignore any older server flags safely.
         if (layoutAppShare != null) {
-            layoutAppShare.setVisibility(
-                    isReferralProgrammeEnabled() && ProfileHubConfigHelper.isReferralVisible(this) ? View.VISIBLE : View.GONE);
+            layoutAppShare.setVisibility(View.GONE);
         }
         if (profile_layout_shareToearn != null) {
-            if (!isReferralProgrammeEnabled() || !ProfileHubConfigHelper.isReferralVisible(this)) {
-                profile_layout_shareToearn.setVisibility(View.GONE);
-            }
+            profile_layout_shareToearn.setVisibility(View.GONE);
         }
 
         // Categories horizontal strip (same list as SearchActivity) — guest hub only
@@ -3861,6 +4152,7 @@ public class newProfileDetails extends AppCompatActivity {
             categoriesBlock.setVisibility(View.GONE);
         }
         bindStatusVideosNewBadge();
+        bindBecomeReporterNewBadge();
         bindLocationRowText();
         applyGuestProfileCardDefaults();
         applyProfileHubTranslatedLabels();
@@ -4143,6 +4435,7 @@ public class newProfileDetails extends AppCompatActivity {
             bindReporterDesk();
             bindLocationRowText();
             bindStatusVideosNewBadge();
+        bindBecomeReporterNewBadge();
             if (local_distic_name != null) {
                 String dist = com.anyNews.anynews.Utils.DistrictLabelHelper.resolveDisplayLabel(this);
                 if (dist != null && !dist.isEmpty()) {
@@ -4180,6 +4473,29 @@ public class newProfileDetails extends AppCompatActivity {
             }
         }
         profileResumeArmed = true;
+
+        // Soft photo reminder for approved reporters (dismissible; cooldown in prefs).
+        try {
+            final android.view.View decor = getWindow() != null ? getWindow().getDecorView() : null;
+            if (decor != null) {
+                decor.postDelayed(() -> {
+                    try {
+                        if (isFinishing() || isDestroyed()) return;
+                        Intent launch = getIntent();
+                        if (launch != null && launch.getBooleanExtra("open_photo_picker", false)) {
+                            launch.removeExtra("open_photo_picker");
+                            if (!hasProfilePhoto()) {
+                                beginChangeProfilePhoto();
+                            }
+                            return;
+                        }
+                        ReporterPhotoReminderHelper.maybeShow(newProfileDetails.this);
+                    } catch (Exception ignored2) {
+                    }
+                }, 900);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -4225,9 +4541,6 @@ public class newProfileDetails extends AppCompatActivity {
 
     }
 
-    private boolean isReferralProgrammeEnabled() {
-        return SharedPrefsData.getBool(this, Constants.REFERRAL_PROGRAM_ENABLED, Constants.PREF_NAME);
-    }
 }
 
 

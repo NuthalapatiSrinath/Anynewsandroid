@@ -50,6 +50,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.StrictMode;
+import android.os.SystemClock;
 import android.text.Html;
 import android.text.Spannable;
 import android.text.SpannableString;
@@ -57,12 +58,16 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
+import android.text.style.URLSpan;
+import android.text.util.Linkify;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -164,8 +169,10 @@ import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.common.util.Util;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
+import androidx.media3.ui.TimeBar;
 import com.google.android.gms.ads.VideoController;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.nativead.MediaView;
@@ -210,6 +217,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Formatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -228,6 +236,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private Context context;
     private boolean isVideoDownloadCancel=false;
     private boolean fromWhatsapp;
+    /**
+     * Blocks double-taps from opening multiple system share sheets. While a launch
+     * is in flight, or within {@link #SHARE_LAUNCH_GUARD_MS} of the last accept,
+     * further share taps are ignored.
+     */
+    private static final long SHARE_LAUNCH_GUARD_MS = 900L;
+    private long lastShareLaunchAtMs = 0L;
+    private boolean shareLaunchInFlight = false;
+    /** Debounce for video options dialog / bottom sheet open. */
+    private long lastVideoShareUiAtMs = 0L;
     private final LayoutInflater inflater;
     private InterstitialAd interstitialAd;
     //   ViewHolder holder;
@@ -285,7 +303,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Live Google ad shells awaiting creative — paint natives in place on fill so we
      * avoid FlipView {@code dataSetChanged()} (full recycle) mid-gesture.
+     * Visible like-count TextViews keyed by postId so Update_Like can refresh the
+     * on-screen number without waiting for FlipView to rebind (notify alone often
+     * left the current page stuck at 0 / optimistic 1 until a later unlike).
      */
+    private final android.util.LongSparseArray<java.lang.ref.WeakReference<TextView>> likeCountViewsByPostId =
+            new android.util.LongSparseArray<>();
+
     private final SparseArray<java.lang.ref.WeakReference<FrameLayout>> adShellPlaceholders =
             new SparseArray<>();
     private final SparseArray<Integer> adShellFromViewTypes = new SparseArray<>();
@@ -300,6 +324,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private static final int AD_BLUR_RADIUS = 24;
     private static final int AD_BLUR_SAMPLING = 4;
     private final Handler adShellHandler = new Handler(Looper.getMainLooper());
+    private final Handler liveReadersHandler = new Handler(Looper.getMainLooper());
     private final SparseArray<Runnable> adShellTimeoutRunnables = new SparseArray<>();
     private boolean pendingSafeAdNotify = false;
             private final Runnable deferredSafeAdNotify = new Runnable() {
@@ -1260,6 +1285,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (item.getLikes() == null) item.setLikes(0);
             if (item.getComments() == null) item.setComments(0);
             if (item.getShares() == null) item.setShares(0);
+            if (item.getWhatsappShares() == null) item.setWhatsappShares(0);
         }
     }
 
@@ -1320,36 +1346,122 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
+    private void rememberLikeCountView(Long postId, TextView countView) {
+        if (postId == null || countView == null) return;
+        likeCountViewsByPostId.put(postId, new java.lang.ref.WeakReference<>(countView));
+    }
+
+    private TextView findRememberedLikeCountView(Long postId) {
+        if (postId == null) return null;
+        java.lang.ref.WeakReference<TextView> ref = likeCountViewsByPostId.get(postId);
+        return ref != null ? ref.get() : null;
+    }
+
     private void bindHalfPostEngagementCounts(View convertView, int position) {
-        bindHalfActionCount(convertView.findViewById(R.id.half_like_count), list.get(position).getLikes());
+        TextView likeCount = convertView.findViewById(R.id.half_like_count);
+        bindHalfActionCount(likeCount, list.get(position).getLikes());
         bindHalfActionCount(convertView.findViewById(R.id.half_comment_count), list.get(position).getComments());
         bindHalfActionCount(convertView.findViewById(R.id.half_share_count), list.get(position).getShares());
+        rememberLikeCountView(list.get(position).getPostId(), likeCount);
         tintHalfActionIcons(convertView);
         applyActionIconRowOffset(convertView);
         applyHalfActionIconSizes(context, convertView);
         applyTitleBodyGap(context, convertView);
         applyContentBlockOffset(context, convertView);
         bindHalfBodyCollapseToggle(convertView);
+        bindLiveReadersBadge(convertView, position);
     }
 
     /**
-     * Content-area single tap → hide/show top Offline News|Bookmarks chrome.
+     * Way2-style live readers badge on half media (bottom-right). Shows for admin
+     * {@code live_readers_show_seconds} then fades out. Full posts skip (no view).
+     */
+    private void bindLiveReadersBadge(@Nullable View convertView, int position) {
+        if (convertView == null) return;
+        final View badge = convertView.findViewById(R.id.live_readers_badge);
+        if (badge == null) return;
+
+        Object prev = badge.getTag(R.id.live_readers_badge);
+        if (prev instanceof Runnable) {
+            liveReadersHandler.removeCallbacks((Runnable) prev);
+            badge.setTag(R.id.live_readers_badge, null);
+        }
+        badge.animate().cancel();
+        badge.setAlpha(1f);
+        badge.setVisibility(GONE);
+
+        if (!LiveReadersConfig.isEnabled(context)) return;
+        if (list == null || position < 0 || position >= list.size()) return;
+        ModelClass.Datum item = list.get(position);
+        if (item == null) return;
+
+        Integer raw = item.getLiveReaders();
+        int count = raw != null ? raw : 0;
+        int min = LiveReadersConfig.getMinCount(context);
+        if (count < min) return;
+
+        TextView countTv = convertView.findViewById(R.id.live_readers_count_text);
+        if (countTv == null) return;
+        String label = item.getLiveReadersLabel();
+        if (label == null || label.trim().isEmpty()) {
+            label = LiveReadersConfig.formatLabel(count);
+        }
+        countTv.setText(label);
+        badge.setVisibility(VISIBLE);
+        badge.setAlpha(1f);
+
+        final int showMs = LiveReadersConfig.getShowSeconds(context) * 1000;
+        final Runnable hide = new Runnable() {
+            @Override
+            public void run() {
+                if (badge.getTag(R.id.live_readers_badge) != this) return;
+                badge.animate()
+                        .alpha(0f)
+                        .setDuration(280)
+                        .withEndAction(new Runnable() {
+                            @Override
+                            public void run() {
+                                badge.setVisibility(GONE);
+                                badge.setAlpha(1f);
+                                badge.setTag(R.id.live_readers_badge, null);
+                            }
+                        })
+                        .start();
+            }
+        };
+        badge.setTag(R.id.live_readers_badge, hide);
+        liveReadersHandler.postDelayed(hide, Math.max(500, showMs));
+    }
+
+    /**
+     * Content-area single tap → mode-aware News|Read chrome and/or Classic hide-bars.
      * Used for half posts (body/title) and re-bound mid-session go-offline.
      * Does not overwrite parent_layout / full_image side-menu listeners — those call
-     * {@link FlipperAdapter#tryToggleOfflineChrome()} first.
+     * {@link FlipperAdapter#dispatchNewsContentTap} first.
      */
     public static void installOfflineChromeTaps(@Nullable View convertView) {
         if (convertView == null) return;
         final HomePage chromeHost = resolveHomePageHost(convertView.getContext());
         if (chromeHost == null) return;
 
+        final View footer = convertView.findViewById(R.id.ll_footer_layout);
+        final View sideMenu = convertView.findViewById(R.id.side_menu);
+        final boolean fullPost = footer == null && sideMenu != null;
+        final View classicChrome = footer != null ? footer : sideMenu;
+
+        // Half: keep engagement row in sync with writers-row visibility after bind/recycle.
+        if (!fullPost) {
+            syncHalfEngagementWithWritersRow(convertView.getContext(), convertView);
+        }
+
         // Half-article body / title regions (not footer-toggle host views).
         final View titleBlock = convertView.findViewById(R.id.layoutParentTitle);
         View relativeBottom = convertView.findViewById(R.id.relativeBottom);
-        installHomeModeChromeTap(relativeBottom, chromeHost);
-        installHomeModeChromeTap(titleBlock, chromeHost);
+        installNewsModeTap(relativeBottom, convertView, classicChrome, fullPost, chromeHost);
+        installNewsModeTap(titleBlock, convertView, classicChrome, fullPost, chromeHost);
         for (int id : HALF_BODY_TEXT_IDS) {
-            installHomeModeChromeTap(convertView.findViewById(id), chromeHost);
+            installNewsModeTap(
+                    convertView.findViewById(id), convertView, classicChrome, fullPost, chromeHost);
         }
         int[] titleIds = new int[] {
                 R.id.half_content_title, R.id.tamil_half_content_title,
@@ -1358,16 +1470,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 R.id.english_half_content_title__
         };
         for (int id : titleIds) {
-            installHomeModeChromeTap(convertView.findViewById(id), chromeHost);
+            installNewsModeTap(
+                    convertView.findViewById(id), convertView, classicChrome, fullPost, chromeHost);
         }
-        installHomeModeChromeTap(convertView.findViewById(R.id.layoutParentTop), chromeHost);
-        installHomeModeChromeTap(convertView.findViewById(R.id.layoutImageHeight), chromeHost);
-        installHomeModeChromeTap(convertView.findViewById(R.id.relative_half_contents), chromeHost);
+        installNewsModeTap(
+                convertView.findViewById(R.id.layoutParentTop),
+                convertView, classicChrome, fullPost, chromeHost);
+        installNewsModeTap(
+                convertView.findViewById(R.id.layoutImageHeight),
+                convertView, classicChrome, fullPost, chromeHost);
+        installNewsModeTap(
+                convertView.findViewById(R.id.relative_half_contents),
+                convertView, classicChrome, fullPost, chromeHost);
+        // Full-post body region when present.
+        installNewsModeTap(
+                convertView.findViewById(R.id.full_image_view_details),
+                convertView, classicChrome, true, chromeHost);
     }
 
     /**
      * Keep half-article body expanded for reading. Wire single taps on the content
-     * area to toggle the Offline News|Bookmarks chrome (not body collapse).
+     * area to mode-aware chrome / Classic hide (not body collapse).
      * Vertical flings stay with FlipView (listener returns false / doesn't consume).
      */
     public static void bindHalfBodyCollapseToggle(View convertView) {
@@ -1407,7 +1530,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         titleBlock.setTag(R.id.tag_half_body_collapsed, Boolean.FALSE);
         titleBlock.setAlpha(1f);
 
-        // Content-area single tap → hide/show top News|Bookmarks chrome only.
+        // Content-area single tap → mode-aware News|Read / Classic hide.
         installOfflineChromeTaps(convertView);
     }
 
@@ -1428,33 +1551,214 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Content tap → toggle Offline News|Bookmarks chrome.
-     * Uses click (cancelled when FlipView intercepts a vertical fling).
+     * Content tap with Classic / Reader / Hybrid routing on main News FlipView.
+     * Long-press always toggles News|Read chrome when that chrome is active
+     * (secondary entry so Classic does not remove Chadivinavi entirely).
      */
-    private static void installHomeModeChromeTap(
-            @Nullable View target, @Nullable final HomePage homePage) {
-        if (target == null || homePage == null) return;
+    private static void installNewsModeTap(
+            @Nullable View target,
+            @Nullable final View bandRoot,
+            @Nullable final View classicChrome,
+            final boolean fullPost,
+            @Nullable final HomePage homePage) {
+        if (target == null) return;
+        final float[] lastXY = new float[] { Float.NaN, Float.NaN };
         target.setClickable(true);
-        target.setOnTouchListener(null);
-        target.setOnClickListener(v -> {
+        target.setOnTouchListener((v, motionEvent) -> {
             try {
-                homePage.toggleHomeModeChrome();
+                int a = motionEvent.getActionMasked();
+                if (a == android.view.MotionEvent.ACTION_DOWN
+                        || a == android.view.MotionEvent.ACTION_UP) {
+                    lastXY[0] = motionEvent.getRawX();
+                    lastXY[1] = motionEvent.getRawY();
+                }
             } catch (Exception ignored) {
             }
+            return false;
+        });
+        target.setOnLongClickListener(v -> {
+            try {
+                HomePage hp = homePage != null ? homePage : resolveHomePageHost(v.getContext());
+                if (hp != null && hp.isHomeModeChromeActive()) {
+                    hp.toggleHomeModeChrome();
+                    return true;
+                }
+            } catch (Exception ignored) {
+            }
+            return false;
+        });
+        target.setOnClickListener(v -> {
+            float x = lastXY[0];
+            float y = lastXY[1];
+            if (Float.isNaN(x) || Float.isNaN(y)) {
+                int[] loc = new int[2];
+                try {
+                    v.getLocationOnScreen(loc);
+                    x = loc[0] + v.getWidth() / 2f;
+                    y = loc[1] + v.getHeight() / 2f;
+                } catch (Exception ignored) {
+                    x = 0f;
+                    y = 0f;
+                }
+            }
+            dispatchNewsContentTap(
+                    v.getContext(),
+                    bandRoot != null ? bandRoot : v,
+                    x,
+                    y,
+                    classicChrome,
+                    fullPost);
         });
     }
 
-    /** @return true if top mode chrome (offline Offline News|Bookmarks or online News|Read) handled the click. */
-    private boolean tryToggleOfflineChrome() {
+    /**
+     * Resolve Classic hide vs News|Read chrome for a content tap.
+     *
+     * @return true if handled (caller should not run a second classic toggle)
+     */
+    private static boolean dispatchNewsContentTap(
+            @Nullable Context ctx,
+            @Nullable View bandRoot,
+            float rawX,
+            float rawY,
+            @Nullable View classicChrome,
+            boolean fullPost) {
         try {
-            HomePage hp = resolveHomePageHost(context);
-            if (hp != null && hp.isHomeModeChromeActive()) {
+            HomePage hp = resolveHomePageHost(ctx);
+            if (hp != null && hp.isLocalFeedChromeActive()) {
                 hp.toggleHomeModeChrome();
                 return true;
             }
+
+            final boolean onlineMain =
+                    hp != null && hp.isOnlineMainNewsChromeActive();
+            final boolean chromeActive =
+                    hp != null && hp.isHomeModeChromeActive();
+
+            // Offline News|Bookmarks / Special / Video: keep prior chrome-first behavior.
+            if (!onlineMain) {
+                if (chromeActive) {
+                    hp.toggleHomeModeChrome();
+                    return true;
+                }
+                toggleClassicChrome(ctx, bandRoot, classicChrome, fullPost);
+                return true;
+            }
+
+            String mode = NewsTapModeConfig.getMode(ctx);
+            if (NewsTapModeConfig.MODE_READER.equals(mode)) {
+                if (chromeActive) {
+                    hp.toggleHomeModeChrome();
+                    return true;
+                }
+                toggleClassicChrome(ctx, bandRoot, classicChrome, fullPost);
+                return true;
+            }
+
+            if (NewsTapModeConfig.MODE_CLASSIC.equals(mode)) {
+                toggleClassicChrome(ctx, bandRoot, classicChrome, fullPost);
+                return true;
+            }
+
+            // Hybrid: upper band → Reader; lower / right-rail → Classic.
+            float yPct = 50f;
+            float xFromRightPct = 100f;
+            View root = bandRoot;
+            if (root != null && root.getHeight() > 0 && root.getWidth() > 0) {
+                int[] loc = new int[2];
+                root.getLocationOnScreen(loc);
+                float relY = rawY - loc[1];
+                float relX = rawX - loc[0];
+                yPct = (relY / (float) root.getHeight()) * 100f;
+                xFromRightPct =
+                        ((root.getWidth() - relX) / (float) root.getWidth()) * 100f;
+            }
+
+            int upperPct =
+                    fullPost
+                            ? NewsTapModeConfig.getFullUpperPct(ctx)
+                            : NewsTapModeConfig.getHalfUpperPct(ctx);
+            int rightRailPct = NewsTapModeConfig.getFullRightRailPct(ctx);
+
+            boolean classicZone = false;
+            if (fullPost && xFromRightPct <= rightRailPct) {
+                classicZone = true;
+            } else if (yPct >= upperPct) {
+                classicZone = true;
+            }
+
+            if (classicZone) {
+                toggleClassicChrome(ctx, bandRoot, classicChrome, fullPost);
+                return true;
+            }
+            if (chromeActive) {
+                hp.toggleHomeModeChrome();
+                return true;
+            }
+            toggleClassicChrome(ctx, bandRoot, classicChrome, fullPost);
+            return true;
+        } catch (Exception ignored) {
+            toggleClassicChrome(ctx, bandRoot, classicChrome, fullPost);
+            return true;
+        }
+    }
+
+    /**
+     * Classic hide: half → writers/reporter footer; full → likes/comments side rail.
+     * When admin {@code news_tap_half_hide_engagement} is ON, half also toggles the
+     * four action icons (like / comment / share / flag) with the writers row.
+     */
+    private static void toggleClassicChrome(
+            @Nullable Context ctx,
+            @Nullable View cardRoot,
+            @Nullable View classicChrome,
+            boolean fullPost) {
+        if (classicChrome == null) return;
+        try {
+            if (fullPost) {
+                if (classicChrome.isShown()
+                        || classicChrome.getVisibility() == View.VISIBLE) {
+                    classicChrome.setVisibility(View.INVISIBLE);
+                } else {
+                    classicChrome.setVisibility(View.VISIBLE);
+                }
+            } else {
+                if (classicChrome.isShown()
+                        || classicChrome.getVisibility() == View.VISIBLE) {
+                    classicChrome.setVisibility(View.GONE);
+                } else {
+                    classicChrome.setVisibility(View.VISIBLE);
+                }
+                syncHalfEngagementWithWritersRow(ctx, cardRoot);
+            }
         } catch (Exception ignored) {
         }
-        return false;
+    }
+
+    /**
+     * Half articles: optionally mirror writers-row visibility onto the engagement
+     * icon row ({@code with_out_strips_layout}). When the admin toggle is OFF,
+     * always keep engagement visible (writers row may still hide alone).
+     */
+    private static void syncHalfEngagementWithWritersRow(
+            @Nullable Context ctx, @Nullable View cardRoot) {
+        if (cardRoot == null) return;
+        try {
+            View engagement = cardRoot.findViewById(R.id.with_out_strips_layout);
+            if (engagement == null) return;
+            if (!NewsTapModeConfig.halfHideEngagementWithWriters(ctx)) {
+                engagement.setVisibility(View.VISIBLE);
+                return;
+            }
+            View footer = cardRoot.findViewById(R.id.ll_footer_layout);
+            if (footer == null) {
+                engagement.setVisibility(View.VISIBLE);
+                return;
+            }
+            boolean writersVisible = footer.getVisibility() == View.VISIBLE;
+            engagement.setVisibility(writersVisible ? View.VISIBLE : View.GONE);
+        } catch (Exception ignored) {
+        }
     }
 
     private static void cancelHalfBodyCollapseAnimator(View titleBlock) {
@@ -1637,6 +1941,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Prefer the post's server {@code location_label} when it matches the current
      * language script; under Indic languages, upgrade Latin-only labels (e.g.
      * English "Anakapalli") to the localized selected-district name.
+     * Never show another Indic script (e.g. Malayalam on a Telugu session).
      */
     private String resolveLocationLabel(@Nullable ModelClass.Datum post) {
         String selected = DistrictLabelHelper.resolveDisplayLabel(context);
@@ -1655,22 +1960,36 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 String trimmed = postLabel.trim();
                 boolean postNeedsUpgrade =
                         DistrictLabelHelper.needsNativeScriptUpgrade(trimmed, langId);
+                boolean postCompatible =
+                        DistrictLabelHelper.labelCompatibleWithLanguage(trimmed, langId);
                 if (postNeedsUpgrade && selectedNative
                         && (categery_id == -1
                         || DistrictLabelHelper.matchesStoredName(context, trimmed))) {
                     my_feed_name = selected;
                     return selected;
                 }
-                if (!postNeedsUpgrade
-                        && DistrictLabelHelper.labelCompatibleWithLanguage(trimmed, langId)) {
+                if (!postNeedsUpgrade && postCompatible) {
                     return trimmed;
                 }
+                // Foreign-script / wrong-language label — never display it.
                 if (categery_id == -1 && selectedNative) {
                     my_feed_name = selected;
                     return selected;
                 }
-                return trimmed;
+                // Latin that didn't upgrade: still show if compatible (neutral).
+                if (postCompatible) {
+                    return trimmed;
+                }
+                my_feed_name = "";
+                return "";
             }
+            // Post has no location_label: only stamp selected on Local feed.
+            if (categery_id == -1 && selectedNative) {
+                my_feed_name = selected;
+                return selected;
+            }
+            my_feed_name = "";
+            return "";
         }
         if (isUsableLocationLabel(selected)) {
             my_feed_name = selected;
@@ -1999,12 +2318,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         bindFullPostLikeCount(holder.full_img_like, list.get(position).getLikes(), getLikeLabel());
         bindFullPostLikeCount(holder.full_img_comment, list.get(position).getComments(), getCommentLabel());
         bindFullPostLikeCount(holder.full_img_share, list.get(position).getShares(), getShareLabel());
+        bindFullPostLikeCount(holder.full_img_whtsapp, list.get(position).getWhatsappShares(), null);
+        rememberLikeCountView(list.get(position).getPostId(), holder.full_img_like);
     }
 
     private void bindFullVideoEngagementCounts(TextView likeView, TextView commentView, TextView shareView, int position) {
+        bindFullVideoEngagementCounts(likeView, commentView, shareView, null, position);
+    }
+
+    private void bindFullVideoEngagementCounts(TextView likeView, TextView commentView, TextView shareView,
+                                               TextView whatsappView, int position) {
         bindFullPostLikeCount(likeView, list.get(position).getLikes(), getLikeLabel());
         bindFullPostLikeCount(commentView, list.get(position).getComments(), getCommentLabel());
         bindFullPostLikeCount(shareView, list.get(position).getShares(), getShareLabel());
+        bindFullPostLikeCount(whatsappView, list.get(position).getWhatsappShares(), null);
+        rememberLikeCountView(list.get(position).getPostId(), likeView);
     }
 
     /**
@@ -2090,13 +2418,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Optimistically update like count in the data model and UI, then fire the API.
+     * Optimistically update like icon + delta on the last known feed total, then
+     * fire Update_Like. The API response always overwrites the count via
+     * {@link #syncLikeCountFromServer} so a stale feed total cannot stick after
+     * the round-trip (prefer server total for like and unlike).
      * Returns the new likeStatus so the caller can update icon immediately.
      * type: 1=like, 2=dislike, 0=remove
      */
     private int applyLikeChange(int position, TextView countView) {
+        if (list == null || position < 0 || position >= list.size()) return 0;
         ModelClass.Datum item = list.get(position);
         int oldStatus = item.getLikeStatus() != null ? item.getLikeStatus() : 0;
+        // Base on last known good from feed / prior server sync — never invent
+        // a count from likeStatus alone.
         int likes = item.getLikes() != null ? item.getLikes() : 0;
         int newStatus;
 
@@ -2115,6 +2449,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         showLog("LIKE_DEBUG pos=" + position + " oldStatus=" + oldStatus + " newStatus=" + newStatus
                 + " newLikes=" + likes);
 
+        rememberLikeCountView(item.getPostId(), countView);
         if (countView != null) {
             bindLikeCountForView(countView, likes);
         }
@@ -2153,17 +2488,40 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     private void syncEngagementFromServer(Long postId, Long subPostId, Integer serverLikes,
                                           Integer serverComments, Integer serverShares) {
+        syncEngagementFromServer(postId, subPostId, serverLikes, serverComments, serverShares, null);
+    }
+
+    private void syncEngagementFromServer(Long postId, Long subPostId, Integer serverLikes,
+                                          Integer serverComments, Integer serverShares,
+                                          Integer serverWhatsappShares) {
         if (postId == null || list == null) return;
+        boolean matched = false;
         for (int i = 0; i < list.size(); i++) {
             ModelClass.Datum item = list.get(i);
-            if (item.getPostId() != null && item.getPostId().equals(postId)
-                    && (subPostId == null || subPostId.equals(item.getSubPostId()))) {
-                if (serverLikes != null) item.setLikes(serverLikes);
-                if (serverComments != null) item.setComments(serverComments);
-                if (serverShares != null) item.setShares(serverShares);
-                notifyDataSetChanged();
-                break;
+            if (item.getPostId() == null || !item.getPostId().equals(postId)) continue;
+            // Prefer exact sub_post match; if client/server omit/zero sub_post_id, still update.
+            if (subPostId != null && item.getSubPostId() != null
+                    && subPostId != 0L && item.getSubPostId() != 0L
+                    && !subPostId.equals(item.getSubPostId())) {
+                continue;
             }
+            if (serverLikes != null) item.setLikes(serverLikes);
+            if (serverComments != null) item.setComments(serverComments);
+            if (serverShares != null) item.setShares(serverShares);
+            if (serverWhatsappShares != null) item.setWhatsappShares(serverWhatsappShares);
+            matched = true;
+            // Update the visible TextView immediately — FlipView often keeps the current
+            // page and does not rebind on notifyDataSetChanged alone.
+            if (serverLikes != null) {
+                TextView countView = findRememberedLikeCountView(postId);
+                if (countView != null) {
+                    bindLikeCountForView(countView, serverLikes);
+                }
+            }
+            break;
+        }
+        if (matched) {
+            notifyDataSetChanged();
         }
     }
 
@@ -3168,27 +3526,36 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Exact {@code ad_req_position} match first, then ready-pool transfer:
      * orphan (reqPos not on a live ad seat) or an <b>unclaimed</b> creative from a
      * seat further ahead. Claimed creatives stay on their painted seat (AdMob
-     * single-view). Mid-flip: exact match only (pool scan can jank).
+     * single-view). Mid-flip: exact match only (pool scan can jank) — except a
+     * ready {@link AdPreloader} creative may be injected for this seat.
      */
     @Nullable
     private NativeAd findGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
-        if (HomePage.nativeGoogleAdList == null || HomePage.nativeGoogleAdList.isEmpty()) {
-            return null;
-        }
         Integer slotPos = slot != null ? slot.getAd_req_position() : null;
         if (slotPos == null) {
             return null;
         }
-        for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
-            FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
-            if (packed == null || packed.getAd() == null) continue;
-            if (packed.getReqPos() == slotPos) {
-                showLog("HomePage.nativeAdList exact pos match reqPos=" + slotPos);
-                return packed.getAd();
+        if (HomePage.nativeGoogleAdList != null && !HomePage.nativeGoogleAdList.isEmpty()) {
+            for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
+                FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
+                if (packed == null || packed.getAd() == null) continue;
+                if (packed.getReqPos() == slotPos) {
+                    showLog("HomePage.nativeAdList exact pos match reqPos=" + slotPos);
+                    return packed.getAd();
+                }
             }
+        }
+        // Early-warmed share-screen creative: inject into the seat pool so settle
+        // paint / exact match can show immediately without waiting for AdLoader.
+        NativeAd preloaded = takeAdPreloaderIntoPool(slotPos);
+        if (preloaded != null) {
+            return preloaded;
         }
         // Mid-flip: exact miss only — pool reclaim walks the feed and can hitch.
         if (isHomeFlipAnimating()) {
+            return null;
+        }
+        if (HomePage.nativeGoogleAdList == null || HomePage.nativeGoogleAdList.isEmpty()) {
             return null;
         }
         // Orphan reclaim only (dead reqPos). Ahead-steal / transfer was disabled —
@@ -3230,6 +3597,51 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 + " (orphan)");
         reassignGoogleNativeReqPos(orphan, slotPos);
         return orphan.getAd();
+    }
+
+    /**
+     * Move a ready {@link AdPreloader} native into {@link HomePage#nativeGoogleAdList}
+     * for {@code slotPos}. Returns the creative, or null when none was ready.
+     * Kicks another prefetch so the next share/ad seat can warm again.
+     */
+    @Nullable
+    private NativeAd takeAdPreloaderIntoPool(int slotPos) {
+        try {
+            if (!AdPreloader.get().isReady()) {
+                return null;
+            }
+            if (HomePage.nativeGoogleAdList == null) {
+                return null;
+            }
+            String code = AdPreloader.get().peekAdCode();
+            NativeAd ad = AdPreloader.get().takeReady();
+            if (ad == null) {
+                return null;
+            }
+            FlipGoogleNativeAds packed = new FlipGoogleNativeAds();
+            packed.setAd(ad);
+            packed.setAdCode(code != null ? code : "");
+            packed.setReqPos(slotPos);
+            packed.setAd_type("google");
+            packed.setClaimed(false);
+            HomePage.nativeGoogleAdList.add(packed);
+            try {
+                if (HomePage.nativeGoogleAdArray != null
+                        && !HomePage.nativeGoogleAdArray.contains(slotPos)) {
+                    HomePage.nativeGoogleAdArray.add(slotPos);
+                }
+            } catch (Exception ignored) {
+            }
+            showLog("AdPreloader → seat reqPos=" + slotPos);
+            try {
+                AdPreloader.get().prefetch(context);
+            } catch (Exception ignored) {
+            }
+            return ad;
+        } catch (Exception e) {
+            showLog("takeAdPreloaderIntoPool: " + e.getMessage());
+            return null;
+        }
     }
 
     /** Move a ready creative onto {@code newPos} and free the donor seat for refill. */
@@ -3380,6 +3792,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         return true;
                     }
                 }
+            }
+            if (AdPreloader.get().isReady()) {
+                return true;
             }
         } catch (Exception ignored) {
         }
@@ -3907,7 +4322,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     }
     public void shareGalleryScreenShot(int position,int from,View customConvertView) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         if (customConvertView == null || customConvertView.findViewById(R.id.relativeLayoutShareOpt) == null) {
+            releaseShareLaunch();
             return;
         }
         if (imageGallaryHolder == null) {
@@ -3927,7 +4346,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (imageGallaryHolder.image_gallary_scrip != null) {
             imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
         }
-        String appLink = "https://com.anyNews.anynews/";
 
         String mInvitationUrl = list.get(position).getShareLink();
         String msg = list.get(position).getTitle() + " "
@@ -3938,70 +4356,60 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             }
             public void onFinish() {
-
-                Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
-                intent.putExtra(Intent.EXTRA_TEXT, msg);
-                final boolean galleryWhatsapp = from == 1 || fromWhatsapp;
-                if(galleryWhatsapp){
-                    intent.setType("text/plain");
-                    intent.setPackage("com.whatsapp");
-                }
-
-                Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(scrren_icon);
-
-                //  layout_strip_iconnew.setVisibility(View.GONE);
                 try {
-                    File file = new File(context.getExternalCacheDir(), "sample.png");
-                    FileOutputStream fOut = new FileOutputStream(file);
-                    b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                    fOut.flush();
-                    fOut.close();
-                    file.setReadable(true, true);
-                    Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                    showLog("file URI:"+photoURI);
-                    intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                    List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                    for (ResolveInfo resolveInfo : resInfoList) {
-                        String packageName = resolveInfo.activityInfo.packageName;
-                        context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    Intent intent = new Intent(Intent.ACTION_SEND);
+                    intent.setType("image/*");
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                    intent.putExtra(Intent.EXTRA_TEXT, msg);
+                    final boolean galleryWhatsapp = from == 1 || fromWhatsapp;
+                    if (galleryWhatsapp) {
+                        intent.setPackage("com.whatsapp");
                     }
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                if (imageGallaryHolder.image_gallary_scrip != null) {
-                    imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
-                }
-                if (imageGallaryHolder.image_gallary_share != null) {
-                    restoreOnPostMagazineShare(
-                            imageGallaryHolder.image_gallary_share,
-                            list.get(position),
-                            v -> {
-                                fromWhatsapp = false;
-                                shareGalleryScreenShotUI(customConvertView);
-                            });
-                }
-                intent.setType("image/*");
-                if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(Intent.createChooser(intent, "Share Link"));
-                }
 
+                    Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(scrren_icon);
+                    try {
+                        writeScreenshotPngAndAttach(intent, b);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    if (imageGallaryHolder.image_gallary_scrip != null) {
+                        imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
+                    }
+                    if (imageGallaryHolder.image_gallary_share != null) {
+                        restoreOnPostMagazineShare(
+                                imageGallaryHolder.image_gallary_share,
+                                list.get(position),
+                                v -> {
+                                    fromWhatsapp = false;
+                                    shareGalleryScreenShotUI(customConvertView);
+                                });
+                    }
+                    if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                        if (galleryWhatsapp) {
+                            context.startActivity(intent);
+                        } else {
+                            context.startActivity(Intent.createChooser(intent, "Share Link"));
+                        }
+                    }
 
-                Share_Count_Value(shareCountProperty(galleryWhatsapp), list.get(position).getPostId());
-                fromWhatsapp = false;
+                    Share_Count_Value(shareCountProperty(galleryWhatsapp), list.get(position).getPostId());
+                    fromWhatsapp = false;
+                } finally {
+                    releaseShareLaunch();
+                }
             }
         }.start();
 
 
     }
     public void shareMagazineScreenShot(ImageView imageViewShare, RelativeLayout relativeLayoutShareOpt, int position,RelativeLayout magzine_relative_slider) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
 
         relativeLayoutShareOpt.setVisibility(GONE);
         image_magazineHolder.magzine_ll_dots.setVisibility(GONE);
-        String appLink = "https://com.anyNews.anynews/";
         imageViewShare.setVisibility(GONE);
 
         String mInvitationUrl = list.get(position).getShareLink();
@@ -4013,59 +4421,45 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             }
             public void onFinish() {
-
-                Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
-                intent.putExtra(Intent.EXTRA_TEXT, msg);
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                if(fromWhatsapp){
-                    intent.setType("text/plain");
-                    intent.setPackage("com.whatsapp");
-                }
-
-                Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(magzine_relative_slider);
-
-                //  layout_strip_iconnew.setVisibility(View.GONE);
                 try {
-                    File file = new File(context.getExternalCacheDir(), "sample.png");
-                    FileOutputStream fOut = new FileOutputStream(file);
-                    b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                    fOut.flush();
-                    fOut.close();
-                    file.setReadable(true, true);
-                    Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                    showLog("file URI:"+photoURI);
-                    intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                    List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                    for (ResolveInfo resolveInfo : resInfoList) {
-                        String packageName = resolveInfo.activityInfo.packageName;
-                        context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    Intent intent = new Intent(Intent.ACTION_SEND);
+                    intent.setType("image/*");
+                    intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                    intent.putExtra(Intent.EXTRA_TEXT, msg);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    final boolean magazineWasWhatsapp = fromWhatsapp;
+                    if (magazineWasWhatsapp) {
+                        intent.setPackage("com.whatsapp");
                     }
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            //    imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
-              //  imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
-                image_magazineHolder.magzine_ll_dots.setVisibility(VISIBLE);
-                if (imageViewShare != null) {
-                    restoreOnPostMagazineShare(imageViewShare, list.get(position), v -> {
-                        fromWhatsapp = false;
-                        if (relativeLayoutShareOpt != null) {
-                            relativeLayoutShareOpt.setVisibility(VISIBLE);
+
+                    Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(magzine_relative_slider);
+                    try {
+                        writeScreenshotPngAndAttach(intent, b);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    image_magazineHolder.magzine_ll_dots.setVisibility(VISIBLE);
+                    if (imageViewShare != null) {
+                        restoreOnPostMagazineShare(imageViewShare, list.get(position), v -> {
+                            fromWhatsapp = false;
+                            if (relativeLayoutShareOpt != null) {
+                                relativeLayoutShareOpt.setVisibility(VISIBLE);
+                            }
+                        });
+                    }
+                    if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                        if (magazineWasWhatsapp) {
+                            context.startActivity(intent);
+                        } else {
+                            context.startActivity(Intent.createChooser(intent, "Share Link"));
                         }
-                    });
-                }
-                intent.setType("image/*");
-                if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(Intent.createChooser(intent, "Share Link"));
-                }
-                boolean magazineWasWhatsapp = fromWhatsapp;
-                fromWhatsapp=false;
+                    }
+                    fromWhatsapp = false;
 
-
-                Share_Count_Value(shareCountProperty(magazineWasWhatsapp), list.get(position).getPostId());
+                    Share_Count_Value(shareCountProperty(magazineWasWhatsapp), list.get(position).getPostId());
+                } finally {
+                    releaseShareLaunch();
+                }
             }
         }.start();
 
@@ -4099,7 +4493,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         bindFullVideoEngagementCounts(fullVideoNewYoutubeViewHolder.full_video_like,
                 fullVideoNewYoutubeViewHolder.full_video_comment,
-                fullVideoNewYoutubeViewHolder.full_video_share, position);
+                fullVideoNewYoutubeViewHolder.full_video_share,
+                convertView.findViewById(R.id.full_img_whtsapp_text), position);
         final ImageView imageViewYoutubePlayVideo = convertView.findViewById(R.id.imageViewPlayVideo);
         RelativeLayout layoutYoutubeFullView = convertView.findViewById(R.id.layoutYoutubeFullView);
         final YouTubePlayerView youTubePlayerView = convertView.findViewById(R.id.youtube_full_video);
@@ -4242,8 +4637,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
             public void onClick(View view) {
                 fullVideoNewYoutubeViewHolder.like_for_video_image = convertView.findViewById(R.id.like_for_video_image);
-                int newStatus = applyLikeChange(position, null);
-                bindFullPostLikeCount(fullVideoNewYoutubeViewHolder.full_video_like, list.get(position).getLikes(), getLikeLabel());
+                int newStatus = applyLikeChange(position, fullVideoNewYoutubeViewHolder.full_video_like);
                 bindThreeStateIcon(fullVideoNewYoutubeViewHolder.like_for_video_image, newStatus);
             }
         });
@@ -4324,6 +4718,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void shareYoutubePlayerFullVideoShare(int position, int from, ImageView newFullImageView1, YouTubePlayerView youTubePlayerView, RelativeLayout layoutYoutubeFullView, ImageView imageViewYoutubePlayVideo, LinearLayout side_menu) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
 
         String mInvitationUrl = list.get(position).getShareLink();
         String msg = list.get(position).getTitle() + " " + mInvitationUrl;
@@ -4339,35 +4736,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             public void onFinish() {
 
                 Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
+                intent.setType("image/*");
+                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
                 intent.putExtra(Intent.EXTRA_TEXT, msg);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(layoutYoutubeFullView);
-                //bitmapResize(b);
-
-
                 try {
-                    File file = new File(context.getExternalCacheDir(), "sample.png");
-
-                    FileOutputStream fOut = new FileOutputStream(file);
-
-                    b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                    fOut.flush();
-                    fOut.close();
-                    file.setReadable(true, true);
-                    Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                    intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                    List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                    for (ResolveInfo resolveInfo : resInfoList) {
-                        String packageName = resolveInfo.activityInfo.packageName;
-                        context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    }
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    writeScreenshotPngAndAttach(intent, b);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-                intent.setType("image/*");
                 if (isFullYoutubeVideoIsInitialized) {
                     youTubePlayerViewHalf.pause();
                     youTubePlayerView.setVisibility(VISIBLE);
@@ -4413,7 +4791,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         bindFullVideoEngagementCounts(full_videoViewHolder.full_video_like,
                 full_videoViewHolder.full_video_comment,
-                full_videoViewHolder.full_video_share, position);
+                full_videoViewHolder.full_video_share,
+                convertView.findViewById(R.id.full_img_whtsapp_text), position);
 
         full_videoViewHolder.full_image_whatsapp_bg.setImageResource(R.drawable.ic_whatsapp_original1);
 
@@ -4613,8 +4992,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
             public void onClick(View view) {
                 full_videoViewHolder.like_for_video_image = convertView.findViewById(R.id.like_for_video_image);
-                int newStatus = applyLikeChange(position, null);
-                bindFullPostLikeCount(full_videoViewHolder.full_video_like, list.get(position).getLikes(), getLikeLabel());
+                int newStatus = applyLikeChange(position, full_videoViewHolder.full_video_like);
                 bindThreeStateIcon(full_videoViewHolder.like_for_video_image, newStatus);
             }
         });
@@ -4681,6 +5059,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void shareExoPlayerFullVideoShare(int position, int from, ImageView thaumbnail_for_video, RelativeLayout exo_play_layout, ImageView imageViewExoVideoPlayVideo, PlayerView simpleExoPlayerViewFull) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         String mInvitationUrl = list.get(position).getShareLink();
         String msg = list.get(position).getTitle() + " " + mInvitationUrl;
         simpleExoPlayerViewFull.setVisibility(GONE);
@@ -4691,27 +5072,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             public void onFinish() {
                 Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
+                intent.setType("image/*");
+                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
                 intent.putExtra(Intent.EXTRA_TEXT, msg);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(exo_play_layout);
-                //bitmapResize(b);
                 try {
-                    File file = new File(context.getExternalCacheDir(), "sample.png");
-                    FileOutputStream fOut = new FileOutputStream(file);
-                    b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                    fOut.flush();
-                    fOut.close();
-                    file.setReadable(true, true);
-                    Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                    intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                    List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                    for (ResolveInfo resolveInfo : resInfoList) {
-                        String packageName = resolveInfo.activityInfo.packageName;
-                        context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    }
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    writeScreenshotPngAndAttach(intent, b);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -4731,7 +5098,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
                 }
-                intent.setType("image/*");
                 launchScreenshotShareIntent(intent, from);
                 Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
             }
@@ -4813,10 +5179,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 //                        Set Text
         fullImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
-        if (languageModelResponse != null && languageModelResponse.getData() != null) {
-            fullImageActivity.full_img_whtsapp.setText(" " + languageModelResponse.getData().getWhatsapp());
-            showLog("sree" + languageModelResponse.getData().getWhatsapp());
-        }
         bindFullPostEngagementCounts(fullImageActivity, position);
 
 
@@ -4840,35 +5202,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         showLog("Check Point FULL_IMAGE:: 8");
         fullImageActivity.full_image_view_details.setOnTouchListener((view, motionEvent) -> false);
 
-        View finalConvertViewFull = convertView;
-        fullImageActivity.full_image_view_details.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (tryToggleOfflineChrome()) return;
-                if (fullImageActivity.side_menu.isShown() || fullImageActivity.side_menu.getVisibility() == View.VISIBLE) {
-                    fullImageActivity.side_menu = finalConvertViewFull.findViewById(R.id.side_menu);
-                    fullImageActivity.side_menu.setVisibility(View.INVISIBLE);
-                    showLog("fullimageadapter"+ "click gone");
-                } else {
-                    fullImageActivity.side_menu = finalConvertViewFull.findViewById(R.id.side_menu);
-                    fullImageActivity.side_menu.setVisibility(View.VISIBLE);
-                    showLog("fullimageadapter"+ "click visible");
-
-                }
-            }
-        });
+        // Mode-aware Classic / Reader / Hybrid (also re-bound in installOfflineChromeTaps).
+        installNewsModeTap(
+                fullImageActivity.full_image_view_details,
+                convertView,
+                fullImageActivity.side_menu,
+                true,
+                resolveHomePageHost(context));
         installOfflineChromeTaps(convertView);
         showLog("like status:"+list.get(position).getLikeStatus());
 
         final TextView likeCountViewRef = convertView.findViewById(R.id.full_img_like_text);
         final ImageView likeIconRef = full_image_selected_like;
+        rememberLikeCountView(list.get(position).getPostId(), likeCountViewRef);
         full_image_like.setTag(position);
         full_image_like.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 int pos = (int) view.getTag();
                 int newStatus = applyLikeChange(pos, likeCountViewRef);
-                bindFullPostLikeCount(likeCountViewRef, list.get(pos).getLikes(), getLikeLabel());
                 bindThreeStateIcon(likeIconRef, newStatus);
             }
         });
@@ -4904,101 +5256,73 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         fullImageActivity.full_image_share.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                if (!tryAcquireShareLaunch()) {
+                    return;
+                }
 
                 fullImageActivity.full_image_share = myFullView.findViewById(R.id.full_image_share);
                 fullImageActivity.layout_strip_iconnew = myFullView.findViewById(R.id.layout_strip_iconnew);
                 fullImageActivity.full_image_view_details = myFullView.findViewById(R.id.full_image_view_details);
+                if (fullImageActivity.full_image_view_details == null) {
+                    releaseShareLaunch();
+                    Toast.makeText(context, "Unable to share this post right now", Toast.LENGTH_SHORT).show();
+                    return;
+                }
 
-                fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
+                if (fullImageActivity.layout_strip_iconnew != null) {
+                    fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
+                }
 
-
-                String appLink = "https://com.anyNews.anynews/";
-
-                //String mInvitationUrl = list.get(position).getShareLink();
-                //String msg = list.get(position).getTitle() + " "+ mInvitationUrl;
-
+                final String mInvitationUrl = list.get(position).getShareLink();
+                final String msg = list.get(position).getTitle() + " " + mInvitationUrl;
 
                 countDownTimer = new CountDownTimer(2, 2) {
 
                     public void onTick(long millisUntilFinished) {
-
                     }
 
                     public void onFinish() {
+                        try {
+                            Intent intent = new Intent(Intent.ACTION_SEND);
+                            intent.setType("image/*");
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                            intent.putExtra(Intent.EXTRA_TEXT, msg);
 
-                        Intent intent = new Intent(Intent.ACTION_SEND);
-                        intent.setType("text/plain");
-                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(fullImageActivity.full_image_view_details);
-
-                        //  layout_strip_iconnew.setVisibility(View.GONE);
-
-                        /*    data for update perticular article share     */
-
-                        JsonObject otp = set_count_request("share", list.get(position).getPostId());
-
-                        APIService apiService = RestApiClient.getClient().create(APIService.class);
-                        Call<EncreptionRequest> apiResponse = apiService.update_post_count("v3", otp);
-                        apiResponse.enqueue(new Callback<EncreptionRequest>() {
-                            //@RequiresApi(api = Build.VERSION_CODES.O)
-                            @Override
-
-                            public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-
-                                EncreptionRequest encreptionRequest = response.body();
-                                if (encreptionRequest == null || encreptionRequest.getData() == null) return;
-                                String encrpt_data = decrypt(encreptionRequest.getData());
-                                showLog("update_post_count:"+encrpt_data);
-
-                                Gson gsonObj = new Gson();
-                                LikeDownloadRespouse likeDownloadRespouse = gsonObj.fromJson(encrpt_data, LikeDownloadRespouse.class);
-
-                                if (likeDownloadRespouse.getSuccess()) {
-
-                                    try {
-                                        String msg = list.get(position).getTitle() + " " + likeDownloadRespouse.getShareLink();
-                                        showLog("ShareLinkAdapter"+ likeDownloadRespouse.getShareLink());
-                                        intent.putExtra(Intent.EXTRA_SUBJECT, likeDownloadRespouse.getShareLink());
-                                        intent.putExtra(Intent.EXTRA_TEXT, msg);
-
-                                        File file = new File(context.getExternalCacheDir(), "sample.png");
-                                        FileOutputStream fOut = new FileOutputStream(file);
-                                        b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                                        fOut.flush();
-                                        fOut.close();
-                                        file.setReadable(true, true);
-                                        Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                                        intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                                        List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                                        for (ResolveInfo resolveInfo : resInfoList) {
-                                            String packageName = resolveInfo.activityInfo.packageName;
-                                            context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                        }
-                                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                    fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
-                                    intent.setType("image/*");
-                                    if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                                        context.startActivity(Intent.createChooser(intent, "Share Link"));
-                                    }
-                                }
+                            Bitmap b = ScreenShott.getInstance()
+                                    .takeScreenShotOfView(fullImageActivity.full_image_view_details);
+                            try {
+                                writeScreenshotPngAndAttach(intent, b);
+                            } catch (Exception e) {
+                                e.printStackTrace();
                             }
-                            @Override
-                            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                            if (fullImageActivity.layout_strip_iconnew != null) {
+                                fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
                             }
-                        });
+                            // Launch immediately with the cached share link — do not wait
+                            // for Update_Post_Counts before opening the system sheet.
+                            if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                                context.startActivity(Intent.createChooser(intent, "Share Link"));
+                            }
+                            Share_Count_Value("share", list.get(position).getPostId());
+                        } finally {
+                            releaseShareLaunch();
+                        }
                     }
                 }.start();
 
             }
         });
+        bindSponsoredChrome(convertView, position);
     }
 
     public void shareFullImageScree(View myFullView, int position) {
 
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         if (myFullView == null) {
+            releaseShareLaunch();
             Toast.makeText(context, "Unable to share this post right now", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -5006,6 +5330,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         fullImageActivity.layout_strip_iconnew = myFullView.findViewById(R.id.layout_strip_iconnew);
         fullImageActivity.full_image_view_details = myFullView.findViewById(R.id.full_image_view_details);
         if (fullImageActivity.full_image_view_details == null) {
+            releaseShareLaunch();
             Toast.makeText(context, "Unable to share this post right now", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -5014,102 +5339,51 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
         }
 
-
-        String appLink = "https://com.anyNews.anynews/";
-
+        final String mInvitationUrl = list.get(position).getShareLink();
+        final String msg = list.get(position).getTitle() + " " + mInvitationUrl;
 
         countDownTimer = new CountDownTimer(2, 2) {
 
             public void onTick(long millisUntilFinished) {
-
-
             }
 
             public void onFinish() {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_SEND);
+                    intent.setType("image/*");
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.setPackage("com.whatsapp");
+                    intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                    intent.putExtra(Intent.EXTRA_TEXT, msg);
 
-                Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                intent.setPackage("com.whatsapp");
-
-                Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(fullImageActivity.full_image_view_details);
-
-
-                JsonObject otp = set_count_request("whatsapp_share", list.get(position).getPostId());
-
-                APIService apiService = RestApiClient.getClient().create(APIService.class);
-                Call<EncreptionRequest> apiResponse = apiService.update_post_count("v3", otp);
-                apiResponse.enqueue(new Callback<EncreptionRequest>() {
-                    //@RequiresApi(api = Build.VERSION_CODES.O)
-                    @Override
-
-                    public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-
-                        EncreptionRequest encreptionRequest = response.body();
-                        if (encreptionRequest == null || encreptionRequest.getData() == null) return;
-                        String encrpt_data = decrypt(encreptionRequest.getData());
-
-                        Gson gsonObj = new Gson();
-                        LikeDownloadRespouse likeDownloadRespouse = gsonObj.fromJson(encrpt_data, LikeDownloadRespouse.class);
-
-                        if (likeDownloadRespouse.getSuccess()) {
-                            //String shareLink = likeDownloadRespouse.getShareLink();
-                            //showLog("ShareLink",""+shareLink);
-//                            intent.putExtra(Intent.EXTRA_SUBJECT, likeDownloadRespouse.getShareLink());
-//                            intent.putExtra(Intent.EXTRA_TEXT, likeDownloadRespouse.getShareLink());
-
-                            String msg = list.get(position).getTitle() + " " + likeDownloadRespouse.getShareLink();
-                            showLog("ShareLinkAdapter"+ likeDownloadRespouse.getShareLink());
-                            showLog("ShareLinkAdapter"+ msg);
-                            intent.putExtra(Intent.EXTRA_SUBJECT, likeDownloadRespouse.getShareLink());
-                            intent.putExtra(Intent.EXTRA_TEXT, msg);
-
-                            try {
-                                File file = new File(context.getExternalCacheDir(), "sample.png");
-                                FileOutputStream fOut = new FileOutputStream(file);
-                                b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                                fOut.flush();
-                                fOut.close();
-                                file.setReadable(true, true);
-                                Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                                intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                                List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                                for (ResolveInfo resolveInfo : resInfoList) {
-                                    String packageName = resolveInfo.activityInfo.packageName;
-                                    context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                }
-                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                            fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
-                            intent.setType("image/*");
-                            if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                                context.startActivity(Intent.createChooser(intent, "Share Link"));
-                            }
-
-
-                        }
-
-
+                    Bitmap b = ScreenShott.getInstance()
+                            .takeScreenShotOfView(fullImageActivity.full_image_view_details);
+                    try {
+                        writeScreenshotPngAndAttach(intent, b);
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
-
-                    @Override
-                    public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
-
+                    if (fullImageActivity.layout_strip_iconnew != null) {
+                        fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
                     }
-                });
-
-
+                    // Instant WhatsApp share — count update is fire-and-forget after launch.
+                    if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                        context.startActivity(intent);
+                    }
+                    Share_Count_Value("whatsapp_share", list.get(position).getPostId());
+                } finally {
+                    releaseShareLaunch();
+                }
             }
         }.start();
-
-
     }
 
     public void shareSurveyScreenshot(View flipChild, int position) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         if (flipChild == null) {
+            releaseShareLaunch();
             Toast.makeText(context, "Unable to share this post right now", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -5118,10 +5392,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             shareTarget = flipChild.findViewById(R.id.card_view_survey);
         }
         if (shareTarget == null) {
+            releaseShareLaunch();
             Toast.makeText(context, "Unable to share this post right now", Toast.LENGTH_SHORT).show();
             return;
         }
         if (list == null || position < 0 || position >= list.size()) {
+            releaseShareLaunch();
             return;
         }
         final View screenshotView = shareTarget;
@@ -5132,36 +5408,26 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
 
             public void onFinish() {
-                Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.setPackage("com.whatsapp");
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
-                intent.putExtra(Intent.EXTRA_TEXT, msg);
-                Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(screenshotView);
                 try {
-                    File file = new File(context.getExternalCacheDir(), "sample.png");
-                    FileOutputStream fOut = new FileOutputStream(file);
-                    b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                    fOut.flush();
-                    fOut.close();
-                    file.setReadable(true, true);
-                    Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                    intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                    List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                    for (ResolveInfo resolveInfo : resInfoList) {
-                        String packageName = resolveInfo.activityInfo.packageName;
-                        context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    Intent intent = new Intent(Intent.ACTION_SEND);
+                    intent.setType("image/*");
+                    intent.setPackage("com.whatsapp");
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                    intent.putExtra(Intent.EXTRA_TEXT, msg);
+                    Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(screenshotView);
+                    try {
+                        writeScreenshotPngAndAttach(intent, b);
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                } catch (Exception e) {
-                    e.printStackTrace();
+                    if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                        context.startActivity(intent);
+                    }
+                    Share_Count_Value("whatsapp_share", list.get(position).getPostId());
+                } finally {
+                    releaseShareLaunch();
                 }
-                intent.setType("image/*");
-                if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(Intent.createChooser(intent, "Share Link"));
-                }
-                Share_Count_Value("whatsapp_share", list.get(position).getPostId());
             }
         }.start();
     }
@@ -5266,6 +5532,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         });
 
         bindHalfPostEngagementCounts(convertView, position);
+        bindSponsoredChrome(convertView, position);
 
         bindLocationPill(
                 halfImageActivity.my_feed,
@@ -5372,30 +5639,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         showLog("Check Point Adapter:: 4");
 
-        // hide and visible
-        halfImageActivity.parent_layout.setOnTouchListener((view, motionEvent) -> false);
-
-        View finalConvertViewHalf = convertView;
-        halfImageActivity.parent_layout.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (tryToggleOfflineChrome()) return;
-                showLog("ll_footer_layout:33::"+halfImageActivity.ll_footer_layout.getVisibility());
-                if (halfImageActivity.ll_footer_layout.isShown() || halfImageActivity.ll_footer_layout.getVisibility() == View.VISIBLE) {
-                    halfImageActivity.ll_footer_layout = finalConvertViewHalf.findViewById(R.id.ll_footer_layout);
-                    halfImageActivity.ll_footer_layout.setVisibility(View.GONE);
-                    showLog("fullimageadapter"+ "click gone");
-                    //  Toast.makeText(HomePage.this, "Gone", Toast.LENGTH_SHORT).show();
-                } else {
-                    halfImageActivity.ll_footer_layout = finalConvertViewHalf.findViewById(R.id.ll_footer_layout);
-                    halfImageActivity.ll_footer_layout.setVisibility(View.VISIBLE);
-                    showLog("fullimageadapter"+ "click visible");
-                    //  Toast.makeText(HomePage.this, "Visible", Toast.LENGTH_SHORT).show();
-
-
-                }
-            }
-        });
+        // hide and visible — mode-aware Classic / Reader / Hybrid
+        installNewsModeTap(
+                halfImageActivity.parent_layout,
+                convertView,
+                halfImageActivity.ll_footer_layout,
+                false,
+                resolveHomePageHost(context));
         // Body text must keep chrome hide after parent listener is set.
         installOfflineChromeTaps(convertView);
 
@@ -5407,14 +5657,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         half_image_like.setTag(position);
         final TextView likeCountViewRef = (TextView) convertView.findViewById(R.id.half_like_count);
         final ImageView likeIconRef = half_image_like;
-        half_image_like.setOnClickListener(new View.OnClickListener() {
+        View.OnClickListener halfLikeClick = new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                int currPosition = (int) view.getTag();
+                Object tag = half_image_like.getTag();
+                if (!(tag instanceof Integer)) return;
+                int currPosition = (Integer) tag;
                 int newStatus = applyLikeChange(currPosition, likeCountViewRef);
                 bindHalfLikeIcon(likeIconRef, newStatus);
             }
-        });
+        };
+        half_image_like.setOnClickListener(halfLikeClick);
+        if (halfImageActivity.half_image_like_icon != null) {
+            halfImageActivity.half_image_like_icon.setOnClickListener(halfLikeClick);
+        }
         showLog("Check Point Adapter:: 6");
         bindWriterStripIdentity(
                 list.get(position),
@@ -5753,7 +6009,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public void takeNormalImageScreenshot(View finalConvertView1, int customPosition,int from) {
         {
             showLog("ll_footer_layout::: takeNormalImageScreenshot");
+            if (!tryAcquireShareLaunch()) {
+                return;
+            }
             if (finalConvertView1 == null) {
+                releaseShareLaunch();
                 Toast.makeText(context, "Unable to share this post right now", Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -5770,6 +6030,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     || halfImageActivity.with_out_strip_layout == null
                     || halfImageActivity.ll_footer_layout == null
                     || halfImageActivity.layoutParentDate == null) {
+                releaseShareLaunch();
                 Toast.makeText(context, "Unable to share this post right now", Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -5788,61 +6049,53 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             halfImageActivity.layoutParentDate.setVisibility(VISIBLE);
             if (list == null || customPosition < 0 || customPosition >= list.size()) {
+                releaseShareLaunch();
                 return;
             }
-            String appLink = "https://com.anyNews.anynews/";
             String mInvitationUrl = list.get(customPosition).getShareLink();
             String msg = list.get(customPosition).getTitle() + " " + mInvitationUrl;
             countDownTimer = new CountDownTimer(2, 2) {
                 public void onTick(long millisUntilFinished) {
                 }
                 public void onFinish() {
-                    Intent intent = new Intent(Intent.ACTION_SEND);
-                    intent.setType("text/plain");
-                    if (from == 1) {
-                        intent.setType("text/plain");
-                        intent.setPackage("com.whatsapp");
-                    }
-                    intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
-                    intent.putExtra(Intent.EXTRA_TEXT, msg);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(halfImageActivity.relative_half_content);
-                    //bitmapResize(b);
                     try {
-                        File file = new File(context.getExternalCacheDir(), "sample.png");
-                        FileOutputStream fOut = new FileOutputStream(file);
-                        b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                        fOut.flush();
-                        fOut.close();
-                        file.setReadable(true, true);
-                        Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                        intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                        List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                        for (ResolveInfo resolveInfo : resInfoList) {
-                            String packageName = resolveInfo.activityInfo.packageName;
-                            context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        Intent intent = new Intent(Intent.ACTION_SEND);
+                        intent.setType("image/*");
+                        if (from == 1) {
+                            intent.setPackage("com.whatsapp");
                         }
-                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    } catch (Exception e) {
-                        e.printStackTrace();
+                        intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                        intent.putExtra(Intent.EXTRA_TEXT, msg);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(halfImageActivity.relative_half_content);
+                        try {
+                            writeScreenshotPngAndAttach(intent, b);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                        halfImageActivity.with_out_strip_layout.setVisibility(View.VISIBLE);
+                        halfImageActivity.with_strip_layout.setVisibility(View.GONE);
+                        halfImageActivity.layoutParentDate.setVisibility(GONE);
+                        halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
+                        if (textViewWebUrl != null) {
+                            textViewWebUrl.setVisibility(VISIBLE);
+                        }
+                        if (list != null && customPosition >= 0 && customPosition < list.size()
+                                && list.get(customPosition).isIs_gallery() && indicator != null) {
+                            indicator.setVisibility(VISIBLE);
+                        }
+                        if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                            showLog("Halfshare"+ context + "First" + context.getPackageName() + "Second" + BuildConfig.APPLICATION_ID);
+                            if (from == 1) {
+                                context.startActivity(intent);
+                            } else {
+                                context.startActivity(Intent.createChooser(intent, "Share Link"));
+                            }
+                        }
+                        Share_Count_Value(shareCountProperty(from == 1), list.get(customPosition).getPostId());
+                    } finally {
+                        releaseShareLaunch();
                     }
-                    halfImageActivity.with_out_strip_layout.setVisibility(View.VISIBLE);
-                    halfImageActivity.with_strip_layout.setVisibility(View.GONE);
-                    halfImageActivity.layoutParentDate.setVisibility(GONE);
-                    halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
-                    if (textViewWebUrl != null) {
-                        textViewWebUrl.setVisibility(VISIBLE);
-                    }
-                    if (list != null && customPosition >= 0 && customPosition < list.size()
-                            && list.get(customPosition).isIs_gallery() && indicator != null) {
-                        indicator.setVisibility(VISIBLE);
-                    }
-                    intent.setType("image/*");
-                    if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        showLog("Halfshare"+ context + "First" + context.getPackageName() + "Second" + BuildConfig.APPLICATION_ID);
-                        context.startActivity(Intent.createChooser(intent, "Share Link"));
-                    }
-                    Share_Count_Value(shareCountProperty(from == 1), list.get(customPosition).getPostId());
                 }
             }.start();
 
@@ -5916,6 +6169,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         halfVideoExoPlayerHolder.half_image_like_icon = convertView.findViewById(R.id.half_image_like_icon);
         bindHalfPostEngagementCounts(convertView, position);
+        bindSponsoredChrome(convertView, position);
 
         bindHalfLikeIcon(halfVideoExoPlayerHolder.half_image_like, list.get(position).getLikeStatus());
 
@@ -5934,22 +6188,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfVideoExoPlayerHolder.ll_refer_and_earn_halfy = convertView.findViewById(R.id.ll_refer_and_earn_half);
         halfVideoExoPlayerHolder.iv_share_and_earn = convertView.findViewById(R.id.iv_share_and_earn);
         halfVideoExoPlayerHolder.my_feed = convertView.findViewById(R.id.my_feed);
-        halfVideoExoPlayerHolder.parent_layout.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (tryToggleOfflineChrome()) return;
-                if (layoutParentReportDetails.isShown() || layoutParentReportDetails.getVisibility() == View.VISIBLE) {
-
-                    layoutParentReportDetails.setVisibility(View.GONE);
-                    Logone.e("fullimageadapter", "click gone");
-                    //  Toast.makeText(HomePage.this, "Gone", Toast.LENGTH_SHORT).show();
-                } else {
-                    layoutParentReportDetails.setVisibility(View.VISIBLE);
-                    Logone.e("fullimageadapter", "click visible");
-                    //  Toast.makeText(HomePage.this, "Visible", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
+        halfVideoExoPlayerHolder.parent_layout.setOnClickListener(null);
+        installNewsModeTap(
+                halfVideoExoPlayerHolder.parent_layout,
+                convertView,
+                layoutParentReportDetails,
+                false,
+                resolveHomePageHost(context));
         installOfflineChromeTaps(convertView);
         TextView textViewWebUrl=convertView.findViewById(R.id.textViewWebUrl);
         TextView textViewStripWebUrl=convertView.findViewById(R.id.textViewStripWebUrl);
@@ -6337,8 +6582,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
             public void onClick(View view) {
                 halfVideoExoPlayerHolder.half_image_like = finalConvertView3.findViewById(R.id.half_image_like);
-                int newStatus = applyLikeChange(position, null);
-                bindHalfActionCount(finalConvertView3.findViewById(R.id.half_like_count), list.get(position).getLikes());
+                TextView likeCount = finalConvertView3.findViewById(R.id.half_like_count);
+                int newStatus = applyLikeChange(position, likeCount);
                 bindHalfLikeIcon(halfVideoExoPlayerHolder.half_image_like, newStatus);
             }
         });
@@ -6504,6 +6749,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         half_youTubePlayerHolder.half_image_like_icon = convertView.findViewById(R.id.half_image_like_icon);
         bindHalfPostEngagementCounts(convertView, position);
+        bindSponsoredChrome(convertView, position);
 
 
         half_youTubePlayerHolder.writer_follow = convertView.findViewById(R.id.writer_follow);
@@ -6513,22 +6759,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         half_youTubePlayerHolder.iv_share_and_earn = convertView.findViewById(R.id.iv_share_and_earn);
         half_youTubePlayerHolder.my_feed = convertView.findViewById(R.id.my_feed);
         layoutParentReportDetails.setVisibility(View.VISIBLE);
-        parent_layout.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (tryToggleOfflineChrome()) return;
-                  // layoutParentReportDetails=convertView.findViewById(R.id.layoutParentReportDetails);
-                if (layoutParentReportDetails.isShown() || layoutParentReportDetails.getVisibility() == View.VISIBLE) {
-                    layoutParentReportDetails.setVisibility(View.GONE);
-                    showLog("showNormalVideo"+ "click gone");
-                    //  Toast.makeText(HomePage.this, "Gone", Toast.LENGTH_SHORT).show();
-                } else {
-                    layoutParentReportDetails.setVisibility(View.VISIBLE);
-                    showLog("showNormalVideo"+ "click visible");
-                    //  Toast.makeText(HomePage.this, "Visible", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
+        parent_layout.setOnClickListener(null);
+        installNewsModeTap(
+                parent_layout,
+                convertView,
+                layoutParentReportDetails,
+                false,
+                resolveHomePageHost(context));
         installOfflineChromeTaps(convertView);
         showLog("showNormalVideo"+ "after thubnails");
         TextView textViewWebUrl=convertView.findViewById(R.id.textViewWebUrl);
@@ -6878,8 +7115,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
             public void onClick(View view) {
                 half_youTubePlayerHolder.half_image_like = finalConvertView3.findViewById(R.id.half_image_like);
-                int newStatus = applyLikeChange(position, null);
-                bindHalfActionCount(finalConvertView3.findViewById(R.id.half_like_count), list.get(position).getLikes());
+                TextView likeCount = finalConvertView3.findViewById(R.id.half_like_count);
+                int newStatus = applyLikeChange(position, likeCount);
                 bindHalfLikeIcon(half_youTubePlayerHolder.half_image_like, newStatus);
             }
         });
@@ -7135,11 +7372,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Article overflow menu (report-style bottom sheet): Bookmark + Report.
+     * Sponsored posts open {@link #showAdCenter} instead (Way2 Ad Center).
      */
     private void showArticleMenu(final int position) {
         if (list == null || position < 0 || position >= list.size()) return;
         final ModelClass.Datum item = list.get(position);
         if (item == null || item.getPostId() == null) return;
+        if (item.isSponsoredAd()) {
+            showAdCenter(position);
+            return;
+        }
 
         try {
             final BottomSheetDialog sheet = new BottomSheetDialog(context);
@@ -7194,6 +7436,330 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } catch (Exception e) {
             // Fallback: open report dialog if sheet fails
             openReportIssueDialog(position);
+        }
+    }
+
+    /**
+     * Way2News-style Ad Center for {@code is_sponsored} posts.
+     * Advertise → Configuration {@code full_jatakam_whatsapp}.
+     */
+    private void showAdCenter(final int position) {
+        if (list == null || position < 0 || position >= list.size()) return;
+        final ModelClass.Datum item = list.get(position);
+        if (item == null || item.getPostId() == null) return;
+
+        try {
+            final BottomSheetDialog sheet = new BottomSheetDialog(context);
+            View dialogView =
+                    LayoutInflater.from(context).inflate(R.layout.bottom_sheet_ad_center, null);
+
+            TextView saveLabel = dialogView.findViewById(R.id.ad_center_save_label);
+            ImageView saveIcon = dialogView.findViewById(R.id.ad_center_save_icon);
+            boolean saved = BookmarkStore.isBookmarked(context, item.getPostId());
+            if (saved || (item.getBookmarkStatus() != null && item.getBookmarkStatus() == 1)) {
+                if (saveLabel != null) saveLabel.setText(R.string.ad_center_saved);
+                if (saveIcon != null) {
+                    saveIcon.setImageResource(R.drawable.ic_action_bookmark);
+                }
+            }
+
+            View close = dialogView.findViewById(R.id.ad_center_close);
+            if (close != null) close.setOnClickListener(v -> sheet.dismiss());
+
+            dialogView
+                    .findViewById(R.id.ad_center_share)
+                    .setOnClickListener(
+                            v -> {
+                                sheet.dismiss();
+                                shareSponsoredAd(position);
+                            });
+
+            dialogView
+                    .findViewById(R.id.ad_center_report)
+                    .setOnClickListener(
+                            v -> {
+                                sheet.dismiss();
+                                openReportIssueDialog(position);
+                            });
+
+            dialogView
+                    .findViewById(R.id.ad_center_save)
+                    .setOnClickListener(
+                            v -> {
+                                sheet.dismiss();
+                                BookmarkStore.toggle(
+                                        context,
+                                        item,
+                                        (bookmarked, toastMsg) -> {
+                                            item.setBookmarkStatus(bookmarked ? 1 : 0);
+                                            Toast.makeText(
+                                                            context,
+                                                            bookmarked
+                                                                    ? context.getString(
+                                                                            R.string
+                                                                                    .bookmark_saved)
+                                                                    : context.getString(
+                                                                            R.string
+                                                                                    .bookmark_removed),
+                                                            Toast.LENGTH_SHORT)
+                                                    .show();
+                                        });
+                            });
+
+            dialogView
+                    .findViewById(R.id.ad_center_advertise)
+                    .setOnClickListener(
+                            v -> {
+                                sheet.dismiss();
+                                openAdvertiseOnAnyNewsWhatsApp();
+                            });
+
+            sheet.setContentView(dialogView);
+            sheet.show();
+        } catch (Exception e) {
+            showLog("showAdCenter: " + e.getMessage());
+            openReportIssueDialog(position);
+        }
+    }
+
+    private void shareSponsoredAd(int position) {
+        if (list == null || position < 0 || position >= list.size()) return;
+        ModelClass.Datum item = list.get(position);
+        if (item == null) return;
+        String link = item.getShareLink();
+        if (TextUtils.isEmpty(link)) {
+            link = item.getTitle() != null ? item.getTitle() : "";
+        }
+        try {
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("text/plain");
+            String body =
+                    (item.getTitle() != null ? item.getTitle() + "\n" : "")
+                            + link;
+            send.putExtra(Intent.EXTRA_TEXT, body);
+            context.startActivity(Intent.createChooser(send, context.getString(R.string.ad_center_share)));
+        } catch (Exception e) {
+            showLog("shareSponsoredAd: " + e.getMessage());
+        }
+    }
+
+    /** Opens WhatsApp using Root_Settings {@code full_jatakam_whatsapp} from splash prefs. */
+    private void openAdvertiseOnAnyNewsWhatsApp() {
+        String number = ProfileHubConfigHelper.getFullJatakamWhatsapp(context);
+        if (TextUtils.isEmpty(number)) {
+            number = SharedPrefsData.getString(
+                    context, Constants.FULL_JATAKAM_WHATSAPP, Constants.PREF_NAME);
+        }
+        if (TextUtils.isEmpty(number)) {
+            Toast.makeText(context, R.string.ad_center_whatsapp_missing, Toast.LENGTH_LONG).show();
+            return;
+        }
+        String digits = number.replaceAll("[^0-9]", "");
+        if (digits.length() < 10) {
+            Toast.makeText(context, R.string.ad_center_whatsapp_missing, Toast.LENGTH_LONG).show();
+            return;
+        }
+        String text = context.getString(R.string.ad_center_advertise_prefill);
+        try {
+            Uri uri = Uri.parse("https://wa.me/" + digits + "?text=" + Uri.encode(text));
+            Intent i = new Intent(Intent.ACTION_VIEW, uri);
+            context.startActivity(i);
+        } catch (Exception e) {
+            Toast.makeText(context, R.string.ad_center_whatsapp_missing, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * Sponsored chrome:
+     * - Full ads: teal "AD" badge top-right → Advertise on AnyNews WhatsApp;
+     *   side engagement chrome hidden so the creative reads full-bleed.
+     * - Half ads: "SPONSORED AD" label + info icon → Ad Center; body URLs blue/tappable.
+     */
+    private void bindSponsoredChrome(View convertView, int position) {
+        if (convertView == null || list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        ModelClass.Datum item = list.get(position);
+        boolean sponsored = item != null && item.isSponsoredAd();
+        boolean fullCreative =
+                sponsored
+                        && item.getPostType() != null
+                        && item.getPostType().toLowerCase().contains("full");
+
+        // Full-bleed AD badge (top-right)
+        TextView adBadge = convertView.findViewById(R.id.sponsored_ad_badge);
+        ViewGroup root =
+                convertView instanceof ViewGroup
+                        ? (ViewGroup) convertView
+                        : null;
+        if (adBadge == null && sponsored && fullCreative && root != null) {
+            adBadge = new TextView(context);
+            adBadge.setId(R.id.sponsored_ad_badge);
+            adBadge.setText(R.string.sponsored_ad_badge);
+            adBadge.setTextColor(Color.WHITE);
+            adBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+            adBadge.setTypeface(adBadge.getTypeface(), Typeface.BOLD);
+            adBadge.setAllCaps(true);
+            adBadge.setBackgroundResource(R.drawable.bg_sponsored_ad_badge);
+            float density = context.getResources().getDisplayMetrics().density;
+            int padH = (int) (8 * density);
+            int padV = (int) (3 * density);
+            adBadge.setPadding(padH, padV, padH, padV);
+            if (root instanceof androidx.constraintlayout.widget.ConstraintLayout) {
+                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams lp =
+                        new androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT);
+                lp.topToTop = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID;
+                lp.endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID;
+                lp.setMargins(0, (int) (12 * density), (int) (12 * density), 0);
+                root.addView(adBadge, lp);
+            } else if (root instanceof FrameLayout) {
+                FrameLayout.LayoutParams lp =
+                        new FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT);
+                lp.gravity = Gravity.TOP | Gravity.END;
+                lp.setMargins(0, (int) (12 * density), (int) (12 * density), 0);
+                root.addView(adBadge, lp);
+            } else {
+                ViewGroup.LayoutParams rlp =
+                        new ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT);
+                root.addView(adBadge, rlp);
+            }
+        }
+        if (adBadge != null) {
+            adBadge.setVisibility(sponsored && fullCreative ? VISIBLE : GONE);
+            if (sponsored && fullCreative) {
+                adBadge.setOnClickListener(v -> openAdvertiseOnAnyNewsWhatsApp());
+                adBadge.bringToFront();
+            } else {
+                adBadge.setOnClickListener(null);
+            }
+        }
+
+        // Full-image layout only: hide engagement chrome for sponsored full creatives;
+        // restore on recycle when binding a normal full post.
+        View sideMenu = convertView.findViewById(R.id.side_menu);
+        if (sideMenu != null && convertView.findViewById(R.id.full_image_view_details) != null) {
+            sideMenu.setVisibility(sponsored && fullCreative ? GONE : VISIBLE);
+        }
+
+        TextView label = convertView.findViewById(R.id.sponsored_ad_label);
+        if (label == null && sponsored && !fullCreative) {
+            ViewGroup row = convertView.findViewById(R.id.with_out_strips_layout);
+            if (row instanceof LinearLayout) {
+                LinearLayout ll = (LinearLayout) row;
+                label = new TextView(context);
+                label.setId(R.id.sponsored_ad_label);
+                label.setText(R.string.sponsored_ad_label);
+                label.setTextColor(Color.parseColor("#5B9BD5"));
+                label.setTextSize(11f);
+                label.setTypeface(label.getTypeface(), Typeface.BOLD);
+                label.setAllCaps(true);
+                LinearLayout.LayoutParams lp =
+                        new LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT);
+                lp.gravity = android.view.Gravity.CENTER_VERTICAL;
+                float density = context.getResources().getDisplayMetrics().density;
+                lp.setMarginStart((int) (12 * density));
+                lp.setMarginEnd((int) (8 * density));
+                int insertAt = 0;
+                for (int i = 0; i < ll.getChildCount(); i++) {
+                    View child = ll.getChildAt(i);
+                    ViewGroup.LayoutParams clp = child.getLayoutParams();
+                    if (clp instanceof LinearLayout.LayoutParams
+                            && ((LinearLayout.LayoutParams) clp).weight > 0f) {
+                        insertAt = i;
+                        break;
+                    }
+                }
+                ll.addView(label, insertAt, lp);
+            }
+        }
+        if (label != null) {
+            label.setVisibility(sponsored && !fullCreative ? VISIBLE : GONE);
+            if (sponsored && !fullCreative) {
+                label.setText(R.string.sponsored_ad_label);
+            }
+        }
+
+        ImageView reportIcon = convertView.findViewById(R.id.report_icon);
+        if (reportIcon == null) {
+            reportIcon = convertView.findViewById(R.id.video_report);
+        }
+        if (reportIcon != null && !(sponsored && fullCreative)) {
+            reportIcon.setImageResource(
+                    sponsored ? R.drawable.ic_action_info : R.drawable.ic_action_more_vert);
+        }
+
+        if (sponsored && !fullCreative) {
+            applySponsoredHalfBodyLinks(convertView, item);
+        }
+    }
+
+    /**
+     * Half sponsored body: auto-link http(s) URLs in blue and make them tappable.
+     * Also linkifies optional source_link when present as plain text.
+     */
+    private void applySponsoredHalfBodyLinks(View convertView, ModelClass.Datum item) {
+        if (convertView == null || item == null) return;
+        String raw = item.getDescription() != null ? item.getDescription() : "";
+        String source = item.getSource_link() != null ? item.getSource_link() : "";
+        if (!TextUtils.isEmpty(source)
+                && !raw.contains(source)
+                && (source.startsWith("http://") || source.startsWith("https://"))) {
+            raw = TextUtils.isEmpty(raw) ? source : (raw + "\n" + source);
+        }
+        for (int id : HALF_BODY_TEXT_IDS) {
+            TextView tv = convertView.findViewById(id);
+            if (tv == null || tv.getVisibility() != VISIBLE) continue;
+            SpannableString spannable = new SpannableString(raw);
+            Linkify.addLinks(spannable, Linkify.WEB_URLS);
+            URLSpan[] urls = spannable.getSpans(0, spannable.length(), URLSpan.class);
+            if (urls != null) {
+                for (URLSpan span : urls) {
+                    int start = spannable.getSpanStart(span);
+                    int end = spannable.getSpanEnd(span);
+                    final String url = span.getURL();
+                    spannable.removeSpan(span);
+                    spannable.setSpan(
+                            new ClickableSpan() {
+                                @Override
+                                public void onClick(View widget) {
+                                    try {
+                                        Intent i =
+                                                new Intent(
+                                                        Intent.ACTION_VIEW, Uri.parse(url));
+                                        if (context != null
+                                                && context
+                                                        .getPackageName()
+                                                        .equals(BuildConfig.APPLICATION_ID)) {
+                                            context.startActivity(i);
+                                        }
+                                    } catch (Exception e) {
+                                        showLog("sponsored link: " + e.getMessage());
+                                    }
+                                }
+
+                                @Override
+                                public void updateDrawState(TextPaint ds) {
+                                    super.updateDrawState(ds);
+                                    ds.setUnderlineText(true);
+                                    ds.setColor(Color.parseColor("#1565C0"));
+                                }
+                            },
+                            start,
+                            end,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+            }
+            tv.setText(spannable);
+            tv.setMovementMethod(LinkMovementMethod.getInstance());
+            tv.setHighlightColor(Color.TRANSPARENT);
         }
     }
 
@@ -7375,7 +7941,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 LikeDownloadRespouse likeDownloadRespouse = gsonObj.fromJson(encrpt_data, LikeDownloadRespouse.class);
 
 
-                if (likeDownloadRespouse.getSuccess()) {
+                // Prefer authoritative Mongo total from Update_Like — overwrites any
+                // optimistic +/- 1 so the side menu never stays on a stale 0/1.
+                if (likeDownloadRespouse != null
+                        && Boolean.TRUE.equals(likeDownloadRespouse.getSuccess())
+                        && likeDownloadRespouse.getLikes() != null) {
                     syncLikeCountFromServer(post_id, sub_post_id, likeDownloadRespouse.getLikes());
                 }
 
@@ -7418,12 +7988,28 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
 
         int postIndex = findPostIndex(post_id);
-        // Only bump the on-card Share count for normal shares — WA is separate.
-        if (postIndex >= 0 && "share".equalsIgnoreCase(property)) {
+        // Normal share bumps shares; WhatsApp button bumps whatsapp_shares only.
+        // Defer FlipView rebind so the system share sheet can open on this frame first.
+        if (postIndex >= 0) {
             ModelClass.Datum item = list.get(postIndex);
-            int shares = item.getShares() != null ? item.getShares() : 0;
-            item.setShares(shares + 1);
-            notifyDataSetChanged();
+            boolean bumped = false;
+            if ("share".equalsIgnoreCase(property)) {
+                int shares = item.getShares() != null ? item.getShares() : 0;
+                item.setShares(shares + 1);
+                bumped = true;
+            } else if (isWhatsapp) {
+                int wa = item.getWhatsappShares() != null ? item.getWhatsappShares() : 0;
+                item.setWhatsappShares(wa + 1);
+                bumped = true;
+            }
+            if (bumped) {
+                adShellHandler.post(() -> {
+                    try {
+                        notifyDataSetChanged();
+                    } catch (Exception ignored) {
+                    }
+                });
+            }
         }
 
         JsonObject jsonObject = new JsonObject();
@@ -7450,7 +8036,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     LikeDownloadRespouse likeDownloadRespouse = gsonObj.fromJson(encrpt_data, LikeDownloadRespouse.class);
 
                     if (likeDownloadRespouse.getSuccess()) {
-                        if (!isWhatsapp) {
+                        if (isWhatsapp) {
+                            syncEngagementFromServer(post_id, null, null, null, null,
+                                    likeDownloadRespouse.getWhatsappShares());
+                        } else {
                             syncEngagementFromServer(post_id, null, null, null, likeDownloadRespouse.getShares());
                         }
                     }
@@ -7474,6 +8063,61 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /** Property for Update_Post_Counts — WhatsApp button vs normal share sheet. */
     private String shareCountProperty(boolean whatsapp) {
         return whatsapp ? "whatsapp_share" : "share";
+    }
+
+    /**
+     * Single-launch guard for all share entry points. Returns false if a share is
+     * already in flight or was accepted within {@link #SHARE_LAUNCH_GUARD_MS}.
+     */
+    private boolean tryAcquireShareLaunch() {
+        long now = SystemClock.elapsedRealtime();
+        if (shareLaunchInFlight || (now - lastShareLaunchAtMs) < SHARE_LAUNCH_GUARD_MS) {
+            showLog("share launch ignored (guard)");
+            return false;
+        }
+        shareLaunchInFlight = true;
+        lastShareLaunchAtMs = now;
+        return true;
+    }
+
+    private void releaseShareLaunch() {
+        shareLaunchInFlight = false;
+    }
+
+    /**
+     * Attach a FileProvider image URI for sharing without waiting on the network.
+     * Uses ClipData + querying the send Intent itself (not createChooser) so grants
+     * resolve quickly and the system sheet can open immediately.
+     */
+    private void putShareImageStream(Intent intent, Uri photoURI) {
+        intent.putExtra(Intent.EXTRA_STREAM, photoURI);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            intent.setClipData(ClipData.newUri(context.getContentResolver(), "share", photoURI));
+        } catch (Exception ignored) {
+        }
+        try {
+            List<ResolveInfo> resInfoList = context.getPackageManager()
+                    .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+            for (ResolveInfo resolveInfo : resInfoList) {
+                String packageName = resolveInfo.activityInfo.packageName;
+                context.grantUriPermission(packageName, photoURI,
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void writeScreenshotPngAndAttach(Intent intent, Bitmap bitmap) throws Exception {
+        File file = new File(context.getExternalCacheDir(), "sample.png");
+        FileOutputStream fOut = new FileOutputStream(file);
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, fOut);
+        fOut.flush();
+        fOut.close();
+        file.setReadable(true, true);
+        Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
+        putShareImageStream(intent, photoURI);
     }
 
     @Override
@@ -8252,9 +8896,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         // Counts + circle/glyph sizing. Skip half-post row offset — survey row is under
         // options and must stay put (offset was designed for half-image content strip).
-        bindHalfActionCount(convertView.findViewById(R.id.half_like_count), list.get(position).getLikes());
+        TextView likeCountTv = convertView.findViewById(R.id.half_like_count);
+        bindHalfActionCount(likeCountTv, list.get(position).getLikes());
         bindHalfActionCount(convertView.findViewById(R.id.half_comment_count), list.get(position).getComments());
         bindHalfActionCount(convertView.findViewById(R.id.half_share_count), list.get(position).getShares());
+        rememberLikeCountView(list.get(position).getPostId(), likeCountTv);
         tintHalfActionIcons(convertView);
         applyHalfActionIconSizes(context, convertView);
 
@@ -8348,6 +8994,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } else if (reportIcon != null) {
             reportIcon.setOnClickListener(reportClick);
         }
+        bindSponsoredChrome(convertView, position);
     }
 
     /** Flag/report dialog used by survey/poll engagement row (same flow as half posts). */
@@ -8489,6 +9136,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             datum.setLikes(list.get(positionx).getLikes());
             datum.setComments(list.get(positionx).getComments());
             datum.setShares(list.get(positionx).getShares());
+            datum.setWhatsappShares(list.get(positionx).getWhatsappShares());
             datum.setDownloads(list.get(positionx).getDownloads());
             datum.setStickyPosition(list.get(positionx).getStickyPosition());
             datum.setDownloads(list.get(positionx).getDownloads());
@@ -9235,6 +9883,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         if (progressBar != null) {
             progressBar.setVisibility(vis);
+            // Scrub readout only while dragging; never leave it up when chrome hides.
+            View scrubTime = null;
+            if (progressBar.getParent() instanceof View) {
+                View parent = (View) progressBar.getParent();
+                scrubTime = parent.findViewById(R.id.exo_scrub_time);
+            }
+            if (scrubTime == null && progressBar.getRootView() != null) {
+                scrubTime = progressBar.getRootView().findViewById(R.id.exo_scrub_time);
+            }
+            if (!visible && scrubTime != null) {
+                scrubTime.setVisibility(GONE);
+            }
         }
     }
 
@@ -9250,6 +9910,55 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             playerView.showController();
         } catch (Exception ignored) {
         }
+        wireWay2ScrubTime(playerView);
+    }
+
+    /**
+     * While the user drags the red progress line, show seek position (e.g. {@code 0:50}).
+     * Hidden at all other times. Seeking itself is already handled by Media3.
+     */
+    @OptIn(markerClass = UnstableApi.class)
+    private void wireWay2ScrubTime(PlayerView playerView) {
+        if (playerView == null) {
+            return;
+        }
+        View progress = playerView.findViewById(R.id.exo_progress);
+        final TextView scrubTime = playerView.findViewById(R.id.exo_scrub_time);
+        if (!(progress instanceof TimeBar) || scrubTime == null) {
+            return;
+        }
+        // Avoid stacking duplicate listeners when the same PlayerView is re-wired.
+        Object wired = scrubTime.getTag(R.id.exo_scrub_time);
+        if (Boolean.TRUE.equals(wired)) {
+            return;
+        }
+        scrubTime.setTag(R.id.exo_scrub_time, Boolean.TRUE);
+        scrubTime.setVisibility(GONE);
+
+        final StringBuilder formatBuilder = new StringBuilder();
+        final Formatter formatter = new Formatter(formatBuilder, Locale.getDefault());
+        TimeBar timeBar = (TimeBar) progress;
+        timeBar.addListener(new TimeBar.OnScrubListener() {
+            @Override
+            public void onScrubStart(TimeBar timeBar, long position) {
+                scrubTime.setText(Util.getStringForTime(formatBuilder, formatter, position));
+                scrubTime.setVisibility(VISIBLE);
+                scrubTime.bringToFront();
+            }
+
+            @Override
+            public void onScrubMove(TimeBar timeBar, long position) {
+                scrubTime.setText(Util.getStringForTime(formatBuilder, formatter, position));
+                if (scrubTime.getVisibility() != VISIBLE) {
+                    scrubTime.setVisibility(VISIBLE);
+                }
+            }
+
+            @Override
+            public void onScrubStop(TimeBar timeBar, long position, boolean canceled) {
+                scrubTime.setVisibility(GONE);
+            }
+        });
     }
 
     /**
@@ -9385,19 +10094,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void shareVideoDirect(int position, VideoShareHelper.ShareMode mode) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         try {
             ModelClass.Datum item = list.get(position);
             String videoUrl = resolveVideoShareUrl(position);
             if (videoUrl == null) {
+                releaseShareLaunch();
                 Toast.makeText(context, "Video is not available to share", Toast.LENGTH_SHORT).show();
                 return;
             }
             final boolean waShare = mode == VideoShareHelper.ShareMode.WHATSAPP_CHAT
                     || mode == VideoShareHelper.ShareMode.WHATSAPP_STATUS;
             VideoShareHelper.shareVideo(context, activity, videoUrl, item.getTitle(), item.getShareLink(), mode,
-                    () -> Share_Count_Value(shareCountProperty(waShare), item.getPostId()));
+                    () -> {
+                        Share_Count_Value(shareCountProperty(waShare), item.getPostId());
+                        releaseShareLaunch();
+                    });
         } catch (Exception e) {
             e.printStackTrace();
+            releaseShareLaunch();
             Toast.makeText(context, "Unable to share video", Toast.LENGTH_SHORT).show();
         }
     }
@@ -9436,6 +10153,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Half and full videos: Download / Share / Dismiss first, then the share sheet.
      */
     private void showVideoShareChooser(int position, VideoShareLayout layout, View convertView) {
+        long now = SystemClock.elapsedRealtime();
+        if ((now - lastVideoShareUiAtMs) < SHARE_LAUNCH_GUARD_MS) {
+            return;
+        }
+        lastVideoShareUiAtMs = now;
         FullVideoOptionsDialog.show(context, new FullVideoOptionsDialog.Listener() {
             @Override
             public void onDownloadVideo() {
@@ -9475,7 +10197,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             FullVideoShareCardHelper.apply(context, whatsappChatOption);
         }
 
+        final boolean[] sheetActionTaken = {false};
         View.OnClickListener dismissAndShare = actionView -> {
+            if (sheetActionTaken[0]) {
+                return;
+            }
+            sheetActionTaken[0] = true;
             bottomSheet.dismiss();
             VideoShareAction action;
             int viewId = actionView.getId();
@@ -9656,23 +10383,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void launchScreenshotShareIntent(Intent intent, int whatsappMode) {
-        if (whatsappMode == 1) {
-            if (!appInstalledOrNot("com.whatsapp")) {
-                Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show();
-                return;
+        try {
+            if (whatsappMode == 1) {
+                if (!appInstalledOrNot("com.whatsapp")) {
+                    Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                intent.putExtra("jid", "status@broadcast");
+                intent.setPackage("com.whatsapp");
+                context.startActivity(intent);
+            } else if (whatsappMode == 2) {
+                if (!appInstalledOrNot("com.whatsapp")) {
+                    Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                intent.setPackage("com.whatsapp");
+                context.startActivity(intent);
+            } else if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                context.startActivity(Intent.createChooser(intent, "Share Link"));
             }
-            intent.putExtra("jid", "status@broadcast");
-            intent.setPackage("com.whatsapp");
-            context.startActivity(intent);
-        } else if (whatsappMode == 2) {
-            if (!appInstalledOrNot("com.whatsapp")) {
-                Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            intent.setPackage("com.whatsapp");
-            context.startActivity(intent);
-        } else if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-            context.startActivity(Intent.createChooser(intent, "Share Link"));
+        } finally {
+            releaseShareLaunch();
         }
     }
 
@@ -9680,10 +10411,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (list == null || position < 0 || position >= list.size()) {
             return;
         }
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         prepareAndShareFullMagazine(position);
     }
 
     public void shareMagazineImagesFallback(int position) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         prepareAndShareFullMagazine(position);
     }
 
@@ -9695,6 +10432,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         boolean hasImages = images != null && !images.isEmpty();
 
         if (!hasPdf && !hasImages) {
+            releaseShareLaunch();
             Toast.makeText(context, "Magazine pages are not available", Toast.LENGTH_LONG).show();
             return;
         }
@@ -9706,21 +10444,33 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     File pdfFile = downloadMagazinePdfToCache(position, downloadUrl.trim());
                     if (pdfFile != null && pdfFile.exists() && pdfFile.length() > 0) {
                         Uri pdfUri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", pdfFile);
-                        postToMain(() -> launchMagazinePdfShareIntent(position, pdfUri));
+                        postToMain(() -> {
+                            launchMagazinePdfShareIntent(position, pdfUri);
+                            releaseShareLaunch();
+                        });
                         return;
                     }
                 }
                 if (hasImages) {
                     ArrayList<Uri> uris = downloadMagazineImagesToCache(position, images);
                     if (!uris.isEmpty()) {
-                        postToMain(() -> launchMagazineImagesShareIntent(position, uris));
+                        postToMain(() -> {
+                            launchMagazineImagesShareIntent(position, uris);
+                            releaseShareLaunch();
+                        });
                         return;
                     }
                 }
-                postToMain(() -> Toast.makeText(context, "Unable to share magazine", Toast.LENGTH_LONG).show());
+                postToMain(() -> {
+                    releaseShareLaunch();
+                    Toast.makeText(context, "Unable to share magazine", Toast.LENGTH_LONG).show();
+                });
             } catch (Exception e) {
                 e.printStackTrace();
-                postToMain(() -> Toast.makeText(context, "Unable to share magazine", Toast.LENGTH_LONG).show());
+                postToMain(() -> {
+                    releaseShareLaunch();
+                    Toast.makeText(context, "Unable to share magazine", Toast.LENGTH_LONG).show();
+                });
             }
         }).start();
     }
@@ -10204,6 +10954,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void shareYoutubeVideoScreenShot(View finalConvertView2, int position, LinearLayout container, int from, ImageView imageViewItems) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         half_youTubePlayerHolder.relative_half_content = finalConvertView2.findViewById(R.id.relative_half_contents);
         half_youTubePlayerHolder.with_strip_layout = finalConvertView2.findViewById(R.id.with_strips_layout);
         half_youTubePlayerHolder.with_out_strip_layout = finalConvertView2.findViewById(R.id.with_out_strips_layout);
@@ -10217,7 +10970,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if ("4".equalsIgnoreCase(list.get(position).getMediaType())) {
             imageViewItems.setVisibility(View.GONE);
         }
-        String appLink = "https://com.anyNews.anynews/";
         half_youTubePlayerHolder.with_out_strip_layout.setVisibility(View.GONE);
         half_youTubePlayerHolder.with_strip_layout.setVisibility(View.VISIBLE);
         imageViewItems.setVisibility(View.VISIBLE);
@@ -10229,27 +10981,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             public void onFinish() {
                 Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
-                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                intent.setType("image/*");
+                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 intent.putExtra(Intent.EXTRA_TEXT, msg);
                 Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(half_youTubePlayerHolder.relative_half_content);
-                //bitmapResize(b);
                 try {
-                    File file = new File(context.getExternalCacheDir(), "sample.png");
-                    FileOutputStream fOut = new FileOutputStream(file);
-                    b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                    fOut.flush();
-                    fOut.close();
-                    file.setReadable(true, true);
-                    Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                    intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                    List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                    for (ResolveInfo resolveInfo : resInfoList) {
-                        String packageName = resolveInfo.activityInfo.packageName;
-                        context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    }
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    writeScreenshotPngAndAttach(intent, b);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -10267,7 +11005,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         imageViewItems.setVisibility(View.VISIBLE);
                     }
                 }
-                intent.setType("image/*");
                 launchScreenshotShareIntent(intent, from);
                 Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
 
@@ -10276,20 +11013,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void shareExoPlayerVideoScreenShot(View finalConvertView2, int position, int from, PlayerView simpleExoPlayerView, ImageView thaumbnail_for_video, ImageView imageViewExoVideoPlayVideo, ProgressBar progress_bar_for_video) {
+        if (!tryAcquireShareLaunch()) {
+            return;
+        }
         halfVideoExoPlayerHolder.relative_half_content = finalConvertView2.findViewById(R.id.relative_half_contents);
         halfVideoExoPlayerHolder.with_strip_layout = finalConvertView2.findViewById(R.id.with_strips_layout);
         halfVideoExoPlayerHolder.with_out_strip_layout = finalConvertView2.findViewById(R.id.with_out_strips_layout);
         halfVideoExoPlayerHolder.layoutParentReportDetails = finalConvertView2.findViewById(R.id.ll_footer_layout);
         halfVideoExoPlayerHolder.layoutParentDate = finalConvertView2.findViewById(R.id.layoutParentDate);
         TextView textViewWebUrl=finalConvertView2.findViewById(R.id.textViewWebUrl);
-        // half_youTubePlayerHolder.imageViewItems = finalConvertView2.findViewById(R.id.imageViewItem);
         simpleExoPlayerView.setVisibility(View.GONE);
         textViewWebUrl.setVisibility(View.GONE);
         halfVideoExoPlayerHolder.layoutParentReportDetails.setVisibility(View.GONE);
         halfVideoExoPlayerHolder.layoutParentDate.setVisibility(VISIBLE);
         imageViewExoVideoPlayVideo.setVisibility(VISIBLE);
         thaumbnail_for_video.setVisibility(VISIBLE);
-        String appLink = "https://com.anyNews.anynews/";
         halfVideoExoPlayerHolder.with_out_strip_layout.setVisibility(View.GONE);
         halfVideoExoPlayerHolder.with_strip_layout.setVisibility(View.VISIBLE);
         String mInvitationUrl = list.get(position).getShareLink();
@@ -10301,27 +11039,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             public void onFinish() {
                 Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType("text/plain");
-                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
+                intent.setType("image/*");
+                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 intent.putExtra(Intent.EXTRA_TEXT, msg);
                 Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(halfVideoExoPlayerHolder.relative_half_content);
-                //bitmapResize(b);
                 try {
-                    File file = new File(context.getExternalCacheDir(), "sample.png");
-                    FileOutputStream fOut = new FileOutputStream(file);
-                    b.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-                    fOut.flush();
-                    fOut.close();
-                    file.setReadable(true, true);
-                    Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-                    intent.putExtra(Intent.EXTRA_STREAM, photoURI);
-                    List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(intent, "Share Link"), PackageManager.MATCH_DEFAULT_ONLY);
-                    for (ResolveInfo resolveInfo : resInfoList) {
-                        String packageName = resolveInfo.activityInfo.packageName;
-                        context.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    }
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    writeScreenshotPngAndAttach(intent, b);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -10347,7 +11071,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
                 }
-                intent.setType("image/*");
                 launchScreenshotShareIntent(intent, from);
                 Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
 

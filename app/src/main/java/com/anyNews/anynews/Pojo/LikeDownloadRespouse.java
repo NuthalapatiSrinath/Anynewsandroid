@@ -22,6 +22,9 @@ public class LikeDownloadRespouse implements Serializable {
     @SerializedName("shares")
     @Expose
     private Integer shares;
+    @SerializedName("whatsapp_shares")
+    @Expose
+    private Integer whatsappShares;
     @SerializedName("comments")
     @Expose
     private Integer comments;
@@ -64,6 +67,14 @@ public class LikeDownloadRespouse implements Serializable {
 
     public void setShares(Integer shares) {
         this.shares = shares;
+    }
+
+    public Integer getWhatsappShares() {
+        return whatsappShares;
+    }
+
+    public void setWhatsappShares(Integer whatsappShares) {
+        this.whatsappShares = whatsappShares;
     }
 
     public Integer getComments() {

@@ -98,8 +98,7 @@ public class Districs extends AppCompatActivity {
                     Intent intent = new Intent(Districs.this, States.class);
                     startActivity(intent);
                 } else {
-                    Intent intent = new Intent(Districs.this, LanguageActivity.class);
-                    startActivity(intent);
+                    startActivity(LanguageActivity.createChangeLanguageIntent(Districs.this));
                 }
 
             }
@@ -268,7 +267,7 @@ public class Districs extends AppCompatActivity {
         if (!TextUtils.isEmpty(message)) {
             Toast.makeText(Districs.this, message, Toast.LENGTH_LONG).show();
         }
-        Intent intent = new Intent(Districs.this, LanguageActivity.class);
+        Intent intent = LanguageActivity.createChangeLanguageIntent(Districs.this);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
         finish();
@@ -314,8 +313,7 @@ public class Districs extends AppCompatActivity {
             Intent intent = new Intent(Districs.this, States.class);
             startActivity(intent);
         } else {
-            Intent intent = new Intent(Districs.this, LanguageActivity.class);
-            startActivity(intent);
+            startActivity(LanguageActivity.createChangeLanguageIntent(Districs.this));
         }
     }
 }

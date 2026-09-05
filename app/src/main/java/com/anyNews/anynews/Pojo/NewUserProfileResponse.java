@@ -80,6 +80,11 @@ public class NewUserProfileResponse {
         @Expose
         private Long totalViews;
 
+        /** Soft lag-payment notice (additive). */
+        @SerializedName("upcoming_payment_message")
+        @Expose
+        private String upcomingPaymentMessage;
+
         public Long getComments() {
             return comments != null ? comments : 0L;
         }
@@ -94,6 +99,14 @@ public class NewUserProfileResponse {
 
         public void setTotalViews(Long totalViews) {
             this.totalViews = totalViews;
+        }
+
+        public String getUpcomingPaymentMessage() {
+            return upcomingPaymentMessage;
+        }
+
+        public void setUpcomingPaymentMessage(String upcomingPaymentMessage) {
+            this.upcomingPaymentMessage = upcomingPaymentMessage;
         }
 
         public String getEmail() {

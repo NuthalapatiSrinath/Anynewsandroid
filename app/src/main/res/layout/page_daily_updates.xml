@@ -1,0 +1,1167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Daily Updates — match IMAGE 1 mock (neon glow borders, 3D icons, CTA footers).
+  Assets: du_bg_* full-bleed card art (drawable-xxhdpi). Border via foreground stroke only.
+  Phone layout remains 2x3 (3x2 too cramped); chrome matches IMAGE 1.
+  Stock Market row sits below Flash News.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/daily_updates_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF070A14"
+    android:clickable="true"
+    android:focusable="true">
+
+    <ScrollView
+        android:id="@+id/du_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="18dp">
+
+            <!-- Header: bell (system-notif off only) | localized title | balance spacer -->
+            <LinearLayout
+                android:id="@+id/du_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="10dp">
+
+                <FrameLayout
+                    android:id="@+id/du_bell_wrap"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/du_btn_bell"
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Notifications"
+                        android:padding="3dp"
+                        android:src="@drawable/ic_settings_bell"
+                        android:tint="#FFFFFFFF" />
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:layout_gravity="top|end"
+                        android:layout_marginTop="1dp"
+                        android:layout_marginEnd="1dp"
+                        android:background="@drawable/bg_du_notif_dot" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:layout_width="15dp"
+                            android:layout_height="15dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_du_lightning_orange" />
+
+                        <TextView
+                            android:id="@+id/du_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="5dp"
+                            android:includeFontPadding="false"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="17sp"
+                            android:textStyle="bold"
+                            tools:text="డైలీ అప్‌డేట్స్" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/du_subtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:includeFontPadding="false"
+                        android:textColor="#FFC8D0DC"
+                        android:textSize="11sp"
+                        tools:text="రోజువారీ ముఖ్య సమాచారం" />
+                </LinearLayout>
+
+                <!-- Keeps title centered after gear removal; invisible when bell shows -->
+                <View
+                    android:id="@+id/du_header_end_spacer"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp" />
+            </LinearLayout>
+
+            <!-- 2×3 grid host (rows rebuilt in DailyUpdatesController).
+                 Each card: left 3D art (bg), right text column, footer link pinned. -->
+            <LinearLayout
+                android:id="@+id/du_grid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp">
+
+                <!-- Weather (blue) -->
+                <FrameLayout
+                    android:id="@+id/du_card_weather_wrap"
+                    android:layout_width="0dp"
+                    android:layout_height="120dp"
+                    android:layout_margin="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_du_card_weather"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
+                    android:elevation="4dp"
+                    android:foreground="@drawable/bg_du_stroke_weather"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/du_card_weather"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="2dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/du_bg_weather" />
+
+                    <LinearLayout
+                        android:id="@+id/du_weather_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:paddingStart="64dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="8dp">
+
+                        <TextView
+                            android:id="@+id/du_weather_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:includeFontPadding="false"
+                            android:text="వాతావరణం"
+                            android:textColor="#FFEAF4FF"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/du_weather_temp"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:textColor="#FFFFFFFF"
+                                android:textSize="24sp"
+                                android:textStyle="bold"
+                                tools:text="27°C" />
+
+                            <TextView
+                                android:id="@+id/du_weather_condition"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:textColor="#FFD6E8FF"
+                                android:textSize="10sp"
+                                tools:text="మేఘావృతం" />
+
+                            <TextView
+                                android:id="@+id/du_weather_summary"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:lineSpacingExtra="1dp"
+                                android:maxLines="2"
+                                android:textColor="#FFEAF2FF"
+                                android:textSize="9sp"
+                                tools:text="గరిష్టం 29°C | కనిష్టం 23°C\nతేమ 64%" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp"
+                            android:background="@drawable/bg_du_hairline_weather" />
+
+                        <TextView
+                            android:id="@+id/du_weather_details"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end"
+                            android:includeFontPadding="false"
+                            android:text="వివరాలు చూడండి →"
+                            android:textColor="#FF8EC8FF"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:visibility="visible" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Fuel (green) -->
+                <FrameLayout
+                    android:id="@+id/du_card_fuel_wrap"
+                    android:layout_width="0dp"
+                    android:layout_height="120dp"
+                    android:layout_margin="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_du_card_fuel"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
+                    android:elevation="4dp"
+                    android:foreground="@drawable/bg_du_stroke_fuel"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/du_card_fuel"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="2dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/du_bg_fuel" />
+
+                    <LinearLayout
+                        android:id="@+id/du_fuel_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:paddingStart="64dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="8dp">
+
+                        <TextView
+                            android:id="@+id/du_fuel_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="పెట్రోల్ &amp; డీజిల్"
+                            android:textColor="#FFE8FFE8"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/du_fuel_petrol"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:textColor="#FFFFFFFF"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                tools:text="పెట్రోల్  ₹104.20" />
+
+                            <TextView
+                                android:id="@+id/du_fuel_petrol_change"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:textSize="9sp"
+                                tools:text="▼ 0.15"
+                                tools:textColor="#FF4ADE80" />
+
+                            <TextView
+                                android:id="@+id/du_fuel_diesel"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:textColor="#FFFFFFFF"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                tools:text="డీజిల్  ₹92.80" />
+
+                            <TextView
+                                android:id="@+id/du_fuel_diesel_change"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:textSize="9sp"
+                                tools:text="▼ 0.12"
+                                tools:textColor="#FF4ADE80" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/du_fuel_summary"
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:visibility="gone" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp"
+                            android:background="@drawable/bg_du_hairline_fuel" />
+
+                        <TextView
+                            android:id="@+id/du_fuel_details"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end"
+                            android:includeFontPadding="false"
+                            android:text="వివరాలు చూడండి →"
+                            android:textColor="#FF6EE7A0"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:visibility="visible" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Gold (amber) -->
+                <FrameLayout
+                    android:id="@+id/du_card_gold_wrap"
+                    android:layout_width="0dp"
+                    android:layout_height="120dp"
+                    android:layout_margin="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_du_card_gold"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
+                    android:elevation="4dp"
+                    android:foreground="@drawable/bg_du_stroke_gold"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/du_card_gold"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="2dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/du_bg_gold" />
+
+                    <LinearLayout
+                        android:id="@+id/du_gold_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:paddingStart="64dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="8dp">
+
+                        <TextView
+                            android:id="@+id/du_gold_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:text="బంగారం &amp; వెండి"
+                            android:textColor="#FFFFE8C8"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/du_gold_24k"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:textColor="#FFFFFFFF"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                tools:text="24K  ₹—" />
+
+                            <TextView
+                                android:id="@+id/du_gold_24k_change"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:textSize="9sp"
+                                tools:text="▲ 350"
+                                tools:textColor="#FF4ADE80" />
+
+                            <TextView
+                                android:id="@+id/du_gold_silver"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:textColor="#FFFFFFFF"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                tools:text="వెండి  ₹—" />
+
+                            <TextView
+                                android:id="@+id/du_gold_silver_change"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:textSize="9sp"
+                                tools:text="▼ 500"
+                                tools:textColor="#FFF87171" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/du_gold_summary"
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:visibility="gone" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp"
+                            android:background="@drawable/bg_du_hairline_gold" />
+
+                        <TextView
+                            android:id="@+id/du_gold_details"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end"
+                            android:includeFontPadding="false"
+                            android:text="వివరాలు చూడండి →"
+                            android:textColor="#FFFFB86C"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- TTD (purple) -->
+                <FrameLayout
+                    android:id="@+id/du_card_ttd_wrap"
+                    android:layout_width="0dp"
+                    android:layout_height="120dp"
+                    android:layout_margin="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_du_card_ttd"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
+                    android:elevation="4dp"
+                    android:foreground="@drawable/bg_du_stroke_ttd"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/du_card_ttd"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="2dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/du_bg_ttd" />
+
+                    <LinearLayout
+                        android:id="@+id/du_ttd_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:paddingStart="64dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="8dp">
+
+                        <TextView
+                            android:id="@+id/du_ttd_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:includeFontPadding="false"
+                            android:text="టీటీడీ సమాచారం"
+                            android:textColor="#FFF0E8FF"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/du_ttd_bullets"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:lineSpacingExtra="1dp"
+                                android:maxLines="4"
+                                android:textColor="#FFEDE4FF"
+                                android:textSize="10sp"
+                                tools:text="• దర్శన సమాచారం\n• సేవా టికెట్లు\n• ప్రత్యేక ప్యాకేజీలు\n• పండుగలు" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp"
+                            android:background="@drawable/bg_du_hairline_ttd" />
+
+                        <TextView
+                            android:id="@+id/du_ttd_details"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end"
+                            android:includeFontPadding="false"
+                            android:text="వివరాలు చూడండి →"
+                            android:textColor="#FFC4B5FD"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Jobs (navy) -->
+                <FrameLayout
+                    android:id="@+id/du_card_jobs_wrap"
+                    android:layout_width="0dp"
+                    android:layout_height="120dp"
+                    android:layout_margin="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_du_card_jobs"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
+                    android:elevation="4dp"
+                    android:foreground="@drawable/bg_du_stroke_jobs"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/du_card_jobs"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="2dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/du_bg_jobs" />
+
+                    <LinearLayout
+                        android:id="@+id/du_jobs_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:paddingStart="64dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="8dp">
+
+                        <TextView
+                            android:id="@+id/du_jobs_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:includeFontPadding="false"
+                            android:text="ఉద్యోగాలు"
+                            android:textColor="#FFE8F4FF"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/du_jobs_count"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:text="0"
+                                android:textColor="#FFFFFFFF"
+                                android:textSize="24sp"
+                                android:textStyle="bold"
+                                tools:text="12" />
+
+                            <TextView
+                                android:id="@+id/du_jobs_label"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:text="కొత్త ఉద్యోగాలు"
+                                android:textColor="#FFC8D8F0"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp"
+                            android:background="@drawable/bg_du_hairline_jobs" />
+
+                        <TextView
+                            android:id="@+id/du_jobs_details"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end"
+                            android:includeFontPadding="false"
+                            android:text="ఉద్యోగాలు చూడండి →"
+                            android:textColor="#FF7DD3FC"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Panchangam (teal) -->
+                <FrameLayout
+                    android:id="@+id/du_card_panchangam_wrap"
+                    android:layout_width="0dp"
+                    android:layout_height="120dp"
+                    android:layout_margin="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_du_card_panchangam"
+                    android:clipChildren="true"
+                    android:clipToPadding="true"
+                    android:elevation="4dp"
+                    android:foreground="@drawable/bg_du_stroke_panchangam"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/du_card_panchangam"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="2dp"
+                        android:contentDescription="@null"
+                        android:scaleType="fitXY"
+                        android:src="@drawable/du_bg_panchangam" />
+
+                    <LinearLayout
+                        android:id="@+id/du_panchangam_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:paddingStart="64dp"
+                        android:paddingTop="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="8dp">
+
+                        <TextView
+                            android:id="@+id/du_panchangam_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:includeFontPadding="false"
+                            android:text="పంచాంగం"
+                            android:textColor="#FFE0FFF8"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center_vertical"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/du_panchangam_copy"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:lineSpacingExtra="1dp"
+                                android:maxLines="4"
+                                android:text="తిథి, నక్షత్రం,\nయోగం, కరణం &amp;\nశుభ సమయాలు"
+                                android:textColor="#FFE8FFF8"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp"
+                            android:background="@drawable/bg_du_hairline_panchangam" />
+
+                        <TextView
+                            android:id="@+id/du_panchangam_details"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="end"
+                            android:includeFontPadding="false"
+                            android:text="వివరాలు చూడండి →"
+                            android:textColor="#FF5EEAD4"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </FrameLayout>
+
+                <!-- Hidden legacy placeholders -->
+                <ImageView
+                    android:id="@+id/du_card_shubha"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/du_card_festivals"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/du_card_district"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Mana Zilla: state art is full-bleed card bg (AP/TG switched in code). -->
+            <FrameLayout
+                android:id="@+id/du_mana_zilla"
+                android:layout_width="match_parent"
+                android:layout_height="124dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_du_card_clip"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:elevation="4dp"
+                android:foreground="?attr/selectableItemBackground">
+
+                <ImageView
+                    android:id="@+id/du_mana_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_margin="3dp"
+                    android:contentDescription="@null"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/du_bg_mana_zilla_ap" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:paddingStart="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="14dp"
+                    android:paddingBottom="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/du_mana_title"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:includeFontPadding="false"
+                            android:shadowColor="#99000000"
+                            android:shadowDx="0"
+                            android:shadowDy="1"
+                            android:shadowRadius="2"
+                            android:textColor="#FFFFE4F0"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:maxLines="2"
+                            android:ellipsize="end" />
+
+                        <LinearLayout
+                            android:id="@+id/du_mana_change_row"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="6dp"
+                            android:paddingTop="3dp"
+                            android:paddingEnd="2dp"
+                            android:paddingBottom="3dp">
+
+                            <TextView
+                                android:id="@+id/du_mana_change"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:shadowColor="#99000000"
+                                android:shadowDx="0"
+                                android:shadowDy="1"
+                                android:shadowRadius="2"
+                                android:textColor="#FFFFD0E4"
+                                android:textSize="10sp" />
+
+                            <ImageView
+                                android:id="@+id/du_mana_change_icon"
+                                android:layout_width="14dp"
+                                android:layout_height="14dp"
+                                android:layout_marginStart="2dp"
+                                android:contentDescription="@null"
+                                android:src="@drawable/ic_local_feed_dropdown" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Floating headlines — no dark shadow strip; pad clears left map art -->
+                    <LinearLayout
+                        android:id="@+id/du_mana_news_block"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginTop="4dp"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:orientation="vertical"
+                        android:paddingStart="100dp"
+                        android:paddingEnd="8dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/du_mana_headline_label"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:includeFontPadding="false"
+                                android:shadowColor="#99000000"
+                                android:shadowDx="0"
+                                android:shadowDy="1"
+                                android:shadowRadius="2"
+                                android:textColor="#FFFFE8F0"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/du_mana_live"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="6dp"
+                                android:background="@drawable/bg_du_live_badge"
+                                android:includeFontPadding="false"
+                                android:paddingStart="5dp"
+                                android:paddingTop="1dp"
+                                android:paddingEnd="5dp"
+                                android:paddingBottom="1dp"
+                                android:text="+ LIVE"
+                                android:textColor="#FFFFFFFF"
+                                android:textSize="8sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/du_mana_news1"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:shadowColor="#AA000000"
+                            android:shadowDx="0"
+                            android:shadowDy="1"
+                            android:shadowRadius="2.5"
+                            android:textColor="#FFFFE8F0"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/du_mana_news2"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:shadowColor="#AA000000"
+                            android:shadowDx="0"
+                            android:shadowDy="1"
+                            android:shadowRadius="2.5"
+                            android:textColor="#FFFFE8F0"
+                            android:textSize="11sp" />
+
+                        <!-- Legacy id kept gone so any stale findViewById stays safe -->
+                        <TextView
+                            android:id="@+id/du_mana_news"
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- Flash News ticker -->
+            <FrameLayout
+                android:id="@+id/du_flash_strip"
+                android:layout_width="match_parent"
+                android:layout_height="38dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_du_card_clip_soft"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:elevation="3dp"
+                android:foreground="@drawable/bg_du_stroke_flash">
+
+                <ImageView
+                    android:id="@+id/du_flash_bg"
+                    android:layout_width="56dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="6dp"
+                    android:layout_marginTop="3dp"
+                    android:layout_marginBottom="3dp"
+                    android:contentDescription="@null"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/du_bg_flash_news" />
+
+                <LinearLayout
+                    android:id="@+id/du_flash_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="34dp"
+                    android:paddingEnd="10dp">
+
+                    <TextView
+                        android:id="@+id/du_flash_chip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:includeFontPadding="false"
+                        android:text="ఫ్లాష్ న్యూస్"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/du_flash_live"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_du_live_badge"
+                        android:includeFontPadding="false"
+                        android:paddingStart="5dp"
+                        android:paddingTop="1dp"
+                        android:paddingEnd="5dp"
+                        android:paddingBottom="1dp"
+                        android:text="+ LIVE"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="8sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/du_flash_headline"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:ellipsize="marquee"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:includeFontPadding="false"
+                        android:marqueeRepeatLimit="marquee_forever"
+                        android:singleLine="true"
+                        android:text="భారీ వర్షాలు · కొత్త రైళ్లు ప్రారంభం · రాష్ట్ర వార్తలు"
+                        android:textColor="#FFFFE8E8"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:id="@+id/du_flash_more"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:includeFontPadding="false"
+                        android:text="మరిన్ని →"
+                        android:textColor="#FFFF8A8A"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </FrameLayout>
+
+
+            <!-- Stock Market row — art left only; all text/CTA on the right. -->
+            <FrameLayout
+                android:id="@+id/du_stock_strip"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_du_card_stock"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:elevation="4dp"
+                android:foreground="@drawable/bg_du_stroke_stock"
+                android:visibility="gone">
+
+                <!-- Candlestick art LEFT only — text column starts after it. -->
+                <ImageView
+                    android:id="@+id/du_stock_bg"
+                    android:layout_width="128dp"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="start|center_vertical"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="2dp"
+                    android:contentDescription="@null"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/du_bg_stock" />
+
+                <LinearLayout
+                    android:id="@+id/du_stock_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:paddingStart="136dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="10dp">
+
+                    <TextView
+                        android:id="@+id/du_stock_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:includeFontPadding="false"
+                        android:text="స్టాక్ మార్కెట్"
+                        android:textColor="#FFE8ECFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/du_stock_subtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:ellipsize="end"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:textColor="#FFC7D2FE"
+                        android:textSize="10sp"
+                        tools:text="నిఫ్టీ · సెన్సెక్స్ · షేర్లు" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginTop="4dp"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/du_stock_nifty"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            tools:text="నిఫ్టీ 24175 ▲" />
+
+                        <TextView
+                            android:id="@+id/du_stock_sensex"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:ellipsize="end"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            tools:text="సెన్సెక్స్ 79000 ▲" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/du_stock_details"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:includeFontPadding="false"
+                        android:text="వివరాలు చూడండి →"
+                        android:textColor="#FFA5B4FC"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- Legacy IDs (gone placeholders for any stale findViewById) -->
+            <TextView
+                android:id="@+id/du_quick_title"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/du_quick_see_all"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/du_offers_title"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/du_offers_see_all"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+
+            <HorizontalScrollView
+                android:id="@+id/du_offers_scroll"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

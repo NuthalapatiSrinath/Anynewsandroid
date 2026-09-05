@@ -213,6 +213,22 @@ public class EncreptionRequest {
     @Expose
     private Integer pn_title_size_sp;
 
+    @SerializedName("live_readers_enabled")
+    @Expose
+    private Boolean live_readers_enabled;
+
+    @SerializedName("live_readers_window_minutes")
+    @Expose
+    private Integer live_readers_window_minutes;
+
+    @SerializedName("live_readers_show_seconds")
+    @Expose
+    private Integer live_readers_show_seconds;
+
+    @SerializedName("live_readers_min_count")
+    @Expose
+    private Integer live_readers_min_count;
+
     public boolean isAllow_screen_capture() {
         return allow_screen_capture;
     }
@@ -393,6 +409,22 @@ public class EncreptionRequest {
 
     public void setActive_match(ActiveMatch active_match) {
         this.active_match = active_match;
+    }
+
+    public Boolean getLive_readers_enabled() {
+        return live_readers_enabled;
+    }
+
+    public Integer getLive_readers_window_minutes() {
+        return live_readers_window_minutes;
+    }
+
+    public Integer getLive_readers_show_seconds() {
+        return live_readers_show_seconds;
+    }
+
+    public Integer getLive_readers_min_count() {
+        return live_readers_min_count;
     }
 
 }

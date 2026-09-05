@@ -16,6 +16,8 @@ import androidx.annotation.Nullable;
 
 import com.google.gson.Gson;
 
+import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
+
 
 
 import java.io.BufferedReader;
@@ -110,8 +112,13 @@ public final class PanchangYearCache {
 
 
 
+    /** Public for repository when switching admin calendar source. */
     @Nullable
+    public static PanchangModels.YearPack loadFromAssetsPublic(Context context, int year) {
+        return loadFromAssets(context, year);
+    }
 
+    @Nullable
     private static PanchangModels.YearPack loadFromAssets(Context context, int year) {
 
         String assetPath = "panchang/hyderabad_" + year + ".json";
@@ -264,26 +271,18 @@ public final class PanchangYearCache {
 
 
 
-        // Always prefer bundled Hyderabad ProKerala pack for every user.
-
-        PanchangModels.YearPack asset = loadFromAssets(context, year);
-
-        if (asset != null) {
-
-            if (asset.cacheKey == null) {
-
-                asset.cacheKey = key;
-
+        // Bundled ProKerala pack (Way2-like). Skip when admin selected astronomical.
+        if (!ProfileHubConfigHelper.prefersAstronomicalCalendar(context)) {
+            PanchangModels.YearPack asset = loadFromAssets(context, year);
+            if (asset != null) {
+                if (asset.cacheKey == null) {
+                    asset.cacheKey = key;
+                }
+                memoryKey = key;
+                memoryPack = asset;
+                save(context, asset);
+                return asset;
             }
-
-            memoryKey = key;
-
-            memoryPack = asset;
-
-            save(context, asset);
-
-            return asset;
-
         }
 
         return null;

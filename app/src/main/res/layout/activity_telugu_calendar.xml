@@ -14,6 +14,17 @@
         android:background="#000000" />
 
     <!--
+      Standalone activity only: Panchangam|Raasi chrome.
+      Do NOT set android:id on include — that would replace calendar_ttd_toggle_root
+      and break findViewById. HomePage embeds its own sibling toggle instead.
+    -->
+    <include
+        layout="@layout/layout_calendar_ttd_toggle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top" />
+
+    <!--
       Same blue circular Share as Special/full posts (FlipperAdapter full_image_share_bg
       → R.drawable.ic_share_full). Slow blink via R.anim.blink_share in controller.
       Bottom-right of content, above the HomePage footer tab bar.
@@ -25,7 +36,7 @@
         android:layout_height="48dp"
         android:layout_gravity="end|bottom"
         android:layout_marginEnd="@dimen/_20sdp"
-        android:layout_marginBottom="64dp"
+        android:layout_marginBottom="10dp"
         android:contentDescription="@string/telugu_calendar_share_day"
         android:padding="12dp"
         android:scaleType="centerInside"

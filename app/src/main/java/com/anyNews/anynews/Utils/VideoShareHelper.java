@@ -58,6 +58,9 @@ public class VideoShareHelper {
                                     OnShareCompleteListener listener) {
         if (videoUrl == null || videoUrl.trim().isEmpty()) {
             Toast.makeText(context, "Video is not available to share", Toast.LENGTH_SHORT).show();
+            if (listener != null) {
+                listener.onShareStarted();
+            }
             return;
         }
 
@@ -78,6 +81,12 @@ public class VideoShareHelper {
             try {
                 PreparedShare prepared = prepareShareableVideo(context, sourceUrl, statusMessage, mainHandler, true);
                 if (prepared == null) {
+                    mainHandler.post(() -> {
+                        dismissProgress();
+                        if (listener != null) {
+                            listener.onShareStarted();
+                        }
+                    });
                     return;
                 }
                 mainHandler.post(() -> {
@@ -92,6 +101,9 @@ public class VideoShareHelper {
                 mainHandler.post(() -> {
                     dismissProgress();
                     Toast.makeText(context, "Unable to prepare video for sharing", Toast.LENGTH_SHORT).show();
+                    if (listener != null) {
+                        listener.onShareStarted();
+                    }
                 });
             }
         }, "video-share");

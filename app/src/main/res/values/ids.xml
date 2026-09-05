@@ -6,4 +6,8 @@
     <item name="tag_half_body_media_h" type="id" />
     <item name="tag_half_body_title_weight" type="id" />
     <item name="tag_half_body_animator" type="id" />
+    <!-- Used when injecting SPONSORED AD on half layouts without XML label -->
+    <item name="sponsored_ad_label" type="id" />
+    <!-- Full-bleed sponsored creative: AD badge top-right -->
+    <item name="sponsored_ad_badge" type="id" />
 </resources>

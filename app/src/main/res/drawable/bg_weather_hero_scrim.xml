@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lighter top→bottom scrim so hero photo reads brighter while white text stays readable. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#33000000"
+        android:centerColor="#4D000000"
+        android:endColor="#73000000"
+        android:type="linear" />
+</shape>

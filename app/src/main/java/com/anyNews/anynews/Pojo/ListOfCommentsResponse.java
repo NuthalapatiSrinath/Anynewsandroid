@@ -44,6 +44,26 @@ public class ListOfCommentsResponse implements Serializable {
         @Expose
         private String user_profile_pic;
 
+        @SerializedName("email")
+        @Expose
+        private String email;
+
+        @SerializedName("district")
+        @Expose
+        private String district;
+
+        @SerializedName("user_comment_count")
+        @Expose
+        private Integer userCommentCount;
+
+        @SerializedName("likes")
+        @Expose
+        private Integer likes;
+
+        @SerializedName("liked_by_me")
+        @Expose
+        private Boolean likedByMe;
+
         public String getEmail() {
             return email;
         }
@@ -52,10 +72,37 @@ public class ListOfCommentsResponse implements Serializable {
             this.email = email;
         }
 
-        @SerializedName("email")
-        @Expose
-        private String email;
+        public String getDistrict() {
+            return district;
+        }
 
+        public void setDistrict(String district) {
+            this.district = district;
+        }
+
+        public Integer getUserCommentCount() {
+            return userCommentCount;
+        }
+
+        public void setUserCommentCount(Integer userCommentCount) {
+            this.userCommentCount = userCommentCount;
+        }
+
+        public Integer getLikes() {
+            return likes;
+        }
+
+        public void setLikes(Integer likes) {
+            this.likes = likes;
+        }
+
+        public Boolean getLikedByMe() {
+            return likedByMe;
+        }
+
+        public void setLikedByMe(Boolean likedByMe) {
+            this.likedByMe = likedByMe;
+        }
 
         public String getUser_profile_pic() {
             return user_profile_pic;

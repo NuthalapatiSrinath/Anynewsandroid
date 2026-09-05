@@ -683,6 +683,68 @@
 
     </LinearLayout>
 
+    <!-- From–to date filter (reporter own articles) -->
+    <LinearLayout
+        android:id="@+id/posts_date_filter_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/posts_date_from"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_profile_guest_card"
+            android:gravity="center"
+            android:hint="From"
+            android:textColor="@color/warm_grey"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/posts_date_to"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_profile_guest_card"
+            android:gravity="center"
+            android:hint="To"
+            android:textColor="@color/warm_grey"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/posts_date_apply"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:background="@drawable/post_green_detailes"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="Apply"
+            android:textColor="@color/on_brand_text"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/posts_date_clear"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="Clear"
+            android:textColor="@color/greyish"
+            android:textSize="12sp" />
+    </LinearLayout>
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"

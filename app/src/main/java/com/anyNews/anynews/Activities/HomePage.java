@@ -143,8 +143,10 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.anyNews.anynews.Ui.HomeFeedRevealView;
+import com.anyNews.anynews.Utils.CalendarRaasiLabels;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
+import com.anyNews.anynews.Utils.AdPreloader;
 import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
@@ -163,11 +165,13 @@ import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.MovementMethodTV;
 import com.anyNews.anynews.Utils.MyUtils;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.ReporterPhotoReminderHelper;
 import com.anyNews.anynews.Utils.OpenPathCache;
 import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
+import com.anyNews.anynews.Utils.LiveReadersConfig;
 import com.anyNews.anynews.Utils.FlipAdWorkGate;
 import com.anyNews.anynews.Utils.NativeAdCacheCoordinator;
 import com.anyNews.anynews.Utils.OfflinePackPrefetcher;
@@ -267,6 +271,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public static final String EXTRA_FOOTER_TAB = "extra_footer_tab";
 
     private static final String TAG = "HomePage :";
+    private static final String ADS_TAG = "ANYNEWS_ADS";
     LinearLayout floating_action_button, search_icon;
     NeomorphFrameLayout neo_profile, neo_post_artical, neo_home, neo_inner_home, neo_inner_profile;
     long mBackPressed;
@@ -447,14 +452,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     List<ListOfCommentsResponse.Datum> comment_chooseLanguage_models;
 
     ProgressBar comment_progress;
-    TextView comment_totoal_count,textViewCommentsTag;
+    TextView comment_totoal_count, textViewCommentsTag, comment_article_title;
     ImageView commet_close;
     EditText leave_comment_white;
     LinearLayout linear_no_comment_page;
     RelativeLayout layoutCommentProgressbar;
     LinearLayout reply_context_layout;
     TextView reply_context_text;
+    TextView reply_context_label;
     ImageView reply_context_cancel;
+    ImageView comment_gif_btn;
+    ImageView comment_smiley_btn;
+    TextView comment_lang_btn;
+    TextView emoji_chip_1, emoji_chip_2, emoji_chip_3, emoji_chip_4, emoji_chip_5;
+    String replyParentSnippet = "";
+    String replyParentUserName = "";
+    MailAdapter commentMailAdapter;
     Long replyParentCommentId = null;
     Long pendingExpandParentId = null;
     public  boolean adImpress=false;
@@ -489,6 +502,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean calendarModeActive = false;
     @Nullable private FrameLayout homeCalendarHost;
     @Nullable private TeluguCalendarController calendarController;
+    /**
+     * Footer Daily Updates mode: embedded mock page above bottom nav
+     * (same stay-on-HomePage pattern as Calendar). Mutually exclusive with
+     * calendar / feed visibility in the content host.
+     */
+    private boolean dailyUpdatesModeActive = false;
+    @Nullable private FrameLayout homeDailyUpdatesHost;
+    @Nullable private DailyUpdatesController dailyUpdatesController;
+    /** Calendar | Panchangam / Raasi top chrome (sibling of calendar host — always above FlipView). */
+    @Nullable private View homeCalendarTtdToggleRoot;
+    @Nullable private View homeCalendarTtdThumb;
+    @Nullable private TextView homeCalendarTtdSegCalendar;
+    @Nullable private TextView homeCalendarTtdSegTtd;
+    private final android.os.Handler homeCalendarTtdHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean homeCalendarTtdUserHidden;
+    private boolean homeCalendarTtdAutoHidePending;
+    private final Runnable homeCalendarTtdAutoHideRunnable = this::runHomeCalendarTtdAutoHide;
     /**
      * Offline chrome (pill) is active for this session transition. Prefer over live
      * {@link #isDeviceOnline()} for hide-on-tap so mid-session Wi‑Fi loss does not
@@ -787,6 +818,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private Animator homeModeChromeAnimator;
     private static final long HOME_MODE_THUMB_ANIM_MS = 300L;
     private static final long HOME_MODE_CHROME_ANIM_MS = 280L;
+
+    /**
+     * Mana Zilla → pure Local feed ({@code category_id=-1}). Back returns to News main
+     * feed (not Daily Updates). Shows Local|district chrome with ~3s auto-hide.
+     */
+    private boolean localFeedFromDailyUpdates = false;
+    @Nullable private View localFeedChromeRoot;
+    @Nullable private View localFeedPill;
+    @Nullable private View localFeedThumb;
+    @Nullable private TextView localFeedSegLocal;
+    @Nullable private TextView localFeedSegDistrict;
+    @Nullable private View localFeedBackBtn;
+    @Nullable private TextView localFeedContextLabel;
+    @Nullable private View localFeedDropdownRow;
+    private boolean localFeedChromeUserHidden = false;
+    private boolean localFeedChromeAutoHidePending = false;
+    private final Handler localFeedChromeAutoHideHandler =
+            new Handler(Looper.getMainLooper());
+    private final Runnable localFeedChromeAutoHideRunnable =
+            this::runLocalFeedChromeAutoHide;
+    @Nullable private Animator localFeedChromeAnimator;
     private final List<ModelClass.Datum> homeBookmarkItems = new ArrayList<>();
     private HomeBookmarksAdapter homeBookmarksAdapter;
     private int homeBookmarksReloadGen = 0;
@@ -874,6 +926,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         AdMobInitializer.initializeFromManifestIfNeeded(this);
+        // Warm share/house-ad seat early (idle after first frames; does not show here).
+        try {
+            adPrefetchHandler.postDelayed(
+                    () -> AdPreloader.get().prefetch(getApplicationContext()), 1_200L);
+        } catch (Exception ignored) {
+        }
 //        RequestConfiguration.Builder requestConfiguration=new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("CEB66515B6C9B2ECD92786955DF252CD"));
 //        MobileAds.setRequestConfiguration(requestConfiguration.build());
 
@@ -914,6 +972,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         mFlipView = findViewById(R.id.flip_view);
         homeCalendarHost = findViewById(R.id.home_calendar_host);
+        homeDailyUpdatesHost = findViewById(R.id.home_daily_updates_host);
+        setupHomeCalendarTtdToggle();
         local_distic_name = findViewById(R.id.local_distic_name);
         selelcted_local_distic_name = findViewById(R.id.selelcted_local_distic_name);
         /*post_artical_text = findViewById(R.id.post_artical_text);*/
@@ -989,6 +1049,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         setupHomeGlassHeader();
         // Top News|Bookmarks pill — show immediately (esp. offline cold start), default News.
         setupNewsBookmarksToggle();
+        setupLocalFeedChrome();
         bindOfflinePackPrefetcherHost();
 
         Window window = getWindow();
@@ -1357,17 +1418,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 comment_page.setVisibility(View.GONE);
 
 
-                last_post_id = 0;
-                skip = 0;
-                actual_skip = 0;
-                category_id = -1;
-                requestPostition = 1;
-                requestSize = 0;
-                isFromLocalArticles = true;
-                positionx = 0;
-                clearPendingFlipRestore();
-                list = new ArrayList<>();
-                dummyResponse = null;
+                prepareLocalFeedPage0(false);
                 inlist(-1);
 
                 writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_local);
@@ -1378,6 +1429,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         un_selected_my_feed.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                if (localFeedFromDailyUpdates) {
+                    localFeedFromDailyUpdates = false;
+                    hideLocalFeedChrome();
+                }
 
                 un_selected_local.setVisibility(View.VISIBLE);
 
@@ -1458,8 +1513,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Profile footer / post-login: open News, Special, Calendar, Video, or Profile
+     * Profile footer / post-login: open News, Daily Updates, Special, or Profile
      * without leaving the HomePage process (CLEAR_TOP + SINGLE_TOP).
+     * Legacy Panchangam EXTRA still opens calendar in-host; footer tab is product-hidden.
      */
     private void handleFooterTabExtra(@Nullable Intent intent) {
         if (intent == null || bottomNavigationView == null) {
@@ -1493,7 +1549,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 } else if (tabId == R.id.navigation_catagiries) {
                     performSpecialFeedOpen();
                 } else if (tabId == R.id.navigation_status) {
-                    performVideoFeedOpen();
+                    performDailyUpdatesOpen();
                 } else if (tabId == R.id.navigation_stricker) {
                     performCalendarOpen();
                 }
@@ -1503,14 +1559,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         });
     }
 
-    /** Process-once guard so feed cache refreshes cannot re-ask in the same session. */
+    /** Process-once guard so feed cache refreshes cannot re-ask wave in the same session. */
     private boolean notificationRepromptHandledThisProcess = false;
     /** Process-once for post-install/update permission (independent of admin wave). */
     private boolean installNotificationPermHandledThisProcess = false;
+    /**
+     * Ask-on-open: once per resume so mid-session Settings disable still re-prompts on return,
+     * without re-firing from feed refreshes in the same foreground period.
+     */
+    private boolean askOnOpenHandledThisResume = false;
     /** Request code for install + re-prompt POST_NOTIFICATIONS (ActivityCompat). */
     private static final int REQ_POST_NOTIFICATIONS = 2901;
     /** Pending result of {@link #requestNotificationPermission(boolean)}. */
     private boolean pendingNotifPermViaAdminReprompt = false;
+    /** Avoid stacking multiple soft notification enable dialogs. */
+    private boolean notificationSettingsDialogShowing = false;
 
     private boolean isSystemNotificationsEnabledSafe() {
         try {
@@ -1552,17 +1615,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private boolean isAdminNotificationRepromptDue() {
-        boolean masterOn = SharedPrefsData.getBool(
-                getApplicationContext(),
-                Constants.NOTIFICATION_REPROMPT_ENABLED,
-                Constants.PREF_NAME,
-                false);
-        boolean due = SharedPrefsData.getBool(
+        // Server computes due from wave; do not gate on legacy master pref.
+        return SharedPrefsData.getBool(
                 getApplicationContext(),
                 Constants.NOTIFICATION_REPROMPT_DUE,
                 Constants.PREF_NAME,
                 false);
-        return masterOn && due;
     }
 
     /**
@@ -1593,25 +1651,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Admin continuous flag: once per process, if system notifications (or
-     * POST_NOTIFICATIONS) are off → same OS dialog / settings path as wave.
-     * Deny does not block the feed; next app launch asks again while flag stays ON.
+     * Admin continuous flag: once per resume, if system notifications (or
+     * POST_NOTIFICATIONS) are off → OS Allow/Don't allow when Android still shows it,
+     * else a soft in-app dialog over the feed (never auto-open Settings).
+     * Deny/dismiss does not block reading; next open/resume asks again while flag stays ON.
      */
     private void maybePromptNotificationsOnOpen() {
-        if (notificationRepromptHandledThisProcess || installNotificationPermHandledThisProcess) {
+        if (askOnOpenHandledThisResume) {
             return;
         }
         boolean systemOn = isSystemNotificationsEnabledSafe();
         boolean runtimeOk = hasPostNotificationsPermission();
         if (systemOn && runtimeOk) {
-            // Already fully on — no prompt; align opt-in pref quietly.
-            notificationRepromptHandledThisProcess = true;
-            installNotificationPermHandledThisProcess = true;
+            // Already fully on — no prompt; do NOT set process-once so a later Settings
+            // disable + resume can still ask while the admin flag stays ON.
+            askOnOpenHandledThisResume = true;
             ensureNotificationPrefAlignedWithSystem(false);
             return;
         }
-        notificationRepromptHandledThisProcess = true;
-        installNotificationPermHandledThisProcess = true;
+        askOnOpenHandledThisResume = true;
         getWindow().getDecorView().postDelayed(() -> {
             if (isFinishing() || isDestroyed()) return;
             if (!isPromptNotificationsOnOpenEnabled()) return;
@@ -1619,7 +1677,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 ensureNotificationPrefAlignedWithSystem(false);
                 return;
             }
-            // force=true → permanent deny opens app notification settings (same as wave).
+            // force=true → OS dialog if allowed; else soft in-app dialog (no Settings jump).
             requestNotificationPermission(true);
         }, 450L);
     }
@@ -1690,30 +1748,47 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Shared install + admin re-prompt path. Uses the same ActivityCompat OS dialog as
-     * first install when the system can still show it (never asked or
-     * shouldShowRequestPermissionRationale). force=true for admin wave: permanent denial
-     * opens app notification settings once.
+     * Shared install + admin re-prompt path. Prefer the first-install style
+     * POST_NOTIFICATIONS OS dialog (Allow / Don't allow) over the feed.
+     * force=true (ask-on-open / wave): if the OS will not show that dialog again
+     * (permanent deny, pre-13 tray off, or runtime granted but tray master off),
+     * show a soft in-app dialog — never auto-navigate to system Settings.
      */
     private void requestNotificationPermission(boolean force) {
         requestPostNotificationsPermission(force);
+    }
+
+    /** True when Android may still show the POST_NOTIFICATIONS system dialog. */
+    private boolean canShowPostNotificationsSystemDialog() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return false;
+        }
+        if (hasPostNotificationsPermission()) {
+            return false;
+        }
+        if (!hasEverAskedPostNotifications()) {
+            return true;
+        }
+        return ActivityCompat.shouldShowRequestPermissionRationale(
+                this, Manifest.permission.POST_NOTIFICATIONS);
     }
 
     private void requestPostNotificationsPermission(final boolean viaAdminReprompt) {
         pendingNotifPermViaAdminReprompt = viaAdminReprompt;
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            // No runtime POST_NOTIFICATIONS — soft dialog only (user may open Settings).
             if (viaAdminReprompt && !isSystemNotificationsEnabledSafe()) {
-                openAppNotificationSettingsForReprompt();
+                showSoftNotificationEnableDialog();
             }
             return;
         }
 
         if (hasPostNotificationsPermission()) {
             if (!isSystemNotificationsEnabledSafe()) {
-                // Runtime granted but tray master off — settings only.
+                // Runtime granted but tray master off — OS will not re-show POST_NOTIFICATIONS.
                 if (viaAdminReprompt) {
-                    openAppNotificationSettingsForReprompt();
+                    showSoftNotificationEnableDialog();
                 }
                 return;
             }
@@ -1721,24 +1796,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
 
-        boolean canAskAgain = ActivityCompat.shouldShowRequestPermissionRationale(
-                this, Manifest.permission.POST_NOTIFICATIONS);
-        boolean neverAsked = !hasEverAskedPostNotifications();
-
-        // Same as install: ActivityCompat OS dialog whenever still allowed.
-        if (neverAsked || canAskAgain) {
-            markEverAskedPostNotifications();
-            try {
-                ActivityCompat.requestPermissions(
-                        this,
-                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
-                        REQ_POST_NOTIFICATIONS);
-            } catch (Exception e) {
-                showLog("request POST_NOTIFICATIONS failed: " + e.getMessage());
-                if (viaAdminReprompt) {
-                    openAppNotificationSettingsForReprompt();
-                }
-            }
+        // Prefer OS Allow / Don't allow whenever the system will still show it.
+        // Do NOT call requestPermissions on permanent deny — some OEMs route that
+        // straight to the app notification Settings screen (the harsh UX).
+        if (canShowPostNotificationsSystemDialog()) {
+            launchPostNotificationsSystemDialog();
             return;
         }
 
@@ -1749,7 +1811,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 false,
                 Constants.PREF_NAME);
         if (viaAdminReprompt) {
-            openAppNotificationSettingsForReprompt();
+            showSoftNotificationEnableDialog();
+        }
+    }
+
+    /** Shows the install-style POST_NOTIFICATIONS system dialog over the feed. */
+    private void launchPostNotificationsSystemDialog() {
+        markEverAskedPostNotifications();
+        try {
+            ActivityCompat.requestPermissions(
+                    this,
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQ_POST_NOTIFICATIONS);
+        } catch (Exception e) {
+            showLog("request POST_NOTIFICATIONS failed: " + e.getMessage());
+            // Never auto-open Settings — soft dialog only for ask-on-open / wave.
+            if (pendingNotifPermViaAdminReprompt) {
+                showSoftNotificationEnableDialog();
+            }
         }
     }
 
@@ -1765,16 +1844,61 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 Constants.NOTIFICATION_ENABLED,
                 false,
                 Constants.PREF_NAME);
-        if (viaAdmin) {
-            // Permanent denial only — install-style ask already used; settings is last resort.
-            boolean canAskAgain = ActivityCompat.shouldShowRequestPermissionRationale(
-                    this, Manifest.permission.POST_NOTIFICATIONS);
-            if (!canAskAgain) {
-                openAppNotificationSettingsForReprompt();
-            }
+        // User tapped Don't allow (or silent deny). Stay on the news feed —
+        // do NOT jump to Settings and do NOT stack another dialog this resume.
+        // Ask-on-open will try again on the next open/resume while the admin flag is ON.
+    }
+
+    /**
+     * Soft in-app prompt when Android will not show Allow / Don't allow again
+     * (permanent deny, pre-13, or tray toggled off while runtime is still granted).
+     * Primary Allow retries the OS dialog when possible; Open settings is optional.
+     * Never auto-starts Settings — only if the user taps that button.
+     */
+    private void showSoftNotificationEnableDialog() {
+        if (isFinishing() || isDestroyed()) return;
+        if (notificationSettingsDialogShowing) return;
+        if (isSystemNotificationsEnabledSafe() && hasPostNotificationsPermission()) {
+            ensureNotificationPrefAlignedWithSystem(pendingNotifPermViaAdminReprompt);
+            return;
+        }
+        notificationSettingsDialogShowing = true;
+        final boolean needSettingsForTray =
+                hasPostNotificationsPermission() && !isSystemNotificationsEnabledSafe();
+        try {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                    .setTitle(R.string.app_name)
+                    .setMessage(
+                            needSettingsForTray
+                                    ? "Notifications are turned off in system settings. Enable them to get breaking news alerts — or keep reading."
+                                    : "Allow notifications to get breaking news alerts? You can keep reading either way.")
+                    .setPositiveButton(
+                            "Allow",
+                            (dialog, which) -> {
+                                if (needSettingsForTray) {
+                                    // Tray master off with runtime already granted — only Settings can fix.
+                                    openAppNotificationSettingsForReprompt();
+                                    return;
+                                }
+                                // Retry OS Allow/Don't allow (even after a prior deny).
+                                // Do not auto-open Settings here — that is the neutral button.
+                                pendingNotifPermViaAdminReprompt = true;
+                                launchPostNotificationsSystemDialog();
+                            })
+                    .setNeutralButton(
+                            "Open settings",
+                            (dialog, which) -> openAppNotificationSettingsForReprompt())
+                    .setNegativeButton("Not now", null)
+                    .setOnDismissListener(d -> notificationSettingsDialogShowing = false);
+            builder.show();
+        } catch (Exception e) {
+            // Do NOT auto-open Settings on dialog failure — leave user on the feed.
+            notificationSettingsDialogShowing = false;
+            showLog("soft notification dialog failed: " + e.getMessage());
         }
     }
 
+    /** Only called after an explicit user tap on Open settings / Allow→Settings. */
     private void openAppNotificationSettingsForReprompt() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1791,18 +1915,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     public void showNotificationAlert(boolean showPopup){
-        boolean masterOn = SharedPrefsData.getBool(
-                getApplicationContext(),
-                Constants.NOTIFICATION_REPROMPT_ENABLED,
-                Constants.PREF_NAME,
-                false);
         boolean due = SharedPrefsData.getBool(
                 getApplicationContext(),
                 Constants.NOTIFICATION_REPROMPT_DUE,
                 Constants.PREF_NAME,
                 false);
         // Admin wave (due) takes priority; legacy daily flag still works when showPopup true.
-        boolean shouldConsider = (masterOn && due) || showPopup;
+        boolean shouldConsider = due || showPopup;
         if (!shouldConsider) {
             return;
         }
@@ -1818,7 +1937,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 Constants.PREF_NAME,
                 true);
         boolean fullyOn = systemOn && prefOn && hasPostNotificationsPermission();
-        final boolean isAdminDue = masterOn && due;
+        final boolean isAdminDue = due;
 
         // Fully enabled: clear due without dialog (only once for this wave).
         if (fullyOn) {
@@ -1841,7 +1960,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             ackNotificationReprompt(false, false, false);
         }
 
-        // Admin force: same install-style OS dialog when can ask; settings if permanent deny.
+        // Admin force: install-style OS dialog when can ask; soft in-app dialog if permanent deny.
         requestNotificationPermission(isAdminDue || showPopup);
     }
 
@@ -2156,6 +2275,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
+        // Home idle: keep one early-warm creative for the next share/house seat.
+        try {
+            AdPreloader.get().prefetch(getApplicationContext());
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -2183,21 +2307,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void loadAds(String ad_code, Integer ad_req_position, String ad_type) {
-       showLog("Ad loading ad_code 1 :"+ad_code);
-       showLog("Ad loading ad_req_position :"+ad_req_position);
-        showLog("Ad loading ad_type:"+ad_type);
-        if (ad_code == null || ad_code.trim().isEmpty() || ad_req_position == null) {
+        if (ad_req_position == null) {
+            Log.w(ADS_TAG, "request skip missing reqPos type=" + ad_type);
             return;
         }
         if (ad_type == null || ad_type.trim().isEmpty()) {
             ad_type = "google";
         }
+        Log.d(ADS_TAG, "request route ad_type=" + ad_type + " server_ad_code="
+                + (ad_code == null ? "" : ad_code.trim()) + " reqPos=" + ad_req_position);
        // ad_code="/21833905170,23071623886/Anynews_APP_Banner_300x600";
         //ad_code="/21833905170,23071623886/Anynews_New_Native_DU";
        //new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("CEB66515B6C9B2ECD92786955DF252CD"));
 //        showLog("Ad loading ad_code 2 :"+ad_code);
        // ad_type="google";
-        if(ad_type.equalsIgnoreCase("google")){
+        if(ad_type.equalsIgnoreCase("google") || ad_type.equalsIgnoreCase("admanager")){
             // Gate only on ad_req_position (not flip index). Mixing positionx into
             // nativeGoogleAdArray caused false skips / duplicate loads after push land.
             if (nativeGoogleAdArray != null && nativeGoogleAdArray.contains(ad_req_position)) {
@@ -2205,6 +2329,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             loadGoogleAds(ad_code, ad_req_position, 0);
         }else{
+            if (ad_code == null || ad_code.trim().isEmpty()) {
+                Log.w(ADS_TAG, "request skip empty Facebook placement reqPos=" + ad_req_position);
+                return;
+            }
             if (nativeFBAdArray != null && nativeFBAdArray.contains(ad_req_position)) {
                 return;
             }
@@ -2222,14 +2350,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             @Nullable String adCode,
             @Nullable Integer adReqPosition,
             @Nullable String adType) {
-        if (adCode == null || adCode.trim().isEmpty() || adReqPosition == null) {
-            // No unit: FlipperAdapter will timeout-skip this shell; do not hang.
-            showLog("ensureFeedNativeAdLoaded skip empty code/pos code="
-                    + adCode + " pos=" + adReqPosition);
+        if (adReqPosition == null) {
+            Log.w(ADS_TAG, "ensure skip missing reqPos");
             return;
         }
         try {
             String type = adType != null ? adType : "google";
+            if (!type.equalsIgnoreCase("google") && !type.equalsIgnoreCase("admanager")
+                    && (adCode == null || adCode.trim().isEmpty())) {
+                Log.w(ADS_TAG, "ensure skip empty Facebook placement reqPos=" + adReqPosition);
+                return;
+            }
             if (type.equalsIgnoreCase("google") || type.equalsIgnoreCase("admanager")) {
                 if (nativeGoogleAdList != null) {
                     for (int i = 0; i < nativeGoogleAdList.size(); i++) {
@@ -2429,6 +2560,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void refillNativeAdPoolAfterConsume() {
         if (isFinishing() || isDestroyed() || list == null || list.isEmpty()) {
             return;
+        }
+        try {
+            // Keep one early-warm creative for the next share/house-ad seat.
+            AdPreloader.get().prefetch(getApplicationContext());
+        } catch (Exception ignored) {
         }
         try {
             if (shouldDeferAdWork()) {
@@ -2964,13 +3100,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    /**
+     * The Play Store production build used this live AdMob native unit for every
+     * Google feed seat. Keep that proven path independent of optional backend
+     * metadata: an empty, app-id, or GAM-style server value must not prevent a
+     * paid native request from reaching AdMob.
+     */
+    @NonNull
+    private String resolveGoogleNativeAdUnit(@Nullable String configuredCode) {
+        String code = configuredCode == null ? "" : configuredCode.trim();
+        String fallback = getString(R.string.admob_native_ad_unit_fallback).trim();
+        Log.d(ADS_TAG, "resolved ad_code=" + fallback + " source=PlayStore-production"
+                + " ignored_server_ad_code=" + code);
+        return fallback;
+    }
+
     private void loadGoogleAds(String adCode, Integer ad_req_position,int reqType) {
-        // The feed/admin configured unit is authoritative. Do not substitute a bundled unit:
-        // that would bypass the configured mediation/revenue seat for this feed.
-        if (adCode == null || adCode.trim().isEmpty() || ad_req_position == null) {
-            showLog("AD REQUEST skip missing configured Google unit/position");
+        if (ad_req_position == null) {
+            Log.w(ADS_TAG, "request skip missing position");
             return;
         }
+        adCode = resolveGoogleNativeAdUnit(adCode);
+        Log.d(ADS_TAG, "request start type=google format=AdMob"
+                + " ad_code=" + adCode + " reqPos=" + ad_req_position);
 
         // Do NOT mark in-flight here — startNativeAdLoader may defer across flips.
         // Marking early left orphan positions that never retried after cancel.
@@ -3118,6 +3270,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             object.put("adPos",ad_req_position);
                             adError=object.toString();
                             boolean noFill = errorCode == AdRequest.ERROR_CODE_NO_FILL;
+                            Log.w(ADS_TAG, "load failure ad_code=" + adCode
+                                    + " reqPos=" + ad_req_position
+                                    + " code=" + errorCode
+                                    + " domain=" + errorDomain
+                                    + " noFill=" + noFill
+                                    + " message=" + errorMessage);
                             long retryDelayMs = NativeAdCacheCoordinator.get().onFailed(
                                     "google", adCode, ad_req_position, noFill, errorMessage);
                             if (retryDelayMs >= 0L) {
@@ -3160,6 +3318,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     public void onAdImpression() {
                         super.onAdImpression();
                         adImpress=true;
+                        Log.d(ADS_TAG, "paid impression ad_code=" + adCode
+                                + " reqPos=" + ad_req_position);
                         NativeAdCacheCoordinator.get().onPaidShown(
                                 "google", adCode, ad_req_position);
                     }
@@ -3167,6 +3327,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     @Override
                     public void onAdLoaded() {
                         super.onAdLoaded();
+                        Log.d(ADS_TAG, "load success callback ad_code=" + adCode
+                                + " reqPos=" + ad_req_position);
                         showLog(TAG+  "onAdLoaded: ");
                     }
 
@@ -3213,6 +3375,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 NativeAdCacheCoordinator.get().onLoaded(
                                         "google", adCode, ad_req_position, adapterName);
                                 NativeAdCacheCoordinator.get().logMediationAdapter(adapterName);
+                                Log.d(ADS_TAG, "native ready ad_code=" + adCode
+                                        + " reqPos=" + ad_req_position
+                                        + " mediationAdapter=" + adapterName);
                                 maybeRestoreDemotedAdSeatsForFill(ad_req_position);
                                 maybeRebindCurrentAdAfterLoad(ad_req_position);
                                 try {
@@ -3232,8 +3397,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 })
                 .build();
-        adLoader.loadAd(new AdRequest.Builder().build());
-        //  adLoader.loadAd(new AdManagerAdRequest.Builder().build());
+        try {
+            adLoader.loadAd(new AdRequest.Builder().build());
+        } catch (Exception e) {
+            if (nativeGoogleAdArray != null && ad_req_position != null) {
+                nativeGoogleAdArray.remove(ad_req_position);
+            }
+            Log.e(ADS_TAG, "load start exception ad_code=" + adCode
+                    + " reqPos=" + ad_req_position + " error=" + e.getMessage());
+            NativeAdCacheCoordinator.get().onFailed(
+                    "google", adCode, ad_req_position, false, String.valueOf(e.getMessage()));
+        }
 
     }
 
@@ -3650,17 +3824,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     @Override
                     public void run() {
 
-                        last_post_id = 0;
-                        skip = 0;
-                        actual_skip = 0;
-                        category_id = -1;
-                        requestPostition=1;
-                        requestSize=0;
-                        isFromLocalArticles=true;
-                        positionx=0;
-                        clearPendingFlipRestore();
-                        list=new ArrayList<>();
-                        dummyResponse=null;
+                        prepareLocalFeedPage0(false);
                         inlist(-1);
                     }
                 },timer);
@@ -4428,6 +4592,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     datum.setLikes(list.get(positionx).getLikes());
                     datum.setComments(list.get(positionx).getComments());
                     datum.setShares(list.get(positionx).getShares());
+                    datum.setWhatsappShares(list.get(positionx).getWhatsappShares());
                     datum.setDownloads(list.get(positionx).getDownloads());
                     datum.setStickyPosition(list.get(positionx).getStickyPosition());
                     datum.setDownloads(list.get(positionx).getDownloads());
@@ -4688,17 +4853,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showHomeFeedLoadingReveal();
                     layout_with_data.setVisibility(View.GONE);
                     comment_page.setVisibility(View.GONE);
-                    last_post_id = 0;
-                    skip = 0;
-                    actual_skip = 0;
-                    category_id = -1;
-                    requestPostition=1;
-                    requestSize=0;
-                    isFromLocalArticles=true;
-                    positionx=0;
-                    clearPendingFlipRestore();
-                    list=new ArrayList<>();
-                    dummyResponse=null;
+                    prepareLocalFeedPage0(false);
                     inlist(-1);
 
 
@@ -4775,9 +4930,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } else {
                 showLog("COMMENTS_PAGE");
                 showProgress();
+                setCommentArticleTitleFromCurrentPost();
+                refreshCommentComposeHint();
                 comment_page.setVisibility(View.VISIBLE);
                 comment_recycler_view.setVisibility(View.GONE);
-                comment_totoal_count.setVisibility(View.GONE);
+                if (comment_totoal_count != null) {
+                    comment_totoal_count.setVisibility(View.GONE);
+                }
 
             }
 
@@ -4801,13 +4960,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         comment_progress = findViewById(R.id.send_progress);
 
         comment_totoal_count = findViewById(R.id.comment_totoal_count);
+        comment_article_title = findViewById(R.id.comment_article_title);
         leave_comment_white = findViewById(R.id.leave_comment_white);
         reply_context_layout = findViewById(R.id.reply_context_layout);
         reply_context_text = findViewById(R.id.reply_context_text);
+        reply_context_label = findViewById(R.id.reply_context_label);
         reply_context_cancel = findViewById(R.id.reply_context_cancel);
         reply_context_cancel.setOnClickListener(view -> clearReplyContext());
         send_btn_layout = findViewById(R.id.send_btn_layout);
         goHomePage = findViewById(R.id.goHomePage);
+        comment_gif_btn = findViewById(R.id.comment_gif_btn);
+        comment_smiley_btn = findViewById(R.id.comment_smiley_btn);
+        comment_lang_btn = findViewById(R.id.comment_lang_btn);
+        emoji_chip_1 = findViewById(R.id.emoji_chip_1);
+        emoji_chip_2 = findViewById(R.id.emoji_chip_2);
+        emoji_chip_3 = findViewById(R.id.emoji_chip_3);
+        emoji_chip_4 = findViewById(R.id.emoji_chip_4);
+        emoji_chip_5 = findViewById(R.id.emoji_chip_5);
+
+        wireCommentComposeChrome();
+        refreshCommentComposeHint();
+
         comment_page.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -4818,51 +4991,42 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         commet_close.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
-                //   player.setPlayWhenReady(true);
                 comment_page.setVisibility(View.GONE);
                 leave_comment_white.setText("");
                 clearReplyContext();
-                CommonMethods commonMethods = new CommonMethods(HomePage.this);
-
                 InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                imm.hideSoftInputFromWindow(leave_comment_white.getWindowToken(), 0);
+                if (imm != null) {
+                    imm.hideSoftInputFromWindow(leave_comment_white.getWindowToken(), 0);
+                }
             }
         });
-
 
         send_btn_layout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if(leave_comment_white.getText().toString().equalsIgnoreCase("") && leave_comment_white.getText().toString().length()<=0){
-                    Toast.makeText(HomePage.this,"Comment is not empty",Toast.LENGTH_LONG).show();
-                    return;
-                }
-
-                if (leave_comment_white.getText().toString().length() >= 1) {
-                    if(allsharedpreference.getEmailId()!=null && !allsharedpreference.getEmailId().equalsIgnoreCase("")){
-                        postComment();
-                    }else{
-                        try {
-                            Intent intent =
-                                    AccountPicker.newChooseAccountIntent(
-                                            new AccountPicker.AccountChooserOptions.Builder()
-                                                    .setAllowableAccountsTypes(Arrays.asList("com.google"))
-                                                    .setAlwaysShowAccountPicker(true)
-                                                    .setTitleOverrideText("Choose Account For AnyNews")
-                                                    .build());
-                            postCommentActivityListerner.launch(intent);
-                        } catch (ActivityNotFoundException e) {
-                            // TODO
-                        }
-                    }
-
-                } else {
-                    ((InputMethodManager) HomePage.this.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(leave_comment_white.getWindowToken(), 0);
-
-                }
+                submitCommentFromCompose();
             }
         });
+
+        leave_comment_white.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                submitCommentFromCompose();
+                return true;
+            }
+            return false;
+        });
+
+        leave_comment_white.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (send_btn_layout != null) {
+                    send_btn_layout.setVisibility(
+                            s != null && s.toString().trim().length() > 0 ? View.VISIBLE : View.GONE);
+                }
+            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+
         goHomePage.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -4878,50 +5042,193 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         });
 
-
-
         textViewCommentsTag = findViewById(R.id.textViewCommentsTag);
-        textViewCommentsTag.setText("Remember to follow our Terms and Conditions and be respectful when messaging other");
-        Spannable spannable = new SpannableString("Remember to follow our Terms and Conditions and be respectful when messaging other");
-        String str = spannable.toString();
-        int iStart = str.indexOf("Terms and Conditions");
-        int length = "Terms and Conditions".length();
-        int iEnd = iStart + length;/*10 characters = in-network. */
-        SpannableStringBuilder ssText = new SpannableStringBuilder(spannable);
+        if (textViewCommentsTag != null) {
+            textViewCommentsTag.setVisibility(View.GONE);
+        }
+    }
 
-        ClickableSpan clickableSpan = new ClickableSpan() {
-            @Override
-            public void onClick(View widget) {
-                comment_page.setVisibility(View.GONE);
-                Intent intent = new Intent(HomePage.this, PrivacyPolicy.class);
-                startActivity(intent);
-            }
-
-            @Override
-            public void updateDrawState(TextPaint ds) {
-                super.updateDrawState(ds);
-                ds.setUnderlineText(false);
-                ds.setColor(getResources().getColor(R.color.colorPrimary));
+    private void wireCommentComposeChrome() {
+        View.OnClickListener emojiClick = v -> {
+            if (v instanceof TextView) {
+                insertEmojiIntoComment(((TextView) v).getText().toString());
             }
         };
+        if (emoji_chip_1 != null) emoji_chip_1.setOnClickListener(emojiClick);
+        if (emoji_chip_2 != null) emoji_chip_2.setOnClickListener(emojiClick);
+        if (emoji_chip_3 != null) emoji_chip_3.setOnClickListener(emojiClick);
+        if (emoji_chip_4 != null) emoji_chip_4.setOnClickListener(emojiClick);
+        if (emoji_chip_5 != null) emoji_chip_5.setOnClickListener(emojiClick);
+
+        if (comment_smiley_btn != null) {
+            comment_smiley_btn.setOnClickListener(v -> insertEmojiIntoComment("😊"));
+        }
+        if (comment_gif_btn != null) {
+            comment_gif_btn.setOnClickListener(v ->
+                    Toast.makeText(HomePage.this, "GIF coming soon", Toast.LENGTH_SHORT).show());
+        }
+        if (comment_lang_btn != null) {
+            comment_lang_btn.setOnClickListener(v -> {
+                try {
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (imm != null) {
+                        imm.showInputMethodPicker();
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+        }
+    }
+
+    private void insertEmojiIntoComment(String emoji) {
+        if (leave_comment_white == null || TextUtils.isEmpty(emoji)) {
+            return;
+        }
+        int start = Math.max(leave_comment_white.getSelectionStart(), 0);
+        int end = Math.max(leave_comment_white.getSelectionEnd(), 0);
+        leave_comment_white.getText().replace(Math.min(start, end), Math.max(start, end), emoji);
+        leave_comment_white.requestFocus();
+    }
+
+    private void refreshCommentComposeHint() {
+        if (leave_comment_white == null) {
+            return;
+        }
+        String userName = SharedPrefsData.getString(this, Constants.USER_NAME, Constants.PREF_NAME);
+        if (TextUtils.isEmpty(userName)) {
+            userName = allsharedpreference != null ? allsharedpreference.getEmailId() : "";
+        }
+        if (TextUtils.isEmpty(userName)) {
+            userName = "Guest";
+        }
+        leave_comment_white.setHint("కామెంట్ చేయండి " + userName);
+    }
+
+    private void setCommentArticleTitleFromCurrentPost() {
+        if (comment_article_title == null) {
+            return;
+        }
+        String title = "";
         try {
-            ssText.setSpan(clickableSpan, iStart, iEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            int index = str.indexOf(descriptionDirectionLink) - 1;
-            ssText = ssText.replace(index, iStart, " ");
-        } catch (IndexOutOfBoundsException e) {
+            int idx = getVisiblePostIndex();
+            if (list != null && idx >= 0 && idx < list.size() && list.get(idx) != null) {
+                title = list.get(idx).getTitle() != null ? list.get(idx).getTitle() : "";
+            }
+        } catch (Exception ignored) {
+        }
+        comment_article_title.setText(title);
+    }
+
+    private void submitCommentFromCompose() {
+        if (leave_comment_white.getText().toString().trim().length() <= 0) {
+            Toast.makeText(HomePage.this, "Comment is empty", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (allsharedpreference.getEmailId() != null && !allsharedpreference.getEmailId().equalsIgnoreCase("")) {
+            postComment();
+        } else {
+            try {
+                Intent intent =
+                        AccountPicker.newChooseAccountIntent(
+                                new AccountPicker.AccountChooserOptions.Builder()
+                                        .setAllowableAccountsTypes(Arrays.asList("com.google"))
+                                        .setAlwaysShowAccountPicker(true)
+                                        .setTitleOverrideText("Choose Account For AnyNews")
+                                        .build());
+                postCommentActivityListerner.launch(intent);
+            } catch (ActivityNotFoundException e) {
+                // TODO
+            }
+        }
+    }
+
+    private void copyCommentAt(int position) {
+        if (comment_chooseLanguage_models == null
+                || position < 0
+                || position >= comment_chooseLanguage_models.size()) {
+            return;
+        }
+        String text = comment_chooseLanguage_models.get(position).getComment();
+        if (TextUtils.isEmpty(text)) {
+            return;
+        }
+        android.content.ClipboardManager clipboard =
+                (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("comment", text));
+            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void likeCommentAt(int position) {
+        if (comment_chooseLanguage_models == null
+                || position < 0
+                || position >= comment_chooseLanguage_models.size()) {
+            return;
+        }
+        ListOfCommentsResponse.Datum datum = comment_chooseLanguage_models.get(position);
+        if (datum.getId() == null) {
+            return;
+        }
+        boolean currentlyLiked = datum.getLikedByMe() != null && datum.getLikedByMe();
+        boolean nextLiked = !currentlyLiked;
+        int nextCount = datum.getLikes() != null ? datum.getLikes() : 0;
+        nextCount = Math.max(0, nextLiked ? nextCount + 1 : nextCount - 1);
+        datum.setLikedByMe(nextLiked);
+        datum.setLikes(nextCount);
+        if (commentMailAdapter != null) {
+            commentMailAdapter.notifyDataSetChanged();
+        }
+
+        try {
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty("comment_id", datum.getId());
+            jsonObject.addProperty(
+                    "draft_id",
+                    SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+            jsonObject.addProperty("liked", nextLiked);
+            String encrypted = encrypt(jsonObject.toString());
+            EncritonRequestData body = new EncritonRequestData();
+            body.setData(encrypted);
+            APIService apiService = RestApiClient.getClient().create(APIService.class);
+            apiService.commentLike("v3", new Gson().toJsonTree(body).getAsJsonObject())
+                    .enqueue(new Callback<EncreptionRequest>() {
+                        @Override
+                        public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                            try {
+                                if (response == null || !response.isSuccessful()
+                                        || response.body() == null || response.body().getData() == null) {
+                                    return;
+                                }
+                                String raw = decrypt(response.body().getData());
+                                JsonObject parsed = new Gson().fromJson(raw, JsonObject.class);
+                                if (parsed != null && parsed.has("likes")) {
+                                    datum.setLikes(parsed.get("likes").getAsInt());
+                                }
+                                if (parsed != null && parsed.has("liked")) {
+                                    datum.setLikedByMe(parsed.get("liked").getAsBoolean());
+                                }
+                                if (commentMailAdapter != null) {
+                                    commentMailAdapter.notifyDataSetChanged();
+                                }
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                            // Keep optimistic UI; next refresh will reconcile.
+                        }
+                    });
+        } catch (Exception e) {
             e.printStackTrace();
         }
-        textViewCommentsTag.setText(ssText);
-        textViewCommentsTag.setMovementMethod(new MovementMethodTV());
-
     }
     public void postComment(){
 
         ((InputMethodManager) HomePage.this.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(leave_comment_white.getWindowToken(), 0);
 
-        //   comment_progress.setVisibility(View.VISIBLE);
-        int count = comment_chooseLanguage_models.size() + 1;
-        comment_totoal_count.setText(" Comments ( " + count + " )");
         WriteComments();
     }
 
@@ -4941,6 +5248,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         datum.setEmail(source.getEmail());
         datum.setParentCommentId(source.getParentCommentId());
         datum.setReplyCount(source.getReplyCount());
+        datum.setDistrict(source.getDistrict());
+        datum.setUserCommentCount(source.getUserCommentCount());
+        datum.setLikes(source.getLikes());
+        datum.setLikedByMe(source.getLikedByMe());
         return datum;
     }
 
@@ -4961,20 +5272,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void bindCommentsAdapter() {
         comment_linearlayoutmanager = new LinearLayoutManager(getContext());
         comment_recycler_view.setLayoutManager(comment_linearlayoutmanager);
-        comment_totoal_count.setVisibility(View.VISIBLE);
+        if (comment_totoal_count != null) {
+            comment_totoal_count.setVisibility(View.GONE);
+        }
         comment_recycler_view.setVisibility(View.VISIBLE);
         linear_no_comment_page.setVisibility(View.GONE);
-        MailAdapter mMailAdapter = new MailAdapter(
+        commentMailAdapter = new MailAdapter(
                 HomePage.this,
                 comment_chooseLanguage_models,
                 position -> openReportPage(position),
-                position -> startReplyToComment(position));
+                position -> startReplyToComment(position),
+                position -> copyCommentAt(position),
+                position -> likeCommentAt(position));
         if (pendingExpandParentId != null) {
-            mMailAdapter.expandParent(pendingExpandParentId);
+            commentMailAdapter.expandParent(pendingExpandParentId);
             pendingExpandParentId = null;
         }
-        comment_recycler_view.setAdapter(mMailAdapter);
-        comment_totoal_count.setText(" Comments ( " + comment_chooseLanguage_models.size() + " )");
+        comment_recycler_view.setAdapter(commentMailAdapter);
     }
 
     private void startReplyToComment(int position) {
@@ -4988,14 +5302,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         replyParentCommentId = datum.getId();
-        String userName = datum.getUserName() != null ? datum.getUserName() : "comment";
+        String userName = datum.getUserName() != null ? datum.getUserName() : "user";
         if (allsharedpreference.getEmailId() != null
                 && datum.getEmail() != null
                 && allsharedpreference.getEmailId().equalsIgnoreCase(datum.getEmail())) {
-            userName = "yourself";
+            userName = "Me";
         }
+        replyParentUserName = userName;
+        replyParentSnippet = datum.getComment() != null ? datum.getComment() : "";
         reply_context_layout.setVisibility(View.VISIBLE);
-        reply_context_text.setText("Replying to " + userName);
+        if (reply_context_label != null) {
+            reply_context_label.setText("REPLY TO @" + userName);
+        }
+        reply_context_text.setText(replyParentSnippet);
         leave_comment_white.requestFocus();
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (imm != null) {
@@ -5005,6 +5324,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private void clearReplyContext() {
         replyParentCommentId = null;
+        replyParentSnippet = "";
+        replyParentUserName = "";
         if (reply_context_layout != null) {
             reply_context_layout.setVisibility(View.GONE);
         }
@@ -5014,6 +5335,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void OpenComments(Long post_id, Long sub_post_id) {
 
             showProgress();
+        setCommentArticleTitleFromCurrentPost();
+        refreshCommentComposeHint();
 
         comment_chooseLanguage_models = new ArrayList<>();
         comment_chooseLanguage_models.clear();
@@ -5032,9 +5355,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         return;
                     }
                     String encrpt_data = null;
-                    /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        encrpt_data = decrypt(encreptionRequest.getData());
-                    }*/
                     encrpt_data = decrypt(encreptionRequest.getData());
                     showLog("comments response:"+encrpt_data);
                     Gson gsonObj = new Gson();
@@ -5047,16 +5367,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             linear_no_comment_page.setVisibility(View.VISIBLE);
 
                         } else {
+                            final boolean parentalOn = SharedPrefsData.getBool(
+                                    HomePage.this, Constants.PARENTAL_CONTROL, Constants.PREF_NAME, false);
                             for (int i = 0; i < validateUserOtp.getData().size(); i++) {
-                                comment_chooseLanguage_models.add(
-                                        mapCommentDatum(validateUserOtp.getData().get(i)));
+                                ListOfCommentsResponse.Datum src = validateUserOtp.getData().get(i);
+                                if (parentalOn && looksAbusiveComment(src != null ? src.getComment() : null)) {
+                                    continue;
+                                }
+                                comment_chooseLanguage_models.add(mapCommentDatum(src));
                             }
 
-
-                            //   comment_progress.setVisibility(View.GONE);
-
-                            bindCommentsAdapter();
-                            //        leave_comment_white.setText(" " + languageModelResponse.getData().getLeaveAComment());
+                            if (comment_chooseLanguage_models.isEmpty()) {
+                                comment_recycler_view.setVisibility(View.INVISIBLE);
+                                linear_no_comment_page.setVisibility(View.VISIBLE);
+                            } else {
+                                bindCommentsAdapter();
+                            }
                         }
 
 
@@ -5449,6 +5775,254 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         scheduleHomeModeChromeAutoHide(false);
     }
 
+    private void setupLocalFeedChrome() {
+        localFeedChromeRoot = findViewById(R.id.local_feed_chrome_root);
+        if (localFeedChromeRoot == null) {
+            View include = findViewById(R.id.include_local_feed_chrome);
+            if (include != null) {
+                localFeedChromeRoot = include.findViewById(R.id.local_feed_chrome_root);
+                if (localFeedChromeRoot == null) {
+                    localFeedChromeRoot = include;
+                }
+            }
+        }
+        if (localFeedChromeRoot != null) {
+            localFeedPill = localFeedChromeRoot.findViewById(R.id.local_feed_pill);
+            localFeedThumb = localFeedChromeRoot.findViewById(R.id.local_feed_thumb);
+            localFeedSegLocal = localFeedChromeRoot.findViewById(R.id.local_feed_seg_local);
+            localFeedSegDistrict = localFeedChromeRoot.findViewById(R.id.local_feed_seg_district);
+            localFeedBackBtn = localFeedChromeRoot.findViewById(R.id.local_feed_back);
+            localFeedContextLabel = localFeedChromeRoot.findViewById(R.id.local_feed_context_label);
+            localFeedDropdownRow = localFeedChromeRoot.findViewById(R.id.local_feed_dropdown_row);
+            localFeedChromeRoot.setVisibility(View.GONE);
+            localFeedChromeRoot.setOnClickListener(v -> bumpLocalFeedChromeAutoHide());
+        }
+        if (localFeedBackBtn != null) {
+            localFeedBackBtn.setOnClickListener(v -> exitLocalFeedToMainNews());
+        }
+        // Trailing control is a dropdown to switch Main News ↔ Local.
+        View.OnClickListener openFeedSwitch = v -> showLocalFeedSwitchDialog();
+        if (localFeedDropdownRow != null) {
+            localFeedDropdownRow.setOnClickListener(openFeedSwitch);
+        }
+        if (localFeedContextLabel != null) {
+            localFeedContextLabel.setOnClickListener(openFeedSwitch);
+        }
+        View localDropIcon = localFeedChromeRoot != null
+                ? localFeedChromeRoot.findViewById(R.id.local_feed_dropdown_icon)
+                : null;
+        if (localDropIcon != null) {
+            localDropIcon.setOnClickListener(openFeedSwitch);
+        }
+        // Legacy dual-pill listeners — keep as no-op refresh of chrome auto-hide.
+        if (localFeedSegLocal != null) {
+            localFeedSegLocal.setOnClickListener(v -> bumpLocalFeedChromeAutoHide());
+        }
+        if (localFeedSegDistrict != null) {
+            localFeedSegDistrict.setOnClickListener(v -> bumpLocalFeedChromeAutoHide());
+        }
+    }
+
+    /** Dropdown: Main News vs Local district feed. */
+    private void showLocalFeedSwitchDialog() {
+        bumpLocalFeedChromeAutoHide();
+        try {
+            String mainLabel;
+            String localLabel = localVarthaluFallback();
+            int lang = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+            switch (lang) {
+                case 1: mainLabel = "പ്രധാന വാർത്തകൾ"; break;
+                case 2: mainLabel = "मुख्य खबरें"; break;
+                case 3: mainLabel = "మెయిన్ వార్తలు"; break;
+                case 4: mainLabel = "முதன்மை செய்திகள்"; break;
+                case 5: mainLabel = "ಮುಖ್ಯ ಸುದ್ದಿ"; break;
+                case 6: mainLabel = "ମୁଖ୍ୟ ଖବର"; break;
+                default: mainLabel = "Main News"; break;
+            }
+            String district = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+            if (DistrictLabelHelper.isUsable(district)) {
+                localLabel = district + " · " + localVarthaluFallback();
+            }
+            final String[] items = new String[]{mainLabel, localLabel};
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setItems(items, (dialog, which) -> {
+                        if (which == 0) {
+                            exitLocalFeedToMainNews();
+                        } else {
+                            // Stay / refresh local district path.
+                            if (category_id != -1 || !localFeedFromDailyUpdates) {
+                                performLocalFeedOpenFromDailyUpdates();
+                            } else {
+                                bumpLocalFeedChromeAutoHide();
+                            }
+                        }
+                    })
+                    .show();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void bindLocalFeedChromeLabels() {
+        if (localFeedContextLabel != null) {
+            String district = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+            if (!DistrictLabelHelper.isUsable(district)) {
+                district = localVarthaluFallback();
+            }
+            localFeedContextLabel.setText(district + " · " + localVarthaluFallback());
+        }
+        // Legacy dual-pill labels (hidden) — keep filled for safety.
+        if (localFeedSegLocal != null) {
+            localFeedSegLocal.setText(localVarthaluFallback());
+        }
+        if (localFeedSegDistrict != null) {
+            String district = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+            localFeedSegDistrict.setText(
+                    DistrictLabelHelper.isUsable(district) ? district : "");
+        }
+    }
+
+    @NonNull
+    private String localVarthaluFallback() {
+        int lang = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        switch (lang) {
+            case 1: return "ലോക്കൽ വാർത്തകൾ";
+            case 2: return "लोकल खबरें";
+            case 3: return "లోకల్ వార్తలు";
+            case 4: return "உள்ளூர் செய்திகள்";
+            case 5: return "ಸ್ಥಳೀಯ ಸುದ್ದಿ";
+            case 6: return "ସ୍ଥାନୀୟ ଖବର";
+            default: return "Local News";
+        }
+    }
+
+    private void showLocalFeedChrome(boolean animate) {
+        if (localFeedChromeRoot == null) return;
+        bindLocalFeedChromeLabels();
+        localFeedChromeUserHidden = false;
+        setLocalFeedChromeVisible(true, animate);
+    }
+
+    private void hideLocalFeedChrome() {
+        cancelLocalFeedChromeAutoHide();
+        localFeedChromeUserHidden = false;
+        if (localFeedChromeRoot == null) return;
+        try {
+            if (localFeedChromeAnimator != null) {
+                localFeedChromeAnimator.cancel();
+                localFeedChromeAnimator = null;
+            }
+        } catch (Exception ignored) {
+        }
+        localFeedChromeRoot.setVisibility(View.GONE);
+        localFeedChromeRoot.setTranslationY(0f);
+        localFeedChromeRoot.setAlpha(1f);
+    }
+
+    public void toggleLocalFeedChrome() {
+        if (isFinishing() || isDestroyed()) return;
+        if (!isLocalFeedChromeActive()) return;
+        if (localFeedChromeRoot == null) return;
+        setLocalFeedChromeVisible(localFeedChromeUserHidden, true);
+    }
+
+    private void setLocalFeedChromeVisible(boolean visible, boolean animate) {
+        if (localFeedChromeRoot == null) return;
+        if (!isLocalFeedChromeActive()) {
+            hideLocalFeedChrome();
+            return;
+        }
+        localFeedChromeUserHidden = !visible;
+        try {
+            if (localFeedChromeAnimator != null) {
+                localFeedChromeAnimator.cancel();
+                localFeedChromeAnimator = null;
+            }
+        } catch (Exception ignored) {
+        }
+        if (visible) {
+            scheduleLocalFeedChromeAutoHide(true);
+        } else {
+            cancelLocalFeedChromeAutoHide();
+        }
+        float dens = getResources().getDisplayMetrics().density;
+        int h = localFeedChromeRoot.getHeight();
+        if (h <= 0) h = (int) (56f * dens);
+        float hiddenY = -h - 8f * dens;
+        if (!animate) {
+            localFeedChromeRoot.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+            localFeedChromeRoot.setTranslationY(visible ? 0f : hiddenY);
+            localFeedChromeRoot.setAlpha(visible ? 1f : 0f);
+            return;
+        }
+        if (visible) {
+            if (localFeedChromeRoot.getVisibility() != View.VISIBLE) {
+                localFeedChromeRoot.setVisibility(View.VISIBLE);
+                localFeedChromeRoot.setTranslationY(hiddenY);
+                localFeedChromeRoot.setAlpha(0f);
+            }
+        }
+        AnimatorSet set = new AnimatorSet();
+        ObjectAnimator ty = ObjectAnimator.ofFloat(
+                localFeedChromeRoot, View.TRANSLATION_Y, visible ? 0f : hiddenY);
+        ObjectAnimator al = ObjectAnimator.ofFloat(
+                localFeedChromeRoot, View.ALPHA, visible ? 1f : 0f);
+        ty.setDuration(HOME_MODE_CHROME_ANIM_MS);
+        al.setDuration(HOME_MODE_CHROME_ANIM_MS);
+        set.playTogether(ty, al);
+        set.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                localFeedChromeAnimator = null;
+                if (!visible && localFeedChromeRoot != null) {
+                    localFeedChromeRoot.setVisibility(View.INVISIBLE);
+                }
+            }
+        });
+        localFeedChromeAnimator = set;
+        set.start();
+    }
+
+    private void scheduleLocalFeedChromeAutoHide(boolean restartIfPending) {
+        if (!restartIfPending && localFeedChromeAutoHidePending) return;
+        if (isFinishing() || isDestroyed()) return;
+        if (!isLocalFeedChromeActive()) return;
+        if (localFeedChromeUserHidden) return;
+        int seconds = HomeModeChromeConfig.getAutoHideSeconds(this);
+        if (seconds <= 0) {
+            cancelLocalFeedChromeAutoHide();
+            return;
+        }
+        try {
+            localFeedChromeAutoHideHandler.removeCallbacks(localFeedChromeAutoHideRunnable);
+            localFeedChromeAutoHidePending = true;
+            localFeedChromeAutoHideHandler.postDelayed(
+                    localFeedChromeAutoHideRunnable, seconds * 1000L);
+        } catch (Exception ignored) {
+            localFeedChromeAutoHidePending = false;
+        }
+    }
+
+    private void bumpLocalFeedChromeAutoHide() {
+        if (!isLocalFeedChromeActive() || localFeedChromeUserHidden) return;
+        scheduleLocalFeedChromeAutoHide(true);
+    }
+
+    private void runLocalFeedChromeAutoHide() {
+        localFeedChromeAutoHidePending = false;
+        if (isFinishing() || isDestroyed()) return;
+        if (!isLocalFeedChromeActive()) return;
+        if (localFeedChromeUserHidden) return;
+        setLocalFeedChromeVisible(false, true);
+    }
+
+    private void cancelLocalFeedChromeAutoHide() {
+        localFeedChromeAutoHidePending = false;
+        try {
+            localFeedChromeAutoHideHandler.removeCallbacks(localFeedChromeAutoHideRunnable);
+        } catch (Exception ignored) {
+        }
+    }
+
     private void bindHomeActionChrome() {
         // Product: remove bottom Calendar|Reload overlay. Calendar is footer center;
         // top News|Read pill stays. Null the root so chrome animators never show it.
@@ -5489,6 +6063,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Leave Special/Video so News|Read chrome rules stay correct under calendar.
         setFeedModeFlags(false, false);
         calendarModeActive = true;
+        hideHomeDailyUpdatesMode();
         // Drop in-flight feed paints while calendar covers the content host.
         feedModeEpoch++;
         clearPendingFlipRestore();
@@ -5502,11 +6077,300 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void hideHomeCalendarMode() {
         calendarModeActive = false;
         try {
+            setHomeCalendarTtdChromeVisible(false, false);
+        } catch (Exception ignored) {
+        }
+        try {
             if (homeCalendarHost != null) {
                 homeCalendarHost.setVisibility(View.GONE);
             }
         } catch (Exception ignored) {
         }
+    }
+
+    private boolean isDailyUpdatesMode() {
+        return dailyUpdatesModeActive;
+    }
+
+    /** Hide embedded Daily Updates page. */
+    private void hideHomeDailyUpdatesMode() {
+        dailyUpdatesModeActive = false;
+        try {
+            if (homeDailyUpdatesHost != null) {
+                homeDailyUpdatesHost.setVisibility(View.GONE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void ensureDailyUpdatesController() {
+        if (homeDailyUpdatesHost == null || isFinishing() || isDestroyed()) return;
+        if (dailyUpdatesController != null) return;
+        try {
+            dailyUpdatesController = DailyUpdatesController.attachEmbedded(
+                    this,
+                    homeDailyUpdatesHost,
+                    new DailyUpdatesController.HostCallbacks() {
+                        @Override
+                        public void openFlashNewsFromDailyUpdates() {
+                            // Flash News = push_posts feed only (not main My Feed).
+                            hideHomeDailyUpdatesMode();
+                            performFlashNewsOpen();
+                        }
+
+                        @Override
+                        public void openLocalNewsFromDailyUpdates() {
+                            performLocalFeedOpenFromDailyUpdates();
+                        }
+
+                        @Override
+                        public void openPanchangamFromDailyUpdates() {
+                            // Footer Panchangam tab is product-hidden; open calendar in-host only.
+                            if (!isDeviceOnline()) {
+                                return;
+                            }
+                            performCalendarOpen();
+                        }
+                    });
+        } catch (Exception e) {
+            e.printStackTrace();
+            dailyUpdatesController = null;
+        }
+    }
+
+    /**
+     * Soft Daily Updates tab open: show mock page in content area above footer.
+     */
+    private void performDailyUpdatesOpen() {
+        showLog("performDailyUpdatesOpen");
+        localFeedFromDailyUpdates = false;
+        hideLocalFeedChrome();
+        if (!ProfileHubConfigHelper.isFooterShowVideos(this) || !isDeviceOnline()) {
+            // Reuse videos admin flag for Daily Updates slot visibility (same menu id).
+            return;
+        }
+        bumpHomeModeChromeAutoHideOnInteraction();
+        closeCenterPlusMenu(true);
+        hideHomeCalendarMode();
+        softMergeOnNextPage0 = false;
+        setFeedModeFlags(false, false);
+        dailyUpdatesModeActive = true;
+        feedModeEpoch++;
+        clearPendingFlipRestore();
+        try {
+            bookmarksModeSelected = false;
+            applyHomeModeContentVisibility();
+            refreshHomeModeToggleUi();
+        } catch (Exception ignored) {
+        }
+        try {
+            hideHomeFeedLoadingReveal(true);
+            if (layout_with_data != null) {
+                layout_with_data.setVisibility(View.GONE);
+            }
+            if (comment_page != null) {
+                comment_page.setVisibility(View.GONE);
+            }
+            if (txtNoData != null) {
+                txtNoData.setVisibility(View.GONE);
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (adapter != null && mFlipView != null) {
+                adapter.resetAllFlipChildrenVideoPlayers(mFlipView);
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (homeDailyUpdatesHost != null) {
+                homeDailyUpdatesHost.setVisibility(View.VISIBLE);
+                homeDailyUpdatesHost.post(() -> {
+                    if (isFinishing() || isDestroyed() || !isDailyUpdatesMode()) {
+                        return;
+                    }
+                    ensureDailyUpdatesController();
+                    if (dailyUpdatesController != null) {
+                        dailyUpdatesController.onHostResume();
+                    }
+                });
+            } else {
+                ensureDailyUpdatesController();
+                if (dailyUpdatesController != null) {
+                    dailyUpdatesController.onHostResume();
+                }
+            }
+        } catch (Exception ignored) {
+            ensureDailyUpdatesController();
+        }
+    }
+
+    private void setupHomeCalendarTtdToggle() {
+        homeCalendarTtdToggleRoot = findViewById(R.id.include_home_calendar_ttd_toggle);
+        if (homeCalendarTtdToggleRoot == null) {
+            homeCalendarTtdToggleRoot = findViewById(R.id.calendar_ttd_toggle_root);
+        }
+        if (homeCalendarTtdToggleRoot == null) return;
+        homeCalendarTtdThumb = homeCalendarTtdToggleRoot.findViewById(R.id.calendar_ttd_thumb);
+        homeCalendarTtdSegCalendar =
+                homeCalendarTtdToggleRoot.findViewById(R.id.calendar_seg_calendar);
+        homeCalendarTtdSegTtd = homeCalendarTtdToggleRoot.findViewById(R.id.calendar_seg_ttd);
+        if (homeCalendarTtdSegCalendar != null) {
+            homeCalendarTtdSegCalendar.setText(CalendarRaasiLabels.segPanchangam(this));
+            homeCalendarTtdSegCalendar.setOnClickListener(v -> {
+                bumpHomeCalendarTtdAutoHide();
+                layoutHomeCalendarTtdThumb(false);
+                ensureCalendarController();
+                if (calendarController != null) {
+                    calendarController.selectPanchangamPage(true);
+                }
+            });
+        }
+        if (homeCalendarTtdSegTtd != null) {
+            homeCalendarTtdSegTtd.setText(CalendarRaasiLabels.segRaasiPhalalu(this));
+            homeCalendarTtdSegTtd.setOnClickListener(v -> {
+                bumpHomeCalendarTtdAutoHide();
+                layoutHomeCalendarTtdThumb(true);
+                ensureCalendarController();
+                if (calendarController != null) {
+                    calendarController.selectRaasiPage(true);
+                }
+            });
+        }
+        homeCalendarTtdToggleRoot.setOnClickListener(v -> bumpHomeCalendarTtdAutoHide());
+        homeCalendarTtdToggleRoot.setVisibility(View.GONE);
+        homeCalendarTtdUserHidden = true;
+    }
+
+    private void layoutHomeCalendarTtdThumb(boolean raasiSelected) {
+        if (homeCalendarTtdThumb == null
+                || homeCalendarTtdSegCalendar == null
+                || homeCalendarTtdSegTtd == null) {
+            return;
+        }
+        final View thumb = homeCalendarTtdThumb;
+        final TextView left = homeCalendarTtdSegCalendar;
+        final TextView right = homeCalendarTtdSegTtd;
+        Runnable place = () -> {
+            int leftW = Math.max(left.getWidth(), (int) (110 * getResources().getDisplayMetrics().density));
+            int rightW = Math.max(right.getWidth(), (int) (110 * getResources().getDisplayMetrics().density));
+            ViewGroup.LayoutParams lp = thumb.getLayoutParams();
+            if (lp != null) {
+                lp.width = raasiSelected ? rightW : leftW;
+                thumb.setLayoutParams(lp);
+            }
+            thumb.setTranslationX(raasiSelected ? leftW : 0f);
+            left.setAlpha(raasiSelected ? 0.75f : 1f);
+            right.setAlpha(raasiSelected ? 1f : 0.75f);
+        };
+        if (left.getWidth() <= 0) left.post(place);
+        else place.run();
+    }
+
+    /** Keep HomePage pill thumb in sync when controller flips pages (back / segment). */
+    public void syncHomeCalendarSegmentThumb(boolean raasiSelected) {
+        layoutHomeCalendarTtdThumb(raasiSelected);
+    }
+
+    private void setHomeCalendarTtdChromeVisible(boolean visible, boolean animate) {
+        if (homeCalendarTtdToggleRoot == null) return;
+        // No longer gated on TTD admin flag — TTD is Daily Updates only.
+        homeCalendarTtdUserHidden = !visible;
+        if (visible) {
+            scheduleHomeCalendarTtdAutoHide(true);
+            homeCalendarTtdToggleRoot.bringToFront();
+            homeCalendarTtdToggleRoot.setElevation(48f * getResources().getDisplayMetrics().density);
+            homeCalendarTtdToggleRoot.setVisibility(View.VISIBLE);
+            if (animate) {
+                homeCalendarTtdToggleRoot.animate().cancel();
+                homeCalendarTtdToggleRoot.setAlpha(0f);
+                homeCalendarTtdToggleRoot.setTranslationY(-48f);
+                homeCalendarTtdToggleRoot.animate()
+                        .alpha(1f)
+                        .translationY(0f)
+                        .setDuration(280L)
+                        .start();
+            } else {
+                homeCalendarTtdToggleRoot.animate().cancel();
+                homeCalendarTtdToggleRoot.setAlpha(1f);
+                homeCalendarTtdToggleRoot.setTranslationY(0f);
+            }
+            boolean raasi = calendarController != null && calendarController.isRaasiPageVisible();
+            layoutHomeCalendarTtdThumb(raasi);
+        } else {
+            cancelHomeCalendarTtdAutoHide();
+            if (animate) {
+                homeCalendarTtdToggleRoot.animate().cancel();
+                homeCalendarTtdToggleRoot.animate()
+                        .alpha(0f)
+                        .translationY(-48f)
+                        .setDuration(280L)
+                        .withEndAction(() -> {
+                            if (homeCalendarTtdToggleRoot != null && homeCalendarTtdUserHidden) {
+                                homeCalendarTtdToggleRoot.setVisibility(View.GONE);
+                            }
+                        })
+                        .start();
+            } else {
+                homeCalendarTtdToggleRoot.animate().cancel();
+                homeCalendarTtdToggleRoot.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private void scheduleHomeCalendarTtdAutoHide(boolean restartIfPending) {
+        if (!restartIfPending && homeCalendarTtdAutoHidePending) return;
+        if (homeCalendarTtdUserHidden || homeCalendarTtdToggleRoot == null) return;
+        int seconds = HomeModeChromeConfig.getAutoHideSeconds(this);
+        if (seconds <= 0) {
+            cancelHomeCalendarTtdAutoHide();
+            return;
+        }
+        homeCalendarTtdHandler.removeCallbacks(homeCalendarTtdAutoHideRunnable);
+        homeCalendarTtdAutoHidePending = true;
+        homeCalendarTtdHandler.postDelayed(homeCalendarTtdAutoHideRunnable, seconds * 1000L);
+    }
+
+    private void bumpHomeCalendarTtdAutoHide() {
+        if (homeCalendarTtdUserHidden) return;
+        scheduleHomeCalendarTtdAutoHide(true);
+    }
+
+    private void runHomeCalendarTtdAutoHide() {
+        homeCalendarTtdAutoHidePending = false;
+        if (homeCalendarTtdUserHidden) return;
+        setHomeCalendarTtdChromeVisible(false, true);
+    }
+
+    private void cancelHomeCalendarTtdAutoHide() {
+        homeCalendarTtdAutoHidePending = false;
+        homeCalendarTtdHandler.removeCallbacks(homeCalendarTtdAutoHideRunnable);
+    }
+
+    /**
+     * Reveal Panchangam|Raasi chrome after auto-hide (tap calendar / raasi content).
+     * Treats a non-visible pill as hidden even if the flag drifted — so both Flip pages
+     * can always re-show the HomePage-hosted toggle for ~3s.
+     */
+    public void revealHomeCalendarTtdChrome() {
+        if (!isCalendarMode()) return;
+        boolean visiblyShown = homeCalendarTtdToggleRoot != null
+                && homeCalendarTtdToggleRoot.getVisibility() == View.VISIBLE
+                && homeCalendarTtdToggleRoot.getAlpha() > 0.05f;
+        if (!homeCalendarTtdUserHidden && visiblyShown) {
+            bumpHomeCalendarTtdAutoHide();
+            return;
+        }
+        setHomeCalendarTtdChromeVisible(true, true);
+    }
+
+    /**
+     * News|Read style: tap content to show chrome if hidden, or hide if visible.
+     * Auto-hide re-arms for {@link HomeModeChromeConfig} seconds (default 3).
+     */
+    public void toggleHomeCalendarChrome() {
+        if (!isCalendarMode()) return;
+        setHomeCalendarTtdChromeVisible(homeCalendarTtdUserHidden, true);
     }
 
     private void ensureCalendarController() {
@@ -5525,12 +6389,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Soft Calendar-tab open: show panchang FlipView in content area above footer.
+     * Soft Calendar open: show panchang FlipView in content area above footer.
      * Does not start {@link TeluguCalendarActivity}.
+     * Entry is Daily Updates (footer Panchangam tab is product-hidden).
      */
     private void performCalendarOpen() {
         showLog("performCalendarOpen");
-        if (!ProfileHubConfigHelper.isFooterShowCalendar(this) || !isDeviceOnline()) {
+        if (!isDeviceOnline()) {
             return;
         }
         bumpHomeModeChromeAutoHideOnInteraction();
@@ -5571,12 +6436,30 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         return;
                     }
                     ensureCalendarController();
+                    setHomeCalendarTtdChromeVisible(true, false);
+                    if (calendarController != null) {
+                        calendarController.onHostResume();
+                    }
                 });
             } else {
                 ensureCalendarController();
+                setHomeCalendarTtdChromeVisible(true, false);
+                if (calendarController != null) {
+                    calendarController.onHostResume();
+                }
             }
         } catch (Exception ignored) {
             ensureCalendarController();
+            try {
+                setHomeCalendarTtdChromeVisible(true, false);
+            } catch (Exception ignored2) {
+            }
+            if (calendarController != null) {
+                try {
+                    calendarController.onHostResume();
+                } catch (Exception ignored2) {
+                }
+            }
         }
     }
 
@@ -5592,11 +6475,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Single tap on article content (from FlipperAdapter) — hide/show the
-     * News|Bookmarks / News|Read top pill. Does not collapse article body/text.
+     * News|Bookmarks / News|Read top pill when tap mode is Reader or Hybrid
+     * (upper band). Classic mode uses long-press / pill for this; content taps
+     * hide reporter/district or likes/comments chrome instead.
      * Reveal always re-arms the {@link HomeModeChromeConfig} auto-hide delay (default 3s).
      */
     public void toggleHomeModeChrome() {
         if (isFinishing() || isDestroyed()) return;
+        if (isLocalFeedChromeActive()) {
+            toggleLocalFeedChrome();
+            return;
+        }
         // Offline Offline-News|Bookmarks or online main News|Read News only.
         if (!isHomeModeChromeActive()) return;
         if (homeModeToggleRoot == null && homeActionChromeRoot == null) return;
@@ -5661,14 +6550,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Online main News feed only: News | Read News pill (not Special / Video / offline).
+     * Online main News feed only: News | Read News pill (not Special / Video / offline /
+     * Mana-Zilla local path).
      */
     public boolean isOnlineMainNewsChromeActive() {
         return isDeviceOnline()
                 && !offlineChromeMode
+                && !localFeedFromDailyUpdates
                 && !isSpecialFeedMode()
                 && !isVideoFeedMode()
-                && !isCalendarMode();
+                && !isCalendarMode()
+                && !isDailyUpdatesMode();
+    }
+
+    /** Mana Zilla → Local-only path chrome (Local Varthalu | district). */
+    public boolean isLocalFeedChromeActive() {
+        return localFeedFromDailyUpdates && category_id == -1
+                && !isCalendarMode() && !isDailyUpdatesMode()
+                && !isSpecialFeedMode() && !isVideoFeedMode();
     }
 
     /**
@@ -7142,10 +8041,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Admin + offline-aware home footer slots.
-     * Online: News / Special / Calendar / Video News / Profile per Root_Settings flags.
-     * Center Calendar is product-on ({@link ProfileHubConfigHelper#isFooterShowCalendar}).
+     * Online: News / Daily Updates / Special / Profile per Root_Settings flags.
+     * Panchangam footer tab is product-off ({@link ProfileHubConfigHelper#isFooterShowCalendar});
+     * open calendar from Daily Updates only.
      * Center + / WhatsApp FAB overlays stay off ({@link ProfileHubConfigHelper#isFooterShowPlus}).
-     * Offline: only News; hide Special, Calendar, Video News, and Profile.
+     * Offline: only News; hide Special, Daily Updates, and Profile.
      * Bookmarks stay on the top News|Bookmarks pill (never a footer item).
      * {@link #rebalanceFooterTabs()} equal-weights whichever items remain visible
      * (single News tab gets full bar / weight 1).
@@ -7197,6 +8097,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         || selectedId == R.id.navigation_profile) {
                     try {
                         hideHomeCalendarMode();
+                        hideHomeDailyUpdatesMode();
                         suppressBottomNavCallbacks = true;
                         bottomNavigationView.setSelectedItemId(R.id.navigation_home);
                     } catch (Exception ignored) {
@@ -7499,10 +8400,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Centers the floating + FAB (and Share/WA overlays) over the empty
-     * {@code navigation_stricker} menu slot — not the absolute bar center.
-     * When Categories is hidden, equal weights leave that slot off geometric center;
-     * translationX aligns the FAB with the visible-tab grid.
+     * Centers magazine Share / WA overlays over the Special (center) footer slot —
+     * not the absolute bar center. When Special is hidden, equal weights leave that
+     * slot off geometric center; translationX aligns overlays with the visible-tab grid.
      */
     private void repositionCenterFabForVisibleTabs() {
         if (bottomNavigationView == null) {
@@ -7552,7 +8452,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** Center Calendar menu item in the bottom nav. */
+    /** Center Special menu item in the bottom nav (News|DU|Special|Profile). */
     @Nullable
     private View findFabSlotItemView() {
         if (bottomNavigationView == null) {
@@ -7570,7 +8470,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             BottomNavigationItemView itemView = (BottomNavigationItemView) child;
             if (itemView.getItemData() != null
-                    && itemView.getItemData().getItemId() == R.id.navigation_stricker) {
+                    && itemView.getItemData().getItemId() == R.id.navigation_catagiries) {
                 return itemView;
             }
         }
@@ -7763,14 +8663,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void openReportPage(int pos) {
         if(allsharedpreference.getEmailId()!=null && !allsharedpreference.getEmailId().equalsIgnoreCase("")){
             ListOfCommentsResponse.Datum lDatum=  comment_chooseLanguage_models.get(pos);
-            CommentsBottomSheetDialog commentsBottomSheetDialog =
-                    CommentsBottomSheetDialog.newInstance();
-            Bundle bundle=new Bundle();
-            bundle.putSerializable("lDatum",lDatum);
-
-            commentsBottomSheetDialog.setArguments(bundle);
-            commentsBottomSheetDialog.show(getSupportFragmentManager(),
-                    commentsBottomSheetDialog.TAG);
+            startActivity(new Intent(HomePage.this, ReportCommentScreenActivity.class)
+                    .putExtra("data", lDatum));
         }else{
 
             try {
@@ -7965,6 +8859,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // OnFlipCompleted is invoked from FlipView.dispatchDraw — never run heavy
         // settle work here or the first landed frame hitches (Narzo / low-RAM).
         schedulePostFlipSettleWork();
+        // Pagination is feed-position based, never creative based. Post it off the
+        // draw callback so a no-fill/house ad seat at the end cannot strand a
+        // fast-scroll before the deferred ad work gets a chance to run.
+        if (v != null) {
+            v.post(() -> {
+                try {
+                    maybePrefetchOnlineNewsIfNearEnd();
+                } catch (Exception ignored) {
+                }
+            });
+        }
     }
 
     /** Cancel queued settle batches when a newer flip supersedes them. */
@@ -8971,8 +9876,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Video News offline with no saved videos: empty message (pack may still have
-     * non-video articles).
+     * Paint last successful Flash / push_posts page-0 from OpenPath disk.
+     * Never paints main My Feed — avoids looking like News when Flash is empty.
+     * @return true when at least one item was painted
+     */
+    private boolean paintCachedFlashFeed() {
+        try {
+            EncreptionRequest cached = OpenPathCache.loadFeed(
+                    this, 0, OpenPathCache.FEED_MODE_VIDEO);
+            if (cached == null) {
+                cached = OpenPathCache.loadFeedForOffline(
+                        this, 0, OpenPathCache.FEED_MODE_VIDEO);
+            }
+            if (cached == null || TextUtils.isEmpty(cached.getData())) {
+                return false;
+            }
+            convertListOfArticles(cached, 0, true);
+            if (list == null || list.isEmpty()) {
+                return false;
+            }
+            rebindFlipperAdapterWithCurrentList();
+            hideHomeFeedLoadingReveal(true);
+            if (txtNoData != null) txtNoData.setVisibility(View.GONE);
+            if (mFlipView != null) mFlipView.setVisibility(View.VISIBLE);
+            if (layout_with_data != null) layout_with_data.setVisibility(View.VISIBLE);
+            showLog("Flash: painted FEED_MODE_VIDEO cache size=" + list.size());
+            return true;
+        } catch (Exception e) {
+            Logone.w(e, "paintCachedFlashFeed");
+            return false;
+        }
+    }
+
+    /**
+     * Flash / former Video offline with no cached push feed: empty message.
      */
     private void showVideoOfflineEmptyState() {
         try {
@@ -9010,7 +9947,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 txtNoData.setVisibility(View.VISIBLE);
             }
             if (nodatascreen != null) {
-                nodatascreen.setText(getString(R.string.video_news_offline_empty));
+                // Device has a link but server/monitor may be down — prefer softer copy.
+                nodatascreen.setText(isNetworkConnected()
+                        ? getString(R.string.breaking_news_empty)
+                        : getString(R.string.breaking_news_offline_empty));
             }
             if (yes_internet != null) {
                 yes_internet.setVisibility(View.VISIBLE);
@@ -9658,6 +10598,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
                         leave_comment_white.setText("");
                         clearReplyContext();
+                        refreshCommentComposeHint();
                         if (adapter != null) {
                             adapter.incrementCommentCount(positionx);
                         } else {
@@ -9673,7 +10614,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
 
                         comment_recycler_view.setVisibility(View.GONE);
-                        comment_totoal_count.setVisibility(View.GONE);
+                        if (comment_totoal_count != null) {
+                            comment_totoal_count.setVisibility(View.GONE);
+                        }
 
                         long post_id = list.get(positionx).getPostId();
                         long sub_post_id = list.get(positionx).getSubPostId();
@@ -9719,6 +10662,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private void OpenComment(long post_id, long sub_post_id) {
         showProgress();
+        setCommentArticleTitleFromCurrentPost();
+        refreshCommentComposeHint();
         comment_chooseLanguage_models = new ArrayList<>();
         comment_chooseLanguage_models.clear();
         JsonObject otp = getAllCommentRequestData(post_id, sub_post_id);
@@ -9824,7 +10769,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 leave_comment_white.setHint("" + languageModelResponse.getData().getWriteComments());
                 applyMagazineShareFooterLabel();
 
-                if (category_id == 0) {
+                if (category_id == 0 || category_id == -1) {
                     type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
                 } else {
                     type = languageModelResponse.getData().getMyFeed().toString();
@@ -9987,6 +10932,35 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         adapter = null;
         requestSize = 0;
+    }
+
+    /**
+     * True page-0 Local district feed ({@code category_id = -1}). Drops in-flight
+     * main-feed responses, clears FlipView scrap, and forces network so warm
+     * main (cat=0) disk never paints or poisons local cache.
+     */
+    private void prepareLocalFeedPage0(boolean fromDailyUpdates) {
+        feedModeEpoch++;
+        clearPendingFlipRestore();
+        dummyResponse = null;
+        last_post_id = 0;
+        skip = 0;
+        actual_skip = 0;
+        positionx = 0;
+        lastSettledFlipIndex = -1;
+        requestSize = 0;
+        requestPostition = 1;
+        isApiRequested = false;
+        isDataParsed = true;
+        isFromLocalArticles = true;
+        onlineNewsAllReadSkipStreak = 0;
+        no_article_message = FEED_LOADING_MESSAGE;
+        hardClearFlipFeedImmediate();
+        clearNativeAdPools();
+        OpenPathCache.forceNextFeedNetwork(this);
+        category_id = -1;
+        localFeedFromDailyUpdates = fromDailyUpdates;
+        list = new ArrayList<>();
     }
 
     /**
@@ -10177,7 +11151,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * everything else. Mutates the list in place.
      */
     private void filterListToVideoPostsOnly(@Nullable java.util.List<ModelClass.Datum> items) {
+        // Breaking / Flash News tab (former Video slot) shows pushed article types from
+        // push history (main + district local) — do not strip to video-only.
         if (items == null || items.isEmpty()) return;
+        if (isVideoFeedMode()) return;
         for (int i = items.size() - 1; i >= 0; i--) {
             ModelClass.Datum d = items.get(i);
             if (d == null || !isVideoFeedAllowedPostType(d.getPostType())) {
@@ -10266,7 +11243,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performFeedReload() {
         showLog("performFeedReload initialCall=" + initialCall);
+        // Leaving any Mana Zilla local path when Reload / News main is requested.
+        localFeedFromDailyUpdates = false;
+        hideLocalFeedChrome();
         hideHomeCalendarMode();
+        hideHomeDailyUpdatesMode();
         writeButtonClick("User", type_firebase_button, current_time_firebase,
                 draft_id_firebase, device_id_firebase, button_name_home);
         showLog("isUnreadPostsSelected set to false #5");
@@ -10325,7 +11306,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performSpecialFeedOpen() {
         showLog("performSpecialFeedOpen");
+        localFeedFromDailyUpdates = false;
+        hideLocalFeedChrome();
         hideHomeCalendarMode();
+        hideHomeDailyUpdatesMode();
         clearSpecialTabBlink();
         showLog("Check Point #5 : HomePage performSpecialFeedOpen soft");
         // Never soft-merge main Offline/reconnect list into Special.
@@ -10387,20 +11371,96 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Soft Video News tab open: always {@code video_posts=true} page 0 from the top
-     * (half + full video only). Offline: paints main offline pack filtered to videos
-     * when any exist; otherwise a clear empty message.
+     * From Mana Zilla on Daily Updates: leave DU, select News tab, open Local
+     * district feed ({@code category_id = -1}) for the persisted district.
+     * Back / chrome back returns to News main feed (not Daily Updates).
      */
-    private void performVideoFeedOpen() {
-        showLog("performVideoFeedOpen");
+    private void performLocalFeedOpenFromDailyUpdates() {
+        showLog("performLocalFeedOpenFromDailyUpdates");
         hideHomeCalendarMode();
+        hideHomeDailyUpdatesMode();
+        localFeedFromDailyUpdates = true;
+        try {
+            suppressBottomNavCallbacks = true;
+            if (bottomNavigationView != null) {
+                bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            suppressBottomNavCallbacks = false;
+        }
         try {
             bookmarksModeSelected = false;
             applyHomeModeContentVisibility();
             refreshHomeModeToggleUi();
         } catch (Exception ignored) {
         }
-        if (!isDeviceOnline()) {
+        try {
+            refreshDistrictLabelsForCurrentLanguage();
+        } catch (Exception ignored) {
+        }
+        try {
+            // Hide News|Read chrome while Local filter chrome is active.
+            forceHideAllHomeModeChrome();
+            cancelHomeModeChromeAutoHide();
+            setFeedModeFlags(false, false);
+            if (un_selected_local != null) un_selected_local.setVisibility(View.GONE);
+            if (selected_local != null) selected_local.setVisibility(View.VISIBLE);
+            if (un_selected_my_feed != null) un_selected_my_feed.setVisibility(View.VISIBLE);
+            if (selected_my_feed != null) selected_my_feed.setVisibility(View.GONE);
+            if (mFlipView != null) mFlipView.setVisibility(View.VISIBLE);
+            showHomeFeedLoadingReveal();
+            if (layout_with_data != null) layout_with_data.setVisibility(View.GONE);
+            if (comment_page != null) comment_page.setVisibility(View.GONE);
+            prepareLocalFeedPage0(true);
+            showLocalFeedChrome(true);
+            inlist(-1);
+            writeButtonClick("User", type_firebase_button, current_time_firebase,
+                    draft_id_firebase, device_id_firebase, button_name_local);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Leave Mana Zilla local-only path and restore News main feed ({@code category_id=0}).
+     */
+    private void exitLocalFeedToMainNews() {
+        showLog("exitLocalFeedToMainNews");
+        localFeedFromDailyUpdates = false;
+        hideLocalFeedChrome();
+        try {
+            if (un_selected_local != null) un_selected_local.setVisibility(View.VISIBLE);
+            if (selected_local != null) selected_local.setVisibility(View.GONE);
+            if (un_selected_my_feed != null) un_selected_my_feed.setVisibility(View.GONE);
+            if (selected_my_feed != null) selected_my_feed.setVisibility(View.VISIBLE);
+        } catch (Exception ignored) {
+        }
+        performFeedReload();
+    }
+
+    /**
+     * Soft Flash News open (reuses videoFeedModeActive): page 0 with
+     * {@code push_posts=true} (language-scoped push history). Not main My Feed.
+     * <p>
+     * Uses {@link #isNetworkConnected()} (not {@link #isDeviceOnline()}) so a brief
+     * ServerAvailabilityMonitor "unavailable" while Daily Updates still shows splash
+     * cache does not immediately paint "Connect to see Flash News".
+     */
+    private void performVideoFeedOpen() {
+        showLog("performVideoFeedOpen");
+        localFeedFromDailyUpdates = false;
+        hideLocalFeedChrome();
+        hideHomeCalendarMode();
+        hideHomeDailyUpdatesMode();
+        try {
+            bookmarksModeSelected = false;
+            applyHomeModeContentVisibility();
+            refreshHomeModeToggleUi();
+        } catch (Exception ignored) {
+        }
+        // No transport → try Flash disk cache, else empty. Do not paint main feed.
+        if (!isNetworkConnected()) {
             OpenPathCache.clearForceFeedNetwork();
             try {
                 clearPendingFlipRestore();
@@ -10424,19 +11484,48 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
             hideHomeFeedLoadingReveal(true);
-            if (!paintOfflineVideoFeed()) {
+            if (!paintCachedFlashFeed()) {
                 showVideoOfflineEmptyState();
             }
             return;
         }
-        prepareVideoFeedFromTop();
+        // Link up but monitor may say API down — nudge health + still request push_posts.
         try {
-            showHomeFeedLoadingReveal();
-            layout_with_data.setVisibility(View.GONE);
-            comment_page.setVisibility(View.GONE);
+            if (ServerAvailabilityMonitor.get().isUnavailable()) {
+                ServerAvailabilityMonitor.get().maybeHealthCheck("flash_open", true);
+            }
+        } catch (Exception ignored) {
+        }
+        prepareVideoFeedFromTop();
+        // Instant paint prior Flash page while network refresh lands.
+        boolean warmed = paintCachedFlashFeed();
+        // Warm paint may advance skip/last_post_id from the snapshot — zero them so
+        // inlist still does a true page-0 push_posts network refresh.
+        try {
+            last_post_id = 0;
+            skip = 0;
+            actual_skip = 0;
+        } catch (Exception ignored) {
+        }
+        try {
+            if (!warmed) {
+                showHomeFeedLoadingReveal();
+                layout_with_data.setVisibility(View.GONE);
+            }
+            if (comment_page != null) {
+                comment_page.setVisibility(View.GONE);
+            }
         } catch (Exception ignored) {
         }
         inlist(0);
+    }
+
+    /**
+     * Flash News from Daily Updates — same push_posts path as former Video tab
+     * ({@link #performVideoFeedOpen}), named for clarity.
+     */
+    private void performFlashNewsOpen() {
+        performVideoFeedOpen();
     }
 
     private JsonObject Articles_All(int category_id) {
@@ -10495,13 +11584,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         requestModel.setDatafrom2g(DATAFROM2G);
         boolean specialMode = isSpecialFeedMode();
         boolean videoMode = isVideoFeedMode();
-        // Mutually exclusive: Video News always wins over Special when video tab is on
+        // Mutually exclusive: Flash News (4th tab) wins over Special when that tab is on
         // so page 2+ never remaps to special_posts / main sticky pagination.
         if (videoMode) {
             specialMode = false;
         }
         requestModel.setSpecial_posts(specialMode);
-        requestModel.setVideo_posts(videoMode);
+        // Flash News tab reuses videoFeedModeActive flag but requests push history,
+        // not video-only — same FlipView open path as News.
+        requestModel.setVideo_posts(false);
+        requestModel.setPush_posts(videoMode);
         // Full chronological List_All_Articles — no exclude_post_ids densify.
         // Already-read items stay in News; Read tab filters local history only.
         requestModel.setScreenHeight(height);
@@ -10575,14 +11667,31 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 || stickyPushOrShare
                 || OpenPathCache.isForceFeedNetworkPending();
 
-        // Full offline: main → OfflineFeedStore; Special online-only; Video filters pack.
+        // Full offline: main → OfflineFeedStore; Special online-only; Flash uses push cache.
+        // Flash/video: if the device has a network link, do NOT return early when only
+        // ServerAvailabilityMonitor says unavailable — still request push_posts.
         if (!isDeviceOnline()) {
-            if (special) {
+            final boolean flashTryNetwork = videoFeed && isNetworkConnected();
+            if (flashTryNetwork) {
+                showLog("Flash: monitor offline but link up — continue push_posts network");
+                // fall through to network path below
+            } else if (special) {
                 showSpecialOfflineEmptyState();
+                if (OpenPathCache.isForceFeedNetworkPending()) {
+                    OpenPathCache.clearForceFeedNetwork();
+                }
+                softMergeOnNextPage0 = false;
+                return;
             } else if (videoFeed) {
-                if (!paintOfflineVideoFeed()) {
+                // Flash/push mode: paint FEED_MODE_VIDEO cache only — never main OpenPath.
+                if (!paintCachedFlashFeed()) {
                     showVideoOfflineEmptyState();
                 }
+                if (OpenPathCache.isForceFeedNetworkPending()) {
+                    OpenPathCache.clearForceFeedNetwork();
+                }
+                softMergeOnNextPage0 = false;
+                return;
             } else if (isFirstPage || list == null || list.isEmpty()) {
                 boolean painted = paintOfflineFeed(false, true);
                 if (!painted && isFirstPage) {
@@ -10593,15 +11702,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     } catch (Exception ignored) {
                     }
                 }
+                if (OpenPathCache.isForceFeedNetworkPending()) {
+                    OpenPathCache.clearForceFeedNetwork();
+                }
+                softMergeOnNextPage0 = false;
+                return;
             } else {
                 // Pagination while offline on main: keep current list, no network.
                 hideHomeFeedLoadingReveal(true);
+                if (OpenPathCache.isForceFeedNetworkPending()) {
+                    OpenPathCache.clearForceFeedNetwork();
+                }
+                softMergeOnNextPage0 = false;
+                return;
             }
-            if (OpenPathCache.isForceFeedNetworkPending()) {
-                OpenPathCache.clearForceFeedNetwork();
-            }
-            softMergeOnNextPage0 = false;
-            return;
         }
 
         boolean paintedFromDisk = false;
@@ -10610,8 +11724,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         long paintedSkip = 0;
         long paintedActualSkip = 0;
         long paintedLastPostId = 0;
-        if (isFirstPage && !forceUserRefresh) {
+        if (isFirstPage && !forceUserRefresh && category_id != -1 && !localFeedFromDailyUpdates) {
             // Main mode only — special/video never hydrate from main page-0 disk.
+            // Local (-1) and Mana-Zilla path skip warm paint — main cat=0 disk must not bleed.
             // Warm OpenPath only (≤5 min). No offline pack decoy while online.
             EncreptionRequest cached = OpenPathCache.loadFeedForInstantPaint(
                     this, category_id, OpenPathCache.FEED_MODE_MAIN);
@@ -10705,10 +11820,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             OpenPathCache.clearForceFeedNetwork();
         }
 
-        // Drop in-flight responses after Special/News/Video mode change.
+        // Drop in-flight responses after Special/News/Video/local mode change.
         final int epochAtEnqueue = feedModeEpoch;
         final boolean specialAtEnqueue = special;
         final boolean videoAtEnqueue = videoFeed;
+        final int categoryAtEnqueue = this.category_id;
 
         Callback<EncreptionRequest> feedCallback = new Callback<EncreptionRequest>() {
 
@@ -10718,6 +11834,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog("List_All_Articles stale response dropped epoch="
                             + epochAtEnqueue + " now=" + feedModeEpoch
                             + " specialWas=" + specialAtEnqueue + " videoWas=" + videoAtEnqueue);
+                    isApiRequested = false;
+                    return;
+                }
+                if (categoryAtEnqueue != category_id) {
+                    showLog("List_All_Articles category mismatch dropped enq="
+                            + categoryAtEnqueue + " now=" + category_id);
                     isApiRequested = false;
                     return;
                 }
@@ -10734,12 +11856,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (response != null && response.body() != null && isFirstPage && !special && !videoFeed && !isStickyFeedOpen()) {
                     OpenPathCache.saveFeed(
                             HomePage.this,
-                            category_id,
+                            categoryAtEnqueue,
                             response.body(),
                             OpenPathCache.FEED_MODE_MAIN);
+                } else if (response != null && response.body() != null && isFirstPage && videoFeed) {
+                    // Flash / push_posts page-0 — separate disk so reopen is instant.
+                    OpenPathCache.saveFeed(
+                            HomePage.this,
+                            category_id,
+                            response.body(),
+                            OpenPathCache.FEED_MODE_VIDEO);
                 } else if (response != null && response.body() != null && isFirstPage) {
-                    // Special/video/sticky still timestamps success so plain reopens can soft-skip later,
-                    // but do not overwrite main disk cache with special/video payloads.
+                    // Special/sticky still timestamps success so plain reopens can soft-skip later,
+                    // but do not overwrite main disk cache with special payloads.
                     OpenPathCache.markFeedNetworkSuccess(HomePage.this);
                 }
                 // isFirstPage → replace (reload/special/open + network over disk paint).
@@ -10768,7 +11897,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             return;
                         }
                         if (videoFlag) {
-                            if (!paintOfflineVideoFeed()) {
+                            // Flash mode — prefer cached push feed; never main-feed offline paint.
+                            if (!paintCachedFlashFeed()) {
                                 showVideoOfflineEmptyState();
                             }
                             initialCall = true;
@@ -11247,6 +12377,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getPn_thumb_size_dp(),
                             encreptionRequest.getPn_title_size_sp()
                     );
+                    LiveReadersConfig.saveFromServer(
+                            HomePage.this,
+                            encreptionRequest.getLive_readers_enabled(),
+                            encreptionRequest.getLive_readers_window_minutes(),
+                            encreptionRequest.getLive_readers_show_seconds(),
+                            encreptionRequest.getLive_readers_min_count());
                     ScreenCaptureHelper.saveAllowed(HomePage.this, encreptionRequest.isAllow_screen_capture());
                     cachedCaptureAllowed = encreptionRequest.isAllow_screen_capture();
                     // Re-apply so a toggle change takes effect on this screen without restart.
@@ -11590,9 +12726,33 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 && !bookmarksModeSelected
                                 && list != null
                                 && !list.isEmpty()) {
-                            // News / Special: load more when near end (Video sets above).
+                            // News / Local / Special: load more when near end (Video sets above).
                             int n = list.size();
                             requestPostition = Math.max(1, Math.min(n - 1, Math.max(1, n - 3)));
+                            // Prefetch page N+1 as soon as page 0 lands so flips never dead-end
+                            // waiting on a slow API (same idea as Video feed above).
+                            final boolean maybeMore = validateUserOtp.getData().size() >= 4;
+                            if (maybeMore && !isApiRequested && dummyResponse == null
+                                    && isDeviceOnline()) {
+                                final int prefetchAt = requestPostition;
+                                final boolean specialAtParse = specialNow;
+                                showLog((category_id == -1 ? "local" : specialAtParse
+                                        ? "special" : "news")
+                                        + " feed prefetch at pos=" + prefetchAt
+                                        + " list=" + n + " skip=" + skip);
+                                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (!isDeviceOnline()) return;
+                                        if (dummyResponse != null || isApiRequested) return;
+                                        if (list == null || list.isEmpty()) return;
+                                        if (isVideoFeedMode()) return;
+                                        if (specialAtParse != isSpecialFeedMode()) return;
+                                        isApiRequested = true;
+                                        ShowNews_Data_Values(category_id, 3);
+                                    }
+                                });
+                            }
                         }
                         showLog("pagination cursors fromCache=" + fromCache
                                 + " skip=" + skip + " actual_skip=" + actual_skip
@@ -11760,7 +12920,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 txtNoData.setVisibility(View.VISIBLE);
                                 try {
                                     if (nodatascreen != null && isVideoFeedMode()) {
-                                        nodatascreen.setText(getString(R.string.video_news_empty));
+                                        nodatascreen.setText(getString(R.string.breaking_news_empty));
                                     }
                                 } catch (Exception ignored) {
                                 }
@@ -11804,12 +12964,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         getApplicationContext(),
                         Constants.NOTIFICATION_REPROMPT_DUE,
                         Constants.PREF_NAME,
-                        false)
-                        && SharedPrefsData.getBool(
-                                getApplicationContext(),
-                                Constants.NOTIFICATION_REPROMPT_ENABLED,
-                                Constants.PREF_NAME,
-                                false);
+                        false);
                 if (!fromCache || duePreferPrefs) {
                     Boolean pushPermAlert = encreptionRequest.getShow_push_perm_alert();
                     showNotificationAlert(
@@ -11903,6 +13058,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("isPlayingVideoInFullScreen"+isPlayingVideoInFullScreen);
         int count = this.getSupportFragmentManager().getBackStackEntryCount();
         if (count == 0) {
+            if (isLocalFeedChromeActive()) {
+                exitLocalFeedToMainNews();
+                return;
+            }
             if (isCalendarMode() && calendarController != null
                     && calendarController.handleBackPress()) {
                 return;
@@ -12847,6 +14006,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         calendarModeActive = false;
+        dailyUpdatesModeActive = false;
+        dailyUpdatesController = null;
         try {
             OfflinePackPrefetcher.get().bindHost(null);
             OfflineFeedStore.setPackChangeListener(null);
@@ -12947,6 +14108,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onResume() {
         super.onResume();
         homeActivityResumed = true;
+        try {
+            if (isCalendarMode()) {
+                setHomeCalendarTtdChromeVisible(true, false);
+                if (calendarController != null) {
+                    calendarController.onHostResume();
+                }
+            }
+            if (isDailyUpdatesMode() && dailyUpdatesController != null) {
+                dailyUpdatesController.onHostResume();
+            }
+        } catch (Exception ignored) {
+        }
         // If create-menu was left open while backgrounded, collapse so feed + icon match.
         try {
             if (isCenterPlusMenuOpen()) {
@@ -12994,8 +14167,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         try {
+            // Fresh resume → allow ask-on-open again if notifications still OFF.
+            askOnOpenHandledThisResume = false;
             // Admin re-prompt / install POST_NOTIFICATIONS before soft GPS so one dialog at a time.
             maybeRequestInstallAndRepromptPermissions();
+        } catch (Exception ignored) {
+        }
+        try {
+            // Soft (dismissible) profile-photo tip for approved reporters — after permission prompts.
+            final android.view.View decor = getWindow() != null ? getWindow().getDecorView() : null;
+            if (decor != null) {
+                decor.postDelayed(
+                        () -> {
+                            try {
+                                if (!isFinishing() && homeActivityResumed) {
+                                    ReporterPhotoReminderHelper.maybeShow(HomePage.this);
+                                }
+                            } catch (Exception ignored2) {
+                            }
+                        },
+                        1800);
+            }
         } catch (Exception ignored) {
         }
         try {
@@ -13376,7 +14568,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 // Re-tap Special while already on Special: always restart from article 0.
                 performSpecialFeedOpen();
             } else if (item.getItemId() == R.id.navigation_status) {
-                performVideoFeedOpen();
+                performDailyUpdatesOpen();
             } else if (item.getItemId() == R.id.navigation_stricker) {
                 if (ProfileHubConfigHelper.isFooterShowCalendar(HomePage.this)
                         && isDeviceOnline()) {
@@ -13412,9 +14604,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog(" layout_with_out_data:::" + layout_with_out_data.getVisibility());
                     showLog(" layout_with_data:::" + layout_with_data.getVisibility());
                     showLog(" txtNoData:::" + txtNoData.getVisibility());
-                    if (initialCall || isCalendarMode()) {
+                    if (initialCall || isCalendarMode() || isDailyUpdatesMode()) {
                         // Soft restart: clear push sticky + flip restore + fetch skip=0.
-                        // Leaves Special/Calendar if open and reloads My Feed page 0.
+                        // Leaves Special/Calendar/Daily Updates if open and reloads My Feed page 0.
                         // Avoid activity CLEAR_TASK recreate (re-applied flip-restore prefs
                         // and could re-land with stale state).
                         performFeedReload();
@@ -13431,15 +14623,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     performSpecialFeedOpen();
                     return true;
                 case R.id.navigation_status:
+                    // Daily Updates (slot 2). Flash News via page chip.
                     if (!ProfileHubConfigHelper.isFooterShowVideos(HomePage.this)
                             || !isDeviceOnline()) {
                         return false;
                     }
                     closeCenterPlusMenu(true);
-                    performVideoFeedOpen();
+                    performDailyUpdatesOpen();
                     return true;
                 case R.id.navigation_stricker:
-                    // Center Calendar — embed in HomePage content host (footer stays).
+                    // Panchangam — embed Telugu calendar in HomePage content host.
                     if (!ProfileHubConfigHelper.isFooterShowCalendar(HomePage.this)
                             || !isDeviceOnline()) {
                         return false;
@@ -13538,6 +14731,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         datum.setComments(list.get(position).getComments());
                         datum.setLikeStatus(list.get(position).getLikeStatus());
                         datum.setShares(list.get(position).getShares());
+                        datum.setWhatsappShares(list.get(position).getWhatsappShares());
                         datum.setDownloads(list.get(position).getDownloads());
                         datum.setStickyPosition(list.get(position).getStickyPosition());
                         datum.setDownloads(list.get(position).getDownloads());

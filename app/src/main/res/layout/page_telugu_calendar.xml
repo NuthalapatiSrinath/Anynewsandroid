@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Flip 0: calendar + tithi cards + festival strip + swipe cue.
-     No NestedScrollView — page is fixed so FlipView vertical flip reaches రాశి ఫలాలు. -->
+<!-- Flip 0: calendar + tithi cards + festival strip.
+     Rashi is reached via top Panchangam|Raasi segment (not swipe/page-flip).
+     Body (grid + cards + holiday) stays hidden until year pack is ready, then reveals L→R. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/telugu_calendar_scroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:clipChildren="false"
     android:clipToPadding="false"
     android:orientation="vertical"
-    android:paddingBottom="56dp">
+    android:paddingBottom="8dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -75,122 +77,164 @@
         android:paddingEnd="4dp"
         android:paddingBottom="2dp" />
 
-    <GridLayout
-        android:id="@+id/telugu_calendar_grid"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:alignmentMode="alignBounds"
-        android:columnCount="7"
-        android:paddingStart="2dp"
-        android:paddingEnd="2dp"
-        android:useDefaultMargins="false" />
-
+    <!-- Stage fills remaining height: loader OR full body (grid+cards+holiday+swipe). -->
     <FrameLayout
+        android:id="@+id/telugu_calendar_body_stage"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:minHeight="168dp"
-        android:paddingTop="8dp">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipChildren="true"
+        android:clipToPadding="true">
 
-        <androidx.viewpager.widget.ViewPager
-            android:id="@+id/telugu_calendar_pager"
+        <LinearLayout
+            android:id="@+id/telugu_calendar_body"
             android:layout_width="match_parent"
-            android:layout_height="190dp"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
             android:clipToPadding="false"
-            android:overScrollMode="never"
-            android:paddingStart="12dp"
-            android:paddingEnd="28dp" />
+            android:orientation="vertical"
+            android:visibility="invisible">
 
-        <!-- Kept for code bind; page counters hidden per product. -->
-        <TextView
-            android:id="@+id/telugu_calendar_detail_page_indicator"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_marginEnd="16dp"
-            android:layout_marginBottom="4dp"
-            android:textColor="#888888"
-            android:textSize="11sp"
-            android:visibility="gone" />
+            <GridLayout
+                android:id="@+id/telugu_calendar_grid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:alignmentMode="alignBounds"
+                android:columnCount="7"
+                android:minHeight="190dp"
+                android:paddingStart="2dp"
+                android:paddingEnd="2dp"
+                android:useDefaultMargins="false" />
 
-        <!-- Retired card top-right share — blinking footer share is on activity root. -->
-        <ImageView
-            android:id="@+id/telugu_calendar_day_share"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_gravity="top|end"
-            android:contentDescription="@string/telugu_calendar_share_day"
-            android:src="@drawable/ic_baseline_share_24"
-            android:visibility="gone" />
+            <FrameLayout
+                android:id="@+id/telugu_calendar_pager_host"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:minHeight="220dp"
+                android:paddingTop="6dp">
+
+                <androidx.viewpager.widget.ViewPager
+                    android:id="@+id/telugu_calendar_pager"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:minHeight="220dp"
+                    android:clipToPadding="false"
+                    android:overScrollMode="never"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="28dp" />
+
+                <!-- Kept for code bind; page counters hidden per product. -->
+                <TextView
+                    android:id="@+id/telugu_calendar_detail_page_indicator"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|end"
+                    android:layout_marginEnd="16dp"
+                    android:layout_marginBottom="4dp"
+                    android:textColor="#888888"
+                    android:textSize="11sp"
+                    android:visibility="gone" />
+
+                <!-- Retired card top-right share — blinking footer share is on activity root. -->
+                <ImageView
+                    android:id="@+id/telugu_calendar_day_share"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_gravity="top|end"
+                    android:contentDescription="@string/telugu_calendar_share_day"
+                    android:src="@drawable/ic_baseline_share_24"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/telugu_calendar_festival_strip"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/bg_calendar_festival_strip"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingEnd="10dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/telugu_calendar_festival_icon"
+                    android:layout_width="22dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_calendar_flag" />
+
+                <TextView
+                    android:id="@+id/telugu_calendar_festival_text"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_calendar_chevron_right_muted" />
+            </LinearLayout>
+
+            <!-- Former swipe-to-rashi cue — retired; Rashi is the top toggle segment. -->
+            <LinearLayout
+                android:id="@+id/telugu_calendar_swipe_cue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:focusable="true"
+                android:gravity="center_horizontal"
+                android:minHeight="24dp"
+                android:orientation="vertical"
+                android:paddingTop="4dp"
+                android:paddingBottom="8dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/telugu_calendar_swipe_arrow"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:clickable="false"
+                    android:contentDescription="@null"
+                    android:padding="4dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_calendar_swipe_down"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/telugu_calendar_swipe_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:clickable="false"
+                    android:text="@string/calendar_seg_raasi_phalalu"
+                    android:textColor="@color/colorPrimary"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Same News-feed skeleton (media bone + text bars + L→R shimmer). -->
+        <com.anyNews.anynews.Ui.HomeFeedRevealView
+            android:id="@+id/telugu_calendar_load_reveal"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true" />
     </FrameLayout>
-
-    <LinearLayout
-        android:id="@+id/telugu_calendar_festival_strip"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="4dp"
-        android:background="#0A0A0A"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp">
-
-        <ImageView
-            android:id="@+id/telugu_calendar_festival_icon"
-            android:layout_width="22dp"
-            android:layout_height="16dp"
-            android:contentDescription="@null"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_calendar_flag" />
-
-        <TextView
-            android:id="@+id/telugu_calendar_festival_text"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="#4DA3FF"
-            android:textSize="13sp" />
-
-        <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_calendar_chevron_right_blue" />
-    </LinearLayout>
-
-    <!-- Visual swipe affordance only — navigation is FlipView vertical swipe. -->
-    <LinearLayout
-        android:id="@+id/telugu_calendar_swipe_cue"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:clickable="false"
-        android:focusable="false"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:paddingTop="14dp"
-        android:paddingBottom="10dp">
-
-        <ImageView
-            android:id="@+id/telugu_calendar_swipe_arrow"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:clickable="false"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_calendar_swipe_down" />
-
-        <TextView
-            android:id="@+id/telugu_calendar_swipe_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:clickable="false"
-            android:text="@string/telugu_calendar_swipe_hint"
-            android:textColor="@color/colorPrimary"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-    </LinearLayout>
 
     <TextView
         android:id="@+id/telugu_calendar_flip_indicator"
@@ -201,14 +245,5 @@
         android:paddingBottom="6dp"
         android:textColor="#888888"
         android:textSize="11sp"
-        android:visibility="gone" />
-
-    <ProgressBar
-        android:id="@+id/telugu_calendar_loading"
-        style="?android:attr/progressBarStyleSmall"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="4dp"
         android:visibility="gone" />
 </LinearLayout>

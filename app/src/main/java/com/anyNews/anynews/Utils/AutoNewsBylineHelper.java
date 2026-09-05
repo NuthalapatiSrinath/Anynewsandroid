@@ -85,6 +85,7 @@ public final class AutoNewsBylineHelper {
     /**
      * Designation line under the name. Auto News posts always show Reporter
      * (translated via language pack / string resource when available).
+     * Editor / admin titles are never shown — map to Reporter.
      */
     public static String displayDesignation(
             Context context,
@@ -93,7 +94,7 @@ public final class AutoNewsBylineHelper {
         if (item == null) {
             return "";
         }
-        if (isAutoNewsPost(item)) {
+        if (isAutoNewsPost(item) || isEditorLikeRole(item.getRole())) {
             return resolveReporterLabel(context, languageModelResponse);
         }
         String role = item.getRole();
@@ -101,6 +102,18 @@ public final class AutoNewsBylineHelper {
             return "";
         }
         return role;
+    }
+
+    /** True when API/DB sent Editor (or similar) — app must show Reporter instead. */
+    public static boolean isEditorLikeRole(String role) {
+        if (TextUtils.isEmpty(role)) {
+            return false;
+        }
+        String r = role.trim().toLowerCase(Locale.US);
+        return "editor".equals(r)
+                || "super admin".equals(r)
+                || "admin".equals(r)
+                || "administrator".equals(r);
     }
 
     public static String resolveReporterLabel(

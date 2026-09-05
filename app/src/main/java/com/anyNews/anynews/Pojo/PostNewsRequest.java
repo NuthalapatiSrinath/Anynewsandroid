@@ -20,6 +20,18 @@ public class PostNewsRequest {
     @SerializedName("skip")
     @Expose
     private Integer skip;
+    @SerializedName("limit")
+    @Expose
+    private Integer limit;
+    @SerializedName("start_time")
+    @Expose
+    private String startTime;
+    @SerializedName("end_time")
+    @Expose
+    private String endTime;
+    @SerializedName("group_by_week")
+    @Expose
+    private Boolean groupByWeek;
 
     public Integer getDraftId() {
         return draftId;
@@ -61,4 +73,35 @@ public class PostNewsRequest {
         this.skip = skip;
     }
 
+    public Integer getLimit() {
+        return limit;
+    }
+
+    public void setLimit(Integer limit) {
+        this.limit = limit;
+    }
+
+    public String getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(String startTime) {
+        this.startTime = startTime;
+    }
+
+    public String getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(String endTime) {
+        this.endTime = endTime;
+    }
+
+    public Boolean getGroupByWeek() {
+        return groupByWeek;
+    }
+
+    public void setGroupByWeek(Boolean groupByWeek) {
+        this.groupByWeek = groupByWeek;
+    }
 }

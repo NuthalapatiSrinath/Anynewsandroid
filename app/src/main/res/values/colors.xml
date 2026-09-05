@@ -4,6 +4,19 @@
     <!-- Brand orange taken from the ANYNEWS logo (logo_new.xml fillColor). Single source of truth for brand color. -->
     <color name="brand_orange">#EF4923</color>
     <color name="colorPrimary">#EF4923</color>
+    <!-- Comments screen (Way2-style dark chrome, AnyNews orange accents) -->
+    <color name="comments_page_bg">#121212</color>
+    <color name="comments_header_bg">#1A1A1A</color>
+    <color name="comments_card_bg">#1E1E1E</color>
+    <color name="comments_input_bg">#2A2A2A</color>
+    <color name="comments_compose_bg">#161616</color>
+    <color name="comments_text_primary">#F0F0F0</color>
+    <color name="comments_text_secondary">#9E9E9E</color>
+    <color name="comments_text_tertiary">#757575</color>
+    <color name="comments_divider">#2C2C2C</color>
+    <color name="comments_reply_label">#757575</color>
+    <color name="comments_reply_snippet">#616161</color>
+    <color name="comments_switch_track_off">#555555</color>
     <color name="colorAccent">#D15353</color>
 
     <!-- Glass / profile hub (day: soft frost; neutral edge — avoid red/orange debug look) -->

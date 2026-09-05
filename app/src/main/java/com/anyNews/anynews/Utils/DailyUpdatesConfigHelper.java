@@ -11,7 +11,8 @@ import org.json.JSONObject;
 
 /**
  * Splash {@code daily_updates} — hub kill switches, card art offset,
- * Mana Zilla per-language enable + headline typography, Stock Market.
+ * Mana Zilla per-language enable + headline typography, Stock Market,
+ * Flash chrome, per-card content start, text sizes.
  */
 public final class DailyUpdatesConfigHelper {
 
@@ -20,6 +21,13 @@ public final class DailyUpdatesConfigHelper {
     private static final int DEFAULT_MANA_Y_DP = 0;
     private static final int DEFAULT_MANA_SIZE_SP = 11;
     private static final int DEFAULT_STOCK_OFFSET_Y_DP = 0;
+    /** Grid cards: XML paddingStart; admin moves text column horizontally. */
+    private static final int DEFAULT_CARD_CONTENT_START_DP = 64;
+    /** Stock strip: wider art column — XML paddingStart 136. */
+    private static final int DEFAULT_STOCK_CONTENT_START_DP = 136;
+    private static final int DEFAULT_FLASH_ICON_DP = 56;
+    private static final int DEFAULT_FLASH_ICON_MARGIN_DP = 6;
+    private static final int DEFAULT_FLASH_PAD_START_DP = 34;
     /** Telugu language id — Mana Zilla default ON only for this language. */
     public static final int TELUGU_LANGUAGE_ID = 3;
     /** Telugu desk state ids (autoNewsLocalGeo defaults). */
@@ -60,6 +68,60 @@ public final class DailyUpdatesConfigHelper {
                     o.optInt("mana_headline_offset_y_dp", DEFAULT_MANA_Y_DP), -24, 24);
             putIntClamped(app, Constants.DU_MANA_HEADLINE_TEXT_SIZE_SP,
                     o.optInt("mana_headline_text_size_sp", DEFAULT_MANA_SIZE_SP), 9, 16);
+
+            putIntClamped(app, Constants.DU_PAGE_TITLE_TEXT_SIZE_SP,
+                    o.optInt("page_title_text_size_sp", 17), 14, 22);
+            putIntClamped(app, Constants.DU_PAGE_SUBTITLE_TEXT_SIZE_SP,
+                    o.optInt("page_subtitle_text_size_sp", 11), 9, 14);
+            putIntClamped(app, Constants.DU_CARD_TITLE_TEXT_SIZE_SP,
+                    o.optInt("card_title_text_size_sp", 11), 9, 16);
+            putIntClamped(app, Constants.DU_CARD_BODY_TEXT_SIZE_SP,
+                    o.optInt("card_body_text_size_sp", 11), 8, 16);
+            putIntClamped(app, Constants.DU_CARD_CTA_TEXT_SIZE_SP,
+                    o.optInt("card_cta_text_size_sp", 10), 8, 14);
+            putIntClamped(app, Constants.DU_CARD_HERO_TEXT_SIZE_SP,
+                    o.optInt("card_hero_text_size_sp", 24), 16, 32);
+            putIntClamped(app, Constants.DU_STOCK_TITLE_TEXT_SIZE_SP,
+                    o.optInt("stock_title_text_size_sp", 13), 10, 18);
+            putIntClamped(app, Constants.DU_STOCK_BODY_TEXT_SIZE_SP,
+                    o.optInt("stock_body_text_size_sp", 12), 9, 16);
+            putIntClamped(app, Constants.DU_STOCK_CTA_TEXT_SIZE_SP,
+                    o.optInt("stock_cta_text_size_sp", 10), 8, 14);
+            putIntClamped(app, Constants.DU_FLASH_CHIP_TEXT_SIZE_SP,
+                    o.optInt("flash_chip_text_size_sp", 11), 9, 16);
+            putIntClamped(app, Constants.DU_FLASH_HEADLINE_TEXT_SIZE_SP,
+                    o.optInt("flash_headline_text_size_sp", 11), 9, 16);
+
+            // Horizontal paddingStart — use splashNumber (Gson Doubles / strings).
+            putIntClamped(app, Constants.DU_WEATHER_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "weather_content_start_dp",
+                            DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
+            putIntClamped(app, Constants.DU_FUEL_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "fuel_content_start_dp",
+                            DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
+            putIntClamped(app, Constants.DU_GOLD_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "gold_content_start_dp",
+                            DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
+            putIntClamped(app, Constants.DU_TTD_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "ttd_content_start_dp",
+                            DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
+            putIntClamped(app, Constants.DU_JOBS_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "jobs_content_start_dp",
+                            DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
+            putIntClamped(app, Constants.DU_PANCHANGAM_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "panchangam_content_start_dp",
+                            DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
+            putIntClamped(app, Constants.DU_STOCK_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "stock_content_start_dp",
+                            DEFAULT_STOCK_CONTENT_START_DP), DEFAULT_STOCK_CONTENT_START_DP), 100, 180);
+
+            putIntClamped(app, Constants.DU_FLASH_ICON_SIZE_DP,
+                    o.optInt("flash_icon_size_dp", DEFAULT_FLASH_ICON_DP), 40, 72);
+            putIntClamped(app, Constants.DU_FLASH_ICON_MARGIN_START_DP,
+                    o.optInt("flash_icon_margin_start_dp", DEFAULT_FLASH_ICON_MARGIN_DP), 0, 24);
+            putIntClamped(app, Constants.DU_FLASH_CONTENT_PAD_START_DP,
+                    o.optInt("flash_content_pad_start_dp", DEFAULT_FLASH_PAD_START_DP), 20, 64);
+
             JSONArray langs = o.optJSONArray("mana_zilla_language_ids");
             StringBuilder csv = new StringBuilder();
             if (langs != null && langs.length() > 0) {
@@ -131,7 +193,6 @@ public final class DailyUpdatesConfigHelper {
                     arr != null ? arr.toString() : "[]",
                     Constants.PREF_NAME);
             putIntClamped(app, Constants.DU_LOCAL_HEADLINES_DIST, o.optInt("dist_id", 0), 0, 999999);
-            // Also seed mana title cache for instant DU paint.
             String t1 = "";
             String t2 = "";
             if (arr != null) {
@@ -255,7 +316,6 @@ public final class DailyUpdatesConfigHelper {
             default: liveDefault = "Live prices"; break;
         }
         if (TextUtils.isEmpty(t)) return liveDefault;
-        // Hub row default chrome → prefer live-prices label on detail.
         String hubDefault = stockSubtitle(context);
         if (hubDefault.equals(t) || t.contains("నిఫ్టీ") || t.toLowerCase().contains("nifty")) {
             return liveDefault;
@@ -358,6 +418,150 @@ public final class DailyUpdatesConfigHelper {
         return readInt(context, Constants.DU_MANA_HEADLINE_TEXT_SIZE_SP, DEFAULT_MANA_SIZE_SP, 9, 16);
     }
 
+    public static int pageTitleTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_PAGE_TITLE_TEXT_SIZE_SP, 17, 14, 22);
+    }
+
+    public static int pageSubtitleTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_PAGE_SUBTITLE_TEXT_SIZE_SP, 11, 9, 14);
+    }
+
+    public static int cardTitleTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_CARD_TITLE_TEXT_SIZE_SP, 11, 9, 16);
+    }
+
+    public static int cardBodyTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_CARD_BODY_TEXT_SIZE_SP, 11, 8, 16);
+    }
+
+    public static int cardCtaTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_CARD_CTA_TEXT_SIZE_SP, 10, 8, 14);
+    }
+
+    public static int cardHeroTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_CARD_HERO_TEXT_SIZE_SP, 24, 16, 32);
+    }
+
+    public static int stockTitleTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_STOCK_TITLE_TEXT_SIZE_SP, 13, 10, 18);
+    }
+
+    public static int stockBodyTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_STOCK_BODY_TEXT_SIZE_SP, 12, 9, 16);
+    }
+
+    public static int stockCtaTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_STOCK_CTA_TEXT_SIZE_SP, 10, 8, 14);
+    }
+
+    public static int flashChipTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_FLASH_CHIP_TEXT_SIZE_SP, 11, 9, 16);
+    }
+
+    public static int flashHeadlineTextSizeSp(@Nullable Context context) {
+        return readInt(context, Constants.DU_FLASH_HEADLINE_TEXT_SIZE_SP, 11, 9, 16);
+    }
+
+    public static int weatherContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_WEATHER_CONTENT_START_DP,
+                "weather_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
+    }
+
+    public static int fuelContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_FUEL_CONTENT_START_DP,
+                "fuel_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
+    }
+
+    public static int goldContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_GOLD_CONTENT_START_DP,
+                "gold_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
+    }
+
+    public static int ttdContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_TTD_CONTENT_START_DP,
+                "ttd_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
+    }
+
+    public static int jobsContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_JOBS_CONTENT_START_DP,
+                "jobs_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
+    }
+
+    public static int panchangamContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_PANCHANGAM_CONTENT_START_DP,
+                "panchangam_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
+    }
+
+    public static int stockContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_STOCK_CONTENT_START_DP,
+                "stock_content_start_dp", DEFAULT_STOCK_CONTENT_START_DP, 100, 180);
+    }
+
+    /**
+     * Prefer dedicated prefs key; fall back to splash {@code daily_updates} JSON blob
+     * when an older build set {@code daily_updates_config_set} without writing insets.
+     */
+    private static int readContentStartDp(
+            @Nullable Context context,
+            @NonNull String prefKey,
+            @NonNull String jsonKey,
+            int def,
+            int min,
+            int max) {
+        final int MISSING = Integer.MIN_VALUE;
+        int v = readInt(context, prefKey, MISSING, MISSING, Integer.MAX_VALUE);
+        if (v == MISSING) {
+            v = readContentStartFromConfigJson(context, jsonKey, MISSING);
+            if (v == MISSING) {
+                return def;
+            }
+            v = migrateContentStart(v, def);
+        }
+        if (v < min) return min;
+        if (v > max) return max;
+        return v;
+    }
+
+    private static int readContentStartFromConfigJson(
+            @Nullable Context context, @NonNull String jsonKey, int def) {
+        if (context == null) return def;
+        try {
+            String raw = SharedPrefsData.getString(
+                    context.getApplicationContext(),
+                    Constants.DAILY_UPDATES_CONFIG_JSON,
+                    Constants.PREF_NAME);
+            if (TextUtils.isEmpty(raw)) return def;
+            JSONObject o = new JSONObject(raw);
+            if (!o.has(jsonKey) || o.isNull(jsonKey)) return def;
+            return splashNumber(o, jsonKey, def);
+        } catch (Exception e) {
+            return def;
+        }
+    }
+
+    /**
+     * Legacy vertical defaults were 0–28 (often 10). Map those onto the XML
+     * horizontal paddingStart base so old splash values do not collapse text into icons.
+     */
+    private static int migrateContentStart(int raw, int baseDefault) {
+        if (raw >= 0 && raw <= 28 && baseDefault >= 40) {
+            return baseDefault + (raw - 10);
+        }
+        return raw;
+    }
+
+    public static int flashIconSizeDp(@Nullable Context context) {
+        return readInt(context, Constants.DU_FLASH_ICON_SIZE_DP, DEFAULT_FLASH_ICON_DP, 40, 72);
+    }
+
+    public static int flashIconMarginStartDp(@Nullable Context context) {
+        return readInt(context, Constants.DU_FLASH_ICON_MARGIN_START_DP, DEFAULT_FLASH_ICON_MARGIN_DP, 0, 24);
+    }
+
+    public static int flashContentPadStartDp(@Nullable Context context) {
+        return readInt(context, Constants.DU_FLASH_CONTENT_PAD_START_DP, DEFAULT_FLASH_PAD_START_DP, 20, 64);
+    }
+
     public static int manaZillaBgResId(@Nullable Context context) {
         int stateId = 0;
         try {
@@ -382,14 +586,42 @@ public final class DailyUpdatesConfigHelper {
                 if (s.isEmpty() || "null".equalsIgnoreCase(s)) return null;
                 return new JSONObject(s);
             }
+            if (raw instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> map = (java.util.Map<String, Object>) raw;
+                return new JSONObject(map);
+            }
             return new JSONObject(String.valueOf(new com.google.gson.Gson().toJson(raw)));
         } catch (Exception e) {
             return null;
         }
     }
 
+    /**
+     * Splash numbers often arrive as Gson {@link Double}; {@link JSONObject#optInt}
+     * can miss them depending on how the object was built — parse explicitly.
+     */
+    private static int splashNumber(@NonNull JSONObject o, @NonNull String key, int def) {
+        if (!o.has(key) || o.isNull(key)) return def;
+        try {
+            Object raw = o.opt(key);
+            if (raw instanceof Number) {
+                return (int) Math.round(((Number) raw).doubleValue());
+            }
+            if (raw instanceof String) {
+                String s = ((String) raw).trim();
+                if (s.isEmpty()) return def;
+                return (int) Math.round(Double.parseDouble(s));
+            }
+            return o.optInt(key, def);
+        } catch (Exception e) {
+            return def;
+        }
+    }
+
     private static void putBool(Context app, String key, boolean v) {
-        SharedPrefsData.putString(app, key, v ? "true" : "false", Constants.PREF_NAME);
+        // Boolean prefs — matches SharedPrefsData.getBool / legacy dumps.
+        SharedPrefsData.putBool(app, key, v, Constants.PREF_NAME);
     }
 
     private static void putIntClamped(Context app, String key, int v, int min, int max) {
@@ -401,10 +633,20 @@ public final class DailyUpdatesConfigHelper {
     private static boolean readBool(@Nullable Context context, String key, boolean def) {
         if (context == null) return def;
         try {
-            String v = SharedPrefsData.getString(
-                    context.getApplicationContext(), key, Constants.PREF_NAME);
-            if (TextUtils.isEmpty(v)) return def;
-            return "true".equalsIgnoreCase(v) || "1".equals(v);
+            Context app = context.getApplicationContext();
+            android.content.SharedPreferences sp =
+                    app.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (sp != null && sp.contains(key)) {
+                Object raw = sp.getAll().get(key);
+                if (raw instanceof Boolean) return (Boolean) raw;
+                if (raw instanceof String) {
+                    String s = ((String) raw).trim();
+                    if (s.isEmpty()) return def;
+                    return "true".equalsIgnoreCase(s) || "1".equals(s);
+                }
+                if (raw instanceof Number) return ((Number) raw).intValue() != 0;
+            }
+            return def;
         } catch (Exception ignored) {
             return def;
         }
@@ -425,14 +667,21 @@ public final class DailyUpdatesConfigHelper {
     private static int readInt(@Nullable Context context, String key, int def, int min, int max) {
         if (context == null) return def;
         try {
-            if (!SharedPrefsData.getBool(
-                    context.getApplicationContext(),
-                    Constants.DAILY_UPDATES_CONFIG_SET,
-                    Constants.PREF_NAME)) {
+            Context app = context.getApplicationContext();
+            if (!SharedPrefsData.getBool(app, Constants.DAILY_UPDATES_CONFIG_SET, Constants.PREF_NAME)) {
                 return def;
             }
-            int v = SharedPrefsData.getInt(
-                    context.getApplicationContext(), key, Constants.PREF_NAME);
+            // Missing key → SharedPrefs getInt defaults to 0; keep XML defaults until splash writes.
+            // Sentinel Integer.MIN_VALUE = caller handles "missing" (content-start JSON fallback).
+            android.content.SharedPreferences sp =
+                    app.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (sp == null || !sp.contains(key)) {
+                return def;
+            }
+            int v = SharedPrefsData.getInt(app, key, Constants.PREF_NAME);
+            if (def == Integer.MIN_VALUE && min == Integer.MIN_VALUE) {
+                return v; // raw for content-start path
+            }
             if (v < min) return min;
             if (v > max) return max;
             return v;

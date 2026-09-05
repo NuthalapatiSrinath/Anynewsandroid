@@ -1,5 +1,6 @@
 package com.anyNews.anynews.Activities;
 
+import android.app.DatePickerDialog;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
@@ -7,6 +8,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -37,9 +39,13 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
 import retrofit2.Call;
@@ -99,6 +105,23 @@ public class PostArticleStatus extends AppCompatActivity {
     private final AtomicIntegerArray requestGen = new AtomicIntegerArray(3);
     private final boolean[] inflight = new boolean[3];
 
+    private View dateFilterRow;
+    private TextView dateFromView;
+    private TextView dateToView;
+    private TextView dateApplyView;
+    private TextView dateClearView;
+    /** yyyy-MM-dd or empty */
+    private String filterStart = "";
+    private String filterTo = "";
+    private int nextSkip = 0;
+    private long firstPostId = 0L;
+    private boolean hasMore = false;
+    private boolean loadingMore = false;
+    /** Flat article rows (no week headers) for pagination append. */
+    private final ArrayList<PostsModel.Datum> flatArticles = new ArrayList<>();
+
+    private static final int PAGE_LIMIT = 50;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -150,6 +173,26 @@ public class PostArticleStatus extends AppCompatActivity {
             }
         });
 
+        dateFilterRow = findViewById(R.id.posts_date_filter_row);
+        dateFromView = findViewById(R.id.posts_date_from);
+        dateToView = findViewById(R.id.posts_date_to);
+        dateApplyView = findViewById(R.id.posts_date_apply);
+        dateClearView = findViewById(R.id.posts_date_clear);
+        setupDateFilterUi();
+
+        post_status.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (dy <= 0 || loadingMore || !hasMore || isMetricMode()) return;
+                if (linearLayoutManager == null) return;
+                int last = linearLayoutManager.findLastVisibleItemPosition();
+                int total = postsStatusAdopter != null ? postsStatusAdopter.getItemCount() : 0;
+                if (total > 0 && last >= total - 4) {
+                    fetchUserPosts(currentStatus, false, true);
+                }
+            }
+        });
+
         applyMetricChrome();
         if (!isMetricMode()) {
             applyLocalizedTabLabels();
@@ -188,7 +231,7 @@ public class PostArticleStatus extends AppCompatActivity {
                 @Override
                 public void onRefresh() {
                     // User pull: soft network refresh; keep existing list until response.
-                    fetchUserPosts(currentStatus, true);
+                    fetchUserPosts(currentStatus, true, false);
                 }
             });
         }
@@ -205,10 +248,75 @@ public class PostArticleStatus extends AppCompatActivity {
     private void applyMetricChrome() {
         if (!isMetricMode()) return;
         if (tabsRow != null) tabsRow.setVisibility(View.GONE);
+        if (dateFilterRow != null) dateFilterRow.setVisibility(View.GONE);
         if (pageTitle != null) {
             pageTitle.setVisibility(View.VISIBLE);
             pageTitle.setText(buildMetricTitle());
         }
+    }
+
+    private void setupDateFilterUi() {
+        if (dateFilterRow == null) return;
+        if (isMetricMode()) {
+            dateFilterRow.setVisibility(View.GONE);
+            return;
+        }
+        dateFilterRow.setVisibility(View.VISIBLE);
+        if (dateFromView != null) {
+            dateFromView.setOnClickListener(v -> pickDate(true));
+        }
+        if (dateToView != null) {
+            dateToView.setOnClickListener(v -> pickDate(false));
+        }
+        if (dateApplyView != null) {
+            dateApplyView.setOnClickListener(v -> {
+                if (!TextUtils.isEmpty(filterStart) && !TextUtils.isEmpty(filterTo)
+                        && filterStart.compareTo(filterTo) > 0) {
+                    Toast.makeText(this, "From date must be before To date", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                resetPaging();
+                fetchUserPosts(currentStatus, true, false);
+            });
+        }
+        if (dateClearView != null) {
+            dateClearView.setOnClickListener(v -> {
+                filterStart = "";
+                filterTo = "";
+                if (dateFromView != null) dateFromView.setText("");
+                if (dateToView != null) dateToView.setText("");
+                resetPaging();
+                fetchUserPosts(currentStatus, true, false);
+            });
+        }
+    }
+
+    private void pickDate(final boolean isFrom) {
+        Calendar c = Calendar.getInstance();
+        DatePickerDialog dlg = new DatePickerDialog(
+                this,
+                (view, year, month, dayOfMonth) -> {
+                    String iso = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth);
+                    if (isFrom) {
+                        filterStart = iso;
+                        if (dateFromView != null) dateFromView.setText(iso);
+                    } else {
+                        filterTo = iso;
+                        if (dateToView != null) dateToView.setText(iso);
+                    }
+                },
+                c.get(Calendar.YEAR),
+                c.get(Calendar.MONTH),
+                c.get(Calendar.DAY_OF_MONTH));
+        dlg.show();
+    }
+
+    private void resetPaging() {
+        nextSkip = 0;
+        firstPostId = 0L;
+        hasMore = false;
+        loadingMore = false;
+        flatArticles.clear();
     }
 
     private String buildMetricTitle() {
@@ -391,6 +499,7 @@ public class PostArticleStatus extends AppCompatActivity {
      */
     private void showTab(int status, boolean isInitialOpen) {
         currentStatus = status;
+        resetPaging();
         final int draftId = SharedPrefsData.getInt(
                 getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
         if (TextUtils.isEmpty(resolvedMobile)) {
@@ -404,14 +513,20 @@ public class PostArticleStatus extends AppCompatActivity {
             return;
         }
 
-        List<PostsModel.Datum> cached =
-                PostStatusListCache.load(this, draftId, resolvedMobile, status);
+        // Date filter active → skip stale cache (cache is unfiltered).
+        boolean dateFilterOn = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
+        List<PostsModel.Datum> cached = dateFilterOn
+                ? null
+                : PostStatusListCache.load(this, draftId, resolvedMobile, status);
         boolean hasCache = cached != null;
 
         if (hasCache) {
-            paintList(status, cached);
+            flatArticles.clear();
+            for (PostsModel.Datum d : cached) {
+                if (d != null && !d.isWeekHeader) flatArticles.add(d);
+            }
+            paintList(status, withWeekHeaders(flatArticles));
         } else {
-            // Uncached tab: clear only this tab's view (do not show spinner). Soft network fills in.
             paintList(status, new ArrayList<PostsModel.Datum>());
             if (emptyState != null) {
                 emptyState.setVisibility(View.GONE);
@@ -427,9 +542,7 @@ public class PostArticleStatus extends AppCompatActivity {
             return;
         }
 
-        // Soft refresh: spinner only on explicit pull, never on open/tab when cache exists.
-        // First visit (no cache): no blocking spinner either — network fills quietly.
-        fetchUserPosts(status, false);
+        fetchUserPosts(status, false, false);
 
         if (isInitialOpen && !isMetricMode()) {
             prefetchOtherTabs(status);
@@ -444,7 +557,7 @@ public class PostArticleStatus extends AppCompatActivity {
             if (isFinishing()) return;
             for (int s : ALL_STATUSES) {
                 if (s == visibleStatus) continue;
-                fetchUserPosts(s, false);
+                fetchUserPosts(s, false, false);
             }
         });
     }
@@ -499,7 +612,7 @@ public class PostArticleStatus extends AppCompatActivity {
         return digits;
     }
 
-    private JsonObject buildRequestBody(int status) {
+    private JsonObject buildRequestBody(int status, int skip, long firstPost) {
         PostNewsRequest requestModel = new PostNewsRequest();
 
         int draftId = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
@@ -514,8 +627,16 @@ public class PostArticleStatus extends AppCompatActivity {
         requestModel.setDraftId(draftId);
         requestModel.setMobileNumber(resolvedMobile != null ? resolvedMobile : "");
         requestModel.setPostStatus(status);
-        requestModel.setFirstPostId(0L);
-        requestModel.setSkip(0);
+        requestModel.setFirstPostId(firstPost > 0 ? firstPost : 0L);
+        requestModel.setSkip(skip);
+        requestModel.setLimit(PAGE_LIMIT);
+        requestModel.setGroupByWeek(true);
+        if (!TextUtils.isEmpty(filterStart)) {
+            requestModel.setStartTime(filterStart);
+        }
+        if (!TextUtils.isEmpty(filterTo)) {
+            requestModel.setEndTime(filterTo);
+        }
 
         String jsonString = new Gson().toJson(requestModel);
         String encrpt_data = encrypt(jsonString);
@@ -529,8 +650,9 @@ public class PostArticleStatus extends AppCompatActivity {
      * Network load for one status. Does not clear the current adapter.
      *
      * @param userPull true only for SwipeRefresh pull — shows small pull indicator.
+     * @param append   true to load next page and append.
      */
-    private void fetchUserPosts(final int status, final boolean userPull) {
+    private void fetchUserPosts(final int status, final boolean userPull, final boolean append) {
         final int draftId = SharedPrefsData.getInt(
                 getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
         if (draftId <= 0 && TextUtils.isEmpty(resolvedMobile)) {
@@ -539,12 +661,27 @@ public class PostArticleStatus extends AppCompatActivity {
         }
         if (status < 0 || status > 2) return;
 
-        // Avoid stacking identical background fetches for the same tab.
-        if (!userPull && inflight[status]) {
-            return;
+        if (append) {
+            if (loadingMore || !hasMore || status != currentStatus) return;
+            loadingMore = true;
+        } else {
+            // Avoid stacking identical background fetches for the same tab.
+            if (!userPull && inflight[status]) {
+                return;
+            }
+            inflight[status] = true;
+            // Only reset visible-tab paging; prefetch must not wipe the active list.
+            if (status == currentStatus) {
+                nextSkip = 0;
+                firstPostId = 0L;
+                hasMore = false;
+                loadingMore = false;
+                flatArticles.clear();
+            }
         }
-        inflight[status] = true;
-        final int gen = requestGen.incrementAndGet(status);
+        final int gen = append ? requestGen.get(status) : requestGen.incrementAndGet(status);
+        final int reqSkip = append ? nextSkip : 0;
+        final long reqFirst = append ? firstPostId : 0L;
 
         if (userPull && swipeRefresh != null && status == currentStatus) {
             swipeRefresh.setRefreshing(true);
@@ -552,6 +689,7 @@ public class PostArticleStatus extends AppCompatActivity {
 
         if (!BookmarkStore.isNetworkAvailable(this)) {
             inflight[status] = false;
+            loadingMore = false;
             if (userPull && status == currentStatus) {
                 stopRefreshing();
                 if (list == null || list.isEmpty()) {
@@ -563,7 +701,7 @@ public class PostArticleStatus extends AppCompatActivity {
             return;
         }
 
-        JsonObject body = buildRequestBody(status);
+        JsonObject body = buildRequestBody(status, reqSkip, reqFirst);
         showLog("API REQ get_user_posts encrypted body " + body.toString());
         APIService apiService = RestApiClient.getClient().create(APIService.class);
         Call<EncreptionRequest> apiResponse = apiService.get_user_posts("v3", body);
@@ -571,14 +709,15 @@ public class PostArticleStatus extends AppCompatActivity {
         apiResponse.enqueue(new Callback<EncreptionRequest>() {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-                inflight[status] = false;
+                if (!append) inflight[status] = false;
+                loadingMore = false;
                 if (status == currentStatus) {
                     stopRefreshing();
                 }
 
                 try {
                     if (!response.isSuccessful() || response.body() == null || response.body().getData() == null) {
-                        if (status == currentStatus && gen == requestGen.get(status)) {
+                        if (status == currentStatus && gen == requestGen.get(status) && !append) {
                             handleFetchError(status, "Could not load articles.",
                                     "Failed to load posts (" + response.code() + ")", true);
                         }
@@ -592,27 +731,55 @@ public class PostArticleStatus extends AppCompatActivity {
 
                     PostsModel postsModel = new Gson().fromJson(plain, PostsModel.class);
                     if (postsModel == null) {
-                        if (status == currentStatus && gen == requestGen.get(status)) {
+                        if (status == currentStatus && gen == requestGen.get(status) && !append) {
                             handleFetchError(status, "Invalid response.", null, false);
                         }
                         return;
                     }
 
-                    ArrayList<PostsModel.Datum> next = new ArrayList<>();
                     if (Boolean.TRUE.equals(postsModel.getSuccess())) {
                         List<PostsModel.Datum> data = postsModel.getData();
-                        if (data != null && !data.isEmpty()) {
-                            next.addAll(data);
+                        ArrayList<PostsModel.Datum> page = new ArrayList<>();
+                        if (data != null) {
+                            for (PostsModel.Datum d : data) {
+                                if (d != null && !d.isWeekHeader) page.add(d);
+                            }
                         }
-                        // Always cache successful responses (including empty).
-                        PostStatusListCache.save(
-                                getApplicationContext(), draftId, resolvedMobile, status, next);
-
-                        // Totals on every get_user_posts success (incl. prefetch / non-visible tab).
-                        applyStatusCountsFromResponse(postsModel);
 
                         if (status == currentStatus && gen == requestGen.get(status)) {
-                            paintList(status, next);
+                            if (!append) {
+                                flatArticles.clear();
+                            }
+                            flatArticles.addAll(page);
+                            if (postsModel.getSkip() != null) {
+                                nextSkip = postsModel.getSkip();
+                            } else {
+                                nextSkip = reqSkip + page.size();
+                            }
+                            if (postsModel.getFirstPostId() != null && postsModel.getFirstPostId() > 0) {
+                                firstPostId = postsModel.getFirstPostId();
+                            } else if (!flatArticles.isEmpty() && flatArticles.get(0).getCreatedAt() != null) {
+                                firstPostId = flatArticles.get(0).getCreatedAt();
+                            }
+                            hasMore = Boolean.TRUE.equals(postsModel.getHasMore());
+
+                            boolean dateFilterOn = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
+                            if (!append && !dateFilterOn) {
+                                PostStatusListCache.save(
+                                        getApplicationContext(), draftId, resolvedMobile, status,
+                                        new ArrayList<>(flatArticles));
+                            }
+
+                            applyStatusCountsFromResponse(postsModel);
+                            paintList(status, withWeekHeaders(flatArticles));
+                        } else if (!append) {
+                            // Prefetch other tabs: cache flat list only
+                            applyStatusCountsFromResponse(postsModel);
+                            boolean dateFilterOn = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
+                            if (!dateFilterOn) {
+                                PostStatusListCache.save(
+                                        getApplicationContext(), draftId, resolvedMobile, status, page);
+                            }
                         }
                     } else {
                         String msg = "Could not load articles.";
@@ -623,8 +790,7 @@ public class PostArticleStatus extends AppCompatActivity {
                             }
                         } catch (Exception ignored) {
                         }
-                        if (status == currentStatus && gen == requestGen.get(status)) {
-                            // Keep cache if we had data; only show error if tab is empty.
+                        if (status == currentStatus && gen == requestGen.get(status) && !append) {
                             if (list == null || list.isEmpty()) {
                                 showEmpty(msg);
                             }
@@ -633,7 +799,7 @@ public class PostArticleStatus extends AppCompatActivity {
                     }
                 } catch (Exception e) {
                     showLog("get_user_posts parse error: " + e.getMessage());
-                    if (status == currentStatus && gen == requestGen.get(status)) {
+                    if (status == currentStatus && gen == requestGen.get(status) && !append) {
                         handleFetchError(status, "Error showing articles.", "Error loading articles", true);
                     }
                 }
@@ -641,17 +807,62 @@ public class PostArticleStatus extends AppCompatActivity {
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-                inflight[status] = false;
+                if (!append) inflight[status] = false;
+                loadingMore = false;
                 if (status == currentStatus) {
                     stopRefreshing();
                 }
                 showLog("get_user_posts onFailure: " + (t != null ? t.getMessage() : "null"));
-                if (status == currentStatus && gen == requestGen.get(status)) {
+                if (status == currentStatus && gen == requestGen.get(status) && !append) {
                     handleFetchError(status, "Network error.",
                             "Network error loading articles", true);
                 }
             }
         });
+    }
+
+    /** Insert week section headers (ISO week) for reporter browsing. */
+    private ArrayList<PostsModel.Datum> withWeekHeaders(List<PostsModel.Datum> articles) {
+        ArrayList<PostsModel.Datum> out = new ArrayList<>();
+        if (articles == null || articles.isEmpty()) return out;
+        if (isMetricMode()) {
+            out.addAll(articles);
+            return out;
+        }
+        Map<String, List<PostsModel.Datum>> byWeek = new LinkedHashMap<>();
+        for (PostsModel.Datum d : articles) {
+            if (d == null || d.isWeekHeader) continue;
+            String key = d.getWeekKey();
+            if (TextUtils.isEmpty(key)) {
+                key = weekKeyFromCreated(d.getCreatedAt());
+            }
+            if (!byWeek.containsKey(key)) byWeek.put(key, new ArrayList<PostsModel.Datum>());
+            byWeek.get(key).add(d);
+        }
+        for (Map.Entry<String, List<PostsModel.Datum>> e : byWeek.entrySet()) {
+            List<PostsModel.Datum> group = e.getValue();
+            PostsModel.Datum header = new PostsModel.Datum();
+            header.isWeekHeader = true;
+            header.headerCount = group.size();
+            String label = null;
+            if (!group.isEmpty() && !TextUtils.isEmpty(group.get(0).getWeekLabel())) {
+                label = group.get(0).getWeekLabel();
+            }
+            if (TextUtils.isEmpty(label)) label = "Week " + e.getKey();
+            header.headerLabel = label;
+            out.add(header);
+            out.addAll(group);
+        }
+        return out;
+    }
+
+    private static String weekKeyFromCreated(Long createdAtMs) {
+        if (createdAtMs == null || createdAtMs <= 0) return "unknown";
+        Calendar c = Calendar.getInstance();
+        c.setFirstDayOfWeek(Calendar.MONDAY);
+        c.setMinimalDaysInFirstWeek(4);
+        c.setTimeInMillis(createdAtMs);
+        return c.get(Calendar.YEAR) + "-W" + String.format(Locale.US, "%02d", c.get(Calendar.WEEK_OF_YEAR));
     }
 
     /**
@@ -661,21 +872,20 @@ public class PostArticleStatus extends AppCompatActivity {
         boolean hasItems = list != null && !list.isEmpty()
                 && postsStatusAdopter != null;
         if (hasItems) {
-            if (showToast && toast != null) {
-                // Soft fail with data on screen — brief toast only for user pull context is enough;
-                // skip noise on silent background refresh if list visible.
-            }
             if (emptyState != null) {
                 emptyState.setVisibility(View.GONE);
             }
             return;
         }
-        // Also check disk/memory for this tab in case list wasn't painted yet.
         int draftId = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
         List<PostsModel.Datum> cached =
                 PostStatusListCache.load(this, draftId, resolvedMobile, status);
         if (cached != null) {
-            paintList(status, cached);
+            flatArticles.clear();
+            for (PostsModel.Datum d : cached) {
+                if (d != null && !d.isWeekHeader) flatArticles.add(d);
+            }
+            paintList(status, withWeekHeaders(flatArticles));
             return;
         }
         showEmpty(emptyMsg);
@@ -694,7 +904,13 @@ public class PostArticleStatus extends AppCompatActivity {
             list.addAll(data);
         }
         if (isMetricMode()) {
-            sortListByMetric(list);
+            ArrayList<PostsModel.Datum> onlyPosts = new ArrayList<>();
+            for (PostsModel.Datum d : list) {
+                if (d != null && !d.isWeekHeader) onlyPosts.add(d);
+            }
+            sortListByMetric(onlyPosts);
+            list.clear();
+            list.addAll(onlyPosts);
             if (pageTitle != null) {
                 pageTitle.setText(buildMetricTitle());
             }
@@ -713,7 +929,8 @@ public class PostArticleStatus extends AppCompatActivity {
         if (list.isEmpty()) {
             int draftId = SharedPrefsData.getInt(
                     getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
-            if (PostStatusListCache.hasLoaded(this, draftId, resolvedMobile, status)) {
+            if (PostStatusListCache.hasLoaded(this, draftId, resolvedMobile, status)
+                    || !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo)) {
                 showEmpty(isMetricMode()
                         ? "No articles for this metric yet."
                         : "No articles in this tab.");

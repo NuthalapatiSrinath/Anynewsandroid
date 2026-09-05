@@ -54,6 +54,25 @@ public class PostsModel {
         @Expose
         private Integer livePostId;
 
+        /** Week metadata from get_user_posts (optional). */
+        @SerializedName("week_key")
+        @Expose
+        private String weekKey;
+        @SerializedName("week_label")
+        @Expose
+        private String weekLabel;
+        @SerializedName("week_start")
+        @Expose
+        private String weekStart;
+        @SerializedName("week_end")
+        @Expose
+        private String weekEnd;
+
+        /** Client-only: week section header row (not from API). */
+        public transient boolean isWeekHeader;
+        public transient String headerLabel;
+        public transient int headerCount;
+
         public Long getPost_status() {
             return post_status;
         }
@@ -92,6 +111,22 @@ public class PostsModel {
 
         public void setLivePostId(Integer livePostId) {
             this.livePostId = livePostId;
+        }
+
+        public String getWeekKey() {
+            return weekKey;
+        }
+
+        public void setWeekKey(String weekKey) {
+            this.weekKey = weekKey;
+        }
+
+        public String getWeekLabel() {
+            return weekLabel;
+        }
+
+        public void setWeekLabel(String weekLabel) {
+            this.weekLabel = weekLabel;
         }
 
         public String getTitle() {
@@ -217,6 +252,10 @@ public class PostsModel {
     @Expose
     private Integer rejectedCount;
 
+    @SerializedName("has_more")
+    @Expose
+    private Boolean hasMore;
+
     public Integer getApprovedCount() {
         return approvedCount;
     }
@@ -239,6 +278,14 @@ public class PostsModel {
 
     public void setRejectedCount(Integer rejectedCount) {
         this.rejectedCount = rejectedCount;
+    }
+
+    public Boolean getHasMore() {
+        return hasMore;
+    }
+
+    public void setHasMore(Boolean hasMore) {
+        this.hasMore = hasMore;
     }
 
 

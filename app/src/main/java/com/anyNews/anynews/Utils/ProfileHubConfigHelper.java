@@ -13,8 +13,8 @@ import com.anyNews.anynews.Services.Config;
  *
  * <p>Defaults match product intent (categories in profile only, header icon OFF —
  * bottom footer Profile tab is the entry; Status Videos ON; footer slots all ON
- * except legacy Categories-in-footer). Settings video autoplay + local stories columns
- * default OFF until admin enables. Null server fields leave the cache untouched so old
+ * except legacy Categories-in-footer). Settings local stories column defaults OFF
+ * until admin enables. Null server fields leave the cache untouched so old
  * servers never wipe user session prefs mid-flight.
  */
 public final class ProfileHubConfigHelper {
@@ -155,6 +155,21 @@ public final class ProfileHubConfigHelper {
         return readBool(context, Constants.ENABLE_STATUS_VIDEOS, true);
     }
 
+    /**
+     * Become a Reporter profile row. Default true until admin turns hiring OFF
+     * ({@code enable_become_a_reporter} via splash).
+     */
+    public static void saveBecomeAReporterEnabled(
+            @Nullable Context context, @Nullable Boolean enabled) {
+        if (context == null || enabled == null) return;
+        saveBool(context.getApplicationContext(),
+                Constants.ENABLE_BECOME_A_REPORTER, enabled);
+    }
+
+    public static boolean isBecomeAReporterEnabled(@Nullable Context context) {
+        return readBool(context, Constants.ENABLE_BECOME_A_REPORTER, true);
+    }
+
     public static boolean isBookmarksVisible(@Nullable Context context) {
         return readBool(context, Constants.PROFILE_SHOW_BOOKMARKS, true);
     }
@@ -178,21 +193,22 @@ public final class ProfileHubConfigHelper {
     }
 
     /**
-     * Home footer center + / WhatsApp FAB overlays.
+     * Home footer + / WhatsApp FAB overlays.
      * Product: always hidden — create-post lives in Profile reporter desk.
-     * Center footer slot is Calendar ({@link #isFooterShowCalendar}), not +.
-     * Admin {@code footer_show_plus} is ignored.
+     * Panchangam tab uses {@link #isFooterShowCalendar} (product-hidden); Daily Updates uses
+     * {@link #isFooterShowVideos}. Admin {@code footer_show_plus} is ignored.
      */
     public static boolean isFooterShowPlus(@Nullable Context context) {
         return false;
     }
 
     /**
-     * Home footer center Calendar tab (between Special and Video).
-     * Product: always on when online; offline chrome keeps News only.
+     * Home footer Panchangam tab ({@code navigation_stricker}).
+     * Product: always hidden — Panchangam opens from Daily Updates only.
+     * Menu id stays for EXTRA_FOOTER_TAB / legacy deep links; slot is GONE + weight 0.
      */
     public static boolean isFooterShowCalendar(@Nullable Context context) {
-        return true;
+        return false;
     }
 
     /** Home footer Profile tab. Default true. */
@@ -201,8 +217,8 @@ public final class ProfileHubConfigHelper {
     }
 
     /**
-     * Home footer Video News tab (half + full video feed). Default true.
-     * Optional pref {@code footer_show_videos}; unread keys keep default on.
+     * Home footer Daily Updates tab ({@code navigation_status}; legacy videos flag).
+     * Default true. Optional pref {@code footer_show_videos}; unread keys keep default on.
      */
     public static boolean isFooterShowVideos(@Nullable Context context) {
         return readBool(context, Constants.FOOTER_SHOW_VIDEOS, true);
@@ -222,7 +238,10 @@ public final class ProfileHubConfigHelper {
         return readBool(context, Constants.SETTINGS_SHOW_NOTIFICATIONS, true);
     }
 
-    /** Settings column: Video Autoplay. Default false (feature incomplete). */
+    /**
+     * Legacy splash flag for Settings Video Autoplay column (UI removed; footer Video
+     * tab replaced by Breaking). Still cached from splash for old server payloads.
+     */
     public static boolean isSettingsShowVideoAutoplay(@Nullable Context context) {
         return readBool(context, Constants.SETTINGS_SHOW_VIDEO_AUTOPLAY, false);
     }
@@ -343,6 +362,56 @@ public final class ProfileHubConfigHelper {
         } catch (Exception ignored) {
             return com.anyNews.anynews.panchang.RaasiContent.clampId(fallback0);
         }
+    }
+
+    /**
+     * Persist admin calendar engine selection from splash.
+     * Null/blank leaves cache (defaults to ProKerala / Way2-like).
+     */
+    public static void saveCalendarPanchangSource(@Nullable Context context,
+                                                    @Nullable String raw) {
+        if (context == null || raw == null) return;
+        String s = raw.trim().toLowerCase(java.util.Locale.US).replace('-', '_');
+        if (s.isEmpty() || "null".equals(s)) return;
+        if ("astronomical".equals(s)
+                || "astronomical_hyderabad".equals(s)
+                || "engine".equals(s)
+                || "formula".equals(s)
+                || "local".equals(s)) {
+            s = Constants.CALENDAR_SOURCE_ASTRONOMICAL;
+        } else {
+            s = Constants.CALENDAR_SOURCE_PROKERALA;
+        }
+        SharedPrefsData.putString(
+                context.getApplicationContext(),
+                Constants.CALENDAR_PANCHANG_SOURCE,
+                s,
+                Constants.PREF_NAME);
+    }
+
+    /** Prefer ProKerala (Way2-like) unless admin selected astronomical. */
+    @NonNull
+    public static String getCalendarPanchangSource(@Nullable Context context) {
+        if (context == null) return Constants.CALENDAR_SOURCE_PROKERALA;
+        try {
+            String v = SharedPrefsData.getString(
+                    context.getApplicationContext(),
+                    Constants.CALENDAR_PANCHANG_SOURCE,
+                    Constants.PREF_NAME);
+            if (TextUtils.isEmpty(v)) return Constants.CALENDAR_SOURCE_PROKERALA;
+            String s = v.trim().toLowerCase(java.util.Locale.US).replace('-', '_');
+            if (Constants.CALENDAR_SOURCE_ASTRONOMICAL.equals(s)) {
+                return Constants.CALENDAR_SOURCE_ASTRONOMICAL;
+            }
+            return Constants.CALENDAR_SOURCE_PROKERALA;
+        } catch (Exception ignored) {
+            return Constants.CALENDAR_SOURCE_PROKERALA;
+        }
+    }
+
+    public static boolean prefersAstronomicalCalendar(@Nullable Context context) {
+        return Constants.CALENDAR_SOURCE_ASTRONOMICAL.equals(
+                getCalendarPanchangSource(context));
     }
 
     /**

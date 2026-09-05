@@ -107,6 +107,9 @@ public class PostArticles extends AppCompatActivity {
 
     private static final String TAG = "REPORTER_IMAGE";
 
+    /** Launch from Become-a-Reporter: same UI, posts go to reporter_applicants (max 3). */
+    public static final String EXTRA_APPLICANT_SAMPLE = "applicant_sample_mode";
+
     ImageView img_upload_photo;
     private int PICK_IMAGE_REQUEST = 1;
     private static final int PICK_IMAGE_REQUEST_CAMARA = 700;
@@ -158,6 +161,8 @@ public class PostArticles extends AppCompatActivity {
 
     // Edit / resubmit rejected article support
     boolean editMode = false;
+    /** Become-a-Reporter sample mode: submit via reporter_applicant_create_post, not live feed. */
+    boolean applicantSampleMode = false;
     int editUserPostId = 0;
     boolean imageChanged = false;
 
@@ -284,6 +289,7 @@ public class PostArticles extends AppCompatActivity {
         }
 
         String value = "" + getIntent().getStringExtra("POST_VIDEO");
+        applicantSampleMode = getIntent().getBooleanExtra(EXTRA_APPLICANT_SAMPLE, false);
 
         // Feature: reporters can freely edit their news content (selection / copy / paste
         // were previously disabled on both fields, preventing corrections before submit).
@@ -1327,6 +1333,11 @@ public class PostArticles extends AppCompatActivity {
             return;
         }
 
+        if (applicantSampleMode) {
+            sendApplicantSamplePost();
+            return;
+        }
+
         btn_upload.setVisibility(View.VISIBLE);
         post_button.setVisibility(View.GONE);
         progressBarLarge.setVisibility(View.VISIBLE);
@@ -1385,6 +1396,60 @@ public class PostArticles extends AppCompatActivity {
             }
         });
     }
+
+    /**
+     * Become-a-Reporter sample: same compose UI, but posts to reporter_applicants (max 3),
+     * never the live reporter feed. Returns to caller instead of HomePage.
+     */
+    private void sendApplicantSamplePost() {
+        btn_upload.setVisibility(View.VISIBLE);
+        post_button.setVisibility(View.GONE);
+        progressBarLarge.setVisibility(View.VISIBLE);
+
+        JsonObject body = new JsonObject();
+        body.addProperty("draft_id",
+                SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
+        body.addProperty("source", "become_a_reporter");
+        body.addProperty("title", edt_news_headlines.getText().toString().trim());
+        body.addProperty("description", edt_news_description.getText().toString().trim());
+        body.addProperty("image_url", ImageId != null ? ImageId : "");
+
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        apiService.reporter_applicant_create_post("v3", body).enqueue(new Callback<JsonObject>() {
+            @Override
+            public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
+                try {
+                    JsonObject root = response != null ? response.body() : null;
+                    if (root == null || !root.has("success") || !root.get("success").getAsBoolean()) {
+                        String msg = root != null && root.has("msg")
+                                ? root.get("msg").getAsString()
+                                : "Submit failed";
+                        Toast.makeText(PostArticles.this, msg, Toast.LENGTH_LONG).show();
+                        progressBarLarge.setVisibility(View.GONE);
+                        post_button.setVisibility(View.VISIBLE);
+                        return;
+                    }
+                    Toast.makeText(PostArticles.this, "Sample article submitted", Toast.LENGTH_SHORT).show();
+                    clearDraftImageState();
+                    setResult(RESULT_OK);
+                    finish();
+                } catch (Exception e) {
+                    Toast.makeText(PostArticles.this, "Submit error", Toast.LENGTH_SHORT).show();
+                    progressBarLarge.setVisibility(View.GONE);
+                    post_button.setVisibility(View.VISIBLE);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<JsonObject> call, Throwable t) {
+                String message = t != null && t.getMessage() != null ? t.getMessage() : "Request failed";
+                Toast.makeText(PostArticles.this, message, Toast.LENGTH_LONG).show();
+                progressBarLarge.setVisibility(View.GONE);
+                post_button.setVisibility(View.VISIBLE);
+            }
+        });
+    }
+
     private void showPermissionDeniedePopup() {
         {
             androidx.appcompat.app.AlertDialog.Builder builder = new androidx.appcompat.app.AlertDialog.Builder(PostArticles.this);

@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Double chevron: clearer scroll-down cue; full glyph fits 24vp without clipping. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="28dp"
-    android:height="28dp"
+    android:width="40dp"
+    android:height="40dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
         android:fillColor="#F5C542"
-        android:pathData="M7.41,8.59L12,13.17l4.59,-4.58L18,10l-6,6 -6,-6 1.41,-1.41z" />
+        android:pathData="M7.41,5.59L12,10.17l4.59,-4.58L18,7l-6,6 -6,-6 1.41,-1.41z" />
+    <path
+        android:fillColor="#F5C542"
+        android:pathData="M7.41,11.59L12,16.17l4.59,-4.58L18,13l-6,6 -6,-6 1.41,-1.41z" />
 </vector>

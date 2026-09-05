@@ -45,11 +45,14 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
+import com.anyNews.anynews.Utils.AdPreloader;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketMiniPlayerPositionHelper;
 import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
+import com.anyNews.anynews.Utils.NewsTapModeConfig;
+import com.anyNews.anynews.Utils.LiveReadersConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
@@ -1235,6 +1238,11 @@ public class StartingActivity extends AppCompatActivity {
                                 && !startActivityReqModel.getData().getAdmobAppId().isEmpty()) {
                             AdMobInitializer.initialize(StartingActivity.this, startActivityReqModel.getData().getAdmobAppId());
                         }
+                        // Warm next share/house-ad seat before the user flips onto it.
+                        try {
+                            AdPreloader.get().prefetch(getApplicationContext());
+                        } catch (Exception ignored) {
+                        }
 
                         // if getting null then uninstall app
 
@@ -1599,14 +1607,13 @@ public class StartingActivity extends AppCompatActivity {
                                             startActivityReqModel.getData().getNotificationRepromptEnabled()),
                                     Constants.PREF_NAME);
                         }
-                        if (startActivityReqModel.getData().getPromptNotificationsOnOpen() != null) {
-                            SharedPrefsData.putBool(
-                                    getApplicationContext(),
-                                    Constants.PROMPT_NOTIFICATIONS_ON_OPEN,
-                                    Boolean.TRUE.equals(
-                                            startActivityReqModel.getData().getPromptNotificationsOnOpen()),
-                                    Constants.PREF_NAME);
-                        }
+                        // Always persist (incl. false) so a prior ON cannot stick after admin turns OFF.
+                        SharedPrefsData.putBool(
+                                getApplicationContext(),
+                                Constants.PROMPT_NOTIFICATIONS_ON_OPEN,
+                                Boolean.TRUE.equals(
+                                        startActivityReqModel.getData().getPromptNotificationsOnOpen()),
+                                Constants.PREF_NAME);
                         if (startActivityReqModel.getData().getNotificationRepromptDue() != null) {
                             SharedPrefsData.putBool(
                                     getApplicationContext(),
@@ -1710,6 +1717,20 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData()
                                         .getHomeModeChromeAutoHideSeconds());
+                        // Main News FlipView tap modes (default hybrid).
+                        NewsTapModeConfig.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getNewsTapMode(),
+                                startActivityReqModel.getData().getNewsTapHalfUpperPct(),
+                                startActivityReqModel.getData().getNewsTapFullUpperPct(),
+                                startActivityReqModel.getData().getNewsTapFullRightRailPct(),
+                                startActivityReqModel.getData().getNewsTapHalfHideEngagement());
+                        LiveReadersConfig.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getLiveReadersEnabled(),
+                                startActivityReqModel.getData().getLiveReadersWindowMinutes(),
+                                startActivityReqModel.getData().getLiveReadersShowSeconds(),
+                                startActivityReqModel.getData().getLiveReadersMinCount());
                         // Read / చదివినవి recency window (default 24h; 1–168).
                         ReadHistoryConfig.saveHoursFromServer(
                                 getApplicationContext(),

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Kalasha / abhishekam pot -->
+    <path
+        android:fillColor="#FFFF8A3D"
+        android:pathData="M10.5,3h3v2h-3z" />
+    <path
+        android:fillColor="#FFFF8A3D"
+        android:pathData="M8,5.5h8l1.2,2.5H6.8z" />
+    <path
+        android:fillColor="#FFFF8A3D"
+        android:pathData="M6.2,8.5h11.6c0.4,0 0.7,0.4 0.55,0.75L16.5,16.5c-0.3,0.9 -1.15,1.5 -2.1,1.5h-4.8c-0.95,0 -1.8,-0.6 -2.1,-1.5L5.65,9.25C5.5,8.9 5.8,8.5 6.2,8.5z" />
+    <path
+        android:fillColor="#FFFF8A3D"
+        android:pathData="M9,19h6v1.5H9z" />
+</vector>

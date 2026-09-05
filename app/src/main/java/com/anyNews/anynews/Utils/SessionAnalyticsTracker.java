@@ -796,6 +796,74 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    try {
+                        String tapMode = null;
+                        Integer halfPct = null;
+                        Integer fullPct = null;
+                        Integer railPct = null;
+                        Boolean halfHideEng = null;
+                        if (resBody.has("news_tap_mode")
+                                && !resBody.get("news_tap_mode").isJsonNull()) {
+                            tapMode = resBody.get("news_tap_mode").getAsString();
+                        }
+                        if (resBody.has("news_tap_half_upper_pct")
+                                && !resBody.get("news_tap_half_upper_pct").isJsonNull()) {
+                            halfPct = resBody.get("news_tap_half_upper_pct").getAsInt();
+                        }
+                        if (resBody.has("news_tap_full_upper_pct")
+                                && !resBody.get("news_tap_full_upper_pct").isJsonNull()) {
+                            fullPct = resBody.get("news_tap_full_upper_pct").getAsInt();
+                        }
+                        if (resBody.has("news_tap_full_right_rail_pct")
+                                && !resBody.get("news_tap_full_right_rail_pct").isJsonNull()) {
+                            railPct = resBody.get("news_tap_full_right_rail_pct").getAsInt();
+                        }
+                        if (resBody.has("news_tap_half_hide_engagement")
+                                && !resBody.get("news_tap_half_hide_engagement").isJsonNull()) {
+                            halfHideEng =
+                                    resBody.get("news_tap_half_hide_engagement").getAsBoolean();
+                        }
+                        if (tapMode != null
+                                || halfPct != null
+                                || fullPct != null
+                                || railPct != null
+                                || halfHideEng != null) {
+                            NewsTapModeConfig.saveFromServer(
+                                    context,
+                                    tapMode,
+                                    halfPct,
+                                    fullPct,
+                                    railPct,
+                                    halfHideEng);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        Boolean lrEn = null;
+                        Integer lrWin = null;
+                        Integer lrShow = null;
+                        Integer lrMin = null;
+                        if (resBody.has("live_readers_enabled")
+                                && !resBody.get("live_readers_enabled").isJsonNull()) {
+                            lrEn = resBody.get("live_readers_enabled").getAsBoolean();
+                        }
+                        if (resBody.has("live_readers_window_minutes")
+                                && !resBody.get("live_readers_window_minutes").isJsonNull()) {
+                            lrWin = resBody.get("live_readers_window_minutes").getAsInt();
+                        }
+                        if (resBody.has("live_readers_show_seconds")
+                                && !resBody.get("live_readers_show_seconds").isJsonNull()) {
+                            lrShow = resBody.get("live_readers_show_seconds").getAsInt();
+                        }
+                        if (resBody.has("live_readers_min_count")
+                                && !resBody.get("live_readers_min_count").isJsonNull()) {
+                            lrMin = resBody.get("live_readers_min_count").getAsInt();
+                        }
+                        if (lrEn != null || lrWin != null || lrShow != null || lrMin != null) {
+                            LiveReadersConfig.saveFromServer(context, lrEn, lrWin, lrShow, lrMin);
+                        }
+                    } catch (Exception ignored) {
+                    }
                     if (resBody.has("read_history_hours")
                             && !resBody.get("read_history_hours").isJsonNull()) {
                         try {

@@ -87,8 +87,7 @@ public class States extends AppCompatActivity {
         img_back.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent intent = new Intent(States.this, LanguageActivity.class);
-                startActivity(intent);
+                startActivity(LanguageActivity.createChangeLanguageIntent(States.this));
             }
         });
 
@@ -301,7 +300,7 @@ public class States extends AppCompatActivity {
         if (!TextUtils.isEmpty(message)) {
             Toast.makeText(States.this, message, Toast.LENGTH_LONG).show();
         }
-        Intent intent = new Intent(States.this, LanguageActivity.class);
+        Intent intent = LanguageActivity.createChangeLanguageIntent(States.this);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
         finish();
@@ -316,7 +315,7 @@ public class States extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         super.onBackPressed();
-        Intent intent = new Intent(States.this, LanguageActivity.class);
+        Intent intent = LanguageActivity.createChangeLanguageIntent(States.this);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         startActivity(intent);
     }

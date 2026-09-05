@@ -1,127 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/comment_item_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:background="@color/background_color">
-    <RelativeLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-        <LinearLayout
-            android:id="@+id/layoutImage"
-            android:layout_width="wrap_content"
-            android:layout_centerVertical="true"
-            android:layout_gravity="top|center"
-            android:layout_height="wrap_content">
-            <soup.neumorphism.NeumorphCardView
-                style="@style/New.Widget.Neumorph.FloatingActionButton"
-                android:layout_width="70dp"
-                android:layout_height="70dp"
-                android:scaleType="fitXY">
-                <de.hdodenhof.circleimageview.CircleImageView
-                    android:id="@+id/circular_image"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:src="@drawable/ic_launcher" />
-            </soup.neumorphism.NeumorphCardView>
-        </LinearLayout>
+    android:layout_marginLeft="10dp"
+    android:layout_marginTop="8dp"
+    android:layout_marginRight="10dp"
+    android:background="@drawable/bg_comment_card"
+    android:orientation="horizontal"
+    android:paddingLeft="12dp"
+    android:paddingTop="12dp"
+    android:paddingRight="12dp"
+    android:paddingBottom="10dp">
 
-        <LinearLayout
-            android:id="@+id/layoutComment"
+    <FrameLayout
+        android:id="@+id/layoutImage"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginTop="2dp">
+
+        <TextView
+            android:id="@+id/avatar_letter"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:text="A"
+            android:textAllCaps="true"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <de.hdodenhof.circleimageview.CircleImageView
+            android:id="@+id/circular_image"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/avatar_badge"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="bottom|end"
+            android:background="@drawable/bg_comment_avatar_badge"
+            android:gravity="center"
+            android:text="0"
+            android:textColor="#1A1A1A"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/layoutComment"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="10dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/person_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/five"
-            android:layout_centerVertical="true"
-            android:layout_toStartOf="@+id/imageViewReport"
-            android:layout_toEndOf="@+id/layoutImage"
-            android:orientation="vertical">
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="username"
+            android:textColor="@color/comments_text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:id="@+id/location_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="11dp"
+                android:layout_height="11dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_comment_pin"
+                app:tint="@color/comments_text_secondary" />
+
+            <TextView
+                android:id="@+id/comment_location"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="3dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="District (D)"
+                android:textColor="@color/comments_text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/comment_details"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:lineSpacingExtra="2dp"
+            android:text="Comment body"
+            android:textColor="@color/comments_text_primary"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/view_replies_link"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="View replies"
+            android:textColor="@color/brand_orange"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
 
             <LinearLayout
-                android:id="@+id/layoutCommentTitle"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/person_name"
-                    android:layout_width="0dp"
+                    android:id="@+id/comment_time"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="left"
-                    android:layout_weight="8"
-                    android:text="Akkisetty Narasimha Rao"
-                    android:textColor="@color/text_color_primary"
-                    android:textSize="@dimen/_12sdp"
-                    android:textStyle="normal" />
+                    android:text="23m ago"
+                    android:textColor="@color/comments_text_tertiary"
+                    android:textSize="11sp" />
 
                 <TextView
-                    android:id="@+id/comment_time"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center"
-                    android:layout_weight="2"
-                    android:gravity="center"
-                    android:text="3 min"
-                    android:textColor="@color/warm_grey_two"
-                    android:textSize="@dimen/_8sdp"
-                    android:textStyle="normal" />
+                    android:layout_marginLeft="6dp"
+                    android:layout_marginRight="6dp"
+                    android:text="·"
+                    android:textColor="@color/comments_text_tertiary"
+                    android:textSize="11sp" />
+
+                <LinearLayout
+                    android:id="@+id/comment_reply_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp">
+
+                    <ImageView
+                        android:layout_width="13dp"
+                        android:layout_height="13dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_comment_reply"
+                        app:tint="@color/comments_text_secondary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="4dp"
+                        android:text="Reply"
+                        android:textColor="@color/comments_text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </LinearLayout>
 
-
-            <TextView
-                android:id="@+id/comment_details"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="left"
-                android:layout_marginBottom="@dimen/two"
-                android:text="Akkisetty Narasimha Raofjrelgnegjgntpjgn eroggj reorb reperoirejepogeipo reigjrgorigroin  ijgigjt"
-                android:textColor="@color/text_color_primary"
-                android:textSize="@dimen/_9sdp"
-                android:textStyle="normal" />
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/view_replies_link"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="left"
-                android:paddingTop="@dimen/two"
-                android:paddingBottom="@dimen/two"
-                android:text="View 2 replies"
-                android:textColor="@color/warm_grey_two"
-                android:textSize="@dimen/_9sdp"
-                android:textStyle="bold"
-                android:visibility="gone" />
+                <ImageView
+                    android:id="@+id/imageViewCopy"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:contentDescription="Copy"
+                    android:padding="5dp"
+                    android:src="@drawable/ic_comment_copy" />
 
-            <TextView
-                android:id="@+id/comment_reply_btn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="left"
-                android:paddingTop="@dimen/two"
-                android:paddingBottom="@dimen/two"
-                android:text="Reply"
-                android:textColor="@color/colorPrimary"
-                android:textSize="@dimen/_9sdp"
-                android:textStyle="bold" />
-        </LinearLayout>
+                <ImageView
+                    android:id="@+id/imageViewReport"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:contentDescription="Report"
+                    android:padding="5dp"
+                    android:src="@drawable/ic_comment_report_warn" />
 
-        <ImageView
-            android:id="@+id/imageViewReport"
-            android:layout_width="@dimen/_24sdp"
-            android:layout_height="@dimen/_24sdp"
-            android:layout_alignParentRight="true"
-            android:layout_centerVertical="true"
-            android:layout_marginLeft="@dimen/_10sdp"
-            android:layout_marginRight="@dimen/_10sdp"
-            android:src="@drawable/ic_menu_block_report" />
+                <LinearLayout
+                    android:id="@+id/like_row"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingLeft="2dp"
+                    android:paddingRight="2dp">
 
-    </RelativeLayout>
+                    <ImageView
+                        android:id="@+id/imageViewLike"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:contentDescription="Like"
+                        android:src="@drawable/ic_comment_heart_outline" />
 
-    <View
-        android:layout_marginLeft="@dimen/_15sdp"
-        android:layout_marginRight="@dimen/_15sdp"
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/warm_grey_16">
-
-    </View>
+                    <TextView
+                        android:id="@+id/like_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="3dp"
+                        android:minWidth="10dp"
+                        android:text="0"
+                        android:textColor="@color/comments_text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </RelativeLayout>
+    </LinearLayout>
 </LinearLayout>

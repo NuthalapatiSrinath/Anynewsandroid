@@ -18,7 +18,7 @@ import java.util.Map;
  * not invalidate it. A real feed replacement or Activity destroy calls {@link #clearAll()}.
  */
 public final class NativeAdCacheCoordinator {
-    private static final String TAG = "NativeAdCache";
+    private static final String TAG = "ANYNEWS_ADS";
     private static final int MAX_READY = 4;
     private static final int MAX_RETRIES = 2;
     private static final long RETRY_BASE_MS = 1_000L;

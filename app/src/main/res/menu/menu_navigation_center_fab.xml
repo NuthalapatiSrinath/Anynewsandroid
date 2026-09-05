@@ -5,28 +5,33 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context=".Activities.HomePage">
 
-
+    <!-- Order L→R: News | Daily Updates | Special | Profile.
+         Panchangam menu item kept (id navigation_stricker) but product-hidden via
+         ProfileHubConfigHelper.isFooterShowCalendar — open from Daily Updates only. -->
     <item
         android:checked="true"
         android:id="@+id/navigation_home"
         android:icon="@drawable/refresh_icon"
         android:title="@string/news_back" />
 
+    <!-- Slot 2: Daily Updates. Id stays navigation_status for menu / admin-flag stability. -->
+    <item
+        android:id="@+id/navigation_status"
+        android:icon="@drawable/ic_footer_daily_updates"
+        android:title="@string/daily_updates" />
+
     <item
         android:id="@+id/navigation_catagiries"
         android:icon="@drawable/ic_footer_special"
         android:title="@string/Events" />
-    <!-- Center: Calendar (embedded in HomePage content host above footer). -->
+
+    <!-- Hidden product slot: Panchangam (Telugu calendar). Id stays navigation_stricker. -->
     <item
         android:id="@+id/navigation_stricker"
-        android:icon="@drawable/ic_footer_calendar"
-        android:title="@string/home_chrome_calendar" />
+        android:icon="@drawable/ic_footer_panchangam"
+        android:title="@string/calendar_seg_panchangam"
+        android:visible="false" />
 
-    <!-- Slot after center Calendar (bookmarks stay top-pill only; never shown in footer). -->
-    <item
-        android:id="@+id/navigation_status"
-        android:icon="@drawable/ic_footer_video_news"
-        android:title="@string/video_news" />
     <item
         android:id="@+id/navigation_profile"
         android:icon="@drawable/ic_nav_profile"

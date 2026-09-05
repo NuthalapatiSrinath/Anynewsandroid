@@ -99,10 +99,20 @@ public class ListAllArticlesRequest implements Serializable {
     /**
      * When true, server returns only {@code normal_video} + {@code full_video}
      * (mutually exclusive with {@link #special_posts} on the API path).
+     * Legacy Video News tab — footer now uses {@link #push_posts} (Flash News).
      */
     @SerializedName("video_posts")
     @Expose
     private boolean video_posts;
+
+    /**
+     * Breaking / Flash News tab: articles/videos from push notification history
+     * (main desk pushes + user's district local pushes only).
+     * Same flip open UX as News.
+     */
+    @SerializedName("push_posts")
+    @Expose
+    private boolean push_posts;
 
     /**
      * Profile Status Videos hub: one Redis-backed pack of {@code full_video}
@@ -129,6 +139,14 @@ public class ListAllArticlesRequest implements Serializable {
 
     public void setVideo_posts(boolean video_posts) {
         this.video_posts = video_posts;
+    }
+
+    public boolean isPush_posts() {
+        return push_posts;
+    }
+
+    public void setPush_posts(boolean push_posts) {
+        this.push_posts = push_posts;
     }
 
     public boolean isStatus_videos() {

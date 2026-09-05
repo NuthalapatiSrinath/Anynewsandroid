@@ -1,10 +1,12 @@
 package com.anyNews.anynews.Adapters;
 
-import android.app.Activity;
 import android.content.Context;
+import android.graphics.drawable.GradientDrawable;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -15,10 +17,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.anyNews.anynews.Pojo.ListOfCommentsResponse;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Utils.Allsharedpreference;
-import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AvatarImageHelper;
-import com.anyNews.anynews.Utils.CommonMethods;
-import com.anyNews.anynews.Utils.MediaUrl;
+import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
+import com.anyNews.anynews.Utils.SharedPrefsData;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,8 +28,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import de.hdodenhof.circleimageview.CircleImageView;
 
@@ -36,24 +40,38 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
     private static final int TYPE_PARENT = 0;
     private static final int TYPE_REPLY = 1;
 
+    private static final int[] AVATAR_COLORS = {
+            0xFF2E7D32, // green
+            0xFF1565C0, // blue
+            0xFFF9A825, // yellow
+            0xFFC2185B, // pink
+            0xFF6A1B9A, // purple
+            0xFF00838F, // teal
+            0xFFE65100, // deep orange
+            0xFF455A64  // blue grey
+    };
+
     private Context mContext;
     private List<ListOfCommentsResponse.Datum> allComments;
     private final List<DisplayItem> displayItems = new ArrayList<>();
     private final Map<Long, List<ListOfCommentsResponse.Datum>> repliesByParent = new HashMap<>();
     private final Map<Long, ListOfCommentsResponse.Datum> commentById = new HashMap<>();
     private final Set<Long> expandedParents = new HashSet<>();
-    CommonMethods commonMethods;
     ShowReportLayout showReportLayout;
     OnReplyListener onReplyListener;
+    OnCopyListener onCopyListener;
+    OnLikeListener onLikeListener;
     Allsharedpreference allsharedpreference;
 
     public MailAdapter(Context mContext, List<ListOfCommentsResponse.Datum> mEmailData,
-                       ShowReportLayout showReportLayout, OnReplyListener onReplyListener) {
+                       ShowReportLayout showReportLayout, OnReplyListener onReplyListener,
+                       OnCopyListener onCopyListener, OnLikeListener onLikeListener) {
         this.mContext = mContext;
         this.allComments = mEmailData != null ? mEmailData : new ArrayList<>();
         this.showReportLayout = showReportLayout;
         this.onReplyListener = onReplyListener;
-        commonMethods = new CommonMethods((Activity) mContext);
+        this.onCopyListener = onCopyListener;
+        this.onLikeListener = onLikeListener;
         allsharedpreference = new Allsharedpreference(mContext);
         rebuildThreadData();
     }
@@ -106,8 +124,6 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
             });
         }
 
-        // Resolve expand targets that point at nested replies back to the
-        // top-level root so "View N replies" opens after posting a reply-to-reply.
         Set<Long> rootsToExpand = new HashSet<>();
         for (Long expandedId : expandedParents) {
             Long rootId = resolveRootCommentId(expandedId);
@@ -120,7 +136,6 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
 
         for (ListOfCommentsResponse.Datum parent : parents) {
             int replyCount = getDescendantReplyCount(parent.getId());
-            // Prefer server reply_count when it already includes all descendants.
             if (parent.getReplyCount() != null && parent.getReplyCount() > replyCount) {
                 replyCount = parent.getReplyCount();
             }
@@ -131,9 +146,6 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         }
     }
 
-    /**
-     * Walk up parent_comment_id until a top-level comment (no parent) is found.
-     */
     private Long resolveRootCommentId(Long commentId) {
         if (commentId == null || commentId <= 0) {
             return null;
@@ -155,7 +167,6 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         return commentId;
     }
 
-    /** Count all nested replies under a top-level comment (any depth). */
     private int getDescendantReplyCount(Long rootId) {
         if (rootId == null) {
             return 0;
@@ -179,10 +190,6 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         return total;
     }
 
-    /**
-     * Instagram-style flatten: depth-first list all descendant replies under
-     * the top-level root so reply-to-reply is visible in "View N replies".
-     */
     private void appendFlattenedReplies(Long rootId) {
         List<ListOfCommentsResponse.Datum> direct = repliesByParent.get(rootId);
         if (direct == null) {
@@ -198,7 +205,6 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
 
     public void expandParent(Long parentId) {
         if (parentId != null && parentId > 0) {
-            // May be a nested reply id; rebuildThreadData resolves to root.
             expandedParents.add(parentId);
             rebuildThreadData();
             notifyDataSetChanged();
@@ -238,29 +244,62 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         ListOfCommentsResponse.Datum datum = item.datum;
         boolean isReply = item.type == TYPE_REPLY;
 
-        holder.comment_time.setText(commonMethods.getHrsFormatfromDate(datum.getCommentTime()));
+        holder.comment_time.setText(formatShortAgo(datum.getCommentTime()));
         holder.comment_details.setText(datum.getComment());
 
-        AvatarImageHelper.loadPicasso(holder.circular_image, datum.getUser_profile_pic());
-
-        AppHelper.showLog("EMAIL ID SERVER:" + datum.getEmail());
-        AppHelper.showLog("EMAIL ID LOCAL:" + allsharedpreference.getEmailId());
-        if (allsharedpreference.getEmailId() != null && datum.getEmail() != null
-                && allsharedpreference.getEmailId().equalsIgnoreCase(datum.getEmail())) {
+        String displayName;
+        boolean isMe = allsharedpreference.getEmailId() != null && datum.getEmail() != null
+                && allsharedpreference.getEmailId().equalsIgnoreCase(datum.getEmail());
+        if (!isMe && datum.getDraftId() != null) {
+            int myDraft = SharedPrefsData.getInt(mContext, Constants.DraftID, Constants.PREF_NAME);
+            if (myDraft > 0 && datum.getDraftId() == myDraft) {
+                isMe = true;
+            }
+        }
+        if (isMe) {
+            displayName = "Me";
             holder.imageViewReport.setVisibility(View.GONE);
-            holder.person_name.setText("Me");
         } else {
+            displayName = datum.getUserName() != null ? datum.getUserName() : "User";
             holder.imageViewReport.setVisibility(View.VISIBLE);
-            holder.person_name.setText(datum.getUserName());
+        }
+        holder.person_name.setText(displayName);
+
+        String district = datum.getDistrict();
+        // Own comments: prefer the language-matched district the app already selected
+        // (avoids stale other-language labels if the API still keyed districts by bare id).
+        if (isMe) {
+            String localDistrict = DistrictLabelHelper.resolveDisplayLabel(mContext);
+            if (DistrictLabelHelper.isUsable(localDistrict)) {
+                district = localDistrict.trim() + " (D)";
+            }
+        }
+        if (TextUtils.isEmpty(district)) {
+            holder.location_row.setVisibility(View.GONE);
+        } else {
+            holder.location_row.setVisibility(View.VISIBLE);
+            holder.comment_location.setText(district);
         }
 
+        bindAvatar(holder, displayName, datum, isMe);
+
+        int badge = datum.getUserCommentCount() != null ? datum.getUserCommentCount() : 0;
+        if (badge <= 0) {
+            badge = 1;
+        }
+        holder.avatar_badge.setText(badge > 99 ? "99+" : String.valueOf(badge));
+
+        boolean liked = datum.getLikedByMe() != null && datum.getLikedByMe();
+        int likes = datum.getLikes() != null ? datum.getLikes() : 0;
+        holder.like_count.setText(String.valueOf(likes));
+        holder.imageViewLike.setImageResource(
+                liked ? R.drawable.ic_comment_heart_filled : R.drawable.ic_comment_heart_outline);
+
         int indent = isReply
-                ? (int) (32 * mContext.getResources().getDisplayMetrics().density)
+                ? (int) (20 * mContext.getResources().getDisplayMetrics().density)
                 : 0;
-        holder.layoutComment.setPadding(indent, holder.layoutComment.getPaddingTop(),
-                holder.layoutComment.getPaddingRight(), holder.layoutComment.getPaddingBottom());
-        holder.layoutImage.setPadding(indent, holder.layoutImage.getPaddingTop(),
-                holder.layoutImage.getPaddingRight(), holder.layoutImage.getPaddingBottom());
+        holder.itemRoot.setPadding(indent, holder.itemRoot.getPaddingTop(),
+                holder.itemRoot.getPaddingRight(), holder.itemRoot.getPaddingBottom());
 
         if (!isReply && item.replyCount > 0) {
             holder.view_replies_link.setVisibility(View.VISIBLE);
@@ -285,7 +324,7 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
 
         holder.imageViewReport.setOnClickListener(view -> {
             int adapterPosition = holder.getBindingAdapterPosition();
-            if (adapterPosition != RecyclerView.NO_POSITION) {
+            if (adapterPosition != RecyclerView.NO_POSITION && showReportLayout != null) {
                 showReportLayout.showReportLayout(findSourceIndex(adapterPosition));
             }
         });
@@ -297,6 +336,91 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
                 }
             }
         });
+        holder.imageViewCopy.setOnClickListener(view -> {
+            if (onCopyListener != null) {
+                int adapterPosition = holder.getBindingAdapterPosition();
+                if (adapterPosition != RecyclerView.NO_POSITION) {
+                    onCopyListener.onCopy(findSourceIndex(adapterPosition));
+                }
+            }
+        });
+        holder.like_row.setOnClickListener(view -> {
+            if (onLikeListener != null) {
+                int adapterPosition = holder.getBindingAdapterPosition();
+                if (adapterPosition != RecyclerView.NO_POSITION) {
+                    onLikeListener.onLike(findSourceIndex(adapterPosition));
+                }
+            }
+        });
+    }
+
+    private void bindAvatar(MailViewHolder holder, String displayName,
+                            ListOfCommentsResponse.Datum datum, boolean isMe) {
+        String letterSource = !TextUtils.isEmpty(datum.getUserName()) ? datum.getUserName() : displayName;
+        char letter = '?';
+        if (!TextUtils.isEmpty(letterSource)) {
+            letter = Character.toUpperCase(letterSource.trim().charAt(0));
+        }
+        holder.avatar_letter.setText(String.valueOf(letter));
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(avatarColorFor(letterSource));
+        holder.avatar_letter.setBackground(bg);
+
+        String picUrl = datum.getUser_profile_pic();
+        if (isMe) {
+            String localPic = SharedPrefsData.getString(
+                    mContext, Constants.PROFILE_PIC_URL, Constants.PREF_NAME);
+            if (!AvatarImageHelper.isUnusablePhoto(localPic)) {
+                picUrl = localPic;
+            }
+        }
+        // Treat shared silhouette placeholders as missing so we don't paint the blue default.
+        boolean hasPic = !AvatarImageHelper.isUnusablePhoto(picUrl);
+        if (hasPic) {
+            holder.circular_image.setVisibility(View.VISIBLE);
+            holder.avatar_letter.setVisibility(View.INVISIBLE);
+            AvatarImageHelper.loadPicasso(holder.circular_image, picUrl);
+        } else {
+            holder.circular_image.setVisibility(View.GONE);
+            holder.avatar_letter.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private static int avatarColorFor(String key) {
+        if (TextUtils.isEmpty(key)) {
+            return AVATAR_COLORS[0];
+        }
+        int hash = Math.abs(key.toLowerCase(Locale.US).hashCode());
+        return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+    }
+
+    static String formatShortAgo(Long commentTimeMs) {
+        if (commentTimeMs == null || commentTimeMs <= 0) {
+            return "";
+        }
+        long diff = System.currentTimeMillis() - commentTimeMs;
+        if (diff < 0) {
+            diff = 0;
+        }
+        long seconds = TimeUnit.MILLISECONDS.toSeconds(diff);
+        if (seconds < 60) {
+            return seconds <= 5 ? "just now" : seconds + "s ago";
+        }
+        long minutes = TimeUnit.MILLISECONDS.toMinutes(diff);
+        if (minutes < 60) {
+            return minutes + "m ago";
+        }
+        long hours = TimeUnit.MILLISECONDS.toHours(diff);
+        if (hours < 24) {
+            return hours + "h ago";
+        }
+        long days = TimeUnit.MILLISECONDS.toDays(diff);
+        if (days < 7) {
+            return days + "d ago";
+        }
+        return (days / 7) + "w ago";
     }
 
     private int findSourceIndex(int displayPosition) {
@@ -322,25 +446,42 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         TextView comment_details;
         TextView person_name;
         TextView comment_time;
-        TextView comment_reply_btn;
+        View comment_reply_btn;
         TextView view_replies_link;
+        TextView avatar_letter;
+        TextView avatar_badge;
+        TextView comment_location;
+        TextView like_count;
         CircleImageView circular_image;
         ImageView imageViewReport;
+        ImageView imageViewCopy;
+        ImageView imageViewLike;
         LinearLayout layoutComment;
-        LinearLayout layoutImage;
+        FrameLayout layoutImage;
+        LinearLayout location_row;
+        LinearLayout like_row;
+        View itemRoot;
 
         public MailViewHolder(@NonNull View itemView) {
             super(itemView);
-
+            itemRoot = itemView.findViewById(R.id.comment_item_root);
             comment_details = itemView.findViewById(R.id.comment_details);
             person_name = itemView.findViewById(R.id.person_name);
             comment_time = itemView.findViewById(R.id.comment_time);
             comment_reply_btn = itemView.findViewById(R.id.comment_reply_btn);
             view_replies_link = itemView.findViewById(R.id.view_replies_link);
+            avatar_letter = itemView.findViewById(R.id.avatar_letter);
+            avatar_badge = itemView.findViewById(R.id.avatar_badge);
+            comment_location = itemView.findViewById(R.id.comment_location);
+            like_count = itemView.findViewById(R.id.like_count);
             circular_image = itemView.findViewById(R.id.circular_image);
             imageViewReport = itemView.findViewById(R.id.imageViewReport);
+            imageViewCopy = itemView.findViewById(R.id.imageViewCopy);
+            imageViewLike = itemView.findViewById(R.id.imageViewLike);
             layoutComment = itemView.findViewById(R.id.layoutComment);
             layoutImage = itemView.findViewById(R.id.layoutImage);
+            location_row = itemView.findViewById(R.id.location_row);
+            like_row = itemView.findViewById(R.id.like_row);
         }
     }
 
@@ -362,5 +503,13 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
 
     public interface OnReplyListener {
         void onReply(int position);
+    }
+
+    public interface OnCopyListener {
+        void onCopy(int position);
+    }
+
+    public interface OnLikeListener {
+        void onLike(int position);
     }
 }

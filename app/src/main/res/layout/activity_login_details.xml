@@ -43,6 +43,7 @@
 
 
             <soup.neumorphism.NeumorphCardView
+                android:id="@+id/username_card"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/_70sdp"
                 android:layout_below="@+id/basin_image_view"
@@ -50,6 +51,7 @@
                 android:layout_marginTop="8dp"
                 android:layout_marginRight="@dimen/_20sdp"
                 android:scaleType="centerInside"
+                android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:neumorph_backgroundColor="@color/neomorph_background_color"
                 app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
@@ -90,6 +92,7 @@
 
 
             <soup.neumorphism.NeumorphCardView
+                android:id="@+id/mobile_card"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/_70sdp"
                 android:layout_below="@+id/basin_image_view"
@@ -134,6 +137,7 @@
 
             </soup.neumorphism.NeumorphCardView>
             <soup.neumorphism.NeumorphCardView
+                android:id="@+id/email_card"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/_70sdp"
                 android:layout_below="@+id/basin_image_view"
@@ -141,7 +145,7 @@
                 android:layout_marginTop="8dp"
                 android:layout_marginRight="@dimen/_20sdp"
                 android:scaleType="centerInside"
-                android:visibility="visible"
+                android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:neumorph_backgroundColor="@color/neomorph_background_color"
                 app:neumorph_shadowColorDark="@color/neomorph_shadow_color"
@@ -167,12 +171,13 @@
                         android:drawablePadding="10dp"
                         android:drawableTint="@color/login_icon_tint"
                         android:hint="Email Id"
+                        android:inputType="textEmailAddress"
                         android:layout_marginLeft="10dp"
                         android:maxLines="1"
-                        android:clickable="false"
-                        android:cursorVisible="false"
-                        android:focusable="false"
-                        android:focusableInTouchMode="false"
+                        android:clickable="true"
+                        android:cursorVisible="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
                         android:textColor="@color/text_color_primary"
                         android:textColorHint="@color/login_hint_color">
 
@@ -310,8 +315,10 @@
                     android:focusableInTouchMode="true"
                     android:gravity="center"
                     android:inputType="number"
-                    android:maxLength="1"
+                    android:maxLength="4"
                     android:maxLines="1"
+                    android:importantForAutofill="yes"
+                    android:autofillHints="smsOTPCode"
                     android:textColor="@color/text_color_primary">
 
                 </EditText>

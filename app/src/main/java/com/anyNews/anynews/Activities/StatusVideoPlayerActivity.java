@@ -1,6 +1,7 @@
 package com.anyNews.anynews.Activities;
 
 import static com.anyNews.anynews.Utils.AppHelper.showLog;
+import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 import android.app.AlertDialog;
@@ -41,6 +42,7 @@ import com.anyNews.anynews.Pojo.DilogeResest;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.GetReportIssueResponce;
+import com.anyNews.anynews.Pojo.LikeDownloadRespouse;
 import com.anyNews.anynews.Pojo.LikeSelectionRequest;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
@@ -822,7 +824,19 @@ public class StatusVideoPlayerActivity extends AppCompatActivity {
         api.update_like("v3", otp).enqueue(new Callback<EncreptionRequest>() {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-                /* optimistic already applied */
+                try {
+                    EncreptionRequest body = response.body();
+                    if (body == null || body.getData() == null) return;
+                    LikeDownloadRespouse likeResp = new Gson().fromJson(
+                            decrypt(body.getData()), LikeDownloadRespouse.class);
+                    if (likeResp != null && Boolean.TRUE.equals(likeResp.getSuccess())
+                            && likeResp.getLikes() != null) {
+                        item.setLikes(likeResp.getLikes());
+                        notifyActiveEngagement();
+                    }
+                } catch (Exception e) {
+                    showLog("StatusPlayer like parse: " + e.getMessage());
+                }
             }
 
             @Override

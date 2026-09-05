@@ -9,10 +9,14 @@ import androidx.annotation.Nullable;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 
 /**
  * Splash-delivered TTD (Tirumala) feature flags + URLs.
@@ -24,6 +28,8 @@ public final class TtdConfigHelper {
     public static final String DEFAULT_BOOKING = "https://tirupatibalaji.ap.gov.in/";
     public static final String DEFAULT_EDARSHAN = "https://tirupatibalaji.ap.gov.in/";
     public static final String DEFAULT_APP = "https://www.tirumala.org/";
+
+    private static final TimeZone IST = TimeZone.getTimeZone("Asia/Kolkata");
 
     private TtdConfigHelper() {}
 
@@ -82,6 +88,12 @@ public final class TtdConfigHelper {
             }
             SharedPrefsData.putString(app, Constants.TTD_BOOKING_DAYS, sb.toString(),
                     Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.TTD_BOOKING_OPENS_AT,
+                    normalizeScheduleRaw(o.optString("booking_opens_at", "")),
+                    Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.TTD_BOOKING_CLOSES_AT,
+                    normalizeScheduleRaw(o.optString("booking_closes_at", "")),
+                    Constants.PREF_NAME);
             SharedPrefsData.putBool(app, Constants.TTD_CONFIG_SET, true, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
@@ -92,13 +104,35 @@ public final class TtdConfigHelper {
         return readBool(context, Constants.TTD_ENABLED, true);
     }
 
+    /**
+     * Booking CTA visibility: master flag + optional IST schedule window + optional days-of-month.
+     * Empty schedule + empty days = show whenever {@code booking_enabled}.
+     */
     public static boolean isBookingCtaVisibleToday(@Nullable Context context) {
         if (!isEnabled(context)) return false;
         if (!readBool(context, Constants.TTD_BOOKING_ENABLED, true)) return false;
+
+        long now = System.currentTimeMillis();
+        Long opens = parseScheduleMillis(bookingOpensAt(context));
+        if (opens != null && now < opens) return false;
+        Long closes = parseScheduleMillis(bookingClosesAt(context));
+        if (closes != null && now > closes) return false;
+
         List<Integer> days = bookingDays(context);
         if (days.isEmpty()) return true;
-        int today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
+        Calendar cal = Calendar.getInstance(IST);
+        int today = cal.get(Calendar.DAY_OF_MONTH);
         return days.contains(today);
+    }
+
+    @NonNull
+    public static String bookingOpensAt(@Nullable Context context) {
+        return readStr(context, Constants.TTD_BOOKING_OPENS_AT, "");
+    }
+
+    @NonNull
+    public static String bookingClosesAt(@Nullable Context context) {
+        return readStr(context, Constants.TTD_BOOKING_CLOSES_AT, "");
     }
 
     @NonNull
@@ -226,6 +260,80 @@ public final class TtdConfigHelper {
                 "• " + TtdLabels.sevasHeading(c),
                 "• " + TtdLabels.quickDarshanSub(c),
         };
+    }
+
+    /** Persist raw schedule string; empty clears. Does not reformat — server already normalizes. */
+    @NonNull
+    private static String normalizeScheduleRaw(@Nullable String raw) {
+        if (raw == null) return "";
+        return raw.trim();
+    }
+
+    /**
+     * Parse schedule datetime. Bare local times (no zone) are treated as Asia/Kolkata (IST).
+     * @return epoch millis, or null if empty/unparseable
+     */
+    @Nullable
+    static Long parseScheduleMillis(@Nullable String raw) {
+        if (raw == null) return null;
+        String s = raw.trim();
+        if (s.isEmpty()) return null;
+        // ISO with Z or numeric offset
+        if (s.endsWith("Z") || s.endsWith("z")
+                || s.matches(".*[+-]\\d{2}:?\\d{2}$")) {
+            try {
+                // SimpleDateFormat ISO-8601 with offset
+                String norm = s;
+                if (norm.endsWith("Z") || norm.endsWith("z")) {
+                    SimpleDateFormat sdf = new SimpleDateFormat(
+                            "yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+                    sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                    // try with millis
+                    try {
+                        return sdf.parse(norm.replaceAll("\\.\\d+", "")).getTime();
+                    } catch (ParseException e) {
+                        SimpleDateFormat sdf2 = new SimpleDateFormat(
+                                "yyyy-MM-dd'T'HH:mm'Z'", Locale.US);
+                        sdf2.setTimeZone(TimeZone.getTimeZone("UTC"));
+                        return sdf2.parse(norm).getTime();
+                    }
+                }
+                // +05:30 or +0530
+                String[] patterns = {
+                        "yyyy-MM-dd'T'HH:mm:ssXXX",
+                        "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+                        "yyyy-MM-dd'T'HH:mmXXX",
+                        "yyyy-MM-dd'T'HH:mm:ssZ",
+                        "yyyy-MM-dd'T'HH:mmZ",
+                };
+                for (String p : patterns) {
+                    try {
+                        SimpleDateFormat sdf = new SimpleDateFormat(p, Locale.US);
+                        Date d = sdf.parse(norm);
+                        if (d != null) return d.getTime();
+                    } catch (Exception ignored) {
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        // Bare local → IST
+        String[] localPatterns = {
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd'T'HH:mm",
+                "yyyy-MM-dd HH:mm:ss",
+                "yyyy-MM-dd HH:mm",
+        };
+        for (String p : localPatterns) {
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat(p, Locale.US);
+                sdf.setTimeZone(IST);
+                Date d = sdf.parse(s);
+                if (d != null) return d.getTime();
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
     }
 
     private static void putBool(Context app, String key, boolean v) {

@@ -85,6 +85,40 @@ public final class PanchangModels {
             return ashubha != null ? ashubha : new ArrayList<>();
         }
 
+        /**
+         * Ashubha list with consecutive same-label rows merged (Way2News:
+         * Durmuhurtham / Varjyam dual slots joined by {@code againConnector}).
+         */
+        @NonNull
+        public List<TimeItem> safeAshubhaMerged(@Nullable String againConnector) {
+            return mergeConsecutiveSameLabel(safeAshubha(), againConnector);
+        }
+
+        @NonNull
+        public static List<TimeItem> mergeConsecutiveSameLabel(
+                @Nullable List<TimeItem> items, @Nullable String againConnector) {
+            List<TimeItem> out = new ArrayList<>();
+            if (items == null || items.isEmpty()) return out;
+            String conn = againConnector != null && !againConnector.isEmpty()
+                    ? againConnector
+                    : " మరలా ";
+            for (TimeItem it : items) {
+                if (it == null) continue;
+                TimeItem prev = out.isEmpty() ? null : out.get(out.size() - 1);
+                if (prev != null
+                        && prev.label != null
+                        && prev.label.equals(it.label)
+                        && prev.range != null
+                        && it.range != null
+                        && !prev.range.contains(conn.trim())) {
+                    prev.range = prev.range + conn + it.range;
+                } else {
+                    out.add(new TimeItem(it.label, it.range));
+                }
+            }
+            return out;
+        }
+
         @NonNull
         public List<TimeItem> safeTithiCard() {
             return tithiCard != null ? tithiCard : new ArrayList<>();

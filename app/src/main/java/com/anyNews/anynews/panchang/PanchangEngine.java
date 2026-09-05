@@ -290,9 +290,16 @@ public final class PanchangEngine {
         day.ashubha.add(item("యమగండం", yama[0], yama[1]));
         day.ashubha.add(item("గుళికా", gulika[0], gulika[1]));
         double[][] durs = DURMU[weekday];
-        for (double[] dr : durs) {
-            double dayLen = sunset - sunrise;
-            day.ashubha.add(item("దుర్ముహూర్తం", sunrise + dayLen * dr[0], sunrise + dayLen * dr[1]));
+        double dayLen = sunset - sunrise;
+        if (durs.length == 1) {
+            day.ashubha.add(item("దుర్ముహూర్తం", sunrise + dayLen * durs[0][0], sunrise + dayLen * durs[0][1]));
+        } else if (durs.length > 1) {
+            StringBuilder durRange = new StringBuilder();
+            for (int di = 0; di < durs.length; di++) {
+                if (di > 0) durRange.append(" మరలా ");
+                durRange.append(formatRange(sunrise + dayLen * durs[di][0], sunrise + dayLen * durs[di][1]));
+            }
+            day.ashubha.add(new PanchangModels.TimeItem("దుర్ముహూర్తం", durRange.toString()));
         }
         day.ashubha.add(item("వర్జ్యం", varjya[0], varjya[1]));
 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Flash News tab — Material "flash_on" bolt/zap (not notification bell).
+  Solid black fill so BottomNavigationView itemIconTint (checked brand orange /
+  unchecked gray) applies via SRC_IN. Same 24dp canvas as other footer glyphs.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M7,2v11h3v9l7,-12h-4l4,-8z" />
+</vector>

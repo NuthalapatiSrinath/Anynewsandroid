@@ -179,13 +179,6 @@
             android:screenOrientation="portrait"
             android:launchMode="singleTask"
             android:theme="@style/AppThemeSplash">
-            <!-- Isolated referral links; /r/ avoids the existing short-code namespace. -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="share.anynews.co.in" android:pathPrefix="/r/" />
-            </intent-filter>
             <!-- Legacy Firebase Dynamic Links (page.link) — still may open app if installed -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -271,7 +264,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".referral.ReferralActivity" android:exported="false" android:theme="@style/AppTheme" />
         <activity
             android:name=".Activities.TestingClass"
             android:theme="@style/AppTheme"
@@ -346,6 +338,12 @@
             android:exported="false"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".Activities.BecomeAReporterActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".Activities.StatusVideoPlayerActivity"
             android:theme="@style/AppTheme"
             android:exported="false"
@@ -377,6 +375,32 @@
             android:screenOrientation="portrait"/>
         <activity
             android:name=".Activities.TeluguCalendarActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".Activities.TtdDetailActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.WeatherDetailActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.FuelDetailActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.GoldDetailActivity"
+            android:theme="@style/AppTheme"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Activities.StockMarketActivity"
             android:theme="@style/AppTheme"
             android:exported="false"
             android:screenOrientation="portrait"

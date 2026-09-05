@@ -18,26 +18,239 @@ public final class CalendarRaasiLabels {
     private CalendarRaasiLabels() {}
 
     public static String swipeHint(@Nullable Context context) {
+        // Legacy swipe affordance retired — Rashi is a top-segment option.
+        return segRaasiPhalalu(context);
+    }
+
+    /** Top segment left: Panchangam (calendar day page). */
+    public static String segPanchangam(@Nullable Context context) {
         switch (languageId(context)) {
-            case 1: return "താഴേക്ക് സ്വൈപ്പ് · രാശിഫലം";
-            case 2: return "नीचे स्वाइप · राशिफल";
+            case 1: return "പഞ്ചാംഗം";
+            case 2: return "पंचांग";
+            case 3: return "పంచాంగం";
+            case 4: return "பஞ்சாங்கம்";
+            case 5: return "ಪಂಚಾಂಗ";
+            case 6: return "ପଞ୍ଚାଙ୍ଗ";
+            default: return str(context, R.string.calendar_seg_panchangam, "Panchangam");
+        }
+    }
+
+    /** Top segment right: Raasi Phalalu (replaces former TTD segment). */
+    public static String segRaasiPhalalu(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "രാശിഫലം";
+            case 2: return "राशिफल";
             case 3: return "రాశి ఫలాలు";
-            case 4: return "கீழே ஸ்வைப் · ராசிபலன்";
-            case 5: return "ಕೆಳಗೆ ಸ್ವೈಪ್ · ರಾಶಿಫಲ";
-            case 6: return "ତଳକୁ ସ୍ୱାଇପ୍ · ରାଶିଫଳ";
-            default: return str(context, R.string.telugu_calendar_swipe_hint, "Raasi Phalalu");
+            case 4: return "ராசிபலன்";
+            case 5: return "ರಾಶಿಫಲ";
+            case 6: return "ରାଶିଫଳ";
+            default: return str(context, R.string.calendar_seg_raasi_phalalu, "Raasi Phalalu");
         }
     }
 
     public static String pickRaasi(@Nullable Context context) {
         switch (languageId(context)) {
-            case 1: return "നിങ്ങളുടെ രാശി തിരഞ്ഞെടുക്കുക";
-            case 2: return "अपनी राशि चुनें";
-            case 3: return "మీ రాశిని ఎంచుకోండి";
-            case 4: return "உங்கள் ராசியைத் தேர்ந்தெடுக்கவும்";
-            case 5: return "ನಿಮ್ಮ ರಾಶಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ";
-            case 6: return "ଆପଣଙ୍କ ରାଶି ବାଛନ୍ତୁ";
-            default: return str(context, R.string.telugu_calendar_pick_raasi, "Choose your rashi");
+            case 1: return "നിങ്ങളുടെ രാശിഫലം";
+            case 2: return "आपकी राशिफल";
+            case 3: return "మీ రాశి ఫలితాలు";
+            case 4: return "உங்கள் ராசிபலன்";
+            case 5: return "ನಿಮ್ಮ ರಾಶಿಫಲ";
+            case 6: return "ଆପଣଙ୍କ ରାଶିଫଳ";
+            default: return str(context, R.string.telugu_calendar_pick_raasi, "Your Rashi Phalalu");
+        }
+    }
+
+    public static String dateLabel(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "തീയതി";
+            case 2: return "तारीख";
+            case 3: return "తేది";
+            case 4: return "தேதி";
+            case 5: return "ದಿನಾಂಕ";
+            case 6: return "ତାରିଖ";
+            default: return "Date";
+        }
+    }
+
+    public static String yogaLabel(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "യോഗം";
+            case 2: return "योग";
+            case 3: return "యోగం";
+            case 4: return "யோகம்";
+            case 5: return "ಯೋಗ";
+            case 6: return "ଯୋଗ";
+            default: return "Yoga";
+        }
+    }
+
+    public static String shubhaYogam(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ശുഭ യോഗം";
+            case 2: return "शुभ योग";
+            case 3: return "శుభ యోగం";
+            case 4: return "சுப யோகம்";
+            case 5: return "ಶುಭ ಯೋಗ";
+            case 6: return "ଶୁଭ ଯୋଗ";
+            default: return "Shubha Yogam";
+        }
+    }
+
+    public static String mishraYogam(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "മിശ്ര യോഗം";
+            case 2: return "मिश्र योग";
+            case 3: return "మిశ్ర యోగం";
+            case 4: return "மிஸ்ர யோகம்";
+            case 5: return "ಮಿಶ್ರ ಯೋಗ";
+            case 6: return "ମିଶ୍ର ଯୋଗ";
+            default: return "Mishra Yogam";
+        }
+    }
+
+    public static String shubhamBhavatu(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "\"ശുഭം ഭവതു\"";
+            case 2: return "\"शुभं भवतु\"";
+            case 3: return "\"శుభం భవతు\"";
+            case 4: return "\"சுபம் பவது\"";
+            case 5: return "\"ಶುಭಂ ಭವತು\"";
+            case 6: return "\"ଶୁଭଂ ଭବତୁ\"";
+            default: return "\"Shubham Bhavatu\"";
+        }
+    }
+
+    public static String lordLabel(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "അധിപൻ";
+            case 2: return "अधिपति";
+            case 3: return "అధిపతి";
+            case 4: return "அதிபதி";
+            case 5: return "ಅಧಿಪತಿ";
+            case 6: return "ଅଧିପତି";
+            default: return "Lord";
+        }
+    }
+
+    public static String elementLabel(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "തത്ത്വം";
+            case 2: return "तत्त्व";
+            case 3: return "తత్త్వం";
+            case 4: return "தத்துவம்";
+            case 5: return "ತತ್ತ್ವ";
+            case 6: return "ତତ୍ତ୍ୱ";
+            default: return "Element";
+        }
+    }
+
+    public static String gemLabel(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "രത്നം";
+            case 2: return "रत्न";
+            case 3: return "శుభ రత్నం";
+            case 4: return "ரத்னம்";
+            case 5: return "ರತ್ನ";
+            case 6: return "ରତ୍ନ";
+            default: return "Gem";
+        }
+    }
+
+    public static String colorAttrLabel(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "നിറം";
+            case 2: return "रंग";
+            case 3: return "శుభ వర్ణం";
+            case 4: return "நிறம்";
+            case 5: return "ಬಣ್ಣ";
+            case 6: return "ରଙ୍ଗ";
+            default: return "Color";
+        }
+    }
+
+    public static String sectionGeneral(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "സാധാരണ ഫലം";
+            case 2: return "सामान्य फल";
+            case 3: return "సాధారణ ఫలితాలు";
+            case 4: return "பொது பலன்";
+            case 5: return "ಸಾಮಾನ್ಯ ಫಲ";
+            case 6: return "ସାଧାରଣ ଫଳ";
+            default: return "General";
+        }
+    }
+
+    public static String sectionFinance(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "സാമ്പത്തികം";
+            case 2: return "वित्त";
+            case 3: return "ఆర్థికం";
+            case 4: return "நிதி";
+            case 5: return "ಆರ್ಥಿಕ";
+            case 6: return "ଆର୍ଥିକ";
+            default: return "Finance";
+        }
+    }
+
+    public static String sectionCareer(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "കരിയർ";
+            case 2: return "करियर";
+            case 3: return "కెరీర్";
+            case 4: return "தொழில்";
+            case 5: return "ವೃತ್ತಿ";
+            case 6: return "କ୍ୟାରିଅର୍";
+            default: return "Career";
+        }
+    }
+
+    public static String sectionHealth(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ആരോഗ്യം";
+            case 2: return "स्वास्थ्य";
+            case 3: return "ఆరోగ్యం";
+            case 4: return "ஆரோக்கியம்";
+            case 5: return "ಆರೋಗ್ಯ";
+            case 6: return "ସ୍ୱାସ୍ଥ୍ୟ";
+            default: return "Health";
+        }
+    }
+
+    public static String sectionLove(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "സ്നേഹം & ബന്ധങ്ങൾ";
+            case 2: return "प्रेम व संबंध";
+            case 3: return "ప్రేమ & సంబంధాలు";
+            case 4: return "காதல் & உறவுகள்";
+            case 5: return "ಪ್ರೇಮ & ಸಂಬಂಧ";
+            case 6: return "ପ୍ରେମ & ସମ୍ପର୍କ";
+            default: return "Love & Relations";
+        }
+    }
+
+    public static String sectionRemedy(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "പരിഹാരം";
+            case 2: return "उपाय";
+            case 3: return "పరిహారం";
+            case 4: return "பரிகாரம்";
+            case 5: return "ಪರಿಹಾರ";
+            case 6: return "ପରିହାର";
+            default: return "Remedy";
+        }
+    }
+
+    /** Short title without date for detail card header. */
+    public static String phalaluShortTitle(@Nullable Context context, int rashiId0) {
+        String name = rashiName(context, rashiId0);
+        switch (languageId(context)) {
+            case 1: return name + " രാശിഫലം";
+            case 2: return name + " राशिफल";
+            case 3: return name + " రాశి ఫలితాలు";
+            case 4: return name + " ராசிபலன்";
+            case 5: return name + " ರಾಶಿಫಲ";
+            case 6: return name + " ରାଶିଫଳ";
+            default: return name + " horoscope";
         }
     }
 
@@ -309,6 +522,136 @@ public final class CalendarRaasiLabels {
             case 5: return "ಹಂಚಿಕೊಳ್ಳಿ";
             case 6: return "ସେଆର୍";
             default: return str(context, R.string.telugu_calendar_share_chooser, "Share");
+        }
+    }
+
+    /** Joins dual Durmuhurtham / Varjyam ranges (Way2News “మరలా”). */
+    public static String againConnector(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return " വീണ്ടും ";
+            case 2: return " फिर ";
+            case 3: return " మరలా ";
+            case 4: return " மீண்டும் ";
+            case 5: return " ಮತ್ತೆ ";
+            case 6: return " ପୁଣି ";
+            default: return " again ";
+        }
+    }
+
+    /** Gregorian month name for calendar header (0 = January). */
+    @NonNull
+    public static String monthName(@Nullable Context context, int month0) {
+        int m = Math.max(0, Math.min(11, month0));
+        switch (languageId(context)) {
+            case 1: {
+                String[] n = {"ജനുവരി", "ഫെബ്രുവരി", "മാർച്ച്", "ഏപ്രിൽ", "മേയ്", "ജൂൺ",
+                        "ജൂലൈ", "ഓഗസ്റ്റ്", "സെപ്റ്റംബർ", "ഒക്ടോബർ", "നവംബർ", "ഡിസംബർ"};
+                return n[m];
+            }
+            case 2: {
+                String[] n = {"जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून",
+                        "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"};
+                return n[m];
+            }
+            case 3: {
+                String[] n = {"జనవరి", "ఫిబ్రవరి", "మార్చి", "ఏప్రిల్", "మే", "జూన్",
+                        "జూలై", "ఆగస్టు", "సెప్టెంబర్", "అక్టోబర్", "నవంబర్", "డిసెంబర్"};
+                return n[m];
+            }
+            case 4: {
+                String[] n = {"ஜனவரி", "பிப்ரவரி", "மார்ச்", "ஏப்ரல்", "மே", "ஜூன்",
+                        "ஜூலை", "ஆகஸ்ட்", "செப்டம்பர்", "அக்டோபர்", "நவம்பர்", "டிசம்பர்"};
+                return n[m];
+            }
+            case 5: {
+                String[] n = {"ಜನವರಿ", "ಫೆಬ್ರವರಿ", "ಮಾರ್ಚ್", "ಏಪ್ರಿಲ್", "ಮೇ", "ಜೂನ್",
+                        "ಜುಲೈ", "ಆಗಸ್ಟ್", "ಸೆಪ್ಟೆಂಬರ್", "ಅಕ್ಟೋಬರ್", "ನವೆಂಬರ್", "ಡಿಸೆಂಬರ್"};
+                return n[m];
+            }
+            case 6: {
+                String[] n = {"ଜାନୁଆରୀ", "ଫେବୃଆରୀ", "ମାର୍ଚ୍ଚ", "ଅପ୍ରେଲ", "ମଇ", "ଜୁନ",
+                        "ଜୁଲାଇ", "ଅଗଷ୍ଟ", "ସେପ୍ଟେମ୍ବର", "ଅକ୍ଟୋବର", "ନଭେମ୍ବର", "ଡିସେମ୍ବର"};
+                return n[m];
+            }
+            default: {
+                String[] n = {"January", "February", "March", "April", "May", "June",
+                        "July", "August", "September", "October", "November", "December"};
+                return n[m];
+            }
+        }
+    }
+
+    /** Weekday short labels Sun→Sat for calendar grid header. */
+    @NonNull
+    public static String[] weekdayShorts(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return new String[]{"ഞായർ", "തിങ്കൾ", "ചൊവ്വ", "ബുധൻ", "വ്യാഴം", "വെള്ളി", "ശനി"};
+            case 2: return new String[]{"रवि", "सोम", "मंगल", "बुध", "गुरु", "शुक्र", "शनि"};
+            case 3: return new String[]{"ఆది", "సోమ", "మంగళ", "బుధ", "గురు", "శుక్ర", "శని"};
+            case 4: return new String[]{"ஞாயி", "திங்", "செவ்", "புத", "வியா", "வெள்", "சனி"};
+            case 5: return new String[]{"ಭಾನು", "ಸೋಮ", "ಮಂಗಳ", "ಬುಧ", "ಗುರು", "ಶುಕ್ರ", "ಶನಿ"};
+            case 6: return new String[]{"ରବି", "ସୋମ", "ମଙ୍ଗଳ", "ବୁଧ", "ଗୁରୁ", "ଶୁକ୍ର", "ଶନି"};
+            default: return new String[]{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+        }
+    }
+
+    public static String shubhaTimes(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ശുഭ സമയങ്ങൾ";
+            case 2: return "शुभ समय";
+            case 3: return "శుభ సమయాలు";
+            case 4: return "சுப நேரங்கள்";
+            case 5: return "ಶುಭ ಸಮಯಗಳು";
+            case 6: return "ଶୁଭ ସମୟ";
+            default: return "Auspicious times";
+        }
+    }
+
+    public static String shubhaMuhurthams(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ശുഭ മുഹൂർത്തങ്ങൾ";
+            case 2: return "शुभ मुहूर्त";
+            case 3: return "శుభ ముహూర్తాలు";
+            case 4: return "சுப முகூர்த்தங்கள்";
+            case 5: return "ಶುಭ ಮುಹೂರ್ತಗಳು";
+            case 6: return "ଶୁଭ ମୁହୂର୍ତ୍ତ";
+            default: return "Auspicious muhurthams";
+        }
+    }
+
+    public static String ashubhaTimes(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "അശുഭങ്ങൾ";
+            case 2: return "अशुभ";
+            case 3: return "అశుభాలు";
+            case 4: return "அசுபங்கள்";
+            case 5: return "ಅಶುಭಗಳು";
+            case 6: return "ଅଶୁଭ";
+            default: return "Inauspicious";
+        }
+    }
+
+    public static String tithiLabel(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "തിഥി";
+            case 2: return "तिथि";
+            case 3: return "తిథి";
+            case 4: return "திதி";
+            case 5: return "ತಿಥಿ";
+            case 6: return "ତିଥି";
+            default: return "Tithi";
+        }
+    }
+
+    public static String nakshatraLabel(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "നക്ഷത്രം";
+            case 2: return "नक्षत्र";
+            case 3: return "నక్షత్రం";
+            case 4: return "நட்சத்திரம்";
+            case 5: return "ನಕ್ಷತ್ರ";
+            case 6: return "ନକ୍ଷତ୍ର";
+            default: return "Nakshatra";
         }
     }
 

@@ -96,8 +96,7 @@ public class AreaSelection extends AppCompatActivity {
                 int back_value = SharedPrefsData.getInt(getApplicationContext(), Constants.Back_Button_Move, Constants.PREF_NAME);
 
                 if (back_value == 1) {
-                    Intent intent = new Intent(AreaSelection.this, LanguageActivity.class);
-                    startActivity(intent);
+                    startActivity(LanguageActivity.createChangeLanguageIntent(AreaSelection.this));
                     finish();
 
                 } else {
@@ -226,7 +225,7 @@ public class AreaSelection extends AppCompatActivity {
         if (!TextUtils.isEmpty(message)) {
             Toast.makeText(AreaSelection.this, message, Toast.LENGTH_LONG).show();
         }
-        Intent intent = new Intent(AreaSelection.this, LanguageActivity.class);
+        Intent intent = LanguageActivity.createChangeLanguageIntent(AreaSelection.this);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
         finish();
@@ -265,8 +264,7 @@ public class AreaSelection extends AppCompatActivity {
         int back_value = SharedPrefsData.getInt(getApplicationContext(), Constants.Back_Button_Move, Constants.PREF_NAME);
 
         if (back_value == 1) {
-            Intent intent = new Intent(AreaSelection.this, LanguageActivity.class);
-            startActivity(intent);
+            startActivity(LanguageActivity.createChangeLanguageIntent(AreaSelection.this));
             finish();
 
         } else {

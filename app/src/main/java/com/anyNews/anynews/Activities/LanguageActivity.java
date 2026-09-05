@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
@@ -44,6 +45,19 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 
 public class LanguageActivity extends AppCompatActivity {
 
+    /**
+     * Explicit language change (Profile / settings / onboarding back).
+     * When true, do not apply {@link OpenPathCache#shouldSkipLanguageOnboarding} —
+     * that skip is only for stale cold-start routes landing here by mistake.
+     */
+    public static final String EXTRA_ALLOW_LANGUAGE_CHANGE = "extra_allow_language_change";
+
+    /** Intent for intentional language pick (Profile hub, back from state/district, etc.). */
+    public static Intent createChangeLanguageIntent(Context context) {
+        Intent intent = new Intent(context, LanguageActivity.class);
+        intent.putExtra(EXTRA_ALLOW_LANGUAGE_CHANGE, true);
+        return intent;
+    }
 
     RecyclerView recycleLayoutManager;
     LinearLayoutManager linearLayoutManager;
@@ -91,9 +105,12 @@ public class LanguageActivity extends AppCompatActivity {
         setStaticData();
         FontSettingsHelper.applySelectionHeader(getApplicationContext(), 1, select_language);
 
-        // Safety net: existing Play / reporter devices with language already chosen
-        // must never sit on this screen (stale MOVE_NEXT_SCREEN=language paths).
-        if (OpenPathCache.shouldSkipLanguageOnboarding(this)) {
+        // Safety net for stale cold-start / MOVE_NEXT_SCREEN=language only.
+        // Profile "change language" and onboarding back must still show the picker
+        // (production always opened LanguageActivity for those paths).
+        boolean allowChange = getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_ALLOW_LANGUAGE_CHANGE, false);
+        if (!allowChange && OpenPathCache.shouldSkipLanguageOnboarding(this)) {
             showLog("LanguageActivity: skip for returning device → HomePage");
             Intent home = new Intent(LanguageActivity.this, HomePage.class);
             home.putExtra("EXTRA_SESSION_ID", "0");

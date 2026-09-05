@@ -39,6 +39,7 @@ import retrofit2.http.Multipart;
 import retrofit2.http.POST;
 import retrofit2.http.Part;
 import retrofit2.http.Path;
+import retrofit2.http.Query;
 
 public interface APIService {
 
@@ -262,6 +263,8 @@ public interface APIService {
     @POST("app/{version}/comments/report")
     Call<EncreptionRequest> postReportFlag(@Path("version") String version,@Body JsonObject flag);
 
+    @POST("app/{version}/comments/like")
+    Call<EncreptionRequest> commentLike(@Path("version") String version, @Body JsonObject body);
 
     //Add_Comment
     @POST("app/{version}/Add_Comment")
@@ -391,6 +394,27 @@ public interface APIService {
 
     @POST("app/{version}/update_scratch_cards")   // get_districts
     Call<EncreptionRequest>get_update_scratch_cards(@Path("version") String version, @Body JsonObject langgg);
+
+    /** Jobs hub list (+ stats). Cache on device; empty items when none posted. */
+    @POST("app/{version}/get_jobs")
+    Call<JsonObject> get_jobs(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/reporter_applicant_get")
+    Call<JsonObject> reporter_applicant_get(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/reporter_applicant_upsert_profile")
+    Call<JsonObject> reporter_applicant_upsert_profile(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/reporter_applicant_create_post")
+    Call<JsonObject> reporter_applicant_create_post(@Path("version") String version, @Body JsonObject body);
+
+    /** Stock Market — Yahoo via server Redis/memory cache. section=indices|watchlist|quote|search */
+    @GET("app/{version}/stock_market")
+    Call<JsonObject> stockMarket(
+            @Path("version") String version,
+            @Query("section") String section,
+            @Query("q") String query,
+            @Query("symbols") String symbols);
 
     @POST("app/{version}/disable_update_menu")     // @POST("app/V1/Splash_Screen")         // ok
     Call<EncreptionRequest> disable_update_menu(@Path("version") String version, @Body JsonObject splash);

@@ -292,6 +292,12 @@
         <item name="colorControlActivated">@color/red</item>
     </style>
 
+    <!-- Gold history date picker — Material calendar dims invalid (non-history) days. -->
+    <style name="ThemeOverlay.AnyNews.GoldMaterialCalendar" parent="ThemeOverlay.MaterialComponents.MaterialCalendar">
+        <item name="colorPrimary">@color/brand_orange</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+    </style>
+
     <style name="AppTheme.AdAttribution">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>

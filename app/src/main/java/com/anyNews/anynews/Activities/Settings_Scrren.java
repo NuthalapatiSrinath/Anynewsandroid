@@ -60,7 +60,7 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 /**
- * Settings screen matching light/dark mocks: banner, 4-toggle card, action pair, contact rows.
+ * Settings screen matching light/dark mocks: banner, toggle card, action pair, contact rows.
  * Pref keys live on {@link Constants} under PREF_NAME ("my_pref").
  * Night mode via {@link NightModeHelper} (smooth switch, no freeze).
  * Toggle-column visibility from admin {@link ProfileHubConfigHelper} splash flags.
@@ -71,15 +71,15 @@ public class Settings_Scrren extends AppCompatActivity {
     private TextView appVersionId;
     private TextView settingsTitle;
     private SwitchCompat switchNotifications;
-    private SwitchCompat switchAutoplay;
     private SwitchCompat switchNight;
     private SwitchCompat switchLocal;
 
     private LanguageModelResponse languageModelResponse;
     private Allsharedpreference prefShare;
     private boolean suppressToggleCallbacks;
-    /** User turned notifications ON while system permission was off — re-check on resume. */
     private boolean pendingEnableNotifications;
+    /** User turned notifications OFF while system still allows — re-check after Settings. */
+    private boolean pendingDisableNotifications;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -100,12 +100,24 @@ public class Settings_Scrren extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (pendingEnableNotifications && isSystemNotificationsEnabled()) {
+        boolean systemOn = isSystemNotificationsEnabled();
+        if (pendingEnableNotifications && systemOn) {
             pendingEnableNotifications = false;
             persistNotificationPreference(true);
             updateNotificationApi(true);
+        } else if (pendingDisableNotifications && !systemOn) {
+            pendingDisableNotifications = false;
+            persistNotificationPreference(false);
+            updateNotificationApi(false);
+        } else {
+            // Soft-align FCM pref if user changed OS settings outside this toggle.
+            boolean pref = SharedPrefsData.getBool(
+                    this, Constants.NOTIFICATION_ENABLED, Constants.PREF_NAME, true);
+            if (pref != systemOn) {
+                persistNotificationPreference(systemOn);
+            }
         }
-        // System tray can change while activity is paused — never show ON without OS consent.
+        // Always mirror Android system app-notification permission — never a fake in-app flag.
         applyNotificationSwitchState();
     }
 
@@ -118,19 +130,13 @@ public class Settings_Scrren extends AppCompatActivity {
         }
     }
 
-    private boolean isUserNotificationPrefEnabled() {
-        return SharedPrefsData.getBool(
-                this, Constants.NOTIFICATION_ENABLED, Constants.PREF_NAME, true);
-    }
-
     /**
-     * Toggle reflects both user preference and system permission: OS off ⇒ switch off.
+     * Toggle ON iff system notifications are allowed for this app; OFF otherwise.
      */
     private void applyNotificationSwitchState() {
         if (switchNotifications == null) return;
         suppressToggleCallbacks = true;
-        boolean showOn = isSystemNotificationsEnabled() && isUserNotificationPrefEnabled();
-        switchNotifications.setChecked(showOn);
+        switchNotifications.setChecked(isSystemNotificationsEnabled());
         suppressToggleCallbacks = false;
     }
 
@@ -165,22 +171,19 @@ public class Settings_Scrren extends AppCompatActivity {
         appVersionId = findViewById(R.id.app_version_id);
         settingsTitle = findViewById(R.id.settings_title);
         switchNotifications = findViewById(R.id.switch_notifications);
-        switchAutoplay = findViewById(R.id.switch_autoplay);
         switchNight = findViewById(R.id.switch_night);
         switchLocal = findViewById(R.id.switch_local);
     }
 
     /**
-     * Admin flags hide toggle columns; GONE cells drop out of the weight row so 2–3
+     * Admin flags hide toggle columns; GONE cells drop out of the weight row so
      * remaining columns fill without empty holes (weightSum = visible count).
      */
     private void applyToggleVisibility() {
         View cellNotif = findViewById(R.id.cell_notifications);
-        View cellAutoplay = findViewById(R.id.cell_autoplay);
         View cellNight = findViewById(R.id.cell_night);
         View cellLocal = findViewById(R.id.cell_local);
         setCellVisible(cellNotif, ProfileHubConfigHelper.isSettingsShowNotifications(this));
-        setCellVisible(cellAutoplay, ProfileHubConfigHelper.isSettingsShowVideoAutoplay(this));
         setCellVisible(cellNight, ProfileHubConfigHelper.isSettingsShowNightMode(this));
         setCellVisible(cellLocal, ProfileHubConfigHelper.isSettingsShowLocalStories(this));
 
@@ -231,7 +234,6 @@ public class Settings_Scrren extends AppCompatActivity {
                 firstNonEmpty(
                         d != null ? d.getNotifications() : null,
                         getString(R.string.settings_notifications)));
-        setText(R.id.label_autoplay, getString(R.string.settings_video_autoplay));
         setText(R.id.label_night, getString(R.string.settings_night_mode));
         setText(
                 R.id.label_local,
@@ -313,13 +315,10 @@ public class Settings_Scrren extends AppCompatActivity {
 
     private void loadLocalToggleState() {
         suppressToggleCallbacks = true;
-        boolean autoplay =
-                SharedPrefsData.getBool(this, Constants.VIDEO_AUTOPLAY, Constants.PREF_NAME, true);
         boolean night = NightModeHelper.isEnabled(this);
         boolean local =
                 SharedPrefsData.getBool(this, Constants.LOCAL_STORIES, Constants.PREF_NAME, false);
 
-        if (switchAutoplay != null) switchAutoplay.setChecked(autoplay);
         if (switchNight != null) switchNight.setChecked(night);
         if (switchLocal != null) switchLocal.setChecked(local);
         suppressToggleCallbacks = false;
@@ -411,19 +410,17 @@ public class Settings_Scrren extends AppCompatActivity {
                             persistNotificationPreference(true);
                             updateNotificationApi(true);
                         } else {
+                            // Apps cannot silently revoke notification access on modern Android.
                             pendingEnableNotifications = false;
-                            persistNotificationPreference(false);
-                            updateNotificationApi(false);
+                            if (!isSystemNotificationsEnabled()) {
+                                persistNotificationPreference(false);
+                                updateNotificationApi(false);
+                                return;
+                            }
+                            pendingDisableNotifications = true;
+                            applyNotificationSwitchState(); // snap back to system ON until user disables
+                            openAppNotificationSettings();
                         }
-                    });
-        }
-
-        if (switchAutoplay != null) {
-            switchAutoplay.setOnCheckedChangeListener(
-                    (buttonView, isChecked) -> {
-                        if (suppressToggleCallbacks) return;
-                        SharedPrefsData.putBool(
-                                this, Constants.VIDEO_AUTOPLAY, isChecked, Constants.PREF_NAME);
                     });
         }
 
@@ -639,11 +636,10 @@ public class Settings_Scrren extends AppCompatActivity {
                                     && model.getSuccess()
                                     && model.getData() != null
                                     && model.getData().getNotificationFlag() != null) {
-                                boolean on =
-                                        Boolean.TRUE.equals(
-                                                model.getData().getNotificationFlag());
-                                // Server opt-in preference; switch still respects system permission.
-                                persistNotificationPreference(on);
+                                // Keep server/FCM prefs in sync when possible, but UI always
+                                // mirrors NotificationManagerCompat.areNotificationsEnabled().
+                                boolean systemOn = isSystemNotificationsEnabled();
+                                persistNotificationPreference(systemOn);
                                 applyNotificationSwitchState();
                                 if (model.getData().getNotificationRepromptDue() != null) {
                                     SharedPrefsData.putBool(
@@ -662,15 +658,13 @@ public class Settings_Scrren extends AppCompatActivity {
                                                             .getNotificationRepromptEnabled()),
                                             Constants.PREF_NAME);
                                 }
-                                if (model.getData().getPromptNotificationsOnOpen() != null) {
-                                    SharedPrefsData.putBool(
-                                            Settings_Scrren.this,
-                                            Constants.PROMPT_NOTIFICATIONS_ON_OPEN,
-                                            Boolean.TRUE.equals(
-                                                    model.getData()
-                                                            .getPromptNotificationsOnOpen()),
-                                            Constants.PREF_NAME);
-                                }
+                                SharedPrefsData.putBool(
+                                        Settings_Scrren.this,
+                                        Constants.PROMPT_NOTIFICATIONS_ON_OPEN,
+                                        Boolean.TRUE.equals(
+                                                model.getData()
+                                                        .getPromptNotificationsOnOpen()),
+                                        Constants.PREF_NAME);
                             }
                         } catch (Exception e) {
                             showLog("settings parse error " + e.getMessage());

@@ -436,11 +436,49 @@ public final class RaasiContent {
         return new Daily(id, NAMES_TE[id], dateKey, title, body, color, numbers, dir);
     }
 
-    /** Drawable res id for monochrome relief icon, or 0 if missing. */
+    /** Traditional lord names (UI chrome; index 0 = Mesha). */
+    public static final String[] LORDS_TE = {
+            "కుజుడు", "శుక్రుడు", "బుధుడు", "చంద్రుడు", "సూర్యుడు", "బుధుడు",
+            "శుక్రుడు", "కుజుడు", "గురుడు", "శని", "శని", "గురుడు"
+    };
+    public static final String[] ELEMENTS_TE = {
+            "అగ్ని", "పృథ్వి", "వాయు", "జలం", "అగ్ని", "పృథ్వి",
+            "వాయు", "జలం", "అగ్ని", "పృథ్వి", "వాయు", "జలం"
+    };
+    public static final String[] GEMS_TE = {
+            "పగడం", "వజ్రం", "పచ్చ", "ముత్యం", "మాణిక్యం", "పచ్చ",
+            "వజ్రం", "పగడం", "పుష్యరాగం", "నీలం", "నీలం", "పుష్యరాగం"
+    };
+
+    /** Premium gold icon (ic_rashi_*), falls back to legacy ic_raasi_*. */
     public static int iconResId(@NonNull Context context, int rashiId0) {
         int id = clampId(rashiId0);
-        String name = "ic_raasi_" + ICON_KEYS[id];
-        return context.getResources().getIdentifier(name, "drawable", context.getPackageName());
+        String pkg = context.getPackageName();
+        int res = context.getResources().getIdentifier(
+                "ic_rashi_" + ICON_KEYS[id], "drawable", pkg);
+        if (res != 0) return res;
+        return context.getResources().getIdentifier(
+                "ic_raasi_" + ICON_KEYS[id], "drawable", pkg);
+    }
+
+    /** Larger detail-header icon when available. */
+    public static int iconResIdLarge(@NonNull Context context, int rashiId0) {
+        int id = clampId(rashiId0);
+        int res = context.getResources().getIdentifier(
+                "ic_rashi_" + ICON_KEYS[id] + "_lg", "drawable", context.getPackageName());
+        return res != 0 ? res : iconResId(context, id);
+    }
+
+    public static String lordName(int rashiId0) {
+        return LORDS_TE[clampId(rashiId0)];
+    }
+
+    public static String elementName(int rashiId0) {
+        return ELEMENTS_TE[clampId(rashiId0)];
+    }
+
+    public static String gemName(int rashiId0) {
+        return GEMS_TE[clampId(rashiId0)];
     }
 
     private static String[] templatesA(int lang) {

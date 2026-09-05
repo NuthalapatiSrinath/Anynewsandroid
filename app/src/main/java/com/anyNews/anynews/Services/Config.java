@@ -7,8 +7,9 @@ public class Config {
     public static final int NEWS_TOTAL_ROWS = 100;
     public static final int COMMENTS_TOTAL_ROWS = 15;
 
-    // Production
-    public static final String SITE_URL = "https://api.anynews.co.in/";
+    // Development / 2nd Oracle (match CommonUtilities.URL). Production kept below.
+    public static final String SITE_URL = "https://anynewsdevelopmentapi.anynews.co.in/"; // Development / 2nd Oracle (match CommonUtilities.URL)
+    // Production: public static final String SITE_URL = "https://api.anynews.co.in/";
 
     static final String API_URL = SITE_URL+"api/mobileapi/";
 

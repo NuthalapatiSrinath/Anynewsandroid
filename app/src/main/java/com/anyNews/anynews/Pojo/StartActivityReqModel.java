@@ -334,6 +334,51 @@ public class StartActivityReqModel implements Serializable {
         private Integer homeModeChromeAutoHideSeconds;
 
         /**
+         * Main News FlipView tap mode: classic | reader | hybrid (default hybrid).
+         * Null on old servers → Android keeps cached / default hybrid.
+         */
+        @SerializedName("news_tap_mode")
+        @Expose
+        private String newsTapMode;
+
+        @SerializedName("news_tap_half_upper_pct")
+        @Expose
+        private Integer newsTapHalfUpperPct;
+
+        @SerializedName("news_tap_full_upper_pct")
+        @Expose
+        private Integer newsTapFullUpperPct;
+
+        @SerializedName("news_tap_full_right_rail_pct")
+        @Expose
+        private Integer newsTapFullRightRailPct;
+
+        /**
+         * Half articles: also hide likes/comments/share/flag with writers row.
+         * Null on old servers → Android keeps cached / default false.
+         */
+        @SerializedName("news_tap_half_hide_engagement")
+        @Expose
+        private Boolean newsTapHalfHideEngagement;
+
+        /** Way2-style live readers badge (half articles). Null on old servers. */
+        @SerializedName("live_readers_enabled")
+        @Expose
+        private Boolean liveReadersEnabled;
+
+        @SerializedName("live_readers_window_minutes")
+        @Expose
+        private Integer liveReadersWindowMinutes;
+
+        @SerializedName("live_readers_show_seconds")
+        @Expose
+        private Integer liveReadersShowSeconds;
+
+        @SerializedName("live_readers_min_count")
+        @Expose
+        private Integer liveReadersMinCount;
+
+        /**
          * Read / చదివినవి recency window in hours (admin; default 24, range 1–168).
          * Null on old servers → Android keeps cached / default 24.
          */
@@ -656,6 +701,43 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / default 3. */
         public Integer getHomeModeChromeAutoHideSeconds() {
             return homeModeChromeAutoHideSeconds;
+        }
+
+        /** Null → old server; caller keeps cached / default hybrid. */
+        public String getNewsTapMode() {
+            return newsTapMode;
+        }
+
+        public Integer getNewsTapHalfUpperPct() {
+            return newsTapHalfUpperPct;
+        }
+
+        public Integer getNewsTapFullUpperPct() {
+            return newsTapFullUpperPct;
+        }
+
+        public Integer getNewsTapFullRightRailPct() {
+            return newsTapFullRightRailPct;
+        }
+
+        public Boolean getNewsTapHalfHideEngagement() {
+            return newsTapHalfHideEngagement;
+        }
+
+        public Boolean getLiveReadersEnabled() {
+            return liveReadersEnabled;
+        }
+
+        public Integer getLiveReadersWindowMinutes() {
+            return liveReadersWindowMinutes;
+        }
+
+        public Integer getLiveReadersShowSeconds() {
+            return liveReadersShowSeconds;
+        }
+
+        public Integer getLiveReadersMinCount() {
+            return liveReadersMinCount;
         }
 
         public Integer getReadHistoryHours() {

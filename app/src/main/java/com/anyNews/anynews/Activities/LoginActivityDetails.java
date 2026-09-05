@@ -14,8 +14,12 @@ import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -41,11 +45,13 @@ import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.anyNews.anynews.BuildConfig;
+import com.anyNews.anynews.Pojo.AddProfileResponse;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.GenerateOtpRequest;
 import com.anyNews.anynews.Pojo.GenerateOtpResponse;
 import com.anyNews.anynews.Pojo.LanguageModelResponse;
+import com.anyNews.anynews.Pojo.UserProfileRequest;
 import com.anyNews.anynews.Pojo.ValidateOtpRequest;
 import com.anyNews.anynews.Pojo.ValidateOtpResponse;
 import com.anyNews.anynews.R;
@@ -53,6 +59,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AppHelper;
+import com.anyNews.anynews.Utils.AppSignatureHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -65,6 +72,7 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,6 +85,12 @@ public class LoginActivityDetails extends AppCompatActivity {
 
     /** When true, after OTP success reopen Profile (single login entry from Profile hub). */
     public static final String EXTRA_RETURN_TO_PROFILE = "extra_return_to_profile";
+    /** When true, after OTP open Become-a-Reporter applicant flow (login source flag). */
+    public static final String EXTRA_OPEN_BECOME_A_REPORTER = "extra_open_become_a_reporter";
+
+    private static final int STEP_MOBILE = 1;
+    private static final int STEP_OTP = 2;
+    private static final int STEP_PROFILE = 3;
 
     NeumorphCardView neumorph_next;
     EditText username_et, mobile_et,emailIdEdittext;
@@ -84,6 +98,7 @@ public class LoginActivityDetails extends AppCompatActivity {
     TextView post_login, otpnew;
     TextView txt_mobile_otp, txt_resend_otp;
     TextView otp_submit;
+    View username_card, email_card, mobile_card;
 
     ProgressDialog pDialog;
     CommonMethods commonMethods;
@@ -98,8 +113,17 @@ public class LoginActivityDetails extends AppCompatActivity {
     EditText[] editTexts;
     LinearLayout login_detailes, otp_layout, verify_layout, resend_layout, post_layout, sendotpnew;
     private static final int REQ_USER_CONSENT = 200;
+    private static final long RESEND_COOLDOWN_MS = 45_000L;
+    private static final String TAG_OTP = "LoginOtp";
     SmsBroadcastReceiver smsBroadcastReceiver;
+    private boolean smsReceiverRegistered = false;
+    private CountDownTimer resendCountDownTimer;
+    private String resendOtpLabel = "Resend OTP";
+    private boolean resendEnabled = true;
     EditText otpNew;
+    private int loginStep = STEP_MOBILE;
+    private boolean pendingReturnToProfile = false;
+    private boolean pendingOpenBecomeReporter = false;
 
 
     @Override
@@ -110,6 +134,9 @@ public class LoginActivityDetails extends AppCompatActivity {
         neumorph_next = findViewById(R.id.neumorph_next);
         txt_resend_otp = findViewById(R.id.txt_resend_otp);
         emailIdEdittext = findViewById(R.id.emailId);
+        username_card = findViewById(R.id.username_card);
+        email_card = findViewById(R.id.email_card);
+        mobile_card = findViewById(R.id.mobile_card);
         //otpNew = findViewById(R.id.otp_new);
         neumorph_next.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -143,6 +170,12 @@ public class LoginActivityDetails extends AppCompatActivity {
         pDialog = new ProgressDialog(LoginActivityDetails.this);
         pDialog.setCancelable(false);
 
+        // Step 1: mobile only — hide name/email until after OTP.
+        if (username_card != null) username_card.setVisibility(View.GONE);
+        if (email_card != null) email_card.setVisibility(View.GONE);
+        if (mobile_card != null) mobile_card.setVisibility(View.VISIBLE);
+        loginStep = STEP_MOBILE;
+
 
         mobile_et.addTextChangedListener(new TextWatcher() {
             @Override
@@ -164,6 +197,9 @@ public class LoginActivityDetails extends AppCompatActivity {
 
             @Override
             public void afterTextChanged(Editable s) {
+                if (loginStep != STEP_MOBILE) {
+                    return;
+                }
                 if (mobile_et.getText().toString().length() >= 10) {
                     InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                     imm.hideSoftInputFromWindow(mobile_et.getWindowToken(), 0);
@@ -185,21 +221,19 @@ public class LoginActivityDetails extends AppCompatActivity {
         post_login.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if(username_et.getText().toString().length()<=0){
-                    Toast.makeText(LoginActivityDetails.this, "Please Enter User Name", Toast.LENGTH_SHORT).show();
-                }else if (mobile_et.getText().toString().length() <=0) {
+                if (loginStep == STEP_PROFILE) {
+                    confirmProfileAndFinish();
+                    return;
+                }
+                // Step 1: mobile only → send OTP
+                if (mobile_et.getText().toString().length() <= 0) {
                     Toast.makeText(LoginActivityDetails.this, "Please Enter Mobile Number", Toast.LENGTH_SHORT).show();
-                }else if (mobile_et.getText().toString().length() <10) {
+                } else if (mobile_et.getText().toString().length() < 10) {
                     Toast.makeText(LoginActivityDetails.this, "Please Enter Valid Mobile Number", Toast.LENGTH_SHORT).show();
-                }else if(emailIdEdittext.getText().toString().length()<=0){
-                    Toast.makeText(LoginActivityDetails.this, "EmailId should not be empty", Toast.LENGTH_SHORT).show();
-                }else{
+                } else {
                     num = mobile_et.getText().toString();
                     GenerateOtp();
-                    otp_layout.setVisibility(View.VISIBLE);
-                    resend_layout.setVisibility(View.VISIBLE);
-                    verify_layout.setVisibility(View.VISIBLE);
-                    login_detailes.setVisibility(View.GONE);
+                    showOtpEntryUi();
                 }
             }
         });
@@ -208,71 +242,23 @@ public class LoginActivityDetails extends AppCompatActivity {
         otpnew.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
-                if (username_et.getText().toString().length() >= 1) {
-
-
-                    if (mobile_et.getText().toString().length() >= 10) {
-                        if(emailIdEdittext.getText().toString().length()<=0){
-                            Toast.makeText(LoginActivityDetails.this, "EmailId should not be empty", Toast.LENGTH_SHORT).show();
-                        }else{
-                            num = mobile_et.getText().toString();
-                            GenerateOtp();
-                            otp_layout.setVisibility(View.VISIBLE);
-                            resend_layout.setVisibility(View.VISIBLE);
-                            verify_layout.setVisibility(View.VISIBLE);
-                            login_detailes.setVisibility(View.GONE);
-                        }
-
-
-
-                    } else {
-
-                        Toast.makeText(LoginActivityDetails.this, "Plese Enter User Name", Toast.LENGTH_SHORT).show();
-
-                    }
-
-
+                if (mobile_et.getText().toString().length() >= 10) {
+                    num = mobile_et.getText().toString();
+                    GenerateOtp();
+                    showOtpEntryUi();
                 } else {
-                    if (mobile_et.getText().toString().length() >= 10) {
-
-                        if (username_et.getText().toString().length() >= 1) {
-
-                            num = mobile_et.getText().toString();
-                            GenerateOtp();
-                            otp_layout.setVisibility(View.VISIBLE);
-                            resend_layout.setVisibility(View.VISIBLE);
-                            verify_layout.setVisibility(View.VISIBLE);
-                            login_detailes.setVisibility(View.GONE);
-
-                        } else {
-
-                            Toast.makeText(LoginActivityDetails.this, "Plese Enter User Name", Toast.LENGTH_SHORT).show();
-
-                        }
-
-
-                        // post_login.setBackgroundColor(Color.BLUE);
-
-                    } else if (mobile_et.getText().toString().length() >= 10) {
-
-                        Toast.makeText(LoginActivityDetails.this, "Please Enter Mobile Number", Toast.LENGTH_SHORT).show();
-
-
-                        //          commonMethods.showerror("Please enter mobile number");
-                    } else {
-                        Toast.makeText(LoginActivityDetails.this, "Plese Enter User Name", Toast.LENGTH_SHORT).show();
-
-//                        commonMethods.showerror("Mobile number must be atleast 10 digits");
-                    }
+                    Toast.makeText(LoginActivityDetails.this, "Please Enter Mobile Number", Toast.LENGTH_SHORT).show();
                 }
-
             }
         });
 
         txt_resend_otp.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                if (!resendEnabled) {
+                    return;
+                }
+                clearOtpBoxes();
                 GenerateOtp();
             }
         });
@@ -298,8 +284,8 @@ public class LoginActivityDetails extends AppCompatActivity {
         otp_4.setOnKeyListener(new LoginActivityDetails.PinOnKeyListener(3));
         emailIdEdittext.setText(allsharedpreference.getEmailId());
 
+        // Focus/keyboard applied when OTP UI is shown (layout starts GONE).
 
-        otp_1.requestFocus();
 
         otp_submit.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -331,7 +317,10 @@ public class LoginActivityDetails extends AppCompatActivity {
         emailIdEdittext.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if(allsharedpreference.getEmailId().equals("")){
+                // Optional Google account picker; field is also freely editable.
+                String current = emailIdEdittext.getText() != null
+                        ? emailIdEdittext.getText().toString().trim() : "";
+                if (current.isEmpty() || !current.contains("@")) {
                     try {
                         Intent intent =
                                 AccountPicker.newChooseAccountIntent(
@@ -386,13 +375,267 @@ public class LoginActivityDetails extends AppCompatActivity {
         post_login.setText(" " + languageModelResponse.getData().getSendOtp());
         otpnew.setText(" " + languageModelResponse.getData().getSendOtp());
         otp_submit.setText(" " + languageModelResponse.getData().getVerify());
-        txt_resend_otp.setText(" " + languageModelResponse.getData().getResendOtp());
+        resendOtpLabel = " " + languageModelResponse.getData().getResendOtp();
+        if (resendEnabled) {
+            txt_resend_otp.setText(resendOtpLabel);
+        }
         //Toast.makeText(LoginActivityDetails.this, ""+languageModelResponse.getData().getSendOtp(), Toast.LENGTH_SHORT).show();
 
 
     }
 
+    /** Switches registration form → OTP digit entry and focuses first box + keyboard. */
+    private void showOtpEntryUi() {
+        loginStep = STEP_OTP;
+        otp_layout.setVisibility(View.VISIBLE);
+        resend_layout.setVisibility(View.VISIBLE);
+        verify_layout.setVisibility(View.VISIBLE);
+        login_detailes.setVisibility(View.GONE);
+        if (num != null && !num.isEmpty()) {
+            txt_mobile_otp.setText("We have sent a 4 digit OTP\nOn +91 " + num);
+        }
+        focusFirstOtpBox();
+    }
+
+    /** Step 3: name + email after OTP — pre-fill for existing mobiles. */
+    private void showProfileDetailsUi(ValidateOtpResponse.Data loginData) {
+        loginStep = STEP_PROFILE;
+        otp_layout.setVisibility(View.GONE);
+        resend_layout.setVisibility(View.GONE);
+        verify_layout.setVisibility(View.GONE);
+        login_detailes.setVisibility(View.VISIBLE);
+        if (mobile_card != null) mobile_card.setVisibility(View.GONE);
+        if (username_card != null) username_card.setVisibility(View.VISIBLE);
+        if (email_card != null) email_card.setVisibility(View.VISIBLE);
+        sendotpnew.setVisibility(View.GONE);
+        post_layout.setVisibility(View.VISIBLE);
+        post_login.setVisibility(View.VISIBLE);
+        post_login.setText(getString(R.string.login_continue));
+
+        String prefillName = "";
+        String prefillEmail = "";
+        if (loginData != null) {
+            if (loginData.getUserName() != null) {
+                prefillName = loginData.getUserName().trim();
+            }
+            if (loginData.getEmailId() != null) {
+                prefillEmail = loginData.getEmailId().trim();
+            }
+        }
+        username_et.setText(prefillName);
+        emailIdEdittext.setText(prefillEmail);
+        username_et.requestFocus();
+        InputMethodManager imm =
+                (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.showSoftInput(username_et, InputMethodManager.SHOW_IMPLICIT);
+        }
+    }
+
+    private void confirmProfileAndFinish() {
+        String name = username_et.getText() != null
+                ? username_et.getText().toString().trim() : "";
+        String email = emailIdEdittext.getText() != null
+                ? emailIdEdittext.getText().toString().trim() : "";
+        if (name.isEmpty()) {
+            Toast.makeText(this, "Please Enter User Name", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (email.isEmpty() || !email.contains("@")) {
+            Toast.makeText(this, "Please enter a valid email", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        post_login.setEnabled(false);
+        JsonObject body = buildProfileUpdateRequest(name, email);
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        Call<EncreptionRequest> call = apiService.update_reporter_profile("v3", body);
+        call.enqueue(new Callback<EncreptionRequest>() {
+            @Override
+            public void onResponse(Call<EncreptionRequest> call, retrofit2.Response<EncreptionRequest> response) {
+                post_login.setEnabled(true);
+                boolean success = false;
+                try {
+                    EncreptionRequest enc = response.body();
+                    if (enc != null && enc.getData() != null) {
+                        String decrypted = decrypt(enc.getData());
+                        AddProfileResponse profileResponse =
+                                new Gson().fromJson(decrypted, AddProfileResponse.class);
+                        success = profileResponse != null
+                                && Boolean.TRUE.equals(profileResponse.getSuccess());
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                // Persist locally even if sync soft-fails so Profile matches what user typed.
+                persistLocalIdentity(name, email);
+                if (!success) {
+                    Toast.makeText(LoginActivityDetails.this,
+                            "Logged in — name sync may retry from Profile",
+                            Toast.LENGTH_SHORT).show();
+                }
+                finishLoginNavigation();
+            }
+
+            @Override
+            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                post_login.setEnabled(true);
+                persistLocalIdentity(name, email);
+                Toast.makeText(LoginActivityDetails.this,
+                        "Logged in — update name later from Profile if needed",
+                        Toast.LENGTH_SHORT).show();
+                finishLoginNavigation();
+            }
+        });
+    }
+
+    private JsonObject buildProfileUpdateRequest(String name, String email) {
+        UserProfileRequest requestModel = new UserProfileRequest();
+        requestModel.setDraftId(SharedPrefsData.getInt(
+                LoginActivityDetails.this, Constants.DraftID, Constants.PREF_NAME));
+        requestModel.setUserName(name);
+        requestModel.setEmail(email);
+        String jsonString = new Gson().toJson(requestModel);
+        showLog("Login profile confirm REQUEST " + jsonString);
+        String encrpt_data = encrypt(jsonString);
+        EncritonRequestData Encriton_Request = new EncritonRequestData();
+        Encriton_Request.setData(encrpt_data);
+        return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
+    }
+
+    private void persistLocalIdentity(String name, String email) {
+        try {
+            allsharedpreference.setEmailID(email);
+            SharedPrefsData.putString(getApplicationContext(), Constants.USER_NAME,
+                    name, Constants.PREF_NAME);
+            SharedPrefsData.putString(getApplicationContext(), Constants.Email,
+                    email, Constants.PREF_NAME);
+            int loginPct = com.anyNews.anynews.Utils.ProfileAchievementHelper
+                    .computePctFromPrefs(getApplicationContext());
+            if (loginPct > 0) {
+                SharedPrefsData.putString(getApplicationContext(),
+                        Constants.PROFILE_ACHIEVED_PCT,
+                        String.valueOf(loginPct), Constants.PREF_NAME);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void finishLoginNavigation() {
+        try {
+            com.anyNews.anynews.Utils.ReporterProfilePrefetcher.prefetchIfPossible(
+                    getApplicationContext());
+        } catch (Exception ignored) {
+        }
+        try {
+            com.anyNews.anynews.Utils.WalletHistoryPrefetcher.prefetchIfPossible(
+                    getApplicationContext());
+        } catch (Exception ignored) {
+        }
+
+        if (languageModelResponse != null && languageModelResponse.getData() != null) {
+            Toast.makeText(LoginActivityDetails.this,
+                    "" + languageModelResponse.getData().getLoginSuccesfully(),
+                    Toast.LENGTH_SHORT).show();
+        }
+
+        if (pendingOpenBecomeReporter) {
+            Intent become = new Intent(LoginActivityDetails.this, BecomeAReporterActivity.class);
+            become.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(become);
+            finish();
+            return;
+        }
+        Intent intent = new Intent(LoginActivityDetails.this, HomePage.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        if (pendingReturnToProfile) {
+            intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_profile);
+        }
+
+        if (getApplicationContext() != null
+                && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+            startActivity(intent);
+        }
+        finish();
+    }
+
+    private void focusFirstOtpBox() {
+        if (otp_1 == null) {
+            return;
+        }
+        otp_1.post(() -> {
+            otp_1.requestFocus();
+            InputMethodManager imm =
+                    (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.showSoftInput(otp_1, InputMethodManager.SHOW_IMPLICIT);
+            }
+            // Some OEMs need a second pass after layout settles.
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (isFinishing()) {
+                    return;
+                }
+                otp_1.requestFocus();
+                InputMethodManager imm2 =
+                        (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm2 != null) {
+                    imm2.showSoftInput(otp_1, InputMethodManager.SHOW_IMPLICIT);
+                }
+            }, 200);
+        });
+    }
+
+    private void clearOtpBoxes() {
+        if (editTexts == null) {
+            return;
+        }
+        for (EditText et : editTexts) {
+            if (et != null) {
+                et.setText("");
+            }
+        }
+    }
+
+    private void startResendCooldown() {
+        if (resendCountDownTimer != null) {
+            resendCountDownTimer.cancel();
+            resendCountDownTimer = null;
+        }
+        setResendEnabled(false);
+        resendCountDownTimer = new CountDownTimer(RESEND_COOLDOWN_MS, 1000L) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+                long seconds = Math.max(1, (millisUntilFinished + 999) / 1000);
+                txt_resend_otp.setText(resendOtpLabel.trim() + " (" + seconds + "s)");
+            }
+
+            @Override
+            public void onFinish() {
+                setResendEnabled(true);
+            }
+        };
+        resendCountDownTimer.start();
+    }
+
+    private void setResendEnabled(boolean enabled) {
+        resendEnabled = enabled;
+        txt_resend_otp.setEnabled(enabled);
+        txt_resend_otp.setClickable(enabled);
+        txt_resend_otp.setAlpha(enabled ? 1f : 0.55f);
+        if (enabled) {
+            txt_resend_otp.setText(resendOtpLabel);
+        }
+    }
+
     private void GenerateOtp() {
+        // Prevent double-tap while request is in flight; cooldown restarts on success.
+        setResendEnabled(false);
+        if (resendCountDownTimer != null) {
+            resendCountDownTimer.cancel();
+            resendCountDownTimer = null;
+        }
+        txt_resend_otp.setText(resendOtpLabel);
         JsonObject otp = generateOtpRequest();
 
         APIService apiService = RestApiClient.getClient().create(APIService.class);
@@ -412,19 +655,18 @@ public class LoginActivityDetails extends AppCompatActivity {
 
 
                 if (OtpRequest.getSuccess()) {
-
-                    startSmsUserConsent();
-
+                    startSmsAutoRead();
+                    startResendCooldown();
+                    focusFirstOtpBox();
                 } else {
-
-
+                    setResendEnabled(true);
                 }
 
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-
+                setResendEnabled(true);
             }
         });
 
@@ -438,9 +680,10 @@ public class LoginActivityDetails extends AppCompatActivity {
         requestModel.setDraftId(SharedPrefsData.getInt(LoginActivityDetails.this, Constants.DraftID, Constants.PREF_NAME));
         requestModel.setCountryCode("+91");
         requestModel.setMobileNumber(mobile_et.getText().toString());
-        requestModel.setUsername(username_et.getText().toString());
+        // Name/email collected after OTP (step 3); older servers ignore empty values.
+        requestModel.setUsername("");
         requestModel.setMessageId("4er54r");
-        requestModel.setEmail(emailIdEdittext.getText().toString().trim());
+        requestModel.setEmail("");
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
         /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -483,7 +726,6 @@ public class LoginActivityDetails extends AppCompatActivity {
 
                 if (validateUserOtp.getSuccess()) {
 
-                    allsharedpreference.setEmailID(emailIdEdittext.getText().toString());
                     SharedPrefsData.putBool(getApplicationContext(), Constants.is_login, true, Constants.PREF_NAME);
                     SharedPrefsData.putBool(getApplicationContext(), Constants.FORCE_LOGGED_OUT, false, Constants.PREF_NAME);
                     // Persist phone at OTP success so get_user_posts has mobile after reinstall
@@ -497,36 +739,11 @@ public class LoginActivityDetails extends AppCompatActivity {
                         SharedPrefsData.putString(getApplicationContext(), Constants.Selected_Phone_Number,
                                 loginMobile, Constants.PREF_NAME);
                     }
-                    try {
-                        String loginName = username_et != null && username_et.getText() != null
-                                ? username_et.getText().toString().trim() : "";
-                        if (!loginName.isEmpty()) {
-                            SharedPrefsData.putString(getApplicationContext(), Constants.USER_NAME,
-                                    loginName, Constants.PREF_NAME);
-                        }
-                    } catch (Exception ignored) {
-                    }
-                    try {
-                        String loginEmail = emailIdEdittext != null && emailIdEdittext.getText() != null
-                                ? emailIdEdittext.getText().toString().trim() : "";
-                        if (loginEmail.contains("@")) {
-                            SharedPrefsData.putString(getApplicationContext(), Constants.Email,
-                                    loginEmail, Constants.PREF_NAME);
-                        }
-                        // Instant "% Achieved" from login fields (before get_user_profile).
-                        int loginPct = com.anyNews.anynews.Utils.ProfileAchievementHelper
-                                .computePctFromPrefs(getApplicationContext());
-                        if (loginPct > 0) {
-                            SharedPrefsData.putString(getApplicationContext(),
-                                    Constants.PROFILE_ACHIEVED_PCT,
-                                    String.valueOf(loginPct), Constants.PREF_NAME);
-                        }
-                    } catch (Exception ignored) {
-                    }
                     // Instant Verified on Profile: persist is_reporter from OTP payload
-                    // (do not wait for get_user_profile).
+                    // (do not wait for get_user_profile). Name/email wait for step 3.
+                    ValidateOtpResponse.Data loginData = null;
                     try {
-                        ValidateOtpResponse.Data loginData = validateUserOtp.getData();
+                        loginData = validateUserOtp.getData();
                         if (loginData != null && loginData.getUserId() != null && loginData.getUserId() > 0) {
                             SharedPrefsData.putLong(getApplicationContext(), Constants.USER_ID,
                                     loginData.getUserId().longValue(), Constants.PREF_NAME);
@@ -543,34 +760,44 @@ public class LoginActivityDetails extends AppCompatActivity {
                             SharedPrefsData.putString(getApplicationContext(), Constants.PROFILE_PIC_URL,
                                     loginData.getProfilePic().trim(), Constants.PREF_NAME);
                         }
-                    } catch (Exception ignored) {
-                    }
-                    try {
-                        com.anyNews.anynews.Utils.ReporterProfilePrefetcher.prefetchIfPossible(
-                                getApplicationContext());
-                    } catch (Exception ignored) {
-                    }
-                    try {
-                        // Warm article/payment history disk cache while Redis warms server-side.
-                        com.anyNews.anynews.Utils.WalletHistoryPrefetcher.prefetchIfPossible(
-                                getApplicationContext());
+                        // Seed local prefs from server prefills so Profile is not blank
+                        // if user backs out before Continue (existing accounts).
+                        if (loginData != null) {
+                            String sn = loginData.getUserName() != null
+                                    ? loginData.getUserName().trim() : "";
+                            String se = loginData.getEmailId() != null
+                                    ? loginData.getEmailId().trim() : "";
+                            if (!sn.isEmpty()) {
+                                SharedPrefsData.putString(getApplicationContext(),
+                                        Constants.USER_NAME, sn, Constants.PREF_NAME);
+                            }
+                            if (se.contains("@")) {
+                                allsharedpreference.setEmailID(se);
+                                SharedPrefsData.putString(getApplicationContext(),
+                                        Constants.Email, se, Constants.PREF_NAME);
+                            }
+                        }
                     } catch (Exception ignored) {
                     }
 
-                    Toast.makeText(LoginActivityDetails.this, "" + languageModelResponse.getData().getLoginSuccesfully(), Toast.LENGTH_SHORT).show();
-
-                    boolean returnToProfile = getIntent() != null
+                    pendingReturnToProfile = getIntent() != null
                             && getIntent().getBooleanExtra(EXTRA_RETURN_TO_PROFILE, false);
-                    Intent intent = new Intent(LoginActivityDetails.this, HomePage.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    if (returnToProfile) {
-                        intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_profile);
+                    pendingOpenBecomeReporter = getIntent() != null
+                            && getIntent().getBooleanExtra(EXTRA_OPEN_BECOME_A_REPORTER, false);
+                    try {
+                        if (!pendingOpenBecomeReporter) {
+                            pendingOpenBecomeReporter = SharedPrefsData.getBool(
+                                    getApplicationContext(),
+                                    Constants.LOGIN_SOURCE_BECOME_REPORTER,
+                                    Constants.PREF_NAME);
+                        }
+                        SharedPrefsData.putBool(getApplicationContext(),
+                                Constants.LOGIN_SOURCE_BECOME_REPORTER, false, Constants.PREF_NAME);
+                    } catch (Exception ignored) {
                     }
 
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                       startActivity(intent);
-                    }
-                    finish();
+                    // Step 3: collect / confirm name + email (pre-filled for existing users).
+                    showProfileDetailsUi(loginData);
 
 
                 } else {
@@ -601,13 +828,37 @@ public class LoginActivityDetails extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        if (loginStep == STEP_OTP) {
+            // Back to mobile entry without finishing.
+            loginStep = STEP_MOBILE;
+            otp_layout.setVisibility(View.GONE);
+            resend_layout.setVisibility(View.GONE);
+            verify_layout.setVisibility(View.GONE);
+            login_detailes.setVisibility(View.VISIBLE);
+            if (mobile_card != null) mobile_card.setVisibility(View.VISIBLE);
+            if (username_card != null) username_card.setVisibility(View.GONE);
+            if (email_card != null) email_card.setVisibility(View.GONE);
+            clearOtpBoxes();
+            if (mobile_et.getText() != null && mobile_et.getText().toString().length() >= 10) {
+                post_layout.setVisibility(View.GONE);
+                post_login.setVisibility(View.GONE);
+                sendotpnew.setVisibility(View.VISIBLE);
+            } else {
+                post_layout.setVisibility(View.VISIBLE);
+                post_login.setVisibility(View.VISIBLE);
+                sendotpnew.setVisibility(View.GONE);
+                if (languageModelResponse != null && languageModelResponse.getData() != null) {
+                    post_login.setText(" " + languageModelResponse.getData().getSendOtp());
+                }
+            }
+            return;
+        }
+        if (loginStep == STEP_PROFILE) {
+            // Already authenticated; leave with current (prefilled) identity.
+            finishLoginNavigation();
+            return;
+        }
         super.onBackPressed();
-
-
-       /* Intent intent = new Intent(LoginActivityDetails.this, HomePage.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
-        startActivity(intent);*/
         finish();
     }
 
@@ -672,9 +923,13 @@ public class LoginActivityDetails extends AppCompatActivity {
 
             String text = newTypedString;
 
-            //    Detect paste event and set first char
+            // Paste / autofill of full OTP into one box → distribute digits.
+            if (text.length() >= 4) {
+                fillOtpDigits(text);
+                return;
+            }
             if (text.length() > 1)
-                text = String.valueOf(text.charAt(0)); // TODO: We can fill out other EditTexts
+                text = String.valueOf(text.charAt(0));
 
             editTexts[currentIndex].removeTextChangedListener(this);
             editTexts[currentIndex].setText(text);
@@ -731,22 +986,43 @@ public class LoginActivityDetails extends AppCompatActivity {
 
     }
 
-    private void startSmsUserConsent() {
-        //otpNew.setVisibility(View.VISIBLE);
-        //otpNew.requestFocus();
-
+    private void startSmsAutoRead() {
+        logAppSignatureForSmsRetriever();
+        // Prefer SMS Retriever (auto-fill, no READ_SMS). Falls back to User Consent.
         SmsRetrieverClient client = SmsRetriever.getClient(this);
-        //We can add sender phone number or leave it blank
-        // I'm adding null here
+        client.startSmsRetriever()
+                .addOnSuccessListener(aVoid -> Log.d(TAG_OTP, "SMS Retriever started"))
+                .addOnFailureListener(e -> {
+                    Log.w(TAG_OTP, "SMS Retriever failed, starting User Consent", e);
+                    startSmsUserConsent();
+                });
+        // Also start User Consent so OTP can still be approved if SMS lacks app hash.
+        startSmsUserConsent();
+    }
+
+    private void logAppSignatureForSmsRetriever() {
+        try {
+            ArrayList<String> hashes = new AppSignatureHelper(this).getAppSignatures();
+            for (String hash : hashes) {
+                Log.i(TAG_OTP, "Append this hash to OTP SMS for Retriever autofill: " + hash);
+                AppHelper.showLog("SMS_RETRIEVER_APP_HASH=" + hash);
+            }
+        } catch (Exception e) {
+            Log.w(TAG_OTP, "Could not compute app signature hash", e);
+        }
+    }
+
+    private void startSmsUserConsent() {
+        SmsRetrieverClient client = SmsRetriever.getClient(this);
         client.startSmsUserConsent(null).addOnSuccessListener(new OnSuccessListener<Void>() {
             @Override
             public void onSuccess(Void aVoid) {
-                //Toast.makeText(getApplicationContext(), "On Success", Toast.LENGTH_LONG).show();
+                Log.d(TAG_OTP, "SMS User Consent started");
             }
         }).addOnFailureListener(new OnFailureListener() {
             @Override
             public void onFailure(@NonNull Exception e) {
-                Toast.makeText(getApplicationContext(), "On OnFailure", Toast.LENGTH_LONG).show();
+                Log.w(TAG_OTP, "SMS User Consent failed", e);
             }
         });
     }
@@ -755,47 +1031,75 @@ public class LoginActivityDetails extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_USER_CONSENT) {
             if ((resultCode == RESULT_OK) && (data != null)) {
-                //That gives all message to us.
-                // We need to get the code from inside with regex
                 String message = data.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE);
-                //Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
-                /*textViewMessage.setText(
-                        String.format("%s - %s", getString(R.string.received_message), message));*/
                 getOtpFromMessage(message);
             }
         }
     }
     private void getOtpFromMessage(String message) {
-        // This will match any 6 digit number in the message
-        int currentIndex = 0;
+        if (message == null || message.isEmpty()) {
+            return;
+        }
         Pattern pattern = Pattern.compile("(|^)\\d{4}");
         Matcher matcher = pattern.matcher(message);
 
         if (matcher.find()) {
             String text = matcher.group(0);
-            //otp_1.setText(matcher.group(0));
-            assert text != null;
-            otp_1.setText(String.valueOf(text.charAt(0)));
-            otp_2.setText(String.valueOf(text.charAt(1)));
-            otp_3.setText(String.valueOf(text.charAt(2)));
-            otp_4.setText(String.valueOf(text.charAt(3)));
+            if (text != null && text.length() >= 4) {
+                fillOtpDigits(text);
+            }
+        }
+    }
+
+    private void fillOtpDigits(String otp) {
+        if (editTexts == null || otp == null) {
+            return;
+        }
+        String digits = otp.replaceAll("\\D", "");
+        if (digits.length() < 4) {
+            return;
+        }
+        // Avoid recursive TextWatcher loops while distributing digits.
+        otp_1.setText(String.valueOf(digits.charAt(0)));
+        otp_2.setText(String.valueOf(digits.charAt(1)));
+        otp_3.setText(String.valueOf(digits.charAt(2)));
+        otp_4.setText(String.valueOf(digits.charAt(3)));
+        otp_4.requestFocus();
+        if (otp_4.getText() != null) {
+            otp_4.setSelection(otp_4.getText().length());
         }
     }
 
     private void registerBroadcastReceiver() {
+        if (smsReceiverRegistered) {
+            return;
+        }
         smsBroadcastReceiver = new SmsBroadcastReceiver();
         smsBroadcastReceiver.smsBroadcastReceiverListener =
                 new SmsBroadcastReceiver.SmsBroadcastReceiverListener() {
                     @Override
-                    public void onSuccess(Intent intent) {
+                    public void onSmsMessageReceived(String message) {
+                        getOtpFromMessage(message);
+                    }
+
+                    @Override
+                    public void onConsentIntent(Intent intent) {
                         startActivityForResult(intent, REQ_USER_CONSENT);
                     }
+
                     @Override
                     public void onFailure() {
+                        Log.d(TAG_OTP, "SMS auto-read timed out or failed");
                     }
                 };
         IntentFilter intentFilter = new IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION);
-        registerReceiver(smsBroadcastReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED);
+        // Must be exported so Play Services can deliver SMS_RETRIEVED_ACTION (API 33+).
+        ContextCompat.registerReceiver(
+                this,
+                smsBroadcastReceiver,
+                intentFilter,
+                ContextCompat.RECEIVER_EXPORTED);
+        smsReceiverRegistered = true;
     }
     @Override
     protected void onStart() {
@@ -833,7 +1137,22 @@ public class LoginActivityDetails extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        unregisterReceiver(smsBroadcastReceiver);
+        if (smsReceiverRegistered && smsBroadcastReceiver != null) {
+            try {
+                unregisterReceiver(smsBroadcastReceiver);
+            } catch (IllegalArgumentException ignored) {
+            }
+            smsReceiverRegistered = false;
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (resendCountDownTimer != null) {
+            resendCountDownTimer.cancel();
+            resendCountDownTimer = null;
+        }
+        super.onDestroy();
     }
 
 

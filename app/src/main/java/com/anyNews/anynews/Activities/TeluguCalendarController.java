@@ -1,7 +1,8 @@
 package com.anyNews.anynews.Activities;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.animation.ObjectAnimator;
-import android.animation.ValueAnimator;
 import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
@@ -9,7 +10,9 @@ import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -27,7 +30,6 @@ import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -44,8 +46,11 @@ import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
 import com.anyNews.anynews.R;
+import com.anyNews.anynews.Ui.HomeFeedRevealView;
 import com.anyNews.anynews.Utils.CalendarRaasiLabels;
+import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -87,6 +92,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     private static final int COLOR_RED = 0xFFE53935;
     private static final int COLOR_GREEN = 0xFF22C55E;
     private static final int COLOR_BLUE = 0xFF3B82F6;
+    private static final int COLOR_ORANGE = 0xFFEF4923;
     private static final int COLOR_WHITE = 0xFFFFFFFF;
     private static final int COLOR_MUTED = 0xFFB0B0B0;
     private static final int COLOR_CELL_LINE = 0xFFC8C8C8;
@@ -112,10 +118,23 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     private ImageView raasiShare;
     /** Magazine/gallery-style blinking Share (bottom-right overlay on calendar root). */
     @Nullable private ImageView blinkShare;
+    /** Panchangam | Raasi Phalalu top chrome (News|Read pattern — show ~3s then auto-hide). */
+    @Nullable private View ttdToggleRoot;
+    @Nullable private View ttdThumb;
+    @Nullable private TextView ttdSegCalendar;
+    @Nullable private TextView ttdSegTtd;
+    private final Handler ttdChromeHandler = new Handler(Looper.getMainLooper());
+    private boolean ttdChromeUserHidden;
+    private boolean ttdChromeAutoHidePending;
+    private boolean raasiSegmentSelected;
+    private final Runnable ttdChromeAutoHideRunnable = this::runTtdChromeAutoHide;
     private LinearLayout festivalStrip;
     private ImageView festivalIcon;
     private TextView festivalText;
-    private ProgressBar loading;
+    @Nullable private View calendarBody;
+    @Nullable private HomeFeedRevealView loadReveal;
+    /** True after first successful pack bind + body reveal. */
+    private boolean calendarContentRevealed;
     private View sheetScrim;
     private LinearLayout festivalList;
     private ImageView swipeArrow;
@@ -135,6 +154,25 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     private TextView luckyNumbers;
     private TextView luckyDirection;
     private TextView fullJatakamCta;
+    @Nullable private ImageView raasiDetailIcon;
+    @Nullable private LinearLayout raasiSections;
+    @Nullable private TextView rashiDateLabel;
+    @Nullable private TextView rashiDateValue;
+    @Nullable private TextView rashiNakLabel;
+    @Nullable private TextView rashiNakValue;
+    @Nullable private TextView rashiYogaLabel;
+    @Nullable private TextView rashiYogaValue;
+    @Nullable private TextView rashiLordLabel;
+    @Nullable private TextView rashiLordValue;
+    @Nullable private TextView rashiElementLabel;
+    @Nullable private TextView rashiElementValue;
+    @Nullable private TextView rashiGemLabel;
+    @Nullable private TextView rashiGemValue;
+    @Nullable private TextView rashiColorLabel;
+    @Nullable private TextView rashiColorValue;
+    @Nullable private TextView rashiShubham;
+    @Nullable private ImageView raasiBack;
+    @Nullable private ImageView raasiHeaderShare;
     private View raasiFormScrim;
     private View raasiFormSheetColumn;
     private NestedScrollView raasiFormScroll;
@@ -161,6 +199,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     private DetailPagerAdapter detailAdapter;
     private int selectedRaasi = 0;
     private ObjectAnimator swipeBob;
+    /** One-shot: rebind grid after page first gets a real height. */
+    private boolean pendingMonthGridRelayout;
     private int themeAccent;
     private boolean calendarPageWired;
     private boolean raasiPageWired;
@@ -204,13 +244,14 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         raasiDetailFullJatakam = root.findViewById(R.id.raasi_detail_full_jatakam);
 
         if (flipPager != null) {
-            // Same pattern as HomePage article FlipView (not ViewPager2 3D transformer).
+            // Same FlipView host as articles, but page switch is toggle-only
+            // (Panchangam | Raasi) — user swipe between pages is disabled.
             CalendarFlipAdapter adapter = new CalendarFlipAdapter();
             flipPager.setAdapter(adapter);
             flipPager.setOnFlipListener(this);
             flipPager.setOverFlipMode(OverFlipMode.GLOW);
-            // Do NOT call peakNext() — infinite FlipView peak bobs the whole calendar
-            // page (Shubha card / content). Swipe-arrow bob alone is the affordance.
+            flipPager.setmIsFlippingEnabled(false);
+            // Do NOT call peakNext() — infinite FlipView peak bobs the whole calendar.
             flipPager.setFlipDistanceperpage(200,
                     host.getResources().getDisplayMetrics().density);
         }
@@ -273,6 +314,16 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
 
         wireBlinkShareOverlay();
+        // Standalone TeluguCalendarActivity only — HomePage embeds its own sibling
+        // Panchangam|Raasi chrome above the calendar host (FlipView cannot cover it).
+        if (applyWindowInsets) {
+            wireSegmentToggleChrome();
+        } else {
+            View embeddedToggle = root.findViewById(R.id.calendar_ttd_toggle_root);
+            if (embeddedToggle != null) {
+                embeddedToggle.setVisibility(View.GONE);
+            }
+        }
     }
 
     /** Inflate calendar layout into a HomePage host and bind (no window inset overrides). */
@@ -333,17 +384,43 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         ViewCompat.requestApplyInsets(target);
     }
 
-    /** Re-apply insets when standalone activity resumes. */
+    /** Re-apply insets when standalone activity resumes; re-show segment chrome. */
     public void onHostResume() {
         if (applyWindowInsets) {
             applySystemBarInsets();
+            setSegmentChromeVisible(true, false);
         }
     }
 
     @Override
     public void onFlippedToPage(FlipView v, int position, long id) {
+        raasiSegmentSelected = position == 1;
         updateFlipIndicators(position);
         refreshBlinkShareContentDescription(position);
+        syncSegmentThumb(raasiSegmentSelected);
+    }
+
+    /** True when the Raasi Phalalu flip page is showing. */
+    public boolean isRaasiPageVisible() {
+        return raasiSegmentSelected
+                || (flipPager != null && flipPager.getCurrentPage() == 1);
+    }
+
+    /** Left segment: Panchangam calendar page (programmatic flip; swipe disabled). */
+    public void selectPanchangamPage(boolean smooth) {
+        raasiSegmentSelected = false;
+        syncSegmentThumb(false);
+        if (flipPager == null) return;
+        if (flipPager.getCurrentPage() == 0) return;
+        if (smooth) flipPager.smoothFlipTo(0);
+        else flipPager.flipTo(0);
+    }
+
+    /** Right segment: Raasi Phalalu page (programmatic flip; swipe disabled). */
+    public void selectRaasiPage(boolean smooth) {
+        raasiSegmentSelected = true;
+        syncSegmentThumb(true);
+        goToRaasiPage(smooth);
     }
 
     /**
@@ -360,6 +437,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         ImageView next = scope.findViewById(R.id.telugu_calendar_next);
         if (prev != null) {
             prev.setOnClickListener(v -> {
+                revealSegmentChromeIfHidden();
                 displayMonth.add(Calendar.MONTH, -1);
                 selectedDay = clampSelectedDay();
                 ensureYearAndBind();
@@ -367,6 +445,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
         if (next != null) {
             next.setOnClickListener(v -> {
+                revealSegmentChromeIfHidden();
                 displayMonth.add(Calendar.MONTH, 1);
                 selectedDay = clampSelectedDay();
                 ensureYearAndBind();
@@ -374,22 +453,26 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
 
         if (festivalStrip != null) {
-            festivalStrip.setOnClickListener(v -> showFestivalsSheet());
+            festivalStrip.setOnClickListener(v -> {
+                revealSegmentChromeIfHidden();
+                showFestivalsSheet();
+            });
         }
-        // Arrow / "రాశి ఫలాలు" is visual hint only — navigate by FlipView swipe.
+        // Swipe-to-rashi cue retired — Rashi is the top segment only.
+        stopSwipeBob();
         if (swipeCue != null) {
+            swipeCue.setVisibility(View.GONE);
             swipeCue.setOnClickListener(null);
             swipeCue.setClickable(false);
             swipeCue.setFocusable(false);
         }
         if (swipeLabel != null) {
-            swipeLabel.setText(CalendarRaasiLabels.swipeHint(host));
-            swipeLabel.setTextColor(themeAccent);
-            swipeLabel.setClickable(false);
+            swipeLabel.setVisibility(View.GONE);
+            swipeLabel.setOnClickListener(null);
         }
         if (swipeArrow != null) {
-            swipeArrow.setColorFilter(themeAccent, PorterDuff.Mode.SRC_IN);
-            swipeArrow.setClickable(false);
+            swipeArrow.setVisibility(View.GONE);
+            swipeArrow.setOnClickListener(null);
         }
         hideLegacyCardShare(dayShare);
         if (pager != null) {
@@ -405,8 +488,9 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
 
         fillWeekdayHeaders();
-        startSwipeBob();
         updateFlipIndicators(flipPager != null ? flipPager.getCurrentPage() : 0);
+        // Tap header / weekday / cards area to re-show segment chrome after ~3s auto-hide.
+        installSegmentChromeRevealTargets();
         if (newInstance || yearPack == null) {
             ensureYearAndBind();
         } else if (grid != null && grid.getChildCount() == 0) {
@@ -432,6 +516,14 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         blinkShare.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         blinkShare.clearColorFilter();
         blinkShare.setBackground(null);
+        ViewGroup.MarginLayoutParams mlp =
+                blinkShare.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
+                        ? (ViewGroup.MarginLayoutParams) blinkShare.getLayoutParams()
+                        : null;
+        if (mlp != null) {
+            mlp.bottomMargin = applyWindowInsets ? dp(28) : dp(10);
+            blinkShare.setLayoutParams(mlp);
+        }
         blinkShare.setOnClickListener(v -> {
             int page = flipPager != null ? flipPager.getCurrentPage() : 0;
             if (page == 1) {
@@ -477,6 +569,224 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
     }
 
+    /**
+     * Top Panchangam | Raasi Phalalu pill — same auto-hide behaviour as home News|Read
+     * ({@link HomeModeChromeConfig#DEFAULT_AUTO_HIDE_SECONDS} = 3).
+     * TTD is not part of this toggle (lives under Daily Updates).
+     */
+    private void wireSegmentToggleChrome() {
+        ttdToggleRoot = root.findViewById(R.id.calendar_ttd_toggle_root);
+        if (ttdToggleRoot == null) return;
+
+        ttdThumb = ttdToggleRoot.findViewById(R.id.calendar_ttd_thumb);
+        ttdSegCalendar = ttdToggleRoot.findViewById(R.id.calendar_seg_calendar);
+        ttdSegTtd = ttdToggleRoot.findViewById(R.id.calendar_seg_ttd);
+        applySegmentLabels(ttdSegCalendar, ttdSegTtd);
+
+        if (ttdSegCalendar != null) {
+            ttdSegCalendar.setOnClickListener(v -> {
+                bumpSegmentChromeAutoHide();
+                selectPanchangamPage(true);
+            });
+        }
+        if (ttdSegTtd != null) {
+            ttdSegTtd.setOnClickListener(v -> {
+                bumpSegmentChromeAutoHide();
+                selectRaasiPage(true);
+            });
+        }
+        // Consume taps on the scrim so they don't fall through to FlipView.
+        ttdToggleRoot.setOnClickListener(v -> bumpSegmentChromeAutoHide());
+
+        installSegmentChromeRevealTargets();
+
+        ttdToggleRoot.post(() -> {
+            syncSegmentThumb(isRaasiPageVisible());
+            setSegmentChromeVisible(true, false);
+        });
+    }
+
+    private static void applySegmentLabels(@Nullable TextView left, @Nullable TextView right) {
+        if (left != null) {
+            left.setText(CalendarRaasiLabels.segPanchangam(left.getContext()));
+        }
+        if (right != null) {
+            right.setText(CalendarRaasiLabels.segRaasiPhalalu(right.getContext()));
+        }
+    }
+
+    private void installSegmentChromeRevealTargets() {
+        // Wired again from wireCalendarPage / wireRaasiPage when FlipView recreates pages.
+        // Content taps always re-show Panchangam|Raasi chrome + re-arm ~3s auto-hide
+        // (HomePage hosts the pill for embedded calendar; standalone uses local chrome).
+        installChromeRevealClick(monthTitle);
+        installChromeRevealClick(teluguLine);
+        View scope = calendarPageRoot != null ? calendarPageRoot : root;
+        if (monthTitle != null && monthTitle.getParent() instanceof View) {
+            View titleCol = (View) monthTitle.getParent();
+            installChromeRevealClick(titleCol);
+            if (titleCol.getParent() instanceof View) {
+                installChromeRevealClick((View) titleCol.getParent());
+            }
+        }
+        installChromeRevealClick(scope.findViewById(R.id.telugu_calendar_weekday_row));
+        installChromeRevealClick(scope.findViewById(R.id.telugu_calendar_grid));
+        installChromeRevealClick(scope.findViewById(R.id.telugu_calendar_pager_host));
+        installChromeRevealClick(scope.findViewById(R.id.telugu_calendar_pager));
+        installChromeRevealClick(scope.findViewById(R.id.telugu_calendar_body));
+        installChromeRevealClick(scope.findViewById(R.id.telugu_calendar_body_stage));
+        // Festival strip keeps its own listener (reveal + open sheet) in wireCalendarPage.
+        installRaasiChromeRevealTargets();
+    }
+
+    /** Raasi flip page: any clear hit target re-shows the same HomePage / local top toggle. */
+    private void installRaasiChromeRevealTargets() {
+        View raasiScope = raasiScroll != null ? raasiScroll : root;
+        installChromeRevealClick(
+                raasiScope.findViewById(R.id.telugu_calendar_pick_raasi_title));
+        installChromeRevealClick(
+                raasiScope.findViewById(R.id.telugu_calendar_raasi_header_divider));
+        // Do not click-wire the full raasi_section — NestedScrollView would fight vertical scroll.
+        installChromeRevealClick(
+                raasiScope.findViewById(R.id.telugu_calendar_raasi_grid));
+        installChromeRevealClick(
+                raasiScope.findViewById(R.id.telugu_calendar_rashi_info_bar));
+        installChromeRevealClick(
+                raasiScope.findViewById(R.id.telugu_calendar_raasi_detail));
+        installChromeRevealClick(
+                raasiScope.findViewById(R.id.telugu_calendar_raasi_title));
+        installChromeRevealClick(
+                raasiScope.findViewById(R.id.telugu_calendar_rashi_sections));
+        // know_raasi keeps reveal+form in wireRaasiPage — do not overwrite here.
+    }
+
+    /**
+     * Content tap → always reveal Panchangam|Raasi chrome (if hidden) and re-arm
+     * auto-hide. Does not hide chrome while the user is browsing calendar content.
+     */
+    private void installChromeRevealClick(@Nullable View v) {
+        if (v == null) return;
+        v.setClickable(true);
+        v.setOnClickListener(view -> revealSegmentChromeIfHidden());
+    }
+
+    /** Re-show segment chrome after auto-hide; if already visible, re-arm the timer. */
+    private void revealSegmentChromeIfHidden() {
+        if (!applyWindowInsets && host instanceof HomePage) {
+            ((HomePage) host).revealHomeCalendarTtdChrome();
+            return;
+        }
+        if (ttdChromeUserHidden) {
+            setSegmentChromeVisible(true, true);
+        } else {
+            bumpSegmentChromeAutoHide();
+        }
+    }
+
+    private void syncSegmentThumb(boolean raasiSelected) {
+        raasiSegmentSelected = raasiSelected;
+        if (applyWindowInsets) {
+            layoutSegmentThumb(raasiSelected);
+        } else if (host instanceof HomePage) {
+            ((HomePage) host).syncHomeCalendarSegmentThumb(raasiSelected);
+        }
+    }
+
+    private void layoutSegmentThumb(boolean raasiSelected) {
+        if (ttdThumb == null || ttdSegCalendar == null || ttdSegTtd == null) return;
+        final View thumb = ttdThumb;
+        final TextView left = ttdSegCalendar;
+        final TextView right = ttdSegTtd;
+        Runnable place = () -> {
+            int leftW = Math.max(left.getWidth(), dp(108));
+            int rightW = Math.max(right.getWidth(), dp(108));
+            ViewGroup.LayoutParams lp = thumb.getLayoutParams();
+            if (lp != null) {
+                lp.width = raasiSelected ? rightW : leftW;
+                thumb.setLayoutParams(lp);
+            }
+            thumb.setTranslationX(raasiSelected ? leftW : 0f);
+            left.setAlpha(raasiSelected ? 0.75f : 1f);
+            right.setAlpha(raasiSelected ? 1f : 0.75f);
+        };
+        if (left.getWidth() <= 0) {
+            left.post(place);
+        } else {
+            place.run();
+        }
+    }
+
+    private void setSegmentChromeVisible(boolean visible, boolean animate) {
+        if (ttdToggleRoot == null) return;
+        ttdChromeUserHidden = !visible;
+        if (visible) {
+            scheduleSegmentChromeAutoHide(true);
+            ttdToggleRoot.setVisibility(View.VISIBLE);
+            if (animate) {
+                ttdToggleRoot.animate().cancel();
+                ttdToggleRoot.setAlpha(0f);
+                ttdToggleRoot.setTranslationY(-dp(24));
+                ttdToggleRoot.animate()
+                        .alpha(1f)
+                        .translationY(0f)
+                        .setDuration(280L)
+                        .start();
+            } else {
+                ttdToggleRoot.animate().cancel();
+                ttdToggleRoot.setAlpha(1f);
+                ttdToggleRoot.setTranslationY(0f);
+            }
+            layoutSegmentThumb(isRaasiPageVisible());
+        } else {
+            cancelTtdChromeAutoHide();
+            if (animate) {
+                ttdToggleRoot.animate().cancel();
+                ttdToggleRoot.animate()
+                        .alpha(0f)
+                        .translationY(-dp(24))
+                        .setDuration(280L)
+                        .withEndAction(() -> {
+                            if (ttdToggleRoot != null && ttdChromeUserHidden) {
+                                ttdToggleRoot.setVisibility(View.GONE);
+                            }
+                        })
+                        .start();
+            } else {
+                ttdToggleRoot.animate().cancel();
+                ttdToggleRoot.setVisibility(View.GONE);
+            }
+        }
+    }
+
+    private void scheduleSegmentChromeAutoHide(boolean restartIfPending) {
+        if (!restartIfPending && ttdChromeAutoHidePending) return;
+        if (ttdChromeUserHidden || ttdToggleRoot == null) return;
+        int seconds = HomeModeChromeConfig.getAutoHideSeconds(host);
+        if (seconds <= 0) {
+            cancelTtdChromeAutoHide();
+            return;
+        }
+        ttdChromeHandler.removeCallbacks(ttdChromeAutoHideRunnable);
+        ttdChromeAutoHidePending = true;
+        ttdChromeHandler.postDelayed(ttdChromeAutoHideRunnable, seconds * 1000L);
+    }
+
+    private void bumpSegmentChromeAutoHide() {
+        if (ttdChromeUserHidden) return;
+        scheduleSegmentChromeAutoHide(true);
+    }
+
+    private void runTtdChromeAutoHide() {
+        ttdChromeAutoHidePending = false;
+        if (ttdChromeUserHidden) return;
+        setSegmentChromeVisible(false, true);
+    }
+
+    private void cancelTtdChromeAutoHide() {
+        ttdChromeAutoHidePending = false;
+        ttdChromeHandler.removeCallbacks(ttdChromeAutoHideRunnable);
+    }
+
     /** Legacy card share icons stay GONE — share is the root blink overlay. */
     private void hideLegacyCardShare(@Nullable ImageView share) {
         if (share == null) return;
@@ -504,7 +814,21 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
         if (knowRaasi != null) {
             knowRaasi.setClickable(true);
-            knowRaasi.setOnClickListener(v -> showRaasiForm());
+            knowRaasi.setOnClickListener(v -> {
+                revealSegmentChromeIfHidden();
+                showRaasiForm();
+            });
+        }
+        if (raasiBack != null) {
+            // Calendar flip path: swipe/back to page 0 — hide header back control.
+            raasiBack.setVisibility(View.GONE);
+            raasiBack.setOnClickListener(null);
+        }
+        if (raasiHeaderShare != null) {
+            raasiHeaderShare.setOnClickListener(v -> {
+                revealSegmentChromeIfHidden();
+                shareSelectedRaasi();
+            });
         }
         // Full inline body — no more→modal flow.
         if (raasiMore != null) {
@@ -512,14 +836,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             raasiMore.setOnClickListener(null);
         }
         if (raasiBody != null) {
-            raasiBody.setOnClickListener(null);
-            raasiBody.setClickable(false);
             raasiBody.setMaxLines(Integer.MAX_VALUE);
             raasiBody.setEllipsize(null);
-        }
-        if (raasiDetail != null) {
-            raasiDetail.setOnClickListener(null);
-            raasiDetail.setClickable(false);
         }
         if (fullJatakamCta != null) {
             fullJatakamCta.setVisibility(View.GONE);
@@ -536,15 +854,23 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             bindRaasiDetail();
         }
         updateFlipIndicators(flipPager != null ? flipPager.getCurrentPage() : 0);
+        // Raasi page taps must re-show the same top Panchangam|Raasi toggle (~3s).
+        installRaasiChromeRevealTargets();
     }
 
-    /** Apply LanguageID chrome (pick / know / lucky). Call on every rebind. */
+    /** Apply LanguageID chrome (pick / know / lucky / premium labels). Call on every rebind. */
     private void applyRaasiChromeLabels() {
         TextView knowRaasi = root.findViewById(R.id.telugu_calendar_know_raasi);
+        if (knowRaasi == null && raasiScroll != null) {
+            knowRaasi = raasiScroll.findViewById(R.id.telugu_calendar_know_raasi);
+        }
         if (knowRaasi != null) {
             knowRaasi.setText(CalendarRaasiLabels.knowRaasi(host));
         }
         TextView pickTitle = root.findViewById(R.id.telugu_calendar_pick_raasi_title);
+        if (pickTitle == null && raasiScroll != null) {
+            pickTitle = raasiScroll.findViewById(R.id.telugu_calendar_pick_raasi_title);
+        }
         if (pickTitle != null) pickTitle.setText(CalendarRaasiLabels.pickRaasi(host));
         if (luckyHeading != null) {
             luckyHeading.setText(CalendarRaasiLabels.luckyHeading(host));
@@ -557,6 +883,30 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
         if (luckyDirectionLabel != null) {
             luckyDirectionLabel.setText(CalendarRaasiLabels.luckyDirection(host));
+        }
+        if (rashiDateLabel != null) {
+            rashiDateLabel.setText(CalendarRaasiLabels.dateLabel(host));
+        }
+        if (rashiNakLabel != null) {
+            rashiNakLabel.setText(CalendarRaasiLabels.nakshatraLabel(host));
+        }
+        if (rashiYogaLabel != null) {
+            rashiYogaLabel.setText(CalendarRaasiLabels.yogaLabel(host));
+        }
+        if (rashiLordLabel != null) {
+            rashiLordLabel.setText(CalendarRaasiLabels.lordLabel(host));
+        }
+        if (rashiElementLabel != null) {
+            rashiElementLabel.setText(CalendarRaasiLabels.elementLabel(host));
+        }
+        if (rashiGemLabel != null) {
+            rashiGemLabel.setText(CalendarRaasiLabels.gemLabel(host));
+        }
+        if (rashiColorLabel != null) {
+            rashiColorLabel.setText(CalendarRaasiLabels.colorAttrLabel(host));
+        }
+        if (rashiShubham != null) {
+            rashiShubham.setText(CalendarRaasiLabels.shubhamBhavatu(host));
         }
         if (fullJatakamCta != null) {
             fullJatakamCta.setVisibility(View.GONE);
@@ -582,6 +932,13 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     }
 
     public void destroy() {
+        cancelTtdChromeAutoHide();
+        if (ttdToggleRoot != null) {
+            ttdToggleRoot.animate().cancel();
+            ttdToggleRoot.setOnClickListener(null);
+        }
+        if (ttdSegCalendar != null) ttdSegCalendar.setOnClickListener(null);
+        if (ttdSegTtd != null) ttdSegTtd.setOnClickListener(null);
         if (swipeBob != null) {
             swipeBob.cancel();
             swipeBob = null;
@@ -598,14 +955,18 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     }
 
     private void startSwipeBob() {
-        if (swipeArrow == null) return;
-        if (swipeBob != null) swipeBob.cancel();
-        swipeBob = ObjectAnimator.ofFloat(swipeArrow, View.TRANSLATION_Y, 0f, dp(8));
-        swipeBob.setDuration(700);
-        swipeBob.setRepeatMode(ValueAnimator.REVERSE);
-        swipeBob.setRepeatCount(ValueAnimator.INFINITE);
-        swipeBob.setInterpolator(new AccelerateDecelerateInterpolator());
-        swipeBob.start();
+        // Retired with swipe-to-rashi cue.
+        stopSwipeBob();
+    }
+
+    private void stopSwipeBob() {
+        if (swipeBob != null) {
+            swipeBob.cancel();
+            swipeBob = null;
+        }
+        if (swipeArrow != null) {
+            swipeArrow.setTranslationY(0f);
+        }
     }
 
     private int clampSelectedDay() {
@@ -619,7 +980,13 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     }
 
     private void fillWeekdayHeaders() {
-        LinearLayout row = root.findViewById(R.id.telugu_calendar_weekday_row);
+        LinearLayout row = null;
+        if (calendarPageRoot != null) {
+            row = calendarPageRoot.findViewById(R.id.telugu_calendar_weekday_row);
+        }
+        if (row == null) {
+            row = root.findViewById(R.id.telugu_calendar_weekday_row);
+        }
         if (row == null) return;
         row.removeAllViews();
         for (int i = 0; i < 7; i++) {
@@ -628,7 +995,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             tv.setLayoutParams(lp);
             tv.setGravity(Gravity.CENTER);
-            tv.setText(WEEKDAYS_TE[i]);
+            tv.setText(CalendarRaasiLabels.weekdayShorts(host)[i]);
             tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
             tv.setTypeface(Typeface.DEFAULT_BOLD);
             tv.setTextColor(i == 0 ? COLOR_RED : COLOR_MUTED);
@@ -641,18 +1008,74 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         int year = displayMonth.get(Calendar.YEAR);
         if (yearPack != null && currentYearLoaded == year) {
             bindAll();
+            revealCalendarContent(false);
             return;
         }
-        if (loading != null) loading.setVisibility(View.VISIBLE);
+        showCalendarLoading();
         final int reqYear = year;
         PanchangRepository.loadYear(host, reqYear, (pack, fromCache) -> {
             if (host.isFinishing() || host.isDestroyed()) return;
             if (pack == null || pack.year != reqYear) return;
+            // Ignore stale soft-fetch if user already moved to another year.
+            if (displayMonth.get(Calendar.YEAR) != reqYear) return;
             yearPack = pack;
             currentYearLoaded = pack.year;
-            if (loading != null) loading.setVisibility(View.GONE);
             bindAll();
+            resizeDetailPagerToContent();
+            revealCalendarContent(!calendarContentRevealed);
         });
+    }
+
+    /** Hide body + run News-style skeleton shimmer until year pack is ready. */
+    private void showCalendarLoading() {
+        setBlinkShareVisible(false);
+        if (calendarBody != null) {
+            calendarBody.animate().cancel();
+            calendarBody.setVisibility(View.INVISIBLE);
+            calendarBody.setAlpha(1f);
+            calendarBody.setTranslationX(0f);
+        }
+        if (swipeCue != null) {
+            swipeCue.setVisibility(View.INVISIBLE);
+        }
+        if (loadReveal != null) {
+            loadReveal.start();
+        }
+    }
+
+    /**
+     * Show grid + cards + holiday together. Optional L→R slide on first paint / refresh.
+     */
+    private void revealCalendarContent(boolean animateLtr) {
+        if (loadReveal != null) {
+            loadReveal.stop(!animateLtr, null);
+        }
+        if (calendarBody != null) {
+            calendarBody.animate().cancel();
+            calendarBody.setVisibility(View.VISIBLE);
+            if (animateLtr) {
+                calendarBody.setAlpha(0f);
+                calendarBody.post(() -> {
+                    if (calendarBody == null) return;
+                    int w = calendarBody.getWidth();
+                    calendarBody.setTranslationX(w > 0 ? -Math.min(w, dp(120)) : -dp(80));
+                    calendarBody.animate()
+                            .translationX(0f)
+                            .alpha(1f)
+                            .setDuration(320L)
+                            .setInterpolator(new AccelerateDecelerateInterpolator())
+                            .start();
+                });
+            } else {
+                calendarBody.setAlpha(1f);
+                calendarBody.setTranslationX(0f);
+            }
+        }
+        if (swipeCue != null) {
+            swipeCue.setVisibility(View.GONE);
+        }
+        setBlinkShareVisible(true);
+        calendarContentRevealed = true;
     }
 
     private void bindAll() {
@@ -666,7 +1089,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         int m0 = displayMonth.get(Calendar.MONTH);
         int year = displayMonth.get(Calendar.YEAR);
         if (monthTitle != null) {
-            monthTitle.setText(EN_MONTHS[m0] + " " + year);
+            monthTitle.setText(CalendarRaasiLabels.monthName(host, m0) + " " + year);
+            monthTitle.setTextColor(themeAccent != 0 ? themeAccent : 0xFFEF4923);
         }
         if (teluguLine != null) {
             String header = yearPack != null ? yearPack.monthHeader(m0 + 1) : null;
@@ -689,10 +1113,75 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         int rows = (int) Math.ceil(totalCells / 7.0);
         int totalSlots = Math.max(rows * 7, 35);
 
-        int screenH = host.getResources().getDisplayMetrics().heightPixels;
-        int gridBudget = (int) (screenH * 0.42f);
-        int cellH = Math.max(dp(48), Math.min(dp(62), gridBudget / Math.max(rows, 5)));
+        int cellH = computeMonthGridCellHeight(rows);
         fillGridCells(leadingEmpty, daysInMonth, totalSlots, cellH, rows);
+        // Pager uses layout_weight; re-measure after grid height settles.
+        resizeDetailPagerToContent();
+    }
+
+    /**
+     * Size day cells so header + weekday + grid ≈ month height fraction
+     * of the page content height, leaving room for taller detail cards + holiday strip.
+     */
+    private int computeMonthGridCellHeight(int rows) {
+        int rowCount = Math.max(rows, 5);
+        int screenH = host.getResources().getDisplayMetrics().heightPixels;
+        int pageH = 0;
+        View heightAnchor = calendarBody != null ? calendarBody : calendarPageRoot;
+        if (heightAnchor != null) {
+            pageH = heightAnchor.getHeight();
+            if (pageH <= 0 && calendarPageRoot != null) {
+                pageH = calendarPageRoot.getHeight();
+            }
+            if (pageH <= 0 && !pendingMonthGridRelayout) {
+                pendingMonthGridRelayout = true;
+                View postTarget = heightAnchor;
+                postTarget.post(() -> {
+                    pendingMonthGridRelayout = false;
+                    if (grid != null && yearPack != null) bindGrid();
+                });
+            }
+        }
+        // Body already sits in weighted stage — use its height directly when known.
+        int contentH = pageH > dp(180)
+                ? Math.max(pageH, dp(320))
+                : Math.max((int) (screenH * 0.55f), dp(320));
+
+        int festivalH = dp(56);
+        int swipeH = dp(16); // former swipe-to-rashi cue removed
+        int minPagerH = dp(CalendarUiConfigHelper.getCardMinHeightDp(host));
+        float monthFraction = CalendarUiConfigHelper.getMonthHeightFraction(host);
+        int monthTarget = Math.round(contentH * monthFraction);
+        int gridBudget = monthTarget;
+
+        // Never starve the card carousel / holiday strip.
+        int maxGridForRest = contentH - festivalH - swipeH - minPagerH;
+        if (maxGridForRest > 0) {
+            gridBudget = Math.min(gridBudget, maxGridForRest);
+        }
+        int cellH = gridBudget / rowCount;
+        return Math.max(dp(36), Math.min(dp(52), cellH));
+    }
+
+    /** Month title row + weekday labels height (measured when laid out, else estimate). */
+    private int measureMonthHeaderBlock() {
+        int h = 0;
+        if (monthTitle != null) {
+            View titleRow = monthTitle.getParent() instanceof View
+                    ? (View) monthTitle.getParent() : null;
+            if (titleRow != null && titleRow.getParent() instanceof View) {
+                View headerRow = (View) titleRow.getParent();
+                if (headerRow.getHeight() > 0) {
+                    h += headerRow.getHeight();
+                }
+            }
+        }
+        View weekday = root.findViewById(R.id.telugu_calendar_weekday_row);
+        if (weekday != null && weekday.getHeight() > 0) {
+            h += weekday.getHeight();
+        }
+        if (h > dp(40)) return h;
+        return dp(70);
     }
 
     private void fillGridCells(int leadingEmpty, int daysInMonth, int totalSlots,
@@ -719,6 +1208,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             cell.setBackgroundResource(R.drawable.bg_calendar_cell);
 
             if (dayNum < 1 || dayNum > daysInMonth) {
+                cell.setOnClickListener(v -> revealSegmentChromeIfHidden());
                 grid.addView(cell);
                 continue;
             }
@@ -735,6 +1225,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             num.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
             num.setTypeface(Typeface.DEFAULT_BOLD);
             num.setGravity(Gravity.CENTER);
+            num.setIncludeFontPadding(false);
             int numColor = COLOR_WHITE;
             if (selected) {
                 numColor = COLOR_BLUE;
@@ -744,15 +1235,26 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
                 numColor = COLOR_RED;
             }
             num.setTextColor(numColor);
-            FrameLayout.LayoutParams nlp = new FrameLayout.LayoutParams(dp(26), dp(26));
-            nlp.gravity = Gravity.TOP | Gravity.START;
-            nlp.leftMargin = dp(2);
-            nlp.topMargin = dp(2);
-            num.setLayoutParams(nlp);
+
+            // Perfect geometric circle around the date digits only (not cell-sized oval).
+            // Square ring view + number centered inside → oval drawable stays circular.
+            int circlePx = CalendarUiConfigHelper.getSelectedCircleDiameterPx(host);
+            FrameLayout numWrap = new FrameLayout(host);
+            FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(circlePx, circlePx);
+            wrapLp.gravity = Gravity.TOP | Gravity.START;
+            wrapLp.leftMargin = dp(2);
+            wrapLp.topMargin = dp(2);
+            numWrap.setLayoutParams(wrapLp);
             if (selected) {
-                num.setBackgroundResource(R.drawable.bg_calendar_day_selected);
+                numWrap.setBackgroundResource(R.drawable.bg_calendar_day_selected);
             }
-            cell.addView(num);
+            FrameLayout.LayoutParams nlp = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            nlp.gravity = Gravity.CENTER;
+            num.setLayoutParams(nlp);
+            numWrap.addView(num);
+            cell.addView(numWrap);
 
             if (iconKey != null) {
                 ImageView icon = new ImageView(host);
@@ -800,6 +1302,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
                 bindGrid();
                 bindDetailCards();
                 bindFestivalStrip();
+                revealSegmentChromeIfHidden();
             });
 
             grid.addView(cell);
@@ -813,6 +1316,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (pager != null) {
             pager.setAdapter(detailAdapter);
             pager.setCurrentItem(0, false);
+            resizeDetailPagerToContent();
         }
         updateDetailPageIndicator(0);
     }
@@ -841,8 +1345,27 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (fests.isEmpty()) {
             fests = yearPack.festivalsForMonth(displayMonth.get(Calendar.MONTH) + 1);
         }
+        int accent = themeAccent != 0 ? themeAccent : COLOR_ORANGE;
+        int month0 = displayMonth.get(Calendar.MONTH);
         if (fests.isEmpty()) {
-            festivalStrip.setVisibility(View.GONE);
+            // Fallback: Telugu month header with theme colors (never leave empty flag strip).
+            String header = yearPack.monthHeader(month0 + 1);
+            if (TextUtils.isEmpty(header)) {
+                PanchangModels.DayData d = yearPack.day(month0 + 1, Math.min(15, selectedDay));
+                if (d != null) header = d.teluguHeader;
+            }
+            if (TextUtils.isEmpty(header)) {
+                festivalStrip.setVisibility(View.GONE);
+                return;
+            }
+            festivalStrip.setVisibility(View.VISIBLE);
+            if (festivalIcon != null) {
+                festivalIcon.setImageResource(R.drawable.ic_calendar_flag);
+            }
+            SpannableStringBuilder sb = new SpannableStringBuilder(header.trim());
+            sb.setSpan(new ForegroundColorSpan(accent), 0, sb.length(),
+                    SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
+            festivalText.setText(sb);
             return;
         }
         PanchangModels.Festival pick = fests.get(0);
@@ -862,11 +1385,57 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (festivalIcon != null) {
             festivalIcon.setImageResource(iconRes(pick.icon));
         }
-        String enPart = pick.dateDisplayEn != null
-                ? pick.dateDisplayEn
-                : EN_MONTHS[displayMonth.get(Calendar.MONTH)].toUpperCase(Locale.US) + " " + pick.day;
-        festivalText.setText(enPart + " - " + pick.name);
-        festivalText.setTextColor(COLOR_BLUE);
+        String datePart;
+        if (!TextUtils.isEmpty(pick.dateDisplayTe)
+                && languageId() == 3) {
+            datePart = pick.dateDisplayTe.trim();
+        } else {
+            datePart = CalendarRaasiLabels.monthName(host, month0) + " " + pick.day;
+        }
+        String namePart = pick.name != null ? pick.name.trim() : "";
+        SpannableStringBuilder sb = new SpannableStringBuilder();
+        int dateStart = sb.length();
+        sb.append(datePart);
+        sb.setSpan(new ForegroundColorSpan(accent), dateStart, sb.length(),
+                SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (!namePart.isEmpty()) {
+            sb.append(" - ");
+            int nameStart = sb.length();
+            sb.append(namePart);
+            sb.setSpan(new ForegroundColorSpan(COLOR_GREEN), nameStart, sb.length(),
+                    SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        festivalText.setText(sb);
+    }
+
+    private int languageId() {
+        try {
+            return SharedPrefsData.getInt(host, Constants.LanguageID, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    @NonNull
+    private String formatDetailCardDate(@Nullable PanchangModels.DayData d) {
+        if (d == null) return "";
+        int y = d.year > 0 ? d.year : displayMonth.get(Calendar.YEAR);
+        int m0 = d.month >= 1 && d.month <= 12
+                ? d.month - 1
+                : displayMonth.get(Calendar.MONTH);
+        int dayNum = d.day > 0 ? d.day : selectedDay;
+        if (languageId() == 3) {
+            if (!TextUtils.isEmpty(d.dateDisplayTe)) {
+                String te = d.dateDisplayTe.trim();
+                if (te.contains(String.valueOf(y))) return te;
+                return te + ", " + y;
+            }
+            return CalendarRaasiLabels.monthName(host, m0) + " " + dayNum + ", " + y;
+        }
+        if (!TextUtils.isEmpty(d.dateDisplayEn) && languageId() == 0) {
+            return d.dateDisplayEn;
+        }
+        return CalendarRaasiLabels.monthName(host, m0) + " " + dayNum + ", " + y;
     }
 
     private void showFestivalsSheet() {
@@ -920,17 +1489,14 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     private void bindRaasiPicker() {
         if (raasiGrid == null) return;
         raasiGrid.removeAllViews();
-        int gap = dp(5);
+        int gap = dp(4);
         for (int i = 0; i < RaasiContent.COUNT; i++) {
             final int id = i;
             boolean sel = id == selectedRaasi;
             LinearLayout tile = new LinearLayout(host);
             tile.setOrientation(LinearLayout.VERTICAL);
             tile.setGravity(Gravity.CENTER_HORIZONTAL);
-            tile.setBackgroundResource(sel
-                    ? R.drawable.bg_raasi_tile_selected
-                    : R.drawable.bg_raasi_tile);
-            tile.setPadding(dp(4), dp(8), dp(4), dp(6));
+            tile.setPadding(dp(2), dp(4), dp(2), dp(4));
             GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
             lp.width = 0;
             lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -940,42 +1506,32 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             tile.setLayoutParams(lp);
 
             FrameLayout top = new FrameLayout(host);
-            LinearLayout.LayoutParams topLp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+            LinearLayout.LayoutParams topLp = new LinearLayout.LayoutParams(dp(64), dp(64));
+            topLp.gravity = Gravity.CENTER_HORIZONTAL;
             top.setLayoutParams(topLp);
+            if (sel) {
+                top.setBackgroundResource(R.drawable.bg_rashi_tile_selected_glow);
+            }
 
             ImageView icon = new ImageView(host);
-            FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(44), dp(44));
+            FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(52), dp(52));
             ilp.gravity = Gravity.CENTER;
             icon.setLayoutParams(ilp);
             icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
             int resId = RaasiContent.iconResId(host, i);
             if (resId != 0) {
                 icon.setImageResource(resId);
+                top.addView(icon);
             } else {
-                // Fallback glyph if drawable missing
-                icon.setVisibility(View.GONE);
                 TextView glyph = new TextView(host);
                 glyph.setText(RaasiContent.GLYPHS[i]);
                 glyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
-                glyph.setTextColor(COLOR_WHITE);
+                glyph.setTextColor(COLOR_GOLD);
                 glyph.setGravity(Gravity.CENTER);
                 glyph.setLayoutParams(new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
                 top.addView(glyph);
-            }
-            if (resId != 0) top.addView(icon);
-
-            if (sel) {
-                ImageView check = new ImageView(host);
-                FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(dp(16), dp(16));
-                clp.gravity = Gravity.BOTTOM | Gravity.END;
-                clp.rightMargin = dp(0);
-                clp.bottomMargin = dp(0);
-                check.setLayoutParams(clp);
-                check.setImageResource(R.drawable.ic_raasi_check);
-                top.addView(check);
             }
             tile.addView(top);
 
@@ -989,17 +1545,15 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             name.setGravity(Gravity.CENTER);
             name.setMaxLines(1);
             name.setEllipsize(TextUtils.TruncateAt.END);
-            name.setPadding(dp(1), dp(2), dp(1), dp(2));
-            name.setBackground(null);
-            name.setTextColor(COLOR_WHITE);
+            name.setTextColor(COLOR_GOLD);
             if (sel) name.setTypeface(Typeface.DEFAULT_BOLD);
             tile.addView(name);
 
             tile.setOnClickListener(v -> {
+                revealSegmentChromeIfHidden();
                 selectedRaasi = id;
                 persistSelectedRaasi(id);
                 bindRaasiPicker();
-                // Inline preview only — full modal opens via "మరిన్ని" / more.
                 bindRaasiDetail();
             });
             raasiGrid.addView(tile);
@@ -1012,22 +1566,41 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         RaasiContent.Daily daily = RaasiContent.forToday(host, selectedRaasi);
         raasiDetail.setVisibility(View.VISIBLE);
         applyRaasiChromeLabels();
+        bindRashiInfoBar();
         if (raasiSignLine != null) {
             raasiSignLine.setVisibility(View.GONE);
         }
         if (raasiTitle != null) {
-            Calendar today = Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"));
-            int y = today.get(Calendar.YEAR);
-            int m0 = today.get(Calendar.MONTH);
-            int d = today.get(Calendar.DAY_OF_MONTH);
-            String dateDisp = String.format(Locale.US, "%02d %s %d", d, EN_MONTHS[m0], y);
-            raasiTitle.setText(CalendarRaasiLabels.phalaluTitle(host, selectedRaasi, dateDisp));
+            raasiTitle.setText(CalendarRaasiLabels.phalaluShortTitle(host, selectedRaasi));
         }
+        if (raasiDetailIcon != null) {
+            int icon = RaasiContent.iconResIdLarge(host, selectedRaasi);
+            if (icon != 0) {
+                raasiDetailIcon.setImageResource(icon);
+                raasiDetailIcon.setVisibility(View.VISIBLE);
+            } else {
+                raasiDetailIcon.setVisibility(View.GONE);
+            }
+        }
+        if (rashiLordValue != null) {
+            rashiLordValue.setText(RaasiContent.lordName(selectedRaasi));
+        }
+        if (rashiElementValue != null) {
+            rashiElementValue.setText(RaasiContent.elementName(selectedRaasi));
+        }
+        if (rashiGemValue != null) {
+            rashiGemValue.setText(RaasiContent.gemName(selectedRaasi));
+        }
+        if (rashiColorValue != null) {
+            rashiColorValue.setText(daily.color != null ? daily.color : "");
+        }
+        bindRashiSections(daily);
         if (raasiBody != null) {
             raasiBody.setMaxLines(Integer.MAX_VALUE);
             raasiBody.setEllipsize(null);
             raasiBody.setSingleLine(false);
             raasiBody.setText(daily.body != null ? daily.body : "");
+            raasiBody.setVisibility(View.GONE);
         }
         if (raasiMore != null) {
             raasiMore.setVisibility(View.GONE);
@@ -1040,6 +1613,255 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (luckyColor != null) luckyColor.setText(daily.color);
         if (luckyNumbers != null) luckyNumbers.setText(daily.numbers);
         if (luckyDirection != null) luckyDirection.setText(daily.direction);
+    }
+
+    private void bindRashiInfoBar() {
+        Calendar cal = Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"));
+        // Prefer selected calendar day when pack is available.
+        int y = displayMonth.get(Calendar.YEAR);
+        int m0 = displayMonth.get(Calendar.MONTH);
+        int d = selectedDay > 0 ? selectedDay : cal.get(Calendar.DAY_OF_MONTH);
+        if (rashiDateValue != null) {
+            String weekday = weekdayTe(calForSelectedDay());
+            String dateTe = formatRashiInfoDate(y, m0, d, weekday);
+            rashiDateValue.setText(dateTe);
+        }
+        PanchangModels.DayData day = selectedDayData();
+        if (rashiNakValue != null) {
+            String nak = "—";
+            if (day != null && day.nakshatra != null && day.nakshatra.name != null) {
+                nak = day.nakshatra.name;
+            }
+            rashiNakValue.setText(nak);
+        }
+        if (rashiYogaValue != null) {
+            boolean shubha = day != null && day.safeShubha() != null && !day.safeShubha().isEmpty();
+            rashiYogaValue.setText(shubha
+                    ? CalendarRaasiLabels.shubhaYogam(host)
+                    : CalendarRaasiLabels.mishraYogam(host));
+        }
+    }
+
+    @NonNull
+    private Calendar calForSelectedDay() {
+        Calendar c = (Calendar) displayMonth.clone();
+        c.set(Calendar.DAY_OF_MONTH, Math.max(1, selectedDay));
+        return c;
+    }
+
+    @NonNull
+    private String formatRashiInfoDate(int y, int m0, int d, @Nullable String weekday) {
+        String[] teMonths = {
+                "జనవరి", "ఫిబ్రవరి", "మార్చి", "ఏప్రిల్", "మే", "జూన్",
+                "జూలై", "ఆగష్టు", "సెప్టెంబర్", "అక్టోబర్", "నవంబర్", "డిసెంబర్"
+        };
+        String month = (m0 >= 0 && m0 < 12) ? teMonths[m0] : EN_MONTHS[Math.max(0, Math.min(11, m0))];
+        String base = d + " " + month + " " + y;
+        if (weekday != null && !weekday.isEmpty()) {
+            return base + " " + weekday;
+        }
+        return base;
+    }
+
+    @NonNull
+    private static String weekdayTe(@NonNull Calendar c) {
+        switch (c.get(Calendar.DAY_OF_WEEK)) {
+            case Calendar.SUNDAY: return "ఆదివారం";
+            case Calendar.MONDAY: return "సోమవారం";
+            case Calendar.TUESDAY: return "మంగళవారం";
+            case Calendar.WEDNESDAY: return "బుధవారం";
+            case Calendar.THURSDAY: return "గురువారం";
+            case Calendar.FRIDAY: return "శుక్రవారం";
+            case Calendar.SATURDAY: return "శనివారం";
+            default: return "";
+        }
+    }
+
+    /**
+     * Builds detail sections from the curated 3-paragraph body + luck fields.
+     * Never reuses the same paragraph under two headings; skips empty / duplicate
+     * sections; does not invent Career/Love copy by falling back to another paragraph.
+     */
+    private void bindRashiSections(@NonNull RaasiContent.Daily daily) {
+        if (raasiSections == null) return;
+        raasiSections.removeAllViews();
+        java.util.LinkedHashSet<String> seenBodies = new java.util.LinkedHashSet<>();
+
+        String body = daily.body != null ? daily.body : "";
+        String[] paras = body.split("\n\n");
+        String p0 = paras.length > 0 ? paras[0].trim() : "";
+        String p1 = paras.length > 1 ? paras[1].trim() : "";
+        String p2 = paras.length > 2 ? paras[2].trim() : "";
+        String numbers = daily.numbers != null ? daily.numbers.trim() : "";
+        String color = daily.color != null ? daily.color.trim() : "";
+        String dir = daily.direction != null ? daily.direction.trim() : "";
+
+        String generalBody = p0;
+        String careerBody = "";
+        String loveBody = "";
+        if (!TextUtils.isEmpty(p1) && !p1.equals(p0)) {
+            if (rashiParagraphLooksLikeLove(p1)) {
+                loveBody = p1;
+            } else if (rashiParagraphLooksLikeCareer(p1)) {
+                careerBody = p1;
+            } else {
+                // Keep mid text once under General — avoid wrong Career/Love labels.
+                generalBody = TextUtils.isEmpty(generalBody) ? p1 : (generalBody + "\n\n" + p1);
+            }
+        }
+
+        addRashiSectionRowUnique(
+                CalendarRaasiLabels.sectionGeneral(host),
+                R.drawable.ic_rashi_sec_general,
+                generalBody,
+                seenBodies);
+
+        // Finance only when lucky numbers exist (distinct field — no paragraph reuse).
+        if (!TextUtils.isEmpty(numbers)) {
+            addRashiSectionRowUnique(
+                    CalendarRaasiLabels.sectionFinance(host),
+                    R.drawable.ic_rashi_sec_finance,
+                    "ఈరోజు అదృష్ట సంఖ్యలు " + numbers
+                            + ". ఖర్చుల్లో జాగ్రత్త పాటించండి; అవసరమైన పనులకే డబ్బు కేటాయించండి.",
+                    seenBodies);
+        }
+
+        addRashiSectionRowUnique(
+                CalendarRaasiLabels.sectionCareer(host),
+                R.drawable.ic_rashi_sec_career,
+                careerBody,
+                seenBodies);
+
+        // Health only when lucky direction exists.
+        if (!TextUtils.isEmpty(dir)) {
+            addRashiSectionRowUnique(
+                    CalendarRaasiLabels.sectionHealth(host),
+                    R.drawable.ic_rashi_sec_health,
+                    "ఆరోగ్యం కోసం తేలిక వ్యాయామం, నీరు, సమయానికి విశ్రాంతి అవసరం. అదృష్ట దిక్కు: "
+                            + dir + ".",
+                    seenBodies);
+        }
+
+        addRashiSectionRowUnique(
+                CalendarRaasiLabels.sectionLove(host),
+                R.drawable.ic_rashi_sec_love,
+                loveBody,
+                seenBodies);
+
+        // Remedy: third paragraph if present; else color tip when color field exists.
+        if (!TextUtils.isEmpty(p2) && !p2.equals(p0) && !p2.equals(p1)) {
+            addRashiSectionRowUnique(
+                    CalendarRaasiLabels.sectionRemedy(host),
+                    R.drawable.ic_rashi_sec_remedy,
+                    p2,
+                    seenBodies);
+        } else if (!TextUtils.isEmpty(color)) {
+            addRashiSectionRowUnique(
+                    CalendarRaasiLabels.sectionRemedy(host),
+                    R.drawable.ic_rashi_sec_remedy,
+                    "శుభ రంగు " + color
+                            + "ను ధరించండి; నిశ్శబ్ద ప్రార్థన లేదా కృతజ్ఞతతో రోజును ముగించండి.",
+                    seenBodies);
+        }
+    }
+
+    /** Love / relationships / social-gathering cues across curated template languages. */
+    private static boolean rashiParagraphLooksLikeLove(@NonNull String text) {
+        String t = text.toLowerCase(Locale.ROOT);
+        return containsAny(t,
+                "ప్రేమ", "స్నేహ", "సంబంధ", "కలయిక", "సామాజిక", "గాసిప్",
+                "प्रेम", "मित्र", "संबंध",
+                "காதல்", "நட்ப்", "உறவு",
+                "ಪ್ರೀತಿ", "ಸ್ನೇಹ", "ಸಂಬಂಧ",
+                "പ്രണയ", "സൗഹൃദ", "ബന്ധ",
+                "ପ୍ରେମ", "ବନ୍ଧୁ",
+                "love", "friendship", "relationship", "gathering", "social", "gossip");
+    }
+
+    /** Career / work / business cues across curated template languages. */
+    private static boolean rashiParagraphLooksLikeCareer(@NonNull String text) {
+        String t = text.toLowerCase(Locale.ROOT);
+        return containsAny(t,
+                "పని", "వ్యాపార", "ప్రాజెక్ట్", "ఒప్పంద", "అప్లికేషన్", "కాల్స్", "సృజనాత్మక పని",
+                "काम", "व्यवसाय", "प्रोजेक्ट", "अनुबंध",
+                "வேலை", "வியாபார", "திட்டம்", "ஒப்பந்த",
+                "ಕೆಲಸ", "ವ್ಯಾಪಾರ", "ಯೋಜನೆ", "ಒಪ್ಪಂದ",
+                "ജോലി", "ബിസിനസ്", "പ്രോജക്ട്", "കരാർ",
+                "କାମ", "ବ୍ୟବସାୟ", "ପ୍ରକଳ୍ପ", "ଚୁକ୍ତି",
+                "work", "career", "business", "project", "contract", "application", "office");
+    }
+
+    private static boolean containsAny(@NonNull String haystack, @NonNull String... needles) {
+        for (String n : needles) {
+            if (n != null && !n.isEmpty() && haystack.contains(n.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void addRashiSectionRowUnique(
+            @NonNull String title,
+            int iconRes,
+            @Nullable String body,
+            @NonNull java.util.Set<String> seenBodies) {
+        if (TextUtils.isEmpty(body)) return;
+        String key = body.trim();
+        if (!seenBodies.add(key)) return;
+        addRashiSectionRow(title, iconRes, key);
+    }
+
+    private void addRashiSectionRow(@NonNull String title, int iconRes, @NonNull String body) {
+        if (raasiSections == null) return;
+        if (TextUtils.isEmpty(body)) return;
+        LinearLayout row = new LinearLayout(host);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.TOP);
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowLp.topMargin = dp(8);
+        row.setLayoutParams(rowLp);
+
+        FrameLayout iconWrap = new FrameLayout(host);
+        LinearLayout.LayoutParams iwLp = new LinearLayout.LayoutParams(dp(32), dp(32));
+        iwLp.topMargin = dp(2);
+        iconWrap.setLayoutParams(iwLp);
+        iconWrap.setBackgroundResource(R.drawable.bg_rashi_section_icon);
+        ImageView iv = new ImageView(host);
+        FrameLayout.LayoutParams ivLp = new FrameLayout.LayoutParams(dp(18), dp(18));
+        ivLp.gravity = Gravity.CENTER;
+        iv.setLayoutParams(ivLp);
+        iv.setImageResource(iconRes);
+        iconWrap.addView(iv);
+        row.addView(iconWrap);
+
+        LinearLayout textCol = new LinearLayout(host);
+        LinearLayout.LayoutParams tcLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tcLp.leftMargin = dp(10);
+        textCol.setLayoutParams(tcLp);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+
+        TextView titleTv = new TextView(host);
+        titleTv.setText(title);
+        titleTv.setTextColor(COLOR_GOLD);
+        titleTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        titleTv.setTypeface(Typeface.DEFAULT_BOLD);
+        textCol.addView(titleTv);
+
+        TextView bodyTv = new TextView(host);
+        bodyTv.setText(body);
+        bodyTv.setTextColor(0xFFE8E0D0);
+        bodyTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        bodyTv.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bLp.topMargin = dp(2);
+        bodyTv.setLayoutParams(bLp);
+        textCol.addView(bodyTv);
+
+        row.addView(textCol);
+        raasiSections.addView(row);
     }
 
     private void showRaasiDetailSheet() {
@@ -1335,7 +2157,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         hideRaasiForm();
         hideRaasiDetailSheet();
         if (flipPager != null && flipPager.getCurrentPage() != 1) {
-            goToRaasiPage(true);
+            selectRaasiPage(true);
         }
         bindRaasiPicker();
         bindRaasiDetail();
@@ -1402,8 +2224,9 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
         sb.append("ANYNEWS — ").append(dateStr).append('\n');
 
-        appendShareSection(sb, "శుభ సమయాలు", day.safeShubha());
-        appendShareSection(sb, "అశుభ సమయాలు", day.safeAshubha());
+        appendShareSection(sb, CalendarRaasiLabels.shubhaTimes(host), day.safeShubha());
+        appendShareSection(sb, CalendarRaasiLabels.ashubhaTimes(host),
+                day.safeAshubhaMerged(CalendarRaasiLabels.againConnector(host)));
         appendShareSection(sb, "తిథి", day.safeTithiCard());
         if (day.nakshatra != null && day.nakshatra.name != null) {
             List<PanchangModels.TimeItem> nak = new ArrayList<>();
@@ -1526,7 +2349,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             return true;
         }
         if (flipPager != null && flipPager.getCurrentPage() > 0) {
-            flipPager.smoothFlipTo(0);
+            selectPanchangamPage(true);
             return true;
         }
         return false;
@@ -1554,6 +2377,43 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
     }
 
+    private void resizeDetailPagerToContent() {
+        if (pager == null) return;
+        pager.post(() -> {
+            if (pager == null) return;
+            // Card host uses layout_weight=1 in page_telugu_calendar.xml so it
+            // fills space below the month block. Ensure a solid min height
+            // when the page has not finished laying out yet.
+            View hostFrame = pager.getParent() instanceof View
+                    ? (View) pager.getParent() : null;
+            int minH = dp(CalendarUiConfigHelper.getCardMinHeightDp(host));
+            ViewGroup.LayoutParams plp = pager.getLayoutParams();
+            if (plp != null && plp.height != ViewGroup.LayoutParams.MATCH_PARENT) {
+                plp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                pager.setLayoutParams(plp);
+            }
+            if (hostFrame != null) {
+                ViewGroup.LayoutParams hlp = hostFrame.getLayoutParams();
+                if (hlp instanceof LinearLayout.LayoutParams) {
+                    LinearLayout.LayoutParams llp = (LinearLayout.LayoutParams) hlp;
+                    if (llp.weight <= 0f) {
+                        llp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                        llp.height = 0;
+                        llp.weight = 1f;
+                        hostFrame.setLayoutParams(llp);
+                    }
+                    hostFrame.setMinimumHeight(minH);
+                } else if (hlp != null && hlp.height < minH) {
+                    hlp.height = minH;
+                    hostFrame.setLayoutParams(hlp);
+                }
+            }
+            if (calendarPageRoot != null) {
+                calendarPageRoot.requestLayout();
+            }
+        });
+    }
+
     private int dp(int v) {
         return Math.round(v * host.getResources().getDisplayMetrics().density);
     }
@@ -1563,6 +2423,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (calendarPageRoot == null && page.getId() == R.id.telugu_calendar_scroll) {
             calendarPageRoot = page;
         }
+        calendarBody = page.findViewById(R.id.telugu_calendar_body);
+        loadReveal = page.findViewById(R.id.telugu_calendar_load_reveal);
         monthTitle = page.findViewById(R.id.telugu_calendar_month);
         teluguLine = page.findViewById(R.id.telugu_calendar_telugu_line);
         grid = page.findViewById(R.id.telugu_calendar_grid);
@@ -1572,11 +2434,18 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         festivalStrip = page.findViewById(R.id.telugu_calendar_festival_strip);
         festivalIcon = page.findViewById(R.id.telugu_calendar_festival_icon);
         festivalText = page.findViewById(R.id.telugu_calendar_festival_text);
-        loading = page.findViewById(R.id.telugu_calendar_loading);
         swipeArrow = page.findViewById(R.id.telugu_calendar_swipe_arrow);
         swipeLabel = page.findViewById(R.id.telugu_calendar_swipe_label);
         swipeCue = page.findViewById(R.id.telugu_calendar_swipe_cue);
         flipIndicator = page.findViewById(R.id.telugu_calendar_flip_indicator);
+        // New FlipView page instance — require a fresh reveal after bind.
+        if (wiredCalendarPageInstance != calendarPageRoot) {
+            calendarContentRevealed = false;
+        }
+        // Paint News-style skeleton immediately (HomeFeedRevealView defaults to GONE).
+        if (!calendarContentRevealed && loadReveal != null) {
+            loadReveal.start();
+        }
     }
 
     private void bindPageRaasiViews(@NonNull View page) {
@@ -1604,6 +2473,25 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
         raasiShare = page.findViewById(R.id.telugu_calendar_raasi_share);
         flipIndicatorRaasi = page.findViewById(R.id.telugu_calendar_flip_indicator_raasi);
+        raasiDetailIcon = page.findViewById(R.id.telugu_calendar_raasi_detail_icon);
+        raasiSections = page.findViewById(R.id.telugu_calendar_rashi_sections);
+        rashiDateLabel = page.findViewById(R.id.telugu_calendar_rashi_date_label);
+        rashiDateValue = page.findViewById(R.id.telugu_calendar_rashi_date_value);
+        rashiNakLabel = page.findViewById(R.id.telugu_calendar_rashi_nak_label);
+        rashiNakValue = page.findViewById(R.id.telugu_calendar_rashi_nak_value);
+        rashiYogaLabel = page.findViewById(R.id.telugu_calendar_rashi_yoga_label);
+        rashiYogaValue = page.findViewById(R.id.telugu_calendar_rashi_yoga_value);
+        rashiLordLabel = page.findViewById(R.id.telugu_calendar_rashi_lord_label);
+        rashiLordValue = page.findViewById(R.id.telugu_calendar_rashi_lord_value);
+        rashiElementLabel = page.findViewById(R.id.telugu_calendar_rashi_element_label);
+        rashiElementValue = page.findViewById(R.id.telugu_calendar_rashi_element_value);
+        rashiGemLabel = page.findViewById(R.id.telugu_calendar_rashi_gem_label);
+        rashiGemValue = page.findViewById(R.id.telugu_calendar_rashi_gem_value);
+        rashiColorLabel = page.findViewById(R.id.telugu_calendar_rashi_color_label);
+        rashiColorValue = page.findViewById(R.id.telugu_calendar_rashi_color_value);
+        rashiShubham = page.findViewById(R.id.telugu_calendar_rashi_shubham);
+        raasiBack = page.findViewById(R.id.telugu_calendar_raasi_back);
+        raasiHeaderShare = page.findViewById(R.id.telugu_calendar_raasi_header_share);
     }
 
     private final class CalendarFlipAdapter extends BaseAdapter {
@@ -1665,20 +2553,30 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             day = d;
             pages.clear();
             if (d == null) {
-                pages.add(new CardPage("…", "", new ArrayList<>()));
+                pages.add(new CardPage("…", "", R.drawable.ic_calendar_sun, new ArrayList<>()));
                 notifyDataSetChanged();
                 return;
             }
-            String dateStr = d.dateDisplayEn != null ? d.dateDisplayEn : "";
+            String dateStr = formatDetailCardDate(d);
             List<PanchangModels.TimeItem> shubha = d.safeShubha();
             boolean onlyVehicle = shubha.size() == 1
                     && shubha.get(0) != null
                     && shubha.get(0).label != null
                     && shubha.get(0).label.contains("వాహన");
-            String shubhaTitle = onlyVehicle ? "శుభ ముహూర్తాలు" : "శుభ సమయాలు";
-            pages.add(new CardPage(shubhaTitle, dateStr, shubha));
-            pages.add(new CardPage("అశుభ సమయాలు", dateStr, d.safeAshubha()));
-            pages.add(new CardPage("తిథి", dateStr, d.safeTithiCard()));
+            String shubhaTitle = onlyVehicle
+                    ? CalendarRaasiLabels.shubhaMuhurthams(host)
+                    : CalendarRaasiLabels.shubhaTimes(host);
+            pages.add(new CardPage(shubhaTitle, dateStr, R.drawable.ic_calendar_sun, shubha));
+            pages.add(new CardPage(
+                    CalendarRaasiLabels.ashubhaTimes(host),
+                    dateStr,
+                    R.drawable.ic_calendar_ashubha_star,
+                    d.safeAshubhaMerged(CalendarRaasiLabels.againConnector(host))));
+            pages.add(new CardPage(
+                    CalendarRaasiLabels.tithiLabel(host),
+                    dateStr,
+                    R.drawable.ic_calendar_tithi,
+                    d.safeTithiCard()));
             if (d.nakshatra != null && d.nakshatra.name != null) {
                 List<PanchangModels.TimeItem> nak = new ArrayList<>();
                 nak.add(new PanchangModels.TimeItem(
@@ -1692,7 +2590,11 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
                 if (d.sunset != null) {
                     nak.add(new PanchangModels.TimeItem("సూర్యాస్తమయం", d.sunset));
                 }
-                pages.add(new CardPage("నక్షత్రం", dateStr, nak));
+                pages.add(new CardPage(
+                        CalendarRaasiLabels.nakshatraLabel(host),
+                        dateStr,
+                        R.drawable.ic_calendar_nakshatra,
+                        nak));
             }
             notifyDataSetChanged();
         }
@@ -1713,23 +2615,53 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             View v = LayoutInflater.from(container.getContext())
                     .inflate(R.layout.item_calendar_detail_card, container, false);
             CardPage page = pages.get(position);
+            ImageView icon = v.findViewById(R.id.card_icon);
             TextView title = v.findViewById(R.id.card_title);
             TextView date = v.findViewById(R.id.card_date);
             LinearLayout items = v.findViewById(R.id.card_items);
-            if (title != null) title.setText(page.title);
-            if (date != null) date.setText(page.date);
+            int accent = themeAccent != 0 ? themeAccent : COLOR_ORANGE;
+            float titleSp = CalendarUiConfigHelper.getTitleSizeSp(host);
+            float itemSp = CalendarUiConfigHelper.getItemSizeSp(host);
+            int itemPad = dp(CalendarUiConfigHelper.getItemPadDp(host));
+            if (icon != null) {
+                icon.setImageResource(page.iconRes);
+                icon.setColorFilter(accent, PorterDuff.Mode.SRC_IN);
+            }
+            if (title != null) {
+                title.setText(page.title);
+                title.setTextColor(accent);
+                title.setTextSize(TypedValue.COMPLEX_UNIT_SP, titleSp);
+            }
+            if (date != null) {
+                date.setText(page.date);
+                date.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(11f, titleSp - 4f));
+            }
             if (items != null) {
                 items.removeAllViews();
                 for (PanchangModels.TimeItem it : page.items) {
                     if (it == null) continue;
+                    String label = safe(it.label);
+                    String range = safe(it.range);
+                    String body = range.isEmpty() ? label : (label + ": " + range);
+                    SpannableStringBuilder rowText = new SpannableStringBuilder();
+                    int bulletStart = rowText.length();
+                    rowText.append("●  ");
+                    rowText.setSpan(new ForegroundColorSpan(accent), bulletStart, bulletStart + 1,
+                            SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    int bodyStart = rowText.length();
+                    rowText.append(body);
+                    rowText.setSpan(new ForegroundColorSpan(COLOR_WHITE), bodyStart, rowText.length(),
+                            SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
                     TextView row = new TextView(container.getContext());
-                    row.setText("•  " + safe(it.label) + ": " + safe(it.range));
-                    row.setTextColor(COLOR_WHITE);
-                    row.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-                    row.setPadding(0, dp(3), 0, dp(3));
+                    row.setText(rowText);
+                    row.setTextSize(TypedValue.COMPLEX_UNIT_SP, itemSp);
+                    row.setPadding(0, itemPad, 0, itemPad);
                     items.addView(row);
                 }
             }
+            // Detail cards sit in a ViewPager — parent OnClickListeners never fire; wire the card.
+            v.setClickable(true);
+            v.setOnClickListener(view -> revealSegmentChromeIfHidden());
             container.addView(v);
             return v;
         }
@@ -1752,11 +2684,13 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     private static final class CardPage {
         final String title;
         final String date;
+        final int iconRes;
         final List<PanchangModels.TimeItem> items;
 
-        CardPage(String title, String date, List<PanchangModels.TimeItem> items) {
+        CardPage(String title, String date, int iconRes, List<PanchangModels.TimeItem> items) {
             this.title = title;
             this.date = date;
+            this.iconRes = iconRes;
             this.items = items != null ? items : new ArrayList<>();
         }
     }

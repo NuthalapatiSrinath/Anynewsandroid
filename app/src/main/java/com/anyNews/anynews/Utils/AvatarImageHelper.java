@@ -59,6 +59,21 @@ public final class AvatarImageHelper {
                 || "/".equals(t);
     }
 
+    /**
+     * True when URL is missing or the shared default silhouette asset
+     * ({@code user_profile.webp} / similar) — not a real uploaded photo.
+     */
+    public static boolean isUnusablePhoto(@Nullable String url) {
+        if (isMissing(url)) {
+            return true;
+        }
+        String lower = url.trim().toLowerCase();
+        return lower.contains("user_profile.webp")
+                || lower.contains("user_profile.png")
+                || lower.contains("profile_icon.webp")
+                || lower.contains("/avatar.png");
+    }
+
     public static DisplayImageOptions uilOptions() {
         return UIL_AVATAR_OPTIONS;
     }

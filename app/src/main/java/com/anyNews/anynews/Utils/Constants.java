@@ -129,6 +129,22 @@ public class Constants {
      */
     public static String FORCE_LOGGED_OUT = "force_logged_out";
     public static String is_reporter="is_reporter";
+    /**
+     * Soft profile-photo reminder for approved reporters: last dismiss timestamp (ms).
+     * Re-show after {@link #PROFILE_PHOTO_REMINDER_COOLDOWN_MS} if still missing a photo.
+     */
+    public static String PROFILE_PHOTO_REMINDER_DISMISSED_AT = "profile_photo_reminder_dismissed_at";
+    /** ~3 days between soft reminders when photo still missing. */
+    public static final long PROFILE_PHOTO_REMINDER_COOLDOWN_MS = 3L * 24 * 60 * 60 * 1000;
+    /**
+     * Cached Profile "Reporter" desk card UI for logged-in non-approved applicants.
+     * 0 = hidden, 1 = awaiting approval, 2 = rejected. Avoids GONE→VISIBLE flicker
+     * while {@code reporter_applicant_get} soft-refreshes in the background.
+     */
+    public static String REPORTER_DESK_UI_STATE = "reporter_desk_ui_state";
+    public static final int REPORTER_DESK_HIDDEN = 0;
+    public static final int REPORTER_DESK_PENDING = 1;
+    public static final int REPORTER_DESK_REJECTED = 2;
     /** Last known "% Achieved" (profile completion) for instant Profile paint. */
     public static String PROFILE_ACHIEVED_PCT = "profile_achieved_pct";
     public static String reporter_language_id="reporter_language_id";
@@ -226,6 +242,30 @@ public class Constants {
     public static String HOME_MODE_CHROME_AUTO_HIDE_SECONDS =
             "home_mode_chrome_auto_hide_seconds";
     /**
+     * Main News FlipView content-tap mode: classic | reader | hybrid (splash/session).
+     * Default hybrid.
+     */
+    public static String NEWS_TAP_MODE = "news_tap_mode";
+    /** Hybrid: top % of half-article page → News|Read. Default 50. */
+    public static String NEWS_TAP_HALF_UPPER_PCT = "news_tap_half_upper_pct";
+    /** Hybrid: top % of full post → News|Read. Default 50. */
+    public static String NEWS_TAP_FULL_UPPER_PCT = "news_tap_full_upper_pct";
+    /** Hybrid: right-edge width % → Classic side-rail hide. Default 28. */
+    public static String NEWS_TAP_FULL_RIGHT_RAIL_PCT = "news_tap_full_right_rail_pct";
+    /**
+     * Half articles: also hide likes/comments/share/flag when Classic hide
+     * hides the writers row. Default false. Splash/session.
+     */
+    public static String NEWS_TAP_HALF_HIDE_ENGAGEMENT = "news_tap_half_hide_engagement";
+    /**
+     * Way2-style live readers badge on half articles (splash/session/articles).
+     * Default OFF.
+     */
+    public static String LIVE_READERS_ENABLED = "live_readers_enabled";
+    public static String LIVE_READERS_WINDOW_MINUTES = "live_readers_window_minutes";
+    public static String LIVE_READERS_SHOW_SECONDS = "live_readers_show_seconds";
+    public static String LIVE_READERS_MIN_COUNT = "live_readers_min_count";
+    /**
      * Hours of last-read articles shown under Read / చదివినవి (splash/runtime).
      * Default 24; clamped 1–168. Older reads stay out of Read but News still strips them.
      */
@@ -322,6 +362,10 @@ public class Constants {
     public static String TTD_ENABLED = "ttd_enabled";
     public static String TTD_BOOKING_ENABLED = "ttd_booking_enabled";
     public static String TTD_BOOKING_DAYS = "ttd_booking_days";
+    /** ISO datetime (IST preferred) when booking CTA becomes visible. Empty = no open gate. */
+    public static String TTD_BOOKING_OPENS_AT = "ttd_booking_opens_at";
+    /** ISO datetime (IST preferred) when booking CTA hides. Empty = no close gate. */
+    public static String TTD_BOOKING_CLOSES_AT = "ttd_booking_closes_at";
     public static String TTD_OFFICIAL_URL = "ttd_official_url";
     public static String TTD_BOOKING_URL = "ttd_booking_url";
     public static String TTD_EDARSHAN_URL = "ttd_edarshan_url";
@@ -353,7 +397,7 @@ public class Constants {
 
     /**
      * Daily Updates hub (splash {@code daily_updates}): Panchangam / Mana Zilla /
-     * Flash News kill switches + card background art offset.
+     * Flash News kill switches + card background art offset + typography / insets.
      */
     public static String DAILY_UPDATES_CONFIG_SET = "daily_updates_config_set";
     public static String DAILY_UPDATES_CONFIG_JSON = "daily_updates_config_json";
@@ -379,6 +423,33 @@ public class Constants {
     /** Splash Redis/memory Mana Zilla local titles JSON array. */
     public static String DU_LOCAL_HEADLINES_JSON = "du_local_headlines_json";
     public static String DU_LOCAL_HEADLINES_DIST = "du_local_headlines_dist";
+
+    // DU typography (sp)
+    public static String DU_PAGE_TITLE_TEXT_SIZE_SP = "du_page_title_text_size_sp";
+    public static String DU_PAGE_SUBTITLE_TEXT_SIZE_SP = "du_page_subtitle_text_size_sp";
+    public static String DU_CARD_TITLE_TEXT_SIZE_SP = "du_card_title_text_size_sp";
+    public static String DU_CARD_BODY_TEXT_SIZE_SP = "du_card_body_text_size_sp";
+    public static String DU_CARD_CTA_TEXT_SIZE_SP = "du_card_cta_text_size_sp";
+    public static String DU_CARD_HERO_TEXT_SIZE_SP = "du_card_hero_text_size_sp";
+    public static String DU_STOCK_TITLE_TEXT_SIZE_SP = "du_stock_title_text_size_sp";
+    public static String DU_STOCK_BODY_TEXT_SIZE_SP = "du_stock_body_text_size_sp";
+    public static String DU_STOCK_CTA_TEXT_SIZE_SP = "du_stock_cta_text_size_sp";
+    public static String DU_FLASH_CHIP_TEXT_SIZE_SP = "du_flash_chip_text_size_sp";
+    public static String DU_FLASH_HEADLINE_TEXT_SIZE_SP = "du_flash_headline_text_size_sp";
+
+    // Per-box content start (horizontal paddingStart dp — clears corner art)
+    public static String DU_WEATHER_CONTENT_START_DP = "du_weather_content_start_dp";
+    public static String DU_FUEL_CONTENT_START_DP = "du_fuel_content_start_dp";
+    public static String DU_GOLD_CONTENT_START_DP = "du_gold_content_start_dp";
+    public static String DU_TTD_CONTENT_START_DP = "du_ttd_content_start_dp";
+    public static String DU_JOBS_CONTENT_START_DP = "du_jobs_content_start_dp";
+    public static String DU_PANCHANGAM_CONTENT_START_DP = "du_panchangam_content_start_dp";
+    public static String DU_STOCK_CONTENT_START_DP = "du_stock_content_start_dp";
+
+    // Flash chrome
+    public static String DU_FLASH_ICON_SIZE_DP = "du_flash_icon_size_dp";
+    public static String DU_FLASH_ICON_MARGIN_START_DP = "du_flash_icon_margin_start_dp";
+    public static String DU_FLASH_CONTENT_PAD_START_DP = "du_flash_content_pad_start_dp";
 
     /**
      * Push tray appearance (admin Configuration → splash / articles config).

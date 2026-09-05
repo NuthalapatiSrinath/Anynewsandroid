@@ -69,6 +69,18 @@ public final class ProfileHubLabels {
         }
     }
 
+    public static String becomeAReporter(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "റിപ്പോർട്ടറാകുക";
+            case 2: return "रिपोर्टर बनें";
+            case 3: return "రిపోర్టర్ అవ్వండి";
+            case 4: return "ரிப்போர்ட்டர் ஆகுங்கள்";
+            case 5: return "ರಿಪೋರ್ಟರ್ ಆಗಿ";
+            case 6: return "ରିପୋର୍ଟର୍ ହୁଅନ୍ତୁ";
+            default: return str(context, R.string.become_a_reporter, "Become a Reporter");
+        }
+    }
+
     /** Small caption above the district name on the location row. */
     public static String selectedLocation(@Nullable Context context) {
         switch (languageId(context)) {

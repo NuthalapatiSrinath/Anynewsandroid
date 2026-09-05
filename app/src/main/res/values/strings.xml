@@ -15,6 +15,8 @@
 
     <string name="edittext_enter_user_name"><font size="14">   User name </font></string>
     <string name="edittext_enter_phone_number"><font size="14">  Phone number </font></string>
+    <string name="login_continue">Continue</string>
+    <string name="login_enter_name_email">Please enter name and email</string>
 
 
     <!--<string name="facebook_app_id">292261002195382</string>-->
@@ -245,6 +247,20 @@
     <string name="offline_action_queued">Saved offline — will sync when online</string>
     <string name="article_menu_title">ANYNEWS</string>
     <string name="report_content">Report</string>
+    <string name="sponsored_ad_label">Sponsored Ad</string>
+    <string name="sponsored_ad_badge">AD</string>
+    <string name="ad_center_title">AnyNews Ad Center</string>
+    <string name="ad_center_share">Share this ad</string>
+    <string name="ad_center_share_sub">Share ad to your friends</string>
+    <string name="ad_center_report">Report Story</string>
+    <string name="ad_center_report_sub">Help us improve better</string>
+    <string name="ad_center_save">Save this ad</string>
+    <string name="ad_center_save_sub">Saved to your bookmarks</string>
+    <string name="ad_center_saved">Saved this ad</string>
+    <string name="ad_center_advertise">Advertise on AnyNews</string>
+    <string name="ad_center_advertise_sub">Grow your business with AnyNews</string>
+    <string name="ad_center_whatsapp_missing">WhatsApp number not configured. Set Full jatakam WhatsApp in admin Configuration.</string>
+    <string name="ad_center_advertise_prefill">Hi, I want to advertise on AnyNews.</string>
     <string name="status_videos">Status Videos</string>
     <string name="become_a_reporter">Become a Reporter</string>
     <string name="become_reporter_profile_section">Complete your reporter profile</string>
@@ -318,6 +334,10 @@
     <string name="profile_change_photo">Change photo</string>
     <string name="profile_camera_permission_needed">Camera permission is required to take a photo</string>
     <string name="profile_photo_upload_failed">Could not update profile photo. Try again.</string>
+    <string name="reporter_photo_reminder_title">Add a profile photo</string>
+    <string name="reporter_photo_reminder_message">Your name shows in feeds without a photo. Upload one anytime from Profile — optional, but helps readers recognize you.</string>
+    <string name="reporter_photo_reminder_add">Upload photo</string>
+    <string name="reporter_photo_reminder_later">Maybe later</string>
 
     <!-- Settings screen (mock-aligned Telugu defaults; translator overrides when available) -->
     <string name="settings_title">సెట్టింగ్స్</string>
