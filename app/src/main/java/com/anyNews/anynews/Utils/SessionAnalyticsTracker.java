@@ -839,6 +839,15 @@ public final class SessionAnalyticsTracker {
                     } catch (Exception ignored) {
                     }
                     try {
+                        if (resBody.has("hide_district_on_main_feed")
+                                && !resBody.get("hide_district_on_main_feed").isJsonNull()) {
+                            DistrictPinVisibilityConfig.saveFromServer(
+                                    context,
+                                    resBody.get("hide_district_on_main_feed").getAsBoolean());
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    try {
                         Boolean lrEn = null;
                         Integer lrWin = null;
                         Integer lrShow = null;

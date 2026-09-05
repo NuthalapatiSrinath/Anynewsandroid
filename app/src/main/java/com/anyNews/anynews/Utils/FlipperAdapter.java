@@ -2078,12 +2078,31 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
-        String label = resolveLocationLabel(post);
+        boolean showDistrict =
+                DistrictPinVisibilityConfig.shouldShowDistrict(context, categery_id);
+        String label = showDistrict ? resolveLocationLabel(post) : "";
+        boolean hasLabel = isUsableLocationLabel(label);
+        if (!showDistrict || !hasLabel) {
+            if (labelView != null) {
+                labelView.setText("");
+                labelView.setVisibility(View.GONE);
+            }
+            if (pinView != null) {
+                pinView.setVisibility(View.GONE);
+            }
+            if (pill != null) {
+                pill.setVisibility(View.GONE);
+                pill.setAlpha(0f);
+            }
+            return;
+        }
         if (labelView != null) {
             labelView.setVisibility(View.VISIBLE);
             labelView.setAlpha(1f);
             labelView.setText(label);
-            labelView.setMaxLines(1);
+            // District sits on its own footer row; allow 2 lines so long Telugu
+            // names wrap instead of crushing the reporter strip above.
+            labelView.setMaxLines(2);
             labelView.setEllipsize(TextUtils.TruncateAt.END);
             try {
                 labelView.setTextColor(ContextCompat.getColor(context, R.color.black));
@@ -2093,11 +2112,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 } catch (Exception ignored) {
                 }
             }
-            ViewGroup.LayoutParams lp = labelView.getLayoutParams();
-            if (lp != null && lp.width == 0) {
-                lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
-                labelView.setLayoutParams(lp);
-            }
+            // Keep weighted width (0dp + weight) from XML so the label fills the
+            // district row; do not force WRAP_CONTENT (that re-expanded long names).
         }
         if (pinView != null) {
             pinView.setVisibility(View.VISIBLE);

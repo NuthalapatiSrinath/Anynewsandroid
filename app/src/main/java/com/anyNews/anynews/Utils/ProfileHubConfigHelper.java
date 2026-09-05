@@ -156,8 +156,9 @@ public final class ProfileHubConfigHelper {
     }
 
     /**
-     * Become a Reporter profile row. Default true until admin turns hiring OFF
-     * ({@code enable_become_a_reporter} via splash).
+     * Become a Reporter hiring flag from splash ({@code enable_become_a_reporter}).
+     * When false the Profile row still shows (except for reporters); tap shows
+     * the localized not-hiring message after login instead of the application form.
      */
     public static void saveBecomeAReporterEnabled(
             @Nullable Context context, @Nullable Boolean enabled) {
@@ -168,6 +169,98 @@ public final class ProfileHubConfigHelper {
 
     public static boolean isBecomeAReporterEnabled(@Nullable Context context) {
         return readBool(context, Constants.ENABLE_BECOME_A_REPORTER, true);
+    }
+
+    /**
+     * Persist per-language not-hiring messages from splash JSON object/map.
+     * Null leaves cache; empty object still overwrites with "{}" so admin clears work.
+     */
+    public static void saveNotHiringMessages(
+            @Nullable Context context, @Nullable Object raw) {
+        if (context == null || raw == null) return;
+        try {
+            String json;
+            if (raw instanceof String) {
+                json = ((String) raw).trim();
+                if (json.isEmpty() || "null".equalsIgnoreCase(json)) return;
+            } else if (raw instanceof org.json.JSONObject) {
+                json = raw.toString();
+            } else if (raw instanceof java.util.Map) {
+                json = new org.json.JSONObject((java.util.Map<?, ?>) raw).toString();
+            } else {
+                // Gson LinkedTreeMap / JsonObject-like
+                json = String.valueOf(raw);
+                if (json.isEmpty() || "null".equalsIgnoreCase(json)) return;
+                // Ensure it parses as object
+                new org.json.JSONObject(json);
+            }
+            SharedPrefsData.putString(
+                    context.getApplicationContext(),
+                    Constants.BECOME_A_REPORTER_NOT_HIRING_MESSAGES,
+                    json,
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Default English not-hiring copy when splash/admin has nothing for the language. */
+    public static final String DEFAULT_NOT_HIRING_MESSAGE =
+            "Currently we are not hiring any reporters, please come back later";
+
+    @NonNull
+    public static String getNotHiringMessage(@Nullable Context context) {
+        if (context == null) return DEFAULT_NOT_HIRING_MESSAGE;
+        int langId = 0;
+        try {
+            langId = SharedPrefsData.getInt(
+                    context.getApplicationContext(),
+                    Constants.LanguageID,
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        return getNotHiringMessage(context, langId);
+    }
+
+    @NonNull
+    public static String getNotHiringMessage(@Nullable Context context, int languageId) {
+        String fallback = builtInNotHiringFallback(languageId);
+        if (context == null) return fallback;
+        try {
+            String raw = SharedPrefsData.getString(
+                    context.getApplicationContext(),
+                    Constants.BECOME_A_REPORTER_NOT_HIRING_MESSAGES,
+                    Constants.PREF_NAME);
+            if (TextUtils.isEmpty(raw)) return fallback;
+            org.json.JSONObject map = new org.json.JSONObject(raw);
+            String byId = map.optString(String.valueOf(languageId), "").trim();
+            if (!byId.isEmpty()) return byId;
+            String en = map.optString("en", "").trim();
+            if (!en.isEmpty()) return en;
+            String zero = map.optString("0", "").trim();
+            if (!zero.isEmpty()) return zero;
+        } catch (Exception ignored) {
+        }
+        return fallback;
+    }
+
+    @NonNull
+    private static String builtInNotHiringFallback(int languageId) {
+        switch (languageId) {
+            case 1:
+                return "നിലവിൽ ഞങ്ങൾ റിപ്പോർട്ടർമാരെ നിയമിക്കുന്നില്ല, ദയവായി പിന്നീട് വരുക";
+            case 2:
+                return "वर्तमान में हम कोई रिपोर्टर नहीं रख रहे हैं, कृपया बाद में आएं";
+            case 3:
+                return "ప్రస్తుతం మేము రిపోర్టర్లను నియమించడం లేదు, దయచేసి తర్వాత రండి";
+            case 4:
+                return "தற்போது நாங்கள் ரிப்போர்ட்டர்களை நியமிக்கவில்லை, தயவுசெய்து பின்னர் வாருங்கள்";
+            case 5:
+                return "ಪ್ರಸ್ತುತ ನಾವು ಯಾವುದೇ ರಿಪೋರ್ಟರ್‌ಗಳನ್ನು ನೇಮಿಸುತ್ತಿಲ್ಲ, ದಯವಿಟ್ಟು ನಂತರ ಬನ್ನಿ";
+            case 6:
+                return "ବର୍ତ୍ତମାନ ଆମେ କୌଣସି ରିପୋର୍ଟର୍ ନିଯୁକ୍ତ କରୁନାହୁଁ, ଦୟାକରି ପରେ ଆସନ୍ତୁ";
+            default:
+                return DEFAULT_NOT_HIRING_MESSAGE;
+        }
     }
 
     public static boolean isBookmarksVisible(@Nullable Context context) {

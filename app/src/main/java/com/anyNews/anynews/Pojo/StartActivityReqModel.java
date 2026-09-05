@@ -361,6 +361,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean newsTapHalfHideEngagement;
 
+        /**
+         * Hide district on main News; show only in Local. Null on old servers.
+         * Default ON when missing from prefs.
+         */
+        @SerializedName("hide_district_on_main_feed")
+        @Expose
+        private Boolean hideDistrictOnMainFeed;
+
         /** Way2-style live readers badge (half articles). Null on old servers. */
         @SerializedName("live_readers_enabled")
         @Expose
@@ -432,6 +440,10 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("enable_become_a_reporter")
         @Expose
         private Boolean enableBecomeAReporter;
+
+        @SerializedName("become_a_reporter_not_hiring_messages")
+        @Expose
+        private Object becomeAReporterNotHiringMessages;
 
         @SerializedName("profile_show_bookmarks")
         @Expose
@@ -724,6 +736,10 @@ public class StartActivityReqModel implements Serializable {
             return newsTapHalfHideEngagement;
         }
 
+        public Boolean getHideDistrictOnMainFeed() {
+            return hideDistrictOnMainFeed;
+        }
+
         public Boolean getLiveReadersEnabled() {
             return liveReadersEnabled;
         }
@@ -776,6 +792,10 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getEnableBecomeAReporter() {
             return enableBecomeAReporter;
+        }
+
+        public Object getBecomeAReporterNotHiringMessages() {
+            return becomeAReporterNotHiringMessages;
         }
 
         public Boolean getProfileShowBookmarks() {

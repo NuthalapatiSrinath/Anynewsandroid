@@ -52,6 +52,7 @@ import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.NewsTapModeConfig;
+import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.LiveReadersConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
@@ -1549,6 +1550,10 @@ public class StartingActivity extends AppCompatActivity {
                         ProfileHubConfigHelper.saveBecomeAReporterEnabled(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getEnableBecomeAReporter());
+                        ProfileHubConfigHelper.saveNotHiringMessages(
+                                getApplicationContext(),
+                                startActivityReqModel.getData()
+                                        .getBecomeAReporterNotHiringMessages());
                         // Contact Us mailto target from Root_Settings (null/blank keeps cache).
                         ProfileHubConfigHelper.saveContactEmail(
                                 getApplicationContext(),
@@ -1725,6 +1730,9 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getNewsTapFullUpperPct(),
                                 startActivityReqModel.getData().getNewsTapFullRightRailPct(),
                                 startActivityReqModel.getData().getNewsTapHalfHideEngagement());
+                        DistrictPinVisibilityConfig.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getHideDistrictOnMainFeed());
                         LiveReadersConfig.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getLiveReadersEnabled(),

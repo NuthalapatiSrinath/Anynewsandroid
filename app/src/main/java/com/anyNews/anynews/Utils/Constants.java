@@ -258,6 +258,11 @@ public class Constants {
      */
     public static String NEWS_TAP_HALF_HIDE_ENGAGEMENT = "news_tap_half_hide_engagement";
     /**
+     * Hide district pin/label on main News feed; show only in Local.
+     * Default true. Splash/session: {@code hide_district_on_main_feed}.
+     */
+    public static String HIDE_DISTRICT_ON_MAIN_FEED = "hide_district_on_main_feed";
+    /**
      * Way2-style live readers badge on half articles (splash/session/articles).
      * Default OFF.
      */
@@ -293,6 +298,9 @@ public class Constants {
     public static String ENABLE_STATUS_VIDEOS = "enable_status_videos";
     /** Profile hub Become a Reporter row (splash hiring toggle). Default true. */
     public static String ENABLE_BECOME_A_REPORTER = "enable_become_a_reporter";
+    /** JSON map of language_id → not-hiring message (splash). */
+    public static String BECOME_A_REPORTER_NOT_HIRING_MESSAGES =
+            "become_a_reporter_not_hiring_messages";
     /** Login source flag: reopen applicant flow after OTP. */
     public static String LOGIN_SOURCE_BECOME_REPORTER = "login_source_become_a_reporter";
     /** Profile hub: hide Status Videos "New" badge after user opens Status Videos once. */
