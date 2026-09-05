@@ -227,6 +227,58 @@ public final class DistrictLabelHelper {
     }
 
     /**
+     * Look up a district display name for {@code distId} in the current language
+     * cache (optionally scoped by {@code stateId}). Prefers native-script names.
+     */
+    @Nullable
+    public static String lookupLocalizedNameForDistrict(
+            @Nullable Context context, int languageId, int distId, int stateId) {
+        if (context == null || languageId <= 0 || distId <= 0) {
+            return null;
+        }
+        Context app = context.getApplicationContext();
+        int sid = stateId;
+        if (sid <= 0) {
+            sid = SelectionListCache.findStateIdForDistrict(app, languageId, distId);
+        }
+        if (sid <= 0) {
+            sid = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
+        }
+        if (sid <= 0) {
+            return null;
+        }
+        try {
+            List<DistricsModel.Datum> list =
+                    SelectionListCache.loadDistricts(app, languageId, sid);
+            if (list == null || list.isEmpty()) {
+                return null;
+            }
+            String latinFallback = null;
+            for (DistricsModel.Datum d : list) {
+                if (d == null || d.getId() == null || d.getId() != distId) {
+                    continue;
+                }
+                if (!isUsable(d.getName())) {
+                    continue;
+                }
+                String name = d.getName().trim();
+                if (isClearScriptConflict(name, languageId)) {
+                    continue;
+                }
+                if (!needsNativeScriptUpgrade(name, languageId)) {
+                    return name;
+                }
+                if (latinFallback == null) {
+                    latinFallback = name;
+                }
+            }
+            return latinFallback;
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
      * Look up the selected district's display name from the language+state district
      * list cache (same source as the change-district picker).
      */
@@ -238,32 +290,7 @@ public final class DistrictLabelHelper {
         Context app = context.getApplicationContext();
         int distId = getStoredDistId(app);
         int stateId = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
-        if (distId <= 0 || stateId <= 0) {
-            return null;
-        }
-        try {
-            List<DistricsModel.Datum> list =
-                    SelectionListCache.loadDistricts(app, languageId, stateId);
-            if (list == null || list.isEmpty()) {
-                return null;
-            }
-            for (DistricsModel.Datum d : list) {
-                if (d == null || d.getId() == null) {
-                    continue;
-                }
-                if (d.getId() == distId && isUsable(d.getName())) {
-                    String name = d.getName().trim();
-                    // Prefer native-script names; skip Latin entries if present.
-                    if (!needsNativeScriptUpgrade(name, languageId)) {
-                        return name;
-                    }
-                    // Keep as weak fallback if list only has Latin.
-                    return name;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
+        return lookupLocalizedNameForDistrict(context, languageId, distId, stateId);
     }
 
     /** True when label is clearly another Indic script than the selected language. */

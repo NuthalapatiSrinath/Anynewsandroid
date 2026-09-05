@@ -1574,6 +1574,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean pendingNotifPermViaAdminReprompt = false;
     /** Avoid stacking multiple soft notification enable dialogs. */
     private boolean notificationSettingsDialogShowing = false;
+    /**
+     * After the user taps Allow (or Open settings) on the soft notification dialog,
+     * suppress ask-on-open re-shows across the permission / Settings pause→resume
+     * cycle so ALLOW cannot loop on the same open. Cleared on real Home stop
+     * (not when leaving for the system permission UI / app notification Settings).
+     * Not set for Not now — that may ask again on the next resume per config.
+     */
+    private boolean notificationSoftAllowSettledThisOpen = false;
+    /** True while we expect pause/stop from POST_NOTIFICATIONS or Open settings. */
+    private boolean expectNotifSettingsOrPermReturn = false;
 
     private boolean isSystemNotificationsEnabledSafe() {
         try {
@@ -1835,7 +1845,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void handlePostNotificationsPermissionResult(boolean granted) {
         final boolean viaAdmin = pendingNotifPermViaAdminReprompt;
         pendingNotifPermViaAdminReprompt = false;
+        expectNotifSettingsOrPermReturn = false;
+        // Permission UI always causes pause/resume — keep ask-on-open settled so
+        // the soft dialog cannot immediately reappear after Allow/Deny.
+        askOnOpenHandledThisResume = true;
         if (granted) {
+            notificationSoftAllowSettledThisOpen = false;
             onNotificationPermissionGrantedFromReprompt(viaAdmin);
             return;
         }
@@ -1844,9 +1859,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 Constants.NOTIFICATION_ENABLED,
                 false,
                 Constants.PREF_NAME);
-        // User tapped Don't allow (or silent deny). Stay on the news feed —
-        // do NOT jump to Settings and do NOT stack another dialog this resume.
-        // Ask-on-open will try again on the next open/resume while the admin flag is ON.
+        // Soft-Allow → OS Don't allow: stay dismissed for this open (no soft loop).
+        // Next real background→resume may ask again while admin ask-on-open is ON.
+        notificationSoftAllowSettledThisOpen = true;
     }
 
     /**
@@ -1858,6 +1873,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void showSoftNotificationEnableDialog() {
         if (isFinishing() || isDestroyed()) return;
         if (notificationSettingsDialogShowing) return;
+        if (notificationSoftAllowSettledThisOpen) return;
         if (isSystemNotificationsEnabledSafe() && hasPostNotificationsPermission()) {
             ensureNotificationPrefAlignedWithSystem(pendingNotifPermViaAdminReprompt);
             return;
@@ -1875,20 +1891,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     .setPositiveButton(
                             "Allow",
                             (dialog, which) -> {
+                                // Advance state for this open so pause→resume from the
+                                // OS dialog / Settings cannot re-show this soft prompt.
+                                notificationSoftAllowSettledThisOpen = true;
+                                askOnOpenHandledThisResume = true;
                                 if (needSettingsForTray) {
-                                    // Tray master off with runtime already granted — only Settings can fix.
+                                    expectNotifSettingsOrPermReturn = true;
                                     openAppNotificationSettingsForReprompt();
                                     return;
                                 }
-                                // Retry OS Allow/Don't allow (even after a prior deny).
-                                // Do not auto-open Settings here — that is the neutral button.
-                                pendingNotifPermViaAdminReprompt = true;
-                                launchPostNotificationsSystemDialog();
+                                if (canShowPostNotificationsSystemDialog()) {
+                                    expectNotifSettingsOrPermReturn = true;
+                                    pendingNotifPermViaAdminReprompt = true;
+                                    launchPostNotificationsSystemDialog();
+                                    return;
+                                }
+                                // OS will not show POST_NOTIFICATIONS again — open
+                                // Settings once from this user tap (not a loop).
+                                expectNotifSettingsOrPermReturn = true;
+                                openAppNotificationSettingsForReprompt();
                             })
                     .setNeutralButton(
                             "Open settings",
-                            (dialog, which) -> openAppNotificationSettingsForReprompt())
-                    .setNegativeButton("Not now", null)
+                            (dialog, which) -> {
+                                notificationSoftAllowSettledThisOpen = true;
+                                askOnOpenHandledThisResume = true;
+                                expectNotifSettingsOrPermReturn = true;
+                                openAppNotificationSettingsForReprompt();
+                            })
+                    .setNegativeButton(
+                            "Not now",
+                            (dialog, which) -> {
+                                // Dismiss until next open/resume — do not settle Allow.
+                                askOnOpenHandledThisResume = true;
+                            })
                     .setOnDismissListener(d -> notificationSettingsDialogShowing = false);
             builder.show();
         } catch (Exception e) {
@@ -14167,10 +14203,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         try {
-            // Fresh resume → allow ask-on-open again if notifications still OFF.
-            askOnOpenHandledThisResume = false;
-            // Admin re-prompt / install POST_NOTIFICATIONS before soft GPS so one dialog at a time.
-            maybeRequestInstallAndRepromptPermissions();
+            // Fresh resume → allow ask-on-open again if notifications still OFF,
+            // unless Allow already advanced this open (permission/Settings return).
+            if (notificationSoftAllowSettledThisOpen) {
+                askOnOpenHandledThisResume = true;
+                expectNotifSettingsOrPermReturn = false;
+                if (isSystemNotificationsEnabledSafe() && hasPostNotificationsPermission()) {
+                    ensureNotificationPrefAlignedWithSystem(true);
+                    notificationSoftAllowSettledThisOpen = false;
+                }
+                // Do not re-show soft / OS prompt in a loop after Allow.
+            } else {
+                askOnOpenHandledThisResume = false;
+                // Admin re-prompt / install POST_NOTIFICATIONS before soft GPS so one dialog at a time.
+                maybeRequestInstallAndRepromptPermissions();
+            }
         } catch (Exception ignored) {
         }
         try {
@@ -14543,6 +14590,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         }
 
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Real background (Home / other app) — clear Allow-settled so next open can ask.
+        // Leaving for POST_NOTIFICATIONS / app notification Settings keeps settled so
+        // return does not immediately re-show the soft dialog.
+        if (!expectNotifSettingsOrPermReturn) {
+            notificationSoftAllowSettledThisOpen = false;
+        }
     }
 
     private Context context;

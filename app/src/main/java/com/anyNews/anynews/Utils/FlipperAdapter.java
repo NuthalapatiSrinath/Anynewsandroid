@@ -1940,8 +1940,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * District / feed label for the location pill.
      * Prefer the post's server {@code location_label} when it matches the current
      * language script; under Indic languages, upgrade Latin-only labels (e.g.
-     * English "Anakapalli") to the localized selected-district name.
+     * English "Anakapalli") to the localized name for the <b>post</b> district
+     * (cache) or the selected district when they match.
      * Never show another Indic script (e.g. Malayalam on a Telugu session).
+     * When the server label is missing or wrong-script, resolve from post
+     * {@code dist_id} via the language district cache so Telugu cards are not blank.
      */
     private String resolveLocationLabel(@Nullable ModelClass.Datum post) {
         String selected = DistrictLabelHelper.resolveDisplayLabel(context);
@@ -1955,6 +1958,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 && !DistrictLabelHelper.needsNativeScriptUpgrade(selected, langId);
 
         if (post != null) {
+            int postDistId = post.getDist_id() != null ? post.getDist_id() : 0;
+            int postStateId = post.getState_id() != null ? post.getState_id() : 0;
+            String fromPostGeo = DistrictLabelHelper.lookupLocalizedNameForDistrict(
+                    context, langId, postDistId, postStateId);
+            boolean fromPostGeoOk = isUsableLocationLabel(fromPostGeo)
+                    && DistrictLabelHelper.labelCompatibleWithLanguage(fromPostGeo, langId);
+
             String postLabel = post.getLocation_label();
             if (isUsableLocationLabel(postLabel)) {
                 String trimmed = postLabel.trim();
@@ -1962,29 +1972,50 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         DistrictLabelHelper.needsNativeScriptUpgrade(trimmed, langId);
                 boolean postCompatible =
                         DistrictLabelHelper.labelCompatibleWithLanguage(trimmed, langId);
-                if (postNeedsUpgrade && selectedNative
-                        && (categery_id == -1
-                        || DistrictLabelHelper.matchesStoredName(context, trimmed))) {
-                    my_feed_name = selected;
-                    return selected;
-                }
-                if (!postNeedsUpgrade && postCompatible) {
+                if (postNeedsUpgrade) {
+                    // Latin server label → prefer native name for this post's district.
+                    if (fromPostGeoOk
+                            && !DistrictLabelHelper.needsNativeScriptUpgrade(fromPostGeo, langId)) {
+                        return fromPostGeo.trim();
+                    }
+                    if (selectedNative
+                            && (categery_id == -1
+                            || DistrictLabelHelper.matchesStoredName(context, trimmed)
+                            || (postDistId > 0
+                            && postDistId == DistrictLabelHelper.getStoredDistId(context)))) {
+                        my_feed_name = selected;
+                        return selected;
+                    }
+                    // Neutral Latin is still better than a blank pin.
+                    if (postCompatible) {
+                        return trimmed;
+                    }
+                } else if (postCompatible) {
                     return trimmed;
                 }
                 // Foreign-script / wrong-language label — never display it.
+                if (fromPostGeoOk) {
+                    return fromPostGeo.trim();
+                }
                 if (categery_id == -1 && selectedNative) {
                     my_feed_name = selected;
                     return selected;
                 }
-                // Latin that didn't upgrade: still show if compatible (neutral).
-                if (postCompatible) {
-                    return trimmed;
+                if (selectedNative && postDistId > 0
+                        && postDistId == DistrictLabelHelper.getStoredDistId(context)) {
+                    my_feed_name = selected;
+                    return selected;
                 }
                 my_feed_name = "";
                 return "";
             }
-            // Post has no location_label: only stamp selected on Local feed.
-            if (categery_id == -1 && selectedNative) {
+            // No server location_label: resolve from post geo, then selected when same dist / Local.
+            if (fromPostGeoOk) {
+                return fromPostGeo.trim();
+            }
+            if (selectedNative && (categery_id == -1
+                    || (postDistId > 0
+                    && postDistId == DistrictLabelHelper.getStoredDistId(context)))) {
                 my_feed_name = selected;
                 return selected;
             }
@@ -2001,6 +2032,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     private static boolean isUsableLocationLabel(String s) {
         return DistrictLabelHelper.isUsable(s);
+    }
+
+    /** Drop an in-feed ratings card after Play Store CTA (never leave thank-you). */
+    private void removeRatingsCardAt(int position) {
+        try {
+            if (list == null || position < 0 || position >= list.size()) {
+                return;
+            }
+            ModelClass.Datum item = list.get(position);
+            if (item == null || item.getPostType() == null
+                    || !item.getPostType().equalsIgnoreCase("ratings")) {
+                // Position may have shifted — scan once.
+                for (int i = 0; i < list.size(); i++) {
+                    ModelClass.Datum d = list.get(i);
+                    if (d != null && d.getPostType() != null
+                            && d.getPostType().equalsIgnoreCase("ratings")) {
+                        list.remove(i);
+                        notifyDataSetChanged();
+                        return;
+                    }
+                }
+                return;
+            }
+            list.remove(position);
+            notifyDataSetChanged();
+        } catch (Exception e) {
+            showLog("removeRatingsCardAt: " + e.getMessage());
+        }
     }
 
     /**
@@ -3048,43 +3107,65 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         Button buttonRateOnPlay = convertView.findViewById(R.id.buttonAppSubmit);
                         TextView textViewRatSubTitle = convertView.findViewById(R.id.textViewRatSubTitle);
                         TextView textViewRatingTitle = convertView.findViewById(R.id.textViewRatingTitle);
+                        // Never park on "Thank you for your feedback" for this CTA.
+                        if (textViewRatSubTitle != null) {
+                            textViewRatSubTitle.setVisibility(GONE);
+                        }
                         boolean isAppRatingSubmitted = SharedPrefsData.getBool(
                                 context, Constants.APP_RATING_SUBMITTED, Constants.PREF_NAME);
                         if (isAppRatingSubmitted) {
-                            textViewRatSubTitle.setVisibility(VISIBLE);
-                            textViewRatingTitle.setVisibility(GONE);
-                            buttonRateOnPlay.setVisibility(GONE);
-                        } else {
-                            textViewRatingTitle.setVisibility(VISIBLE);
-                            textViewRatSubTitle.setVisibility(GONE);
-                            buttonRateOnPlay.setVisibility(VISIBLE);
-                            buttonRateOnPlay.setOnClickListener(view -> {
-                                // Mark done before launching so the card does not nag again.
-                                SharedPrefsData.putBool(
-                                        context, Constants.APP_RATING_SUBMITTED, true, Constants.PREF_NAME);
-                                ReadArticleStore.markRatingsPromptSeen(context);
-                                textViewRatSubTitle.setVisibility(VISIBLE);
+                            // Already acted — drop the card so the user is not stuck on thank-you.
+                            if (textViewRatingTitle != null) {
                                 textViewRatingTitle.setVisibility(GONE);
+                            }
+                            if (buttonRateOnPlay != null) {
                                 buttonRateOnPlay.setVisibility(GONE);
+                            }
+                            final int ratingsPos = position;
+                            convertView.post(() -> removeRatingsCardAt(ratingsPos));
+                        } else {
+                            if (textViewRatingTitle != null) {
+                                textViewRatingTitle.setVisibility(VISIBLE);
+                            }
+                            if (buttonRateOnPlay != null) {
+                                buttonRateOnPlay.setVisibility(VISIBLE);
+                                buttonRateOnPlay.setOnClickListener(view -> {
+                                    SharedPrefsData.putBool(
+                                            context, Constants.APP_RATING_SUBMITTED, true, Constants.PREF_NAME);
+                                    ReadArticleStore.markRatingsPromptSeen(context);
 
-                                Activity host = activity;
-                                if (host == null && context instanceof Activity) {
-                                    host = (Activity) context;
-                                }
-                                if (host != null && !host.isFinishing()) {
-                                    PlayInAppReviewHelper.launch(host, null);
-                                } else {
-                                    try {
-                                        final String appPackageName = context.getPackageName();
-                                        context.startActivity(new Intent(Intent.ACTION_VIEW,
-                                                Uri.parse("market://details?id=" + appPackageName)));
-                                    } catch (android.content.ActivityNotFoundException anfe) {
-                                        context.startActivity(new Intent(Intent.ACTION_VIEW,
-                                                Uri.parse("https://play.google.com/store/apps/details?id="
-                                                        + context.getPackageName())));
+                                    Activity host = activity;
+                                    if (host == null && context instanceof Activity) {
+                                        host = (Activity) context;
                                     }
-                                }
-                            });
+                                    // Primary: open Play Store listing. Do not swap UI to thank-you.
+                                    boolean openedStore = false;
+                                    if (host != null && !host.isFinishing()) {
+                                        openedStore = PlayInAppReviewHelper.openPlayStoreListing(host);
+                                        if (!openedStore) {
+                                            PlayInAppReviewHelper.launch(host, null);
+                                        }
+                                    } else {
+                                        try {
+                                            final String appPackageName = context.getPackageName();
+                                            context.startActivity(new Intent(Intent.ACTION_VIEW,
+                                                    Uri.parse("market://details?id=" + appPackageName)));
+                                            openedStore = true;
+                                        } catch (android.content.ActivityNotFoundException anfe) {
+                                            try {
+                                                context.startActivity(new Intent(Intent.ACTION_VIEW,
+                                                        Uri.parse("https://play.google.com/store/apps/details?id="
+                                                                + context.getPackageName())));
+                                                openedStore = true;
+                                            } catch (Exception ignored) {
+                                            }
+                                        }
+                                    }
+                                    // Leave the prompt; remove so return from Play is not thank-you.
+                                    removeRatingsCardAt(position);
+                                    showLog("rate_on_play openedStore=" + openedStore);
+                                });
+                            }
                         }
                         break;
                     case "share_app":
