@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFF7F2"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="#FFFF6B00"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="12dp">
+
+        <ImageButton
+            android:id="@+id/advertise_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/anynews"
+            android:src="@drawable/ic_profile_chevron_right"
+            android:rotation="180"
+            app:tint="#FFFFFF" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/advertise_on_anynews"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/advertise_offer_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxHeight="120dp"
+        android:padding="14dp"
+        android:scrollbars="vertical"
+        android:text="@string/advertise_offer_default"
+        android:textColor="#FFFF6B00"
+        android:textSize="15sp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#FFE8DCCF" />
+
+    <!-- Lead form -->
+    <ScrollView
+        android:id="@+id/advertise_form_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:id="@+id/advertise_form"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <EditText
+                android:id="@+id/advertise_name"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@android:drawable/edit_text"
+                android:hint="@string/advertise_hint_name"
+                android:inputType="textPersonName"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/advertise_mobile"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="10dp"
+                android:background="@android:drawable/edit_text"
+                android:hint="@string/advertise_hint_mobile"
+                android:inputType="phone"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textSize="15sp" />
+
+            <EditText
+                android:id="@+id/advertise_promo"
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:layout_marginTop="10dp"
+                android:background="@android:drawable/edit_text"
+                android:gravity="top|start"
+                android:hint="@string/advertise_hint_promo"
+                android:inputType="textMultiLine"
+                android:padding="12dp"
+                android:textSize="15sp" />
+
+            <TextView
+                android:id="@+id/advertise_start_btn"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="16dp"
+                android:background="#FFFF6B00"
+                android:gravity="center"
+                android:text="@string/advertise_start_chat"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Chat -->
+    <LinearLayout
+        android:id="@+id/advertise_chat"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/advertise_messages"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:padding="12dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#FFFFFF"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <ImageButton
+                android:id="@+id/advertise_attach"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/advertise_attach"
+                android:src="@drawable/ic_hub_share"
+                app:tint="#FF6B00" />
+
+            <ImageButton
+                android:id="@+id/advertise_voice"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/advertise_voice"
+                android:src="@drawable/ic_hub_feedback"
+                app:tint="#FF6B00" />
+
+            <EditText
+                android:id="@+id/advertise_input"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="@android:drawable/edit_text"
+                android:hint="@string/advertise_message_hint"
+                android:inputType="textCapSentences|textMultiLine"
+                android:maxLines="4"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/advertise_send"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginStart="6dp"
+                android:background="#FFFF6B00"
+                android:gravity="center"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:text="@string/advertise_send"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

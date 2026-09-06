@@ -96,6 +96,7 @@ import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
+import com.anyNews.anynews.Utils.ContactUsChooser;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
@@ -708,22 +709,17 @@ public class newProfileDetails extends AppCompatActivity {
         if (edit_profile_icon != null) {
             edit_profile_icon.setOnClickListener(v -> showEditNameDialog());
         }
-        layoutAppDelete.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                showAccountDeletePopup();
-            }
-        });
+        if (layoutAppDelete != null) {
+            layoutAppDelete.setVisibility(View.GONE);
+            layoutAppDelete.setOnClickListener(null);
+        }
         if (layoutAppLogout != null) {
             layoutAppLogout.setOnClickListener(v -> showLogoutConfirmDialog());
         }
-        account_delete.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-                showAccountDeletePopup();
-            }
-        });
+        if (account_delete != null) {
+            account_delete.setVisibility(View.GONE);
+            account_delete.setOnClickListener(null);
+        }
 
 
         if (username_text != null) {
@@ -2901,8 +2897,9 @@ public class newProfileDetails extends AppCompatActivity {
                 settingsRow.setVisibility(View.VISIBLE);
             }
         }
+        // Contact Us — visible for everyone including reporters (WhatsApp / Mail chooser).
         if (contact != null) {
-            contact.setVisibility(isReporter ? View.GONE : View.VISIBLE);
+            contact.setVisibility(View.VISIBLE);
         }
         if (layoutAppShare != null) {
             layoutAppShare.setVisibility(View.GONE);
@@ -4113,10 +4110,33 @@ public class newProfileDetails extends AppCompatActivity {
             layoutFeedback.setOnClickListener(v -> openHubMailto("Feedback — AnyNews"));
         }
 
-        // Contact Us → admin contact_email pref, else Config.LINK_CONTACT_EMAIL
+        // Contact Us → chooser (WhatsApp from Configuration, or Mail)
         View layoutContact = findViewById(R.id.layout_profile_contact);
         if (layoutContact != null) {
-            layoutContact.setOnClickListener(v -> openHubMailto("Contact — AnyNews"));
+            layoutContact.setVisibility(View.VISIBLE);
+            layoutContact.setOnClickListener(
+                    v -> ContactUsChooser.show(newProfileDetails.this, "Contact — AnyNews"));
+        }
+
+        // Advertise on AnyNews — all users
+        View layoutAdvertise = findViewById(R.id.layout_advertise_on_anynews);
+        TextView advertiseLabel = findViewById(R.id.profile_advertise_label);
+        TextView advertiseBadge = findViewById(R.id.profile_advertise_new_badge);
+        if (advertiseLabel != null) {
+            advertiseLabel.setTextSize(menuSp);
+            advertiseLabel.setText(R.string.advertise_on_anynews);
+        }
+        if (advertiseBadge != null) {
+            advertiseBadge.setVisibility(View.VISIBLE);
+        }
+        if (layoutAdvertise != null) {
+            layoutAdvertise.setVisibility(View.VISIBLE);
+            layoutAdvertise.setOnClickListener(
+                    v ->
+                            startActivity(
+                                    new Intent(
+                                            newProfileDetails.this,
+                                            AdvertiseOnAnyNewsActivity.class)));
         }
 
         // Bookmarks visibility
@@ -4176,22 +4196,75 @@ public class newProfileDetails extends AppCompatActivity {
         }
     }
 
-    /** Profile hub Contact / Feedback — same mailto targets as Settings Contact Us rows. */
+    /** Profile hub Contact / Feedback — chooser (WhatsApp or Mail). */
     private void openHubMailto(String subject) {
-        String to = ProfileHubConfigHelper.getContactEmail(this);
+        ContactUsChooser.show(this, subject);
+    }
+
+    /**
+     * Soft-refresh rewards_master + exclude_reporters from rewards_hub so
+     * Profile reflects admin toggle without requiring a full splash restart.
+     */
+    private void softRefreshRewardsFlags() {
         try {
-            Intent email = new Intent(Intent.ACTION_SENDTO);
-            email.setData(Uri.parse("mailto:" + to));
-            email.putExtra(Intent.EXTRA_SUBJECT, subject);
-            startActivity(Intent.createChooser(email, getString(R.string.profile_contact_us)));
-        } catch (Exception e) {
-            startActivity(new Intent(newProfileDetails.this, Settings_Scrren.class));
+            APIService api = RestApiClient.getClient().create(APIService.class);
+            JsonObject body = new JsonObject();
+            try {
+                body.addProperty(
+                        "draft_id",
+                        SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+                body.addProperty(
+                        "language_id",
+                        SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME));
+            } catch (Exception ignored) {
+            }
+            api.rewards_hub("v3", body)
+                    .enqueue(
+                            new Callback<JsonObject>() {
+                                @Override
+                                public void onResponse(
+                                        Call<JsonObject> call, Response<JsonObject> response) {
+                                    try {
+                                        JsonObject root = response.body();
+                                        if (root == null) return;
+                                        Boolean master = null;
+                                        Boolean exclude = null;
+                                        if (root.has("enabled") && !root.get("enabled").isJsonNull()) {
+                                            master = root.get("enabled").getAsBoolean();
+                                        }
+                                        if (root.has("exclude_reporters")
+                                                && !root.get("exclude_reporters").isJsonNull()) {
+                                            exclude = root.get("exclude_reporters").getAsBoolean();
+                                        }
+                                        if (master != null || exclude != null) {
+                                            DistrictPinVisibilityConfig.saveFromServer(
+                                                    newProfileDetails.this,
+                                                    null,
+                                                    master,
+                                                    null,
+                                                    exclude);
+                                        }
+                                        runOnUiThread(
+                                                () -> {
+                                                    try {
+                                                        bindProfileRewardsRow(15f);
+                                                        applyLoginGatedHubRows();
+                                                    } catch (Exception ignored) {
+                                                    }
+                                                });
+                                    } catch (Exception ignored) {
+                                    }
+                                }
+
+                                @Override
+                                public void onFailure(Call<JsonObject> call, Throwable t) {}
+                            });
+        } catch (Exception ignored) {
         }
     }
 
     /**
-     * Logout and Delete Account only for logged-in users (not guests / anonymous).
-     * Hides trailing dividers so the menu does not end with an orphan line.
+     * Logout only for logged-in users. Account delete removed from the app.
      */
     private void applyLoginGatedHubRows() {
         boolean loggedIn = SharedPrefsData.getBool(
@@ -4200,11 +4273,12 @@ public class newProfileDetails extends AppCompatActivity {
         if (layoutAppLogout != null) {
             layoutAppLogout.setVisibility(vis);
         }
+        // Product: never show account delete.
         if (layoutAppDelete != null) {
-            layoutAppDelete.setVisibility(vis);
+            layoutAppDelete.setVisibility(View.GONE);
         }
         if (account_delete != null) {
-            account_delete.setVisibility(vis);
+            account_delete.setVisibility(View.GONE);
         }
         View divBeforeAuth = findViewById(R.id.divider_before_delete_logout);
         if (divBeforeAuth != null) {
@@ -4510,6 +4584,7 @@ public class newProfileDetails extends AppCompatActivity {
         //    getWriterProfileData();
         try {
             applyLoginGatedHubRows();
+            softRefreshRewardsFlags();
             bindProfileLoginPill();
             bindReporterDesk();
             bindLocationRowText();

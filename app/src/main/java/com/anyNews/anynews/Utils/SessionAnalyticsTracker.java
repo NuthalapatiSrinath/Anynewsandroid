@@ -842,6 +842,7 @@ public final class SessionAnalyticsTracker {
                         Boolean hideDistrict = null;
                         Boolean rewardsMaster = null;
                         Boolean rewardsSlot = null;
+                        Boolean excludeReporters = null;
                         if (resBody.has("hide_district_on_main_feed")
                                 && !resBody.get("hide_district_on_main_feed").isJsonNull()) {
                             hideDistrict =
@@ -856,11 +857,21 @@ public final class SessionAnalyticsTracker {
                             rewardsSlot =
                                     resBody.get("rewards_in_main_feed_slot").getAsBoolean();
                         }
+                        if (resBody.has("rewards_exclude_reporters")
+                                && !resBody.get("rewards_exclude_reporters").isJsonNull()) {
+                            excludeReporters =
+                                    resBody.get("rewards_exclude_reporters").getAsBoolean();
+                        }
                         if (hideDistrict != null
                                 || rewardsMaster != null
-                                || rewardsSlot != null) {
+                                || rewardsSlot != null
+                                || excludeReporters != null) {
                             DistrictPinVisibilityConfig.saveFromServer(
-                                    context, hideDistrict, rewardsMaster, rewardsSlot);
+                                    context,
+                                    hideDistrict,
+                                    rewardsMaster,
+                                    rewardsSlot,
+                                    excludeReporters);
                         }
                     } catch (Exception ignored) {
                     }

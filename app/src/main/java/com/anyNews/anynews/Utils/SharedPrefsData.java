@@ -73,6 +73,28 @@ public class SharedPrefsData {
         }
     }
 
+    /**
+     * Same as {@link #putString} but {@code commit()} so the next {@link #getString}
+     * in this process never races (e.g. rewards_exclude_reporters after splash/session).
+     */
+    public static void putStringImmediate(Context context, String key, String value, String pref) {
+        if (context == null || key == null) {
+            return;
+        }
+        try {
+            SharedPreferences.Editor editor;
+            if (pref == null || pref.isEmpty()) {
+                editor = PreferenceManager.getDefaultSharedPreferences(context).edit();
+            } else {
+                editor = context.getSharedPreferences(pref, Context.MODE_PRIVATE).edit();
+            }
+            editor.putString(key, value);
+            editor.commit();
+        } catch (Exception e) {
+            putString(context, key, value, pref);
+        }
+    }
+
     public static String getString(Context context, String key, String pref) {
         if (context == null || key == null) {
             return null;

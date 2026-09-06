@@ -493,6 +493,24 @@ public interface APIService {
     @POST("app/{version}/rewards_earnings_status")
     Call<JsonObject> rewards_earnings_status(@Path("version") String version, @Body JsonObject body);
 
+    /** Advertise on AnyNews — offer banner + lead chat (no continuous polling). */
+    @POST("app/{version}/advertise_offer")
+    Call<JsonObject> advertise_offer(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/advertise_start")
+    Call<JsonObject> advertise_start(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/advertise_messages")
+    Call<JsonObject> advertise_messages(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/advertise_send")
+    Call<JsonObject> advertise_send(@Path("version") String version, @Body JsonObject body);
+
+    /** General media upload (image/video/voice) → OCI URL in extras.url. */
+    @Multipart
+    @POST("upload/Upload_File")
+    Call<JsonObject> uploadFile(@Part MultipartBody.Part body);
+
     @POST("app/{version}/session")
     Call<JsonObject> post_session(@Path("version") String version, @Body JsonObject session);
 

@@ -36,6 +36,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.NightModeHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
+import com.anyNews.anynews.Utils.ContactUsChooser;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.bumptech.glide.Glide;
 import com.google.gson.Gson;
@@ -494,51 +495,11 @@ public class Settings_Scrren extends AppCompatActivity {
     }
 
     private void openContactDialog() {
-        LanguageModelResponse.Data d =
-                languageModelResponse != null ? languageModelResponse.getData() : null;
-        String title =
-                firstNonEmpty(
-                        d != null ? d.getContactUs() : null, getString(R.string.settings_contact));
-        String optCrash =
-                firstNonEmpty(
-                        d != null ? d.getReportCrash() : null,
-                        getString(R.string.settings_contact_report_crash));
-        String optLang =
-                firstNonEmpty(
-                        d != null ? d.getLanguageIssue() : null,
-                        getString(R.string.settings_contact_language_issue));
-        String optFeedback =
-                firstNonEmpty(
-                        d != null ? d.getFeedback() : null, getString(R.string.settings_feedback));
-        final String[] options = {optCrash, optLang, optFeedback};
-
-        new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setItems(
-                        options,
-                        new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                String subject =
-                                        which >= 0 && which < options.length
-                                                ? options[which]
-                                                : title;
-                                openMailto(subject + " — AnyNews");
-                            }
-                        })
-                .show();
+        ContactUsChooser.show(this, "Contact — AnyNews");
     }
 
     private void openMailto(String subject) {
-        String to = ProfileHubConfigHelper.getContactEmail(this);
-        try {
-            Intent intent = new Intent(Intent.ACTION_SENDTO);
-            intent.setData(Uri.parse("mailto:" + to));
-            intent.putExtra(Intent.EXTRA_SUBJECT, subject);
-            startActivity(Intent.createChooser(intent, getString(R.string.profile_contact_us)));
-        } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, to, Toast.LENGTH_LONG).show();
-        }
+        ContactUsChooser.show(this, subject);
     }
 
     private void clearAppCache() {

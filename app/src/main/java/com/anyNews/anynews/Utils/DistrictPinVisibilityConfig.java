@@ -76,7 +76,9 @@ public final class DistrictPinVisibilityConfig {
                     Constants.PREF_NAME);
         }
         if (excludeReporters != null) {
-            SharedPrefsData.putString(
+            // commit() so Profile / feed gates see the new value immediately
+            // (apply() can race with onResume after session heartbeat).
+            SharedPrefsData.putStringImmediate(
                     app,
                     Constants.REWARDS_EXCLUDE_REPORTERS,
                     excludeReporters ? "true" : "false",
