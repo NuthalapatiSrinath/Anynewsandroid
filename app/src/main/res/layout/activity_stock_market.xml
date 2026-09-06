@@ -15,7 +15,7 @@
         android:paddingStart="12dp"
         android:paddingTop="10dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="8dp">
+        android:paddingBottom="6dp">
 
         <ImageView
             android:id="@+id/stock_btn_back"
@@ -41,7 +41,7 @@
                 android:includeFontPadding="false"
                 android:text="స్టాక్ మార్కెట్"
                 android:textColor="#FFFFFFFF"
-                android:textSize="18sp"
+                android:textSize="19sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -55,6 +55,7 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Index cards: depth + change chip + mini sparkline -->
     <LinearLayout
         android:id="@+id/stock_indices_row"
         android:layout_width="match_parent"
@@ -62,24 +63,28 @@
         android:orientation="horizontal"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="8dp">
+        android:paddingBottom="10dp">
 
         <LinearLayout
+            android:id="@+id/stock_nifty_card"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginEnd="6dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_du_card_stock"
-            android:foreground="@drawable/bg_du_stroke_stock"
+            android:background="@drawable/bg_stock_index_card"
+            android:elevation="2dp"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:includeFontPadding="false"
                 android:text="నిఫ్టీ 50"
-                android:textColor="#FFC7D2FE"
+                android:textColor="#FFA5B4FC"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
@@ -90,36 +95,54 @@
                 android:includeFontPadding="false"
                 android:text="—"
                 android:textColor="#FFFFFFFF"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:textStyle="bold"
                 tools:text="24,175.65" />
 
             <TextView
                 android:id="@+id/stock_nifty_change"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_stock_change_down"
                 android:includeFontPadding="false"
+                android:paddingStart="7dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="7dp"
+                android:paddingBottom="3dp"
                 android:text="—"
-                android:textColor="#FF94A3B8"
-                android:textSize="12sp" />
+                android:textColor="#FFF87171"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <com.anyNews.anynews.Ui.StockSparklineView
+                android:id="@+id/stock_nifty_spark"
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/stock_sensex_card"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_du_card_stock"
-            android:foreground="@drawable/bg_du_stroke_stock"
+            android:background="@drawable/bg_stock_index_card"
+            android:elevation="2dp"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:includeFontPadding="false"
                 android:text="సెన్సెక్స్"
-                android:textColor="#FFC7D2FE"
+                android:textColor="#FFA5B4FC"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
@@ -130,50 +153,74 @@
                 android:includeFontPadding="false"
                 android:text="—"
                 android:textColor="#FFFFFFFF"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:textStyle="bold"
                 tools:text="79,412.00" />
 
             <TextView
                 android:id="@+id/stock_sensex_change"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_stock_change_down"
                 android:includeFontPadding="false"
+                android:paddingStart="7dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="7dp"
+                android:paddingBottom="3dp"
                 android:text="—"
-                android:textColor="#FF94A3B8"
-                android:textSize="12sp" />
+                android:textColor="#FFF87171"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <com.anyNews.anynews.Ui.StockSparklineView
+                android:id="@+id/stock_sensex_spark"
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:layout_marginTop="8dp"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 
-    <EditText
-        android:id="@+id/stock_search"
+    <!-- Unmistakable search field -->
+    <LinearLayout
+        android:id="@+id/stock_search_wrap"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="48dp"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="12dp"
-        android:layout_marginBottom="8dp"
-        android:background="@drawable/bg_du_card_clip_soft"
-        android:hint="షేర్ శోధన (ఉదా: RELIANCE)"
-        android:imeOptions="actionSearch"
-        android:inputType="text"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:textColor="#FFFFFFFF"
-        android:textColorHint="#FF64748B"
-        android:textSize="14sp" />
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/bg_stock_search_selector"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="10dp">
 
-    <TextView
-        android:id="@+id/stock_list_label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:includeFontPadding="false"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="6dp"
-        android:text="ప్రముఖ షేర్లు"
-        android:textColor="#FFE2E8F0"
-        android:textSize="13sp"
-        android:textStyle="bold" />
+        <ImageView
+            android:id="@+id/stock_search_icon"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_jobs_search"
+            android:tint="#FF94A3B8" />
+
+        <EditText
+            android:id="@+id/stock_search"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:hint="షేర్ శోధన (ఉదా: RELIANCE)"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#FF64748B"
+            android:textSize="14sp" />
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/stock_list"
@@ -181,8 +228,9 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:clipToPadding="false"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
+        android:paddingStart="10dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="10dp"
         android:paddingBottom="16dp" />
 
     <TextView
@@ -194,5 +242,12 @@
         android:text="ధరలు లభ్యం కాలేదు"
         android:textColor="#FF94A3B8"
         android:textSize="13sp"
+        android:visibility="gone" />
+
+    <!-- Kept for binding compatibility; section titles now live in the list. -->
+    <TextView
+        android:id="@+id/stock_list_label"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:visibility="gone" />
 </LinearLayout>
