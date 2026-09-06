@@ -1952,13 +1952,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * District / feed label for the location pill.
-     * Prefer the post's server {@code location_label} when it matches the current
-     * language script; under Indic languages, upgrade Latin-only labels (e.g.
-     * English "Anakapalli") to the localized name for the <b>post</b> district
-     * (cache) or the selected district when they match.
+     * Prefer the post's server {@code location_label} / post geo when it matches the
+     * current language script; under Indic languages, upgrade Latin-only labels.
      * Never show another Indic script (e.g. Malayalam on a Telugu session).
-     * When the server label is missing or wrong-script, resolve from post
-     * {@code dist_id} via the language district cache so Telugu cards are not blank.
+     * When post geo is missing (common for national / {@code dist_id=0} cards), fall
+     * back to the user's selected district — same as pre–hide-toggle main-feed
+     * behavior. Callers gate main vs Local via
+     * {@link DistrictPinVisibilityConfig#shouldShowDistrict}.
      */
     private String resolveLocationLabel(@Nullable ModelClass.Datum post) {
         String selected = DistrictLabelHelper.resolveDisplayLabel(context);
@@ -1968,7 +1968,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
-        boolean selectedNative = isUsableLocationLabel(selected)
+        boolean selectedUsable = isUsableLocationLabel(selected);
+        boolean selectedNative = selectedUsable
                 && !DistrictLabelHelper.needsNativeScriptUpgrade(selected, langId);
 
         if (post != null) {
@@ -2011,32 +2012,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (fromPostGeoOk) {
                     return fromPostGeo.trim();
                 }
-                if (categery_id == -1 && selectedNative) {
-                    my_feed_name = selected;
-                    return selected;
-                }
-                if (selectedNative && postDistId > 0
-                        && postDistId == DistrictLabelHelper.getStoredDistId(context)) {
-                    my_feed_name = selected;
-                    return selected;
-                }
-                my_feed_name = "";
-                return "";
-            }
-            // No server location_label: resolve from post geo, then selected when same dist / Local.
-            if (fromPostGeoOk) {
+            } else if (fromPostGeoOk) {
                 return fromPostGeo.trim();
             }
-            if (selectedNative && (categery_id == -1
-                    || (postDistId > 0
-                    && postDistId == DistrictLabelHelper.getStoredDistId(context)))) {
-                my_feed_name = selected;
-                return selected;
-            }
-            my_feed_name = "";
-            return "";
         }
-        if (isUsableLocationLabel(selected)) {
+        // National / no-geo posts: previous main-feed behavior used the selected district.
+        if (selectedUsable) {
             my_feed_name = selected;
             return selected;
         }
