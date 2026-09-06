@@ -5473,6 +5473,46 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return positionx;
     }
 
+    /**
+     * True when the first half article in the feed has no {@code live_readers} field
+     * (stale OpenPath cache from before the feature / attach). Null ≠ legitimate 0.
+     */
+    private static boolean firstHalfPostMissingLiveReaders(
+            @Nullable java.util.List<ModelClass.Datum> items) {
+        if (items == null || items.isEmpty()) return true;
+        for (int i = 0; i < items.size(); i++) {
+            ModelClass.Datum d = items.get(i);
+            if (d == null || d.getPostType() == null) continue;
+            String t = d.getPostType().trim().toLowerCase(java.util.Locale.US);
+            if (!"normal_image".equals(t) && !"normal_video".equals(t)) continue;
+            return d.getLiveReaders() == null;
+        }
+        return false;
+    }
+
+    /**
+     * Re-show live readers on the visible half card after warm open / resume / soft-skip.
+     * FlipView keeps the current page and often does not rebind after a prior fade.
+     */
+    private void maybeRefreshLiveReadersBadge() {
+        try {
+            if (adapter == null || mFlipView == null || list == null || list.isEmpty()) return;
+            if (bookmarksModeSelected
+                    || isSpecialFeedMode()
+                    || isCalendarMode()
+                    || isDailyUpdatesMode()) {
+                return;
+            }
+            final int cur = getVisiblePostIndex();
+            if (cur < 0 || cur >= list.size()) return;
+            if (cur >= mFlipView.getChildCount()) return;
+            final View child = mFlipView.getChildAt(cur);
+            if (child == null) return;
+            adapter.refreshLiveReadersBadgeOnVisiblePage(child, cur);
+        } catch (Exception ignored) {
+        }
+    }
+
     /** Visible flip index for FlipperAdapter on-post magazine Share restore. */
     public int getVisiblePostIndexForShare() {
         return getVisiblePostIndex();
@@ -11811,11 +11851,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             needNetwork = true;
         }
 
+        // Feature enabled but warm disk was saved before counts were attached → force
+        // a network page-0 so first half post gets live_readers on this open.
+        if (!needNetwork
+                && LiveReadersConfig.isEnabled(this)
+                && firstHalfPostMissingLiveReaders(list)) {
+            showLog("OpenPath: live readers ON but first half missing live_readers — forcing network");
+            needNetwork = true;
+        }
+
         if (!needNetwork) {
             showLog("OpenPath: skip feed network (fresh within "
                     + OpenPathCache.FEED_NETWORK_MIN_INTERVAL_MS + "ms)"
                     + " cursors skip=" + skip + " actual_skip=" + actual_skip
                     + " last_post_id=" + last_post_id);
+            maybeRefreshLiveReadersBadge();
             return;
         }
 
@@ -12419,6 +12469,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getLive_readers_window_minutes(),
                             encreptionRequest.getLive_readers_show_seconds(),
                             encreptionRequest.getLive_readers_min_count());
+                    // Config may land after FlipView already painted — re-show if count present.
+                    try {
+                        final android.view.View decor =
+                                getWindow() != null ? getWindow().getDecorView() : null;
+                        if (decor != null) {
+                            decor.post(() -> maybeRefreshLiveReadersBadge());
+                        } else {
+                            maybeRefreshLiveReadersBadge();
+                        }
+                    } catch (Exception ignored) {
+                    }
                     ScreenCaptureHelper.saveAllowed(HomePage.this, encreptionRequest.isAllow_screen_capture());
                     cachedCaptureAllowed = encreptionRequest.isAllow_screen_capture();
                     // Re-apply so a toggle change takes effect on this screen without restart.
@@ -12577,6 +12638,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 if (adapter != null) {
                                     adapter.notifyDataSetChanged();
                                 }
+                                maybeRefreshLiveReadersBadge();
                             } catch (Exception ignored) {
                             }
                             // Do not rebuild adapter / do not jump flip — capture offline store.
@@ -14273,6 +14335,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onResume();
         updateSpecialTabBlinkIndicator();
+        try {
+            // Warm reopen: FlipView kept the page after badge fade — re-show on this open.
+            final android.view.View decor =
+                    getWindow() != null ? getWindow().getDecorView() : null;
+            if (decor != null) {
+                decor.post(() -> maybeRefreshLiveReadersBadge());
+            } else {
+                maybeRefreshLiveReadersBadge();
+            }
+        } catch (Exception ignored) {
+        }
         try {
             updateCenterFab();
         } catch (Exception fabEx) {

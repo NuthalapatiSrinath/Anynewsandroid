@@ -1375,6 +1375,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Way2-style live readers badge on half media (bottom-right). Shows for admin
      * {@code live_readers_show_seconds} then fades out. Full posts skip (no view).
+     * Call again on resume / open so warm reopens re-show after a prior fade.
      */
     private void bindLiveReadersBadge(@Nullable View convertView, int position) {
         if (convertView == null) return;
@@ -1390,7 +1391,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         badge.setAlpha(1f);
         badge.setVisibility(GONE);
 
-        if (!LiveReadersConfig.isEnabled(context)) return;
         if (list == null || position < 0 || position >= list.size()) return;
         ModelClass.Datum item = list.get(position);
         if (item == null) return;
@@ -1399,6 +1399,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         int count = raw != null ? raw : 0;
         int min = LiveReadersConfig.getMinCount(context);
         if (count < min) return;
+
+        // Server only attaches non-zero counts when the feature is ON. Prefer prefs,
+        // but if the feed payload already has a count, show even when splash prefs
+        // have not landed yet (cold-open race that made the badge intermittent).
+        if (!LiveReadersConfig.isEnabled(context) && count <= 0) return;
 
         TextView countTv = convertView.findViewById(R.id.live_readers_count_text);
         if (countTv == null) return;
@@ -1431,6 +1436,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         };
         badge.setTag(R.id.live_readers_badge, hide);
         liveReadersHandler.postDelayed(hide, Math.max(500, showMs));
+    }
+
+    /**
+     * Re-show live readers on the currently visible FlipView page (warm open / resume).
+     * FlipView often keeps the current page and does not rebind on notify alone.
+     */
+    public void refreshLiveReadersBadgeOnVisiblePage(@Nullable View pageView, int position) {
+        if (pageView == null) return;
+        bindLiveReadersBadge(pageView, position);
     }
 
     /**

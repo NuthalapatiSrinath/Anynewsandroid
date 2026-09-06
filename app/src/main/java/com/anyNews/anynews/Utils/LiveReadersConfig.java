@@ -11,11 +11,14 @@ import androidx.annotation.Nullable;
  * Values arrive via splash / session / articles / get_settings:
  * {@code live_readers_enabled}, {@code live_readers_window_minutes},
  * {@code live_readers_show_seconds}, {@code live_readers_min_count}.
+ *
+ * Lookback window max is 360 minutes (6 hours) to match admin + Redis.
  */
 public final class LiveReadersConfig {
 
     public static final boolean DEFAULT_ENABLED = false;
     public static final int DEFAULT_WINDOW_MINUTES = 120;
+    public static final int MAX_WINDOW_MINUTES = 360;
     public static final int DEFAULT_SHOW_SECONDS = 4;
     public static final int DEFAULT_MIN_COUNT = 1;
 
@@ -40,7 +43,7 @@ public final class LiveReadersConfig {
             SharedPrefsData.putString(
                     app,
                     Constants.LIVE_READERS_WINDOW_MINUTES,
-                    String.valueOf(clamp(windowMinutes, 1, 120, DEFAULT_WINDOW_MINUTES)),
+                    String.valueOf(clamp(windowMinutes, 1, MAX_WINDOW_MINUTES, DEFAULT_WINDOW_MINUTES)),
                     Constants.PREF_NAME);
         }
         if (showSeconds != null) {
@@ -75,7 +78,12 @@ public final class LiveReadersConfig {
     }
 
     public static int getWindowMinutes(@Nullable Context context) {
-        return readInt(context, Constants.LIVE_READERS_WINDOW_MINUTES, 1, 120, DEFAULT_WINDOW_MINUTES);
+        return readInt(
+                context,
+                Constants.LIVE_READERS_WINDOW_MINUTES,
+                1,
+                MAX_WINDOW_MINUTES,
+                DEFAULT_WINDOW_MINUTES);
     }
 
     public static int getShowSeconds(@Nullable Context context) {
