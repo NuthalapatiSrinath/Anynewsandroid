@@ -61,6 +61,8 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
     /** Same production native unit as HomePage / feed between articles. */
     private static final String FEED_NATIVE_UNIT =
             "ca-app-pub-8562336752221105/4901277505";
+    private static final String WATCH_ADS_REWARDED_UNIT =
+            "ca-app-pub-8562336752221105/4844814289";
 
     private TextView progressView;
     private TextView hintView;
@@ -69,8 +71,8 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
     private int required = 3;
     private int watched = 0;
     private int coins = 40;
-    private String adUnit = FEED_NATIVE_UNIT;
-    private String adFormat = FORMAT_NATIVE;
+    private String adUnit = WATCH_ADS_REWARDED_UNIT;
+    private String adFormat = FORMAT_REWARDED;
     @Nullable private NativeAd loadedNative;
     @Nullable private InterstitialAd loadedInterstitial;
     @Nullable private RewardedAd loadedRewarded;
@@ -93,15 +95,19 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
         String fmt = getIntent().getStringExtra(EXTRA_AD_FORMAT);
         if (!TextUtils.isEmpty(fmt)) {
             fmt = fmt.trim().toLowerCase(Locale.US);
-            if (FORMAT_INTERSTITIAL.equals(fmt) || FORMAT_REWARDED.equals(fmt)) {
+            if (FORMAT_INTERSTITIAL.equals(fmt)
+                    || FORMAT_REWARDED.equals(fmt)
+                    || FORMAT_NATIVE.equals(fmt)) {
                 adFormat = fmt;
             } else {
-                adFormat = FORMAT_NATIVE;
+                adFormat = FORMAT_REWARDED;
             }
         }
         String unit = getIntent().getStringExtra(EXTRA_AD_UNIT);
         if (!TextUtils.isEmpty(unit) && !unit.contains("3940256099942544")) {
             adUnit = unit.trim();
+        } else if (FORMAT_REWARDED.equals(adFormat)) {
+            adUnit = WATCH_ADS_REWARDED_UNIT;
         } else if (FORMAT_NATIVE.equals(adFormat)) {
             try {
                 String fallback = getString(R.string.admob_native_ad_unit_fallback);

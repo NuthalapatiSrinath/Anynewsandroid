@@ -171,7 +171,15 @@ public final class AdPreloader {
     @Nullable
     private static String resolveUnit(Context context) {
         try {
-            String unit = context.getString(R.string.admob_native_ad_unit_fallback);
+            if (FeedAdConfig.isInterstitial(context)) {
+                // Native preloader is unused in interstitial mode.
+                return null;
+            }
+            String unit = FeedAdConfig.getUnitId(context);
+            if (!TextUtils.isEmpty(unit)) {
+                return unit.trim();
+            }
+            unit = context.getString(R.string.admob_native_ad_unit_fallback);
             return unit == null ? null : unit.trim();
         } catch (Exception e) {
             return null;

@@ -3,25 +3,28 @@ package com.anyNews.anynews.Utils;
 import android.content.Context;
 import android.text.TextUtils;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * Admin-tunable in-feed native ad cadence / load knobs + impression flush.
+ * Admin-tunable in-feed ad cadence / format / unit + load knobs.
  * Values arrive via splash / session ({@code feed_ad_every_n},
+ * {@code feed_ad_format}, {@code ad_code},
  * {@code ad_prefetch_lookahead}, {@code max_native_ad_loads_in_flight},
  * {@code ad_impr_flush_every_n}).
  *
- * <ul>
- *   <li>Ad every N articles — default {@link #DEFAULT_EVERY_N} (4), range 2–10</li>
- *   <li>Prefetch lookahead — default {@link #DEFAULT_PREFETCH_LOOKAHEAD} (3), range 2–4</li>
- *   <li>Max concurrent loads — default {@link #DEFAULT_MAX_IN_FLIGHT} (2), range 1–2</li>
- *   <li>Impression flush every N — default {@link #DEFAULT_FLUSH_EVERY_N} (3), range 1–50</li>
- * </ul>
- *
- * Process-level caches let list rebalance run without a Context after splash.
- * Caps are intentionally tight so AdMob pool work does not jank flip FPS.
+ * <p>After a multi-format APK, admin alone switches native ↔ interstitial + unit;
+ * no rebuild for format/unit changes. Cadence ({@link #getEveryN}) remains the
+ * frequency cap for both formats.
  */
 public final class FeedAdConfig {
+
+    public static final String FORMAT_NATIVE = "native";
+    public static final String FORMAT_INTERSTITIAL = "interstitial";
+
+    /** Production feed native unit (code / strings fallback). */
+    public static final String DEFAULT_UNIT_ID =
+            "ca-app-pub-8562336752221105/4901277505";
 
     public static final int DEFAULT_EVERY_N = 4;
     public static final int MIN_EVERY_N = 2;
@@ -48,6 +51,8 @@ public final class FeedAdConfig {
     private static volatile int cachedPrefetchLookahead = DEFAULT_PREFETCH_LOOKAHEAD;
     private static volatile int cachedMaxInFlight = DEFAULT_MAX_IN_FLIGHT;
     private static volatile int cachedFlushEveryN = DEFAULT_FLUSH_EVERY_N;
+    private static volatile String cachedFormat = FORMAT_NATIVE;
+    private static volatile String cachedUnitId = DEFAULT_UNIT_ID;
 
     private FeedAdConfig() {}
 
@@ -58,6 +63,8 @@ public final class FeedAdConfig {
         getPrefetchLookahead(context);
         getMaxInFlight(context);
         getFlushEveryN(context);
+        getFormat(context);
+        getUnitId(context);
     }
 
     /** Persist when present (null fields = old server; leave cache). */
@@ -66,7 +73,7 @@ public final class FeedAdConfig {
             @Nullable Integer everyN,
             @Nullable Integer prefetchLookahead,
             @Nullable Integer maxInFlight) {
-        saveFromServer(context, everyN, prefetchLookahead, maxInFlight, null);
+        saveFromServer(context, everyN, prefetchLookahead, maxInFlight, null, null, null);
     }
 
     public static void saveFromServer(
@@ -75,6 +82,18 @@ public final class FeedAdConfig {
             @Nullable Integer prefetchLookahead,
             @Nullable Integer maxInFlight,
             @Nullable Integer flushEveryN) {
+        saveFromServer(
+                context, everyN, prefetchLookahead, maxInFlight, flushEveryN, null, null);
+    }
+
+    public static void saveFromServer(
+            @Nullable Context context,
+            @Nullable Integer everyN,
+            @Nullable Integer prefetchLookahead,
+            @Nullable Integer maxInFlight,
+            @Nullable Integer flushEveryN,
+            @Nullable String feedAdFormat,
+            @Nullable String feedAdUnitId) {
         if (everyN != null) {
             saveEveryNFromServer(context, everyN);
         }
@@ -86,6 +105,12 @@ public final class FeedAdConfig {
         }
         if (flushEveryN != null) {
             saveFlushEveryNFromServer(context, flushEveryN);
+        }
+        if (feedAdFormat != null) {
+            saveFormatFromServer(context, feedAdFormat);
+        }
+        if (feedAdUnitId != null) {
+            saveUnitIdFromServer(context, feedAdUnitId);
         }
     }
 
@@ -138,6 +163,35 @@ public final class FeedAdConfig {
                 context.getApplicationContext(),
                 Constants.AD_IMPR_FLUSH_EVERY_N,
                 String.valueOf(safe),
+                Constants.PREF_NAME);
+    }
+
+    public static void saveFormatFromServer(
+            @Nullable Context context, @Nullable String format) {
+        if (format == null) return;
+        String safe = normalizeFormat(format);
+        cachedFormat = safe;
+        if (context == null) return;
+        SharedPrefsData.putString(
+                context.getApplicationContext(),
+                Constants.FEED_AD_FORMAT,
+                safe,
+                Constants.PREF_NAME);
+    }
+
+    public static void saveUnitIdFromServer(
+            @Nullable Context context, @Nullable String unitId) {
+        if (unitId == null) return;
+        String trimmed = unitId.trim();
+        if (trimmed.isEmpty() || trimmed.contains("3940256099942544")) {
+            trimmed = DEFAULT_UNIT_ID;
+        }
+        cachedUnitId = trimmed;
+        if (context == null) return;
+        SharedPrefsData.putString(
+                context.getApplicationContext(),
+                Constants.FEED_AD_UNIT_ID,
+                trimmed,
                 Constants.PREF_NAME);
     }
 
@@ -234,6 +288,75 @@ public final class FeedAdConfig {
 
     public static int getFlushEveryN() {
         return clampFlushEveryN(cachedFlushEveryN);
+    }
+
+    @NonNull
+    public static String getFormat(@Nullable Context context) {
+        if (context != null) {
+            try {
+                String v =
+                        SharedPrefsData.getString(
+                                context.getApplicationContext(),
+                                Constants.FEED_AD_FORMAT,
+                                Constants.PREF_NAME);
+                if (!TextUtils.isEmpty(v)) {
+                    String n = normalizeFormat(v);
+                    cachedFormat = n;
+                    return n;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return normalizeFormat(cachedFormat);
+    }
+
+    @NonNull
+    public static String getFormat() {
+        return normalizeFormat(cachedFormat);
+    }
+
+    public static boolean isInterstitial(@Nullable Context context) {
+        return FORMAT_INTERSTITIAL.equals(getFormat(context));
+    }
+
+    public static boolean isInterstitial() {
+        return FORMAT_INTERSTITIAL.equals(getFormat());
+    }
+
+    @NonNull
+    public static String getUnitId(@Nullable Context context) {
+        if (context != null) {
+            try {
+                String v =
+                        SharedPrefsData.getString(
+                                context.getApplicationContext(),
+                                Constants.FEED_AD_UNIT_ID,
+                                Constants.PREF_NAME);
+                if (!TextUtils.isEmpty(v)) {
+                    String n = v.trim();
+                    if (!n.contains("3940256099942544")) {
+                        cachedUnitId = n;
+                        return n;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        String cached = cachedUnitId == null ? "" : cachedUnitId.trim();
+        return TextUtils.isEmpty(cached) ? DEFAULT_UNIT_ID : cached;
+    }
+
+    @NonNull
+    public static String getUnitId() {
+        String cached = cachedUnitId == null ? "" : cachedUnitId.trim();
+        return TextUtils.isEmpty(cached) ? DEFAULT_UNIT_ID : cached;
+    }
+
+    @NonNull
+    private static String normalizeFormat(@Nullable String raw) {
+        if (raw == null) return FORMAT_NATIVE;
+        String v = raw.trim().toLowerCase();
+        return FORMAT_INTERSTITIAL.equals(v) ? FORMAT_INTERSTITIAL : FORMAT_NATIVE;
     }
 
     private static int clampEveryN(int n) {

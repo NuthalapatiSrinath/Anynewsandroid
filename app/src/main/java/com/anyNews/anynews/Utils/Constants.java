@@ -296,6 +296,10 @@ public class Constants {
      * In-feed native ad after every N real articles (splash/runtime; default 4, 2–10).
      */
     public static String FEED_AD_EVERY_N = "feed_ad_every_n";
+    /** Between-news format: native | interstitial (splash/session). */
+    public static String FEED_AD_FORMAT = "feed_ad_format";
+    /** Between-news AdMob unit ID (splash/session; Root_Settings.ad_code). */
+    public static String FEED_AD_UNIT_ID = "feed_ad_unit_id";
     /** Flip positions ahead to prefetch next native ad (default 6, 3–12). */
     public static String AD_PREFETCH_LOOKAHEAD = "ad_prefetch_lookahead";
     /** Max simultaneous native ad loads (default 3, 1–5). */

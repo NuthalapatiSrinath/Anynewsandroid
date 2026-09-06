@@ -1754,13 +1754,15 @@ public class StartingActivity extends AppCompatActivity {
                         ReadHistoryConfig.saveHoursFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getReadHistoryHours());
-                        // Feed ad cadence + Android prefetch/concurrency + impression flush.
+                        // Feed ad cadence + format/unit + Android prefetch/concurrency + impression flush.
                         FeedAdConfig.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getFeedAdEveryN(),
                                 startActivityReqModel.getData().getAdPrefetchLookahead(),
                                 startActivityReqModel.getData().getMaxNativeAdLoadsInFlight(),
-                                startActivityReqModel.getData().getAdImprFlushEveryN());
+                                startActivityReqModel.getData().getAdImprFlushEveryN(),
+                                startActivityReqModel.getData().getFeedAdFormat(),
+                                startActivityReqModel.getData().getAdCode());
                         FeedAdConfig.warmFromPrefs(getApplicationContext());
                         Boolean newMini = startActivityReqModel.getData()
                                 .getCricketMiniPlayerEnabled();

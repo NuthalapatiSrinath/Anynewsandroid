@@ -78,7 +78,7 @@ public class RewardsHubActivity extends AppCompatActivity {
     private int watchAdsRequired = 3;
     private int watchAdsCoins = 40;
     private String watchAdsUnit = "";
-    private String watchAdsFormat = "native";
+    private String watchAdsFormat = "rewarded";
     private int checkinCoins = 25;
     private int ratingCoins = 100;
     private boolean checkinAvailable;

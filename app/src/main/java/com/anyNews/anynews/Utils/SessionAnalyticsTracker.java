@@ -913,6 +913,8 @@ public final class SessionAnalyticsTracker {
                     Integer adPrefetch = null;
                     Integer maxInFlight = null;
                     Integer flushEveryN = null;
+                    String feedAdFormat = null;
+                    String feedAdUnit = null;
                     if (resBody.has("feed_ad_every_n")
                             && !resBody.get("feed_ad_every_n").isJsonNull()) {
                         try {
@@ -941,12 +943,33 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    if (resBody.has("feed_ad_format")
+                            && !resBody.get("feed_ad_format").isJsonNull()) {
+                        try {
+                            feedAdFormat = resBody.get("feed_ad_format").getAsString();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("ad_code") && !resBody.get("ad_code").isJsonNull()) {
+                        try {
+                            feedAdUnit = resBody.get("ad_code").getAsString();
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (feedEveryN != null
                             || adPrefetch != null
                             || maxInFlight != null
-                            || flushEveryN != null) {
+                            || flushEveryN != null
+                            || feedAdFormat != null
+                            || feedAdUnit != null) {
                         FeedAdConfig.saveFromServer(
-                                context, feedEveryN, adPrefetch, maxInFlight, flushEveryN);
+                                context,
+                                feedEveryN,
+                                adPrefetch,
+                                maxInFlight,
+                                flushEveryN,
+                                feedAdFormat,
+                                feedAdUnit);
                     }
                     if (resBody.has("session_live_enabled")
                             || resBody.has("session_heartbeat_interval_seconds")

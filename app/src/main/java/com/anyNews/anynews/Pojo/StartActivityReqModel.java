@@ -473,6 +473,21 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Integer adImprFlushEveryN;
 
+        /**
+         * Between-news format: native | interstitial (admin; default native).
+         * Null on old servers → Android keeps cached / native.
+         */
+        @SerializedName("feed_ad_format")
+        @Expose
+        private String feedAdFormat;
+
+        /**
+         * Between-news AdMob unit (Root_Settings.ad_code). Null → keep cached / default native unit.
+         */
+        @SerializedName("ad_code")
+        @Expose
+        private String adCode;
+
         // Profile hub / More (null = old server; keep cached defaults).
         @SerializedName("categories_in_footer")
         @Expose
@@ -869,6 +884,16 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / default 3. */
         public Integer getAdImprFlushEveryN() {
             return adImprFlushEveryN;
+        }
+
+        /** Null → old server; caller keeps cached / native. */
+        public String getFeedAdFormat() {
+            return feedAdFormat;
+        }
+
+        /** Null → old server; caller keeps cached / default native unit. */
+        public String getAdCode() {
+            return adCode;
         }
 
         public Boolean getCategoriesInFooter() {

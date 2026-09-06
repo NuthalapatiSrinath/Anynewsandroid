@@ -752,6 +752,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     static  public List<FlipGoogleNativeAds> nativeFBAdList =new ArrayList<>();
     static  public List<Integer> nativeGoogleAdArray =new ArrayList<>();
     static  public List<Integer> nativeFBAdArray =new ArrayList<>();
+    /** Interstitial seats already shown this session (avoid re-show on back-flip). */
+    private final HashSet<Integer> feedInterstitialShownPos = new HashSet<>();
     public List<AdsPojo> adsPojoList =new ArrayList<>();
     public List<Integer> adsReqPosList =new ArrayList<>();
     static  int adIndex=0;
@@ -2305,6 +2307,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
             try {
+                maybeShowFeedInterstitialForSlot(list.get(position));
+            } catch (Exception ignored) {
+            }
+            try {
                 loadAds(list.get(position).getNext_req_ad_code(),
                         list.get(position).getNext_ad_req_position(),
                         list.get(position).getAd_type());
@@ -2373,7 +2379,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (nativeGoogleAdArray != null && nativeGoogleAdArray.contains(ad_req_position)) {
                 return;
             }
-            loadGoogleAds(ad_code, ad_req_position, 0);
+            int reqType = FeedAdConfig.isInterstitial(this) ? 1 : 0;
+            loadGoogleAds(ad_code, ad_req_position, reqType);
         }else{
             if (ad_code == null || ad_code.trim().isEmpty()) {
                 Log.w(ADS_TAG, "request skip empty Facebook placement reqPos=" + ad_req_position);
@@ -2691,6 +2698,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (nativeGoogleAdArray != null) {
                 nativeGoogleAdArray.clear();
             }
+            feedInterstitialShownPos.clear();
             if (nativeFBAdArray != null) {
                 nativeFBAdArray.clear();
             }
@@ -3147,18 +3155,80 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * The Play Store production build used this live AdMob native unit for every
-     * Google feed seat. Keep that proven path independent of optional backend
-     * metadata: an empty, app-id, or GAM-style server value must not prevent a
-     * paid native request from reaching AdMob.
+     * Prefer admin/splash unit ({@link FeedAdConfig}); fall back to production native
+     * string. Ignore Google test publisher units and empty/GAM-mismatched values when
+     * the admin unit is unset — keep paid AdMob requests working.
      */
     @NonNull
     private String resolveGoogleNativeAdUnit(@Nullable String configuredCode) {
+        String adminUnit = FeedAdConfig.getUnitId(this);
+        if (!TextUtils.isEmpty(adminUnit) && !adminUnit.contains("3940256099942544")) {
+            Log.d(ADS_TAG, "resolved ad_code=" + adminUnit + " source=FeedAdConfig"
+                    + " ignored_slot_ad_code=" + (configuredCode == null ? "" : configuredCode));
+            return adminUnit;
+        }
         String code = configuredCode == null ? "" : configuredCode.trim();
+        if (!code.isEmpty()
+                && !code.startsWith("/")
+                && !code.contains("3940256099942544")
+                && !code.contains("~")) {
+            Log.d(ADS_TAG, "resolved ad_code=" + code + " source=slot");
+            return code;
+        }
         String fallback = getString(R.string.admob_native_ad_unit_fallback).trim();
-        Log.d(ADS_TAG, "resolved ad_code=" + fallback + " source=PlayStore-production"
+        if (TextUtils.isEmpty(fallback)) {
+            fallback = FeedAdConfig.DEFAULT_UNIT_ID;
+        }
+        Log.d(ADS_TAG, "resolved ad_code=" + fallback + " source=strings-fallback"
                 + " ignored_server_ad_code=" + code);
         return fallback;
+    }
+
+    /**
+     * When admin format (or slot ad_screen_type) is interstitial, show a full-screen
+     * ad at most once per seat. Frequency is still feed_ad_every_n (ad seats only).
+     */
+    private void maybeShowFeedInterstitialForSlot(@Nullable ModelClass.Datum slot) {
+        if (slot == null || isFinishing() || isDestroyed()) return;
+        boolean interstitial =
+                FeedAdConfig.isInterstitial(this)
+                        || "interstitial".equalsIgnoreCase(
+                                slot.getAd_screen_type() == null
+                                        ? ""
+                                        : slot.getAd_screen_type().trim());
+        if (!interstitial) return;
+        Integer reqPos = slot.getAd_req_position();
+        if (reqPos == null) return;
+        if (feedInterstitialShownPos.contains(reqPos)) return;
+        if (nativeGoogleAdList == null || nativeGoogleAdList.isEmpty()) return;
+        InterstitialAd ready = null;
+        int readyIndex = -1;
+        for (int i = 0; i < nativeGoogleAdList.size(); i++) {
+            FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
+            if (packed == null || packed.getInterstitialAd() == null) continue;
+            if (packed.getReqPos() == reqPos) {
+                ready = packed.getInterstitialAd();
+                readyIndex = i;
+                break;
+            }
+            if (ready == null) {
+                ready = packed.getInterstitialAd();
+                readyIndex = i;
+            }
+        }
+        if (ready == null) return;
+        try {
+            feedInterstitialShownPos.add(reqPos);
+            if (readyIndex >= 0 && readyIndex < nativeGoogleAdList.size()) {
+                FlipGoogleNativeAds packed = nativeGoogleAdList.get(readyIndex);
+                if (packed != null) packed.setInterstitialAd(null);
+            }
+            Log.d(ADS_TAG, "show feed interstitial reqPos=" + reqPos);
+            ready.show(this);
+        } catch (Exception e) {
+            feedInterstitialShownPos.remove(reqPos);
+            Log.w(ADS_TAG, "feed interstitial show failed: " + e.getMessage());
+        }
     }
 
     private void loadGoogleAds(String adCode, Integer ad_req_position,int reqType) {
@@ -3466,38 +3536,46 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             @Override
             public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
                 super.onAdFailedToLoad(loadAdError);
+                if (nativeGoogleAdArray != null && ad_req_position != null) {
+                    nativeGoogleAdArray.remove(ad_req_position);
+                }
+                Log.w(ADS_TAG, "interstitial load failure ad_code=" + adCode
+                        + " reqPos=" + ad_req_position
+                        + " error=" + (loadAdError != null ? loadAdError.getMessage() : ""));
             }
 
             @Override
             public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
                 super.onAdLoaded(interstitialAd);
                 try {
-                    if (list != null && list.size() > 0) {
-                        FlipGoogleNativeAds flipGoogleNativeAds = new FlipGoogleNativeAds();
-                        flipGoogleNativeAds.setInterstitialAd(interstitialAd);
-                        flipGoogleNativeAds.setAdCode(adCode);
-                        flipGoogleNativeAds.setReqPos(ad_req_position);
-                        if (!nativeGoogleAdArray.contains(list.get(positionx).getAd_req_position())) {
-                            nativeGoogleAdArray.add(ad_req_position);
-                        }
-                        nativeGoogleAdList.add(flipGoogleNativeAds);
-                        try {
-                            if(interstitialAd.getResponseInfo()!=null && interstitialAd.getResponseInfo().getLoadedAdapterResponseInfo()!=null &&
-                                    interstitialAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName()!=null){
-                                showLog("Data:"+interstitialAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName());
-                            }
-                        }catch (Exception e){
-                            e.printStackTrace();
-                        }
+                    FlipGoogleNativeAds flipGoogleNativeAds = new FlipGoogleNativeAds();
+                    flipGoogleNativeAds.setInterstitialAd(interstitialAd);
+                    flipGoogleNativeAds.setAdCode(adCode);
+                    flipGoogleNativeAds.setReqPos(ad_req_position);
+                    if (nativeGoogleAdArray != null
+                            && ad_req_position != null
+                            && !nativeGoogleAdArray.contains(ad_req_position)) {
+                        nativeGoogleAdArray.add(ad_req_position);
                     }
-                }catch (Exception e){
+                    nativeGoogleAdList.add(flipGoogleNativeAds);
+                    Log.d(ADS_TAG, "interstitial ready ad_code=" + adCode
+                            + " reqPos=" + ad_req_position);
+                    // If user already settled on this seat, show immediately.
+                    try {
+                        if (list != null
+                                && positionx >= 0
+                                && positionx < list.size()
+                                && list.get(positionx) != null
+                                && "ad".equalsIgnoreCase(list.get(positionx).getPostType())) {
+                            maybeShowFeedInterstitialForSlot(list.get(positionx));
+                        }
+                    } catch (Exception ignored) {
+                    }
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
-
-
             }
         });
-
     }
 
     /**
