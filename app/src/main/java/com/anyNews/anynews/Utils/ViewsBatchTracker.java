@@ -193,6 +193,11 @@ public final class ViewsBatchTracker {
                 e.put("offline_at", openedAt);
             }
             addEvent(context, e);
+            try {
+                com.anyNews.anynews.rewards.RewardsEngagementBatcher.get()
+                        .trackOpen(context, String.valueOf(postId));
+            } catch (Exception ignored) {
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -222,6 +227,16 @@ public final class ViewsBatchTracker {
             } catch (Exception ignored) {
             }
             addEvent(context, e);
+            try {
+                int secs = (int) Math.max(1L, durationSeconds);
+                com.anyNews.anynews.rewards.RewardsEngagementBatcher.get()
+                        .trackQualityRead(context, String.valueOf(postId), secs);
+                if (secs >= 8) {
+                    com.anyNews.anynews.rewards.RewardsEngagementBatcher.get()
+                            .trackScrollDepth(context, String.valueOf(postId), 55);
+                }
+            } catch (Exception ignored) {
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         }

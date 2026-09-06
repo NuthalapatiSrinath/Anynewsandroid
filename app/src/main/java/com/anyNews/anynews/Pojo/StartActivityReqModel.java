@@ -362,12 +362,37 @@ public class StartActivityReqModel implements Serializable {
         private Boolean newsTapHalfHideEngagement;
 
         /**
-         * Hide district on main News; show only in Local. Null on old servers.
-         * Default ON when missing from prefs.
+         * Hide district on main News for non-district posts. Null on old servers.
+         * Default ON when missing from prefs. District/local posts still show.
          */
         @SerializedName("hide_district_on_main_feed")
         @Expose
         private Boolean hideDistrictOnMainFeed;
+
+        /** Rewards feature master (Profile + optional feed slot). Null on old servers. */
+        @SerializedName("rewards_master")
+        @Expose
+        private Boolean rewardsMaster;
+
+        /**
+         * Show rewards promo in main-feed district slot when district would be hidden.
+         * Null on old servers.
+         */
+        @SerializedName("rewards_in_main_feed_slot")
+        @Expose
+        private Boolean rewardsInMainFeedSlot;
+
+        @SerializedName("rewards_guest_chip")
+        @Expose
+        private String rewardsGuestChip;
+
+        @SerializedName("rewards_joined_chip")
+        @Expose
+        private String rewardsJoinedChip;
+
+        @SerializedName("rewards_rate_label")
+        @Expose
+        private String rewardsRateLabel;
 
         /** Way2-style live readers badge (half articles). Null on old servers. */
         @SerializedName("live_readers_enabled")
@@ -738,6 +763,26 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getHideDistrictOnMainFeed() {
             return hideDistrictOnMainFeed;
+        }
+
+        public Boolean getRewardsMaster() {
+            return rewardsMaster;
+        }
+
+        public Boolean getRewardsInMainFeedSlot() {
+            return rewardsInMainFeedSlot;
+        }
+
+        public String getRewardsGuestChip() {
+            return rewardsGuestChip;
+        }
+
+        public String getRewardsJoinedChip() {
+            return rewardsJoinedChip;
+        }
+
+        public String getRewardsRateLabel() {
+            return rewardsRateLabel;
         }
 
         public Boolean getLiveReadersEnabled() {

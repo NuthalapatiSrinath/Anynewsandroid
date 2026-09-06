@@ -1593,6 +1593,21 @@ public class FlipView extends FrameLayout {
     }
 
     /**
+     * The active page View (not {@link #getChildAt} by absolute feed index —
+     * FlipView only keeps prev/current/next children).
+     */
+    @androidx.annotation.Nullable
+    public View getCurrentPageView() {
+        try {
+            if (mCurrentPage != null && mCurrentPage.valid) {
+                return mCurrentPage.v;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
      * True while a flip gesture/animation is in progress (touch, scroller, or peak).
      * Callers must not {@code notifyDataSetChanged} / recycle pages during this window.
      */

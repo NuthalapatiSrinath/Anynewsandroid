@@ -1373,25 +1373,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Way2-style live readers badge on half media (bottom-right). Shows for admin
-     * {@code live_readers_show_seconds} then fades out. Full posts skip (no view).
-     * Call again on resume / open so warm reopens re-show after a prior fade.
+     * Way2-style live readers badge: first half article only, once per app process.
+     * Rises from near the likes bar onto the image corner, holds
+     * {@code live_readers_show_seconds}, then exits downward and stays gone for the
+     * session (scroll / rebind / resume must not bring it back).
      */
     private void bindLiveReadersBadge(@Nullable View convertView, int position) {
         if (convertView == null) return;
         final View badge = convertView.findViewById(R.id.live_readers_badge);
         if (badge == null) return;
 
-        Object prev = badge.getTag(R.id.live_readers_badge);
-        if (prev instanceof Runnable) {
-            liveReadersHandler.removeCallbacks((Runnable) prev);
-            badge.setTag(R.id.live_readers_badge, null);
-        }
-        badge.animate().cancel();
-        badge.setAlpha(1f);
-        badge.setVisibility(GONE);
+        resetLiveReadersBadgeVisual(badge);
+
+        // Already consumed this process — keep every recycled half card clear.
+        if (LiveReadersConfig.hasShownThisSession()) return;
 
         if (list == null || position < 0 || position >= list.size()) return;
+        final int firstHalf = indexOfFirstHalfPost();
+        if (firstHalf < 0 || position != firstHalf) return;
+
+        // Only animate on the currently visible flip page (avoid consuming the
+        // session while FlipView prebinds an off-screen neighbour).
+        if (!isCurrentlyVisibleFlipPage(position)) return;
+
         ModelClass.Datum item = list.get(position);
         if (item == null) return;
 
@@ -1412,15 +1416,28 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             label = LiveReadersConfig.formatLabel(count);
         }
         countTv.setText(label);
-        badge.setVisibility(VISIBLE);
-        badge.setAlpha(1f);
 
-        final int showMs = LiveReadersConfig.getShowSeconds(context) * 1000;
+        // Consume immediately so a later rebind / scroll cannot restart the show.
+        LiveReadersConfig.markShownThisSession();
+
+        allowLiveReadersBadgeOverflow(badge);
+
+        final float density =
+                context != null ? context.getResources().getDisplayMetrics().density : 1f;
+        // Rise from near the likes row (below media) up onto the image corner.
+        final float riseFromLikesPx = 52f * density;
+        final int showMs = Math.max(500, LiveReadersConfig.getShowSeconds(context) * 1000);
+
+        badge.setTranslationY(riseFromLikesPx);
+        badge.setAlpha(0f);
+        badge.setVisibility(VISIBLE);
+
         final Runnable hide = new Runnable() {
             @Override
             public void run() {
                 if (badge.getTag(R.id.live_readers_badge) != this) return;
                 badge.animate()
+                        .translationY(riseFromLikesPx)
                         .alpha(0f)
                         .setDuration(280)
                         .withEndAction(new Runnable() {
@@ -1428,6 +1445,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             public void run() {
                                 badge.setVisibility(GONE);
                                 badge.setAlpha(1f);
+                                badge.setTranslationY(0f);
                                 badge.setTag(R.id.live_readers_badge, null);
                             }
                         })
@@ -1435,15 +1453,85 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         };
         badge.setTag(R.id.live_readers_badge, hide);
-        liveReadersHandler.postDelayed(hide, Math.max(500, showMs));
+
+        badge.animate()
+                .translationY(0f)
+                .alpha(1f)
+                .setDuration(340)
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (badge.getTag(R.id.live_readers_badge) != hide) return;
+                        liveReadersHandler.postDelayed(hide, showMs);
+                    }
+                })
+                .start();
+    }
+
+    /** Cancel pending hide + reset visual state without consuming the session. */
+    private void resetLiveReadersBadgeVisual(@NonNull View badge) {
+        Object prev = badge.getTag(R.id.live_readers_badge);
+        if (prev instanceof Runnable) {
+            liveReadersHandler.removeCallbacks((Runnable) prev);
+            badge.setTag(R.id.live_readers_badge, null);
+        }
+        badge.animate().cancel();
+        badge.setAlpha(1f);
+        badge.setTranslationY(0f);
+        badge.setVisibility(GONE);
+    }
+
+    /** Let the rise/exit travel slightly past the media bottom toward the likes row. */
+    private static void allowLiveReadersBadgeOverflow(@NonNull View badge) {
+        try {
+            android.view.ViewParent p = badge.getParent();
+            if (p instanceof android.view.ViewGroup) {
+                android.view.ViewGroup vg = (android.view.ViewGroup) p;
+                vg.setClipChildren(false);
+                vg.setClipToPadding(false);
+                android.view.ViewParent gp = vg.getParent();
+                if (gp instanceof android.view.ViewGroup) {
+                    ((android.view.ViewGroup) gp).setClipChildren(false);
+                    ((android.view.ViewGroup) gp).setClipToPadding(false);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Index of the first half news card in the current list, or -1. */
+    private int indexOfFirstHalfPost() {
+        if (list == null || list.isEmpty()) return -1;
+        for (int i = 0; i < list.size(); i++) {
+            ModelClass.Datum d = list.get(i);
+            if (d == null || d.getPostType() == null) continue;
+            String t = d.getPostType().trim().toLowerCase(java.util.Locale.US);
+            if ("normal_image".equals(t) || "normal_video".equals(t)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** True when FlipView's current page is {@code position} (or FlipView not ready → pos 0). */
+    private boolean isCurrentlyVisibleFlipPage(int position) {
+        try {
+            HomePage hp = resolveHomePageHost(context);
+            if (hp != null) {
+                return hp.getVisiblePostIndexForShare() == position;
+            }
+        } catch (Exception ignored) {
+        }
+        return position == 0;
     }
 
     /**
-     * Re-show live readers on the currently visible FlipView page (warm open / resume).
-     * FlipView often keeps the current page and does not rebind on notify alone.
+     * Attempt session badge on the visible FlipView page after paint / config land.
+     * No-op if already shown this process or visible page is not the first half.
      */
     public void refreshLiveReadersBadgeOnVisiblePage(@Nullable View pageView, int position) {
         if (pageView == null) return;
+        if (LiveReadersConfig.hasShownThisSession()) return;
         bindLiveReadersBadge(pageView, position);
     }
 
@@ -1957,7 +2045,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Never show another Indic script (e.g. Malayalam on a Telugu session).
      * When post geo is missing (common for national / {@code dist_id=0} cards), fall
      * back to the user's selected district — same as pre–hide-toggle main-feed
-     * behavior. Callers gate main vs Local via
+     * behavior. Callers gate main vs Local vs district posts via
      * {@link DistrictPinVisibilityConfig#shouldShowDistrict}.
      */
     private String resolveLocationLabel(@Nullable ModelClass.Datum post) {
@@ -2074,10 +2162,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } catch (Exception ignored) {
         }
         boolean showDistrict =
-                DistrictPinVisibilityConfig.shouldShowDistrict(context, categery_id);
-        String label = showDistrict ? resolveLocationLabel(post) : "";
+                DistrictPinVisibilityConfig.shouldShowDistrict(context, categery_id, post);
+        boolean showRewardsSlot =
+                DistrictPinVisibilityConfig.shouldShowRewardsInDistrictSlot(
+                        context, categery_id, post);
+        String label = "";
+        boolean rewardsMode = false;
+        if (showDistrict) {
+            label = resolveLocationLabel(post);
+        } else if (showRewardsSlot) {
+            rewardsMode = true;
+            label = resolveRewardsSlotLabel();
+        }
         boolean hasLabel = isUsableLocationLabel(label);
-        if (!showDistrict || !hasLabel) {
+        if ((!showDistrict && !rewardsMode) || !hasLabel) {
             if (labelView != null) {
                 labelView.setText("");
                 labelView.setVisibility(View.GONE);
@@ -2095,9 +2193,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             labelView.setVisibility(View.VISIBLE);
             labelView.setAlpha(1f);
             labelView.setText(label);
-            // District sits on its own footer row; allow 2 lines so long Telugu
-            // names wrap instead of crushing the reporter strip above.
-            labelView.setMaxLines(2);
+            // Single-row footer: ellipsize long Telugu districts without crushing name/Follow.
+            labelView.setMaxLines(1);
             labelView.setEllipsize(TextUtils.TruncateAt.END);
             try {
                 labelView.setTextColor(ContextCompat.getColor(context, R.color.black));
@@ -2107,12 +2204,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 } catch (Exception ignored) {
                 }
             }
-            // Keep weighted width (0dp + weight) from XML so the label fills the
-            // district row; do not force WRAP_CONTENT (that re-expanded long names).
         }
         if (pinView != null) {
             pinView.setVisibility(View.VISIBLE);
-            if (categery_id == 0) {
+            if (rewardsMode) {
+                // Soft placeholder icon until full rewards UI ships.
+                try {
+                    pinView.setBackgroundResource(ic_news_icon);
+                } catch (Exception ignored) {
+                    pinView.setBackgroundResource(ic_location_icon);
+                }
+            } else if (categery_id == 0) {
                 pinView.setBackgroundResource(ic_location_icon);
             } else {
                 pinView.setBackgroundResource(ic_news_icon);
@@ -2121,7 +2223,57 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (pill != null) {
             pill.setVisibility(View.VISIBLE);
             pill.setAlpha(1f);
+            if (rewardsMode) {
+                try {
+                    pill.clearAnimation();
+                    android.view.animation.AlphaAnimation blink =
+                            new android.view.animation.AlphaAnimation(0.45f, 1f);
+                    blink.setDuration(700);
+                    blink.setRepeatMode(android.view.animation.Animation.REVERSE);
+                    blink.setRepeatCount(android.view.animation.Animation.INFINITE);
+                    pill.startAnimation(blink);
+                } catch (Exception ignored) {
+                }
+                pill.setOnClickListener(v -> {
+                    try {
+                        android.content.Intent intent =
+                                new android.content.Intent(
+                                        context,
+                                        com.anyNews.anynews.rewards.RewardsHubActivity.class);
+                        if (!(context instanceof android.app.Activity)) {
+                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        }
+                        context.startActivity(intent);
+                    } catch (Exception ignored) {
+                    }
+                });
+            } else {
+                try {
+                    pill.clearAnimation();
+                } catch (Exception ignored) {
+                }
+                // District pill keeps its own listeners elsewhere; don't steal clicks.
+            }
         }
+    }
+
+    /** Guest vs joined copy for the main-feed rewards slot. */
+    private String resolveRewardsSlotLabel() {
+        boolean loggedIn = false;
+        try {
+            loggedIn = SharedPrefsData.getBool(
+                    context.getApplicationContext(), Constants.is_login, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        boolean joined = false;
+        try {
+            joined = com.anyNews.anynews.rewards.RewardsConfigHelper.isJoined(context);
+        } catch (Exception ignored) {
+        }
+        if (loggedIn && joined) {
+            return com.anyNews.anynews.rewards.RewardsConfigHelper.joinedChip(context);
+        }
+        return com.anyNews.anynews.rewards.RewardsConfigHelper.guestChip(context);
     }
 
     /**
@@ -7438,8 +7590,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
                 if (likeDownloadRespouse.getSuccess()) {
-
-
+                    try {
+                        com.anyNews.anynews.rewards.RewardsEngagementBatcher.get()
+                                .trackFollow(context);
+                    } catch (Exception ignored) {
+                    }
                 }
 
             }

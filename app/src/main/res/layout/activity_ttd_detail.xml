@@ -20,9 +20,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingBottom="120dp">
+            android:paddingBottom="24dp">
 
-            <!-- Top bar: back | TTD | home -->
+            <!-- Top bar: back | TTD | share -->
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -68,16 +68,15 @@
                 </LinearLayout>
 
                 <ImageView
-                    android:id="@+id/ttd_home"
+                    android:id="@+id/ttd_header_share"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true"
                     android:background="@drawable/bg_ttd_nav_square"
-                    android:contentDescription="@string/home_chrome_reload"
-                    android:padding="9dp"
-                    android:src="@drawable/ic_ttd_home"
-                    android:visibility="visible" />
+                    android:contentDescription="@string/ttd_share"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_share_icon" />
             </RelativeLayout>
 
             <!-- Full-width TTD hero banner — dark clip, no light frame edge -->
@@ -406,6 +405,56 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:orientation="vertical" />
+
+                <!-- Blessing / mantra — last item in news (not sticky) -->
+                <FrameLayout
+                    android:id="@+id/ttd_blessing_sticky"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_ttd_blessing"
+                    android:paddingStart="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="10dp">
+
+                    <ImageView
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_gravity="end|center_vertical"
+                        android:alpha="0.14"
+                        android:contentDescription="@null"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/img_ttd_temple_watermark" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/ttd_blessing_line1"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:textColor="#FFF5C542"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            tools:text="శ్రీ వారిని సేవించండి, భక్తితో జీవించండి" />
+
+                        <TextView
+                            android:id="@+id/ttd_blessing"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:gravity="center"
+                            android:textColor="#FFFF8A3D"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            tools:text="|| ఓం నమో వేంకటేశాయ ||" />
+                    </LinearLayout>
+                </FrameLayout>
             </LinearLayout>
 
             <!-- Important links -->
@@ -577,71 +626,4 @@
                 android:visibility="gone" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-
-    <!-- Sticky mantra box — bottom center, visible while scrolling -->
-    <FrameLayout
-        android:id="@+id/ttd_blessing_sticky"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginStart="20dp"
-        android:layout_marginEnd="20dp"
-        android:layout_marginBottom="20dp"
-        android:background="@drawable/bg_ttd_blessing"
-        android:elevation="8dp"
-        android:paddingStart="12dp"
-        android:paddingTop="10dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="10dp">
-
-        <ImageView
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:layout_gravity="end|center_vertical"
-            android:alpha="0.14"
-            android:contentDescription="@null"
-            android:scaleType="centerCrop"
-            android:src="@drawable/img_ttd_temple_watermark" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/ttd_blessing_line1"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:textColor="#FFF5C542"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                tools:text="శ్రీ వారిని సేవించండి, భక్తితో జీవించండి" />
-
-            <TextView
-                android:id="@+id/ttd_blessing"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:gravity="center"
-                android:textColor="#FFFF8A3D"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                tools:text="|| ఓం నమో వేంకటేశాయ ||" />
-        </LinearLayout>
-    </FrameLayout>
-
-    <ImageView
-        android:id="@+id/ttd_blink_share"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_gravity="end|bottom"
-        android:layout_marginEnd="12dp"
-        android:layout_marginBottom="22dp"
-        android:contentDescription="@string/ttd_share"
-        android:elevation="10dp"
-        android:padding="12dp"
-        android:scaleType="centerInside"
-        android:src="@drawable/ic_share_full" />
 </FrameLayout>

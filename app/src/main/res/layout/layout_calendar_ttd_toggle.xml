@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Panchangam | Raasi Phalalu top chrome — same pill pattern as News|Read (auto-hide ~3s). -->
+<!-- Panchangam | Raasi top chrome — retired on HomePage (separate DU tiles).
+     Layout kept for standalone TeluguCalendarActivity only. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/calendar_ttd_toggle_root"
     android:layout_width="match_parent"

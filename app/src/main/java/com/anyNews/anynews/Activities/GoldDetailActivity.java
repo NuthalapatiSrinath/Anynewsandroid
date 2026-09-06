@@ -1,8 +1,10 @@
 package com.anyNews.anynews.Activities;
 
+import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -25,6 +27,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.fragment.app.Fragment;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Ui.GoldHistoryChartView;
@@ -307,6 +310,8 @@ public class GoldDetailActivity extends AppCompatActivity {
         }
     }
 
+    private static final String TAG_GOLD_DATE_PICKER = "gold_history_date";
+
     private void openDatePicker() {
         final TreeSet<String> available = availableHistoryDates(goldSource);
         if (available.isEmpty()) {
@@ -319,6 +324,31 @@ public class GoldDetailActivity extends AppCompatActivity {
             initial = nearestAvailableDate(initial, available);
         }
 
+        // Drop a stale Material picker so re-open never throws "Fragment already added"
+        // or leaves a half-attached dialog that can finish this activity on back.
+        try {
+            Fragment existing = getSupportFragmentManager().findFragmentByTag(TAG_GOLD_DATE_PICKER);
+            if (existing instanceof MaterialDatePicker) {
+                ((MaterialDatePicker<?>) existing).dismissAllowingStateLoss();
+                getSupportFragmentManager().executePendingTransactions();
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            showMaterialHistoryPicker(available, initial);
+        } catch (Exception e) {
+            // AppCompat host / theme gaps used to crash here and pop Gold → Home/News.
+            openDatePickerFallback(available, initial);
+        }
+    }
+
+    /**
+     * Material calendar with {@link AvailableDatesValidator} so IBJA non-trading days
+     * (weekends/holidays) stay dimmed. Requires {@code GoldDetailTheme} (Material Bridge).
+     */
+    private void showMaterialHistoryPicker(@NonNull TreeSet<String> available,
+                                           @NonNull String initial) {
         // Material calendar uses UTC midnight per civil date (not IST wall-clock).
         Set<Long> validUtc = new HashSet<>();
         for (String iso : available) {
@@ -352,16 +382,72 @@ public class GoldDetailActivity extends AppCompatActivity {
         picker.addOnPositiveButtonClickListener(selection -> {
             if (selection == null) return;
             String picked = utcMsToIsoDate(selection);
-            String use = available.contains(picked) ? picked : nearestAvailableDate(picked, available);
-            selectedDateIso = use;
-            setText(R.id.gold_date_value, formatDateLabel(selectedDateIso));
-            applyRatesForSelectedDate();
-            refreshTables();
-            if (!displayHasRates) {
-                Toast.makeText(this, R.string.gold_date_no_data, Toast.LENGTH_SHORT).show();
-            }
+            applyPickedIso(available.contains(picked) ? picked
+                    : nearestAvailableDate(picked, available));
         });
-        picker.show(getSupportFragmentManager(), "gold_history_date");
+        // Cancel / dismiss must stay on Gold & Silver — never finish() this activity.
+        picker.addOnNegativeButtonClickListener(v -> { /* no-op */ });
+        picker.addOnCancelListener(dialog -> { /* no-op */ });
+        picker.addOnDismissListener(dialog -> { /* no-op */ });
+        picker.show(getSupportFragmentManager(), TAG_GOLD_DATE_PICKER);
+    }
+
+    /** Pre-Material fallback: spinner + snap to nearest history day (no dimming). */
+    private void openDatePickerFallback(@NonNull TreeSet<String> available,
+                                        @NonNull String initial) {
+        Calendar cal = Calendar.getInstance(TZ_IST);
+        if (isIsoDate(initial)) {
+            try {
+                String[] p = initial.split("-");
+                cal.set(Integer.parseInt(p[0]), Integer.parseInt(p[1]) - 1, Integer.parseInt(p[2]));
+            } catch (Exception ignored) {
+            }
+        }
+
+        final boolean[] snapping = {false};
+        DatePickerDialog dlg = new DatePickerDialog(this, (view, year, month, dayOfMonth) -> {
+            String picked = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth);
+            applyPickedIso(available.contains(picked) ? picked
+                    : nearestAvailableDate(picked, available));
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH));
+
+        long minMs = isoToStartOfDayMs(available.first());
+        long maxMs = isoToEndOfDayMs(available.last());
+        long todayEnd = Calendar.getInstance(TZ_IST).getTimeInMillis();
+        if (maxMs > todayEnd) maxMs = todayEnd;
+        if (minMs > 0) dlg.getDatePicker().setMinDate(minMs);
+        if (maxMs > 0) dlg.getDatePicker().setMaxDate(maxMs);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            dlg.getDatePicker().setOnDateChangedListener((view, year, month, dayOfMonth) -> {
+                if (snapping[0]) return;
+                String picked = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth);
+                if (available.contains(picked)) return;
+                String nearest = nearestAvailableDate(picked, available);
+                if (!isIsoDate(nearest) || nearest.equals(picked)) return;
+                try {
+                    String[] p = nearest.split("-");
+                    snapping[0] = true;
+                    view.updateDate(Integer.parseInt(p[0]), Integer.parseInt(p[1]) - 1,
+                            Integer.parseInt(p[2]));
+                } catch (Exception ignored) {
+                } finally {
+                    snapping[0] = false;
+                }
+            });
+        }
+        dlg.setOnCancelListener(dialog -> { /* stay on Gold */ });
+        dlg.show();
+    }
+
+    private void applyPickedIso(@NonNull String use) {
+        selectedDateIso = use;
+        setText(R.id.gold_date_value, formatDateLabel(selectedDateIso));
+        applyRatesForSelectedDate();
+        refreshTables();
+        if (!displayHasRates) {
+            Toast.makeText(this, R.string.gold_date_no_data, Toast.LENGTH_SHORT).show();
+        }
     }
 
     /**
@@ -441,6 +527,38 @@ public class GoldDetailActivity extends AppCompatActivity {
         }
     }
 
+    /** IST start-of-day for DatePickerDialog min/max bounds. */
+    private static long isoToStartOfDayMs(String iso) {
+        if (!isIsoDate(iso)) return 0;
+        try {
+            String[] p = iso.split("-");
+            Calendar c = Calendar.getInstance(TZ_IST);
+            c.clear();
+            c.set(Integer.parseInt(p[0]), Integer.parseInt(p[1]) - 1, Integer.parseInt(p[2]),
+                    0, 0, 0);
+            c.set(Calendar.MILLISECOND, 0);
+            return c.getTimeInMillis();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /** IST end-of-day for DatePickerDialog max bound. */
+    private static long isoToEndOfDayMs(String iso) {
+        if (!isIsoDate(iso)) return 0;
+        try {
+            String[] p = iso.split("-");
+            Calendar c = Calendar.getInstance(TZ_IST);
+            c.clear();
+            c.set(Integer.parseInt(p[0]), Integer.parseInt(p[1]) - 1, Integer.parseInt(p[2]),
+                    23, 59, 59);
+            c.set(Calendar.MILLISECOND, 999);
+            return c.getTimeInMillis();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     private static String utcMsToIsoDate(long utcMs) {
         Calendar c = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
         c.setTimeInMillis(utcMs);
@@ -451,8 +569,9 @@ public class GoldDetailActivity extends AppCompatActivity {
     /**
      * Only ISO dates present in {@link #availableHistoryDates} validate; others are
      * dimmed and non-selectable (Way2-style disabled look via Material calendar).
+     * Public so MaterialDatePicker can parcel/unparcel the validator reliably.
      */
-    private static final class AvailableDatesValidator implements CalendarConstraints.DateValidator {
+    public static final class AvailableDatesValidator implements CalendarConstraints.DateValidator {
         private final HashSet<Long> validUtcDays;
 
         AvailableDatesValidator(Set<Long> validUtcDays) {

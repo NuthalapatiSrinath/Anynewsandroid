@@ -6,6 +6,7 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 import android.accounts.AccountManager;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -62,6 +63,7 @@ import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AppSignatureHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.SmsBroadcastReceiver;
 import com.google.android.gms.auth.api.phone.SmsRetriever;
@@ -541,6 +543,41 @@ public class LoginActivityDetails extends AppCompatActivity {
         }
 
         if (pendingOpenBecomeReporter) {
+            if (!ProfileHubConfigHelper.isBecomeAReporterEnabled(this)) {
+                // Hiring OFF: convert guest via OTP, then show not-hiring message — no BAR form.
+                try {
+                    String msg = ProfileHubConfigHelper.getNotHiringMessage(this);
+                    new AlertDialog.Builder(this)
+                            .setMessage(msg)
+                            .setPositiveButton(android.R.string.ok, (d, w) -> {
+                                Intent intent = new Intent(
+                                        LoginActivityDetails.this, HomePage.class);
+                                intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                                if (pendingReturnToProfile) {
+                                    intent.putExtra(
+                                            HomePage.EXTRA_FOOTER_TAB, R.id.navigation_profile);
+                                }
+                                startActivity(intent);
+                                finish();
+                            })
+                            .setCancelable(false)
+                            .show();
+                } catch (Exception e) {
+                    Toast.makeText(this,
+                            ProfileHubConfigHelper.getNotHiringMessage(this),
+                            Toast.LENGTH_LONG).show();
+                    Intent intent = new Intent(LoginActivityDetails.this, HomePage.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    if (pendingReturnToProfile) {
+                        intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_profile);
+                    }
+                    startActivity(intent);
+                    finish();
+                }
+                return;
+            }
             Intent become = new Intent(LoginActivityDetails.this, BecomeAReporterActivity.class);
             become.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(become);

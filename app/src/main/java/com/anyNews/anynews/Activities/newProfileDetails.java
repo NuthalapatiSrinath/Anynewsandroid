@@ -94,6 +94,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
+import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
@@ -475,7 +476,10 @@ public class newProfileDetails extends AppCompatActivity {
 
         textViewAppDelete = findViewById(R.id.textViewAppDelete);
         textViewAppLogout = findViewById(R.id.textViewAppLogout);
-        profile_layout_rewards.setVisibility(View.GONE);
+        profile_layout_rewards.setVisibility(
+                DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
+                        ? View.VISIBLE
+                        : View.GONE);
         profile_layout_shareToearn.setVisibility(View.VISIBLE);
         // Keep avatar tappable (guest → login; signed-in → pick/crop).
         img_upload_photo.setVisibility(View.VISIBLE);
@@ -636,22 +640,13 @@ public class newProfileDetails extends AppCompatActivity {
         profile_layout_rewards.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Toast.makeText(newProfileDetails.this,"Coming soon..",Toast.LENGTH_SHORT).show();
-
-//                boolean is_login = SharedPrefsData.getBool(newProfileDetails.this, Constants.is_login, Constants.PREF_NAME);
-//
-//                if (is_login) {
-//
-//                    Intent intent = new Intent(newProfileDetails.this, ScratchCardsList.class);
-//                    intent.putExtra("REFER_LINK", "" + refer_earn);
-//                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-//                        startActivity(intent);
-//                    }
-//                } else {
-//                    Intent intent = new Intent(newProfileDetails.this, LoginActivityDetails.class);
-//                    startActivity(intent);
-//                }
-
+                if (!DistrictPinVisibilityConfig.rewardsMasterEnabled(newProfileDetails.this)) {
+                    Toast.makeText(newProfileDetails.this, "Rewards is currently off", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                Intent intent = new Intent(newProfileDetails.this,
+                        com.anyNews.anynews.rewards.RewardsHubActivity.class);
+                startActivity(intent);
             }
         });
 
@@ -2406,9 +2401,7 @@ public class newProfileDetails extends AppCompatActivity {
         View row = findViewById(R.id.layout_become_a_reporter);
         if (badge == null) return;
 
-        boolean rowVisible = row != null
-                && row.getVisibility() == View.VISIBLE
-                && ProfileHubConfigHelper.isBecomeAReporterEnabled(this);
+        boolean rowVisible = row != null && row.getVisibility() == View.VISIBLE;
         boolean seen = SharedPrefsData.getBool(
                 this, Constants.BECOME_REPORTER_BADGE_SEEN, Constants.PREF_NAME);
 
@@ -2895,8 +2888,8 @@ public class newProfileDetails extends AppCompatActivity {
         }
         View becomeReporter = findViewById(R.id.layout_become_a_reporter);
         if (becomeReporter != null) {
-            boolean hiringOn = ProfileHubConfigHelper.isBecomeAReporterEnabled(this);
-            becomeReporter.setVisibility(hiringOn && !isReporter ? View.VISIBLE : View.GONE);
+            // Guests + normal users always see the row; hide only for reporters.
+            becomeReporter.setVisibility(isReporter ? View.GONE : View.VISIBLE);
         }
         if (settingsRow != null) {
             if (isReporter) {
@@ -3478,12 +3471,9 @@ public class newProfileDetails extends AppCompatActivity {
         startActivity(intent);
     }
 
-    /** Become-a-Reporter entry: require login, then applicant sandbox (not PostArticles). */
+    /** Become-a-Reporter entry: require login; form if hiring ON, else not-hiring message. */
     private void openBecomeAReporterFlow() {
         markBecomeReporterBadgeSeen();
-        if (!ProfileHubConfigHelper.isBecomeAReporterEnabled(this)) {
-            return;
-        }
         boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
         if (!loggedIn) {
             SharedPrefsData.putBool(this, Constants.LOGIN_SOURCE_BECOME_REPORTER, true, Constants.PREF_NAME);
@@ -3493,7 +3483,27 @@ public class newProfileDetails extends AppCompatActivity {
             startActivity(intent);
             return;
         }
+        if (!ProfileHubConfigHelper.isBecomeAReporterEnabled(this)) {
+            showNotHiringReporterDialog();
+            return;
+        }
         startActivity(new Intent(newProfileDetails.this, BecomeAReporterActivity.class));
+    }
+
+    /** Centered dialog with admin/splash localized not-hiring copy. */
+    private void showNotHiringReporterDialog() {
+        try {
+            String msg = ProfileHubConfigHelper.getNotHiringMessage(this);
+            new AlertDialog.Builder(this)
+                    .setMessage(msg)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .setCancelable(true)
+                    .show();
+        } catch (Exception e) {
+            Toast.makeText(this,
+                    ProfileHubConfigHelper.getNotHiringMessage(this),
+                    Toast.LENGTH_LONG).show();
+        }
     }
 
     private void openReporterPostVideo() {
@@ -4069,7 +4079,7 @@ public class newProfileDetails extends AppCompatActivity {
             });
         }
 
-        // Become a Reporter — hiring toggle; hide for existing reporters
+        // Become a Reporter — always visible for non-reporters; hiring controls form vs message
         View layoutBecome = findViewById(R.id.layout_become_a_reporter);
         TextView becomeLabel = findViewById(R.id.profile_become_a_reporter_label);
         if (becomeLabel != null) {
@@ -4077,10 +4087,9 @@ public class newProfileDetails extends AppCompatActivity {
             becomeLabel.setText(ProfileHubLabels.becomeAReporter(this));
         }
         if (layoutBecome != null) {
-            boolean hiringOn = ProfileHubConfigHelper.isBecomeAReporterEnabled(this);
             boolean alreadyReporter = SharedPrefsData.getBool(
                     this, Constants.is_reporter, Constants.PREF_NAME);
-            layoutBecome.setVisibility(hiringOn && !alreadyReporter ? View.VISIBLE : View.GONE);
+            layoutBecome.setVisibility(alreadyReporter ? View.GONE : View.VISIBLE);
             layoutBecome.setOnClickListener(v -> openBecomeAReporterFlow());
         }
 
@@ -4201,6 +4210,13 @@ public class newProfileDetails extends AppCompatActivity {
         // Pencil: name save only for logged-in users.
         if (edit_profile_icon != null) {
             edit_profile_icon.setVisibility(vis);
+        }
+        // Rewards row: gated by admin rewards_master (placeholder until full payout).
+        if (profile_layout_rewards != null) {
+            profile_layout_rewards.setVisibility(
+                    DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
+                            ? View.VISIBLE
+                            : View.GONE);
         }
     }
 

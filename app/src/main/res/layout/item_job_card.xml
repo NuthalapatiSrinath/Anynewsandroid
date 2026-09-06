@@ -1,24 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Way2-style job card: logo, title, time, description, salary + report/share/call. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="10dp"
     android:background="@drawable/bg_jobs_card"
+    android:elevation="2dp"
+    android:orientation="vertical"
     android:padding="12dp">
 
+    <!-- Header: logo + title + time -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <ImageView
             android:id="@+id/job_logo"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:background="@drawable/bg_jobs_logo"
             android:contentDescription="@null"
-            android:padding="4dp"
+            android:padding="3dp"
             android:scaleType="centerCrop"
             tools:src="@drawable/jobs_company_01" />
 
@@ -34,125 +39,116 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:maxLines="1"
-                android:textColor="#FFFFFFFF"
-                android:textSize="14sp"
+                android:maxLines="2"
+                android:textColor="#FF0F172A"
+                android:textSize="15sp"
                 android:textStyle="bold"
-                tools:text="Software Developer" />
+                tools:text="పుల్కా &amp; రోటీ మేకర్" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="3dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/job_company"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textColor="#FF94A3B8"
-                    android:textSize="12sp"
-                    tools:text="Tata Consultancy Services" />
-
                 <ImageView
-                    android:id="@+id/job_verified"
-                    android:layout_width="14dp"
-                    android:layout_height="14dp"
-                    android:layout_marginStart="4dp"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_jobs_verified"
-                    android:visibility="gone"
-                    tools:visibility="visible" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <ImageView
-                    android:layout_width="11dp"
-                    android:layout_height="11dp"
-                    android:src="@drawable/ic_jobs_pin"
-                    android:tint="#FF64748B" />
+                    android:src="@drawable/ic_jobs_clock"
+                    android:tint="#FF94A3B8" />
 
                 <TextView
-                    android:id="@+id/job_location"
+                    android:id="@+id/job_time"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
+                    android:layout_marginStart="4dp"
                     android:textColor="#FF94A3B8"
                     android:textSize="11sp"
-                    tools:text="Hyderabad" />
-
-                <ImageView
-                    android:layout_width="11dp"
-                    android:layout_height="11dp"
-                    android:layout_marginStart="10dp"
-                    android:src="@drawable/ic_jobs_briefcase"
-                    android:tint="#FF64748B" />
-
-                <TextView
-                    android:id="@+id/job_experience"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
-                    android:textColor="#FF94A3B8"
-                    android:textSize="11sp"
-                    tools:text="2-5 Yrs" />
-
-                <TextView
-                    android:id="@+id/job_salary"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:textColor="#FF4ADE80"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    tools:text="₹ 6 - 10 LPA" />
+                    tools:text="Yesterday" />
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/job_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:layout_marginTop="4dp"
-                android:textColor="#FF64748B"
-                android:textSize="10sp"
-                tools:text="3h క్రితం" />
         </LinearLayout>
-
-        <ImageView
-            android:id="@+id/job_bookmark"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@null"
-            android:padding="5dp"
-            android:src="@drawable/ic_jobs_bookmark"
-            android:tint="#FF64748B" />
     </LinearLayout>
 
+    <!-- Description (phone links applied in code) -->
     <TextView
-        android:id="@+id/job_new_badge"
-        android:layout_width="wrap_content"
+        android:id="@+id/job_description"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="end|top"
-        android:background="@drawable/bg_jobs_new_ribbon"
-        android:paddingStart="8dp"
-        android:paddingTop="2dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="2dp"
-        android:text="NEW"
-        android:textColor="#FFFFFFFF"
-        android:textSize="9sp"
-        android:textStyle="bold"
-        android:visibility="gone"
-        tools:visibility="visible" />
-</FrameLayout>
+        android:layout_marginTop="10dp"
+        android:lineSpacingExtra="2dp"
+        android:textColor="#FF334155"
+        android:textSize="13sp"
+        tools:text="Job description with phone…" />
+
+    <!-- Dashed divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_jobs_dashed_line"
+        android:layerType="software" />
+
+    <!-- Footer: salary + actions -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp">
+
+        <TextView
+            android:id="@+id/job_salary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:layout_toStartOf="@id/job_actions"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingEnd="8dp"
+            android:textColor="#FF0F172A"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            tools:text="₹ 20,000 - 30,000/-" />
+
+        <LinearLayout
+            android:id="@+id/job_actions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/job_report"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_jobs_action_btn"
+                android:contentDescription="@null"
+                android:padding="8dp"
+                android:src="@drawable/ic_jobs_warning" />
+
+            <ImageView
+                android:id="@+id/job_share"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_jobs_action_btn"
+                android:contentDescription="@null"
+                android:padding="8dp"
+                android:src="@drawable/ic_jobs_share_arrow" />
+
+            <ImageView
+                android:id="@+id/job_call"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_jobs_call_btn"
+                android:contentDescription="@null"
+                android:padding="9dp"
+                android:src="@drawable/ic_jobs_call"
+                android:tint="#FFFFFFFF" />
+        </LinearLayout>
+    </RelativeLayout>
+</LinearLayout>

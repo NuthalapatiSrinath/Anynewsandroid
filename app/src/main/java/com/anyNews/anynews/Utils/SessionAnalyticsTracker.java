@@ -839,11 +839,28 @@ public final class SessionAnalyticsTracker {
                     } catch (Exception ignored) {
                     }
                     try {
+                        Boolean hideDistrict = null;
+                        Boolean rewardsMaster = null;
+                        Boolean rewardsSlot = null;
                         if (resBody.has("hide_district_on_main_feed")
                                 && !resBody.get("hide_district_on_main_feed").isJsonNull()) {
+                            hideDistrict =
+                                    resBody.get("hide_district_on_main_feed").getAsBoolean();
+                        }
+                        if (resBody.has("rewards_master")
+                                && !resBody.get("rewards_master").isJsonNull()) {
+                            rewardsMaster = resBody.get("rewards_master").getAsBoolean();
+                        }
+                        if (resBody.has("rewards_in_main_feed_slot")
+                                && !resBody.get("rewards_in_main_feed_slot").isJsonNull()) {
+                            rewardsSlot =
+                                    resBody.get("rewards_in_main_feed_slot").getAsBoolean();
+                        }
+                        if (hideDistrict != null
+                                || rewardsMaster != null
+                                || rewardsSlot != null) {
                             DistrictPinVisibilityConfig.saveFromServer(
-                                    context,
-                                    resBody.get("hide_district_on_main_feed").getAsBoolean());
+                                    context, hideDistrict, rewardsMaster, rewardsSlot);
                         }
                     } catch (Exception ignored) {
                     }

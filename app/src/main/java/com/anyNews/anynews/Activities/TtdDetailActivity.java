@@ -15,8 +15,6 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -58,7 +56,6 @@ public class TtdDetailActivity extends AppCompatActivity {
             R.drawable.ic_ttd_brahmotsavam
     };
 
-    private ImageView blinkShare;
     @Nullable private TtdModels.DayPack pack;
 
     @Override
@@ -75,7 +72,6 @@ public class TtdDetailActivity extends AppCompatActivity {
         pack = TtdRepository.loadToday(this);
         bindUi(pack);
         wireClicks();
-        wireBlinkShare();
         clipHeroPhoto();
     }
 
@@ -100,23 +96,8 @@ public class TtdDetailActivity extends AppCompatActivity {
         final int padB = root.getPaddingBottom();
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(padL + bars.left, padT + bars.top, padR + bars.right, padB);
-            // Keep sticky blessing + share above the nav bar
-            View sticky = findViewById(R.id.ttd_blessing_sticky);
-            if (sticky != null) {
-                ViewGroup.MarginLayoutParams lp =
-                        (ViewGroup.MarginLayoutParams) sticky.getLayoutParams();
-                lp.bottomMargin = (int) (20 * getResources().getDisplayMetrics().density)
-                        + bars.bottom;
-                sticky.setLayoutParams(lp);
-            }
-            if (blinkShare != null) {
-                ViewGroup.MarginLayoutParams lp =
-                        (ViewGroup.MarginLayoutParams) blinkShare.getLayoutParams();
-                lp.bottomMargin = (int) (22 * getResources().getDisplayMetrics().density)
-                        + bars.bottom;
-                blinkShare.setLayoutParams(lp);
-            }
+            v.setPadding(padL + bars.left, padT + bars.top, padR + bars.right,
+                    padB + bars.bottom);
             return insets;
         });
         ViewCompat.requestApplyInsets(root);
@@ -143,14 +124,17 @@ public class TtdDetailActivity extends AppCompatActivity {
         hero.setScaleX(1f);
         hero.setScaleY(1f);
         hero.setImageResource(R.drawable.img_ttd_hero_banner);
-        // MATRIX + right-align cover: image is ~4:1; centerCrop clipped the baked-in
-        // "Tirumala Tirupati Devasthanams" on the right. Prefer cropping the left temple.
+        // MATRIX cover + overscale: crop all edges (hide white fringe); mild end bias
+        // keeps "Tirumala Tirupati Devasthanams" on the right readable.
         hero.setScaleType(ImageView.ScaleType.MATRIX);
         hero.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> applyHeroCoverMatrix(hero));
         hero.post(() -> applyHeroCoverMatrix(hero));
     }
 
-    /** Cover-scale the hero drawable, aligned to the end so right-side title stays visible. */
+    /**
+     * Cover-scale the hero drawable with a slight overscale so all four edges are
+     * cropped (hides white fringe). Mild end bias keeps the right-side title readable.
+     */
     private void applyHeroCoverMatrix(@NonNull ImageView hero) {
         Drawable d = hero.getDrawable();
         if (d == null) return;
@@ -159,10 +143,13 @@ public class TtdDetailActivity extends AppCompatActivity {
         int dw = d.getIntrinsicWidth();
         int dh = d.getIntrinsicHeight();
         if (vw <= 0 || vh <= 0 || dw <= 0 || dh <= 0) return;
-        // Cover + tiny overscale hides any light fringe without a white frame.
-        float scale = Math.max((float) vw / dw, (float) vh / dh) * 1.02f;
-        float dx = vw - dw * scale; // right-align
-        float dy = (vh - dh * scale) * 0.5f;
+        // Overscale ~8% so thin edge artifacts are clipped on all sides.
+        float scale = Math.max((float) vw / dw, (float) vh / dh) * 1.08f;
+        float scaledW = dw * scale;
+        float scaledH = dh * scale;
+        // Bias crop toward the start so right title stays in frame, still inset right.
+        float dx = (vw - scaledW) * 0.35f;
+        float dy = (vh - scaledH) * 0.5f;
         Matrix m = new Matrix();
         m.setScale(scale, scale);
         m.postTranslate(dx, dy);
@@ -192,6 +179,11 @@ public class TtdDetailActivity extends AppCompatActivity {
 
         ImageView back = findViewById(R.id.ttd_back);
         if (back != null) back.setColorFilter(ACCENT, PorterDuff.Mode.SRC_IN);
+        ImageView headerShare = findViewById(R.id.ttd_header_share);
+        if (headerShare != null) {
+            headerShare.setImageResource(R.drawable.ic_share_icon);
+            headerShare.setColorFilter(ACCENT, PorterDuff.Mode.SRC_IN);
+        }
 
         // Quick tiles are informational only — no accidental external link-outs.
         bindQuick(R.id.ttd_quick_darshan, R.drawable.ic_ttd_darshan,
@@ -345,14 +337,9 @@ public class TtdDetailActivity extends AppCompatActivity {
         View back = findViewById(R.id.ttd_back);
         if (back != null) back.setOnClickListener(v -> finish());
 
-        View home = findViewById(R.id.ttd_home);
-        if (home != null) {
-            home.setOnClickListener(v -> {
-                Intent intent = new Intent(this, HomePage.class);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                startActivity(intent);
-                finish();
-            });
+        View headerShare = findViewById(R.id.ttd_header_share);
+        if (headerShare != null) {
+            headerShare.setOnClickListener(v -> sharePack());
         }
 
         TextView book = findViewById(R.id.ttd_book_cta);
@@ -386,17 +373,6 @@ public class TtdDetailActivity extends AppCompatActivity {
                 openUrl(TtdConfigHelper.bookingUrl(this));
             });
         }
-    }
-
-    private void wireBlinkShare() {
-        blinkShare = findViewById(R.id.ttd_blink_share);
-        if (blinkShare == null) return;
-        blinkShare.setImageResource(R.drawable.ic_share_full);
-        blinkShare.clearColorFilter();
-        blinkShare.setBackground(null);
-        blinkShare.setOnClickListener(v -> sharePack());
-        Animation blink = AnimationUtils.loadAnimation(this, R.anim.blink_share);
-        blinkShare.startAnimation(blink);
     }
 
     private void sharePack() {

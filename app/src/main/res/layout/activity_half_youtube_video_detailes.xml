@@ -615,32 +615,22 @@
                 </LinearLayout>
 
 
-                <!-- Reporter row + district row: long Telugu districts no longer crush name/Follow -->
-                <LinearLayout
-                    android:id="@+id/ll_footer_layout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="@dimen/_40sdp"
-                    android:visibility="visible"
-                    android:layout_alignParentBottom="true"
-                    android:background="@color/white"
-                    android:gravity="center_vertical"
-                    android:orientation="vertical"
-                    android:paddingTop="@dimen/_2sdp"
-                    android:paddingBottom="@dimen/_2sdp">
-
-                                <LinearLayout
+                    <!-- Production single-row writer strip: avatar | name+Follow | role/time left; district right (ellipsize) -->
+                    <LinearLayout
+                        android:id="@+id/ll_footer_layout"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:minHeight="@dimen/_28sdp"
+                        android:layout_height="@dimen/_40sdp"
+                        android:visibility="visible"
+                        android:layout_alignParentBottom="true"
+                        android:background="@color/white"
+                        android:gravity="start|center_vertical"
                         android:orientation="horizontal">
 
                         <LinearLayout
                             android:id="@+id/writer_profile_image"
                             android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center_vertical">
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center">
 
                             <de.hdodenhof.circleimageview.CircleImageView
                                 android:id="@+id/writer_profile_pic"
@@ -652,13 +642,13 @@
 
                         <LinearLayout
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="match_parent"
                             android:layout_weight="1"
-                            android:gravity="left|center"
                             android:layout_marginLeft="5dp"
+                            android:gravity="left|center"
+                            android:minWidth="@dimen/_96sdp"
                             android:orientation="vertical">
 
-                            <!-- name+follow cluster: Follow immediately after name -->
                             <LinearLayout
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
@@ -670,12 +660,12 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_gravity="left|center"
-                                    android:maxWidth="@dimen/_140sdp"
                                     android:ellipsize="end"
                                     android:maxLines="1"
+                                    android:maxWidth="@dimen/_100sdp"
+                                    android:text="pavan kumar"
                                     android:textColor="@color/black"
                                     android:textSize="@dimen/_8sdp"
-                                    android:text="pavan kumar"
                                     android:textStyle="bold" />
 
                                 <LinearLayout
@@ -754,44 +744,50 @@
                             </LinearLayout>
 
                         </LinearLayout>
-                    </LinearLayout>
 
-                    <LinearLayout
-                        android:id="@+id/ll_refer_and_earn_half"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/_2sdp"
-                        android:layout_marginStart="@dimen/_4sdp"
-                        android:layout_marginEnd="@dimen/_10sdp"
-                        android:paddingLeft="@dimen/_8sdp"
-                        android:paddingRight="@dimen/_8sdp"
-                        android:paddingTop="@dimen/_2sdp"
-                        android:paddingBottom="@dimen/_2sdp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:background="@drawable/circle_article_location"
-                        android:visibility="visible">
-                        <ImageView
-                            android:id="@+id/iv_share_and_earn"
-                            android:layout_width="@dimen/_12sdp"
-                            android:layout_height="@dimen/_10sdp"
-                            android:layout_marginRight="@dimen/_8sdp"
-                            android:adjustViewBounds="true"
-                            android:gravity="center" />
-                        <TextView
-                            android:id="@+id/my_feed"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:ellipsize="end"
-                            android:gravity="center_vertical|start"
-                            android:maxLines="2"
-                            android:text=""
-                            android:textColor="@color/black"
-                            android:textSize="@dimen/_10sdp"/>
-                    </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginEnd="@dimen/_10sdp"
+                            android:gravity="end|center"
+                            android:orientation="horizontal">
 
-                </LinearLayout>
+                            <LinearLayout
+                                android:id="@+id/ll_refer_and_earn_half"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:paddingLeft="@dimen/_8sdp"
+                                android:paddingRight="@dimen/_8sdp"
+                                android:paddingTop="@dimen/_2sdp"
+                                android:paddingBottom="@dimen/_2sdp"
+                                android:gravity="center"
+                                android:background="@drawable/circle_article_location"
+                                android:orientation="horizontal">
+
+                                <ImageView
+                                    android:id="@+id/iv_share_and_earn"
+                                    android:layout_width="@dimen/_12sdp"
+                                    android:layout_height="@dimen/_10sdp"
+                                    android:layout_marginRight="@dimen/_8sdp"
+                                    android:adjustViewBounds="true"
+                                    android:gravity="center" />
+
+                                <TextView
+                                    android:id="@+id/my_feed"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="match_parent"
+                                    android:ellipsize="end"
+                                    android:gravity="center"
+                                    android:maxLines="1"
+                                    android:maxWidth="@dimen/_90sdp"
+                                    android:text=""
+                                    android:textColor="@color/black"
+                                    android:textSize="@dimen/_12sdp" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                    </LinearLayout>
 
 
             </LinearLayout>

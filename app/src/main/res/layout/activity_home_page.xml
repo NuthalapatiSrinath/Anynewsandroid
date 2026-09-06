@@ -440,7 +440,7 @@
                     android:focusable="true"
                     android:visibility="gone" />
 
-                <!-- Panchangam | Raasi — sibling above calendar host so FlipView cannot cover it. -->
+                <!-- Panchangam | Raasi top chrome retired — separate Daily Updates tiles open each page. -->
                 <include
                     android:id="@+id/include_home_calendar_ttd_toggle"
                     layout="@layout/layout_calendar_ttd_toggle"

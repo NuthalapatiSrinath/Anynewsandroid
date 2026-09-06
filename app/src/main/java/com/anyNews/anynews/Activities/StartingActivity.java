@@ -1732,7 +1732,14 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getNewsTapHalfHideEngagement());
                         DistrictPinVisibilityConfig.saveFromServer(
                                 getApplicationContext(),
-                                startActivityReqModel.getData().getHideDistrictOnMainFeed());
+                                startActivityReqModel.getData().getHideDistrictOnMainFeed(),
+                                startActivityReqModel.getData().getRewardsMaster(),
+                                startActivityReqModel.getData().getRewardsInMainFeedSlot());
+                        com.anyNews.anynews.rewards.RewardsConfigHelper.saveChipCopyFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getRewardsGuestChip(),
+                                startActivityReqModel.getData().getRewardsJoinedChip(),
+                                startActivityReqModel.getData().getRewardsRateLabel());
                         LiveReadersConfig.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getLiveReadersEnabled(),

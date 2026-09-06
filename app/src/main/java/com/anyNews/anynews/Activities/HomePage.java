@@ -143,7 +143,6 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.anyNews.anynews.Ui.HomeFeedRevealView;
-import com.anyNews.anynews.Utils.CalendarRaasiLabels;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
 import com.anyNews.anynews.Utils.AdPreloader;
@@ -151,6 +150,7 @@ import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketFooterLabel;
+import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
@@ -1197,11 +1197,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         // Cold open always starts My Feed (not Video News) unless Special deep-link above.
 
-        // if rewards gots then redirect to profile page
+        // if rewards gots then redirect to Rewards hub (or profile if master off)
         if (TITLE_REWARDS != null && TITLE_REWARDS.contains("rewards")) {
 
             writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_profile);
 
+            if (DistrictPinVisibilityConfig.rewardsMasterEnabled(this)) {
+                try {
+                    startActivity(new Intent(this,
+                            com.anyNews.anynews.rewards.RewardsHubActivity.class));
+                    finish();
+                    overridePendingTransition(0, 0);
+                    return;
+                } catch (Exception ignored) {
+                }
+            }
             openProfileInstant();
 
             finish();
@@ -1551,7 +1561,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 } else if (tabId == R.id.navigation_status) {
                     performDailyUpdatesOpen();
                 } else if (tabId == R.id.navigation_stricker) {
-                    performCalendarOpen();
+                    performCalendarOpen(false);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -5491,11 +5501,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Re-show live readers on the visible half card after warm open / resume / soft-skip.
-     * FlipView keeps the current page and often does not rebind after a prior fade.
+     * Show live readers once on the first half card after paint / config land.
+     * No-op when already shown this process, or when the visible page is not that card.
      */
     private void maybeRefreshLiveReadersBadge() {
         try {
+            if (LiveReadersConfig.hasShownThisSession()) return;
             if (adapter == null || mFlipView == null || list == null || list.isEmpty()) return;
             if (bookmarksModeSelected
                     || isSpecialFeedMode()
@@ -5505,8 +5516,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             final int cur = getVisiblePostIndex();
             if (cur < 0 || cur >= list.size()) return;
-            if (cur >= mFlipView.getChildCount()) return;
-            final View child = mFlipView.getChildAt(cur);
+            // First half article only — never articles below / other visible pages.
+            int firstHalf = -1;
+            for (int i = 0; i < list.size(); i++) {
+                ModelClass.Datum d = list.get(i);
+                if (d == null || d.getPostType() == null) continue;
+                String t = d.getPostType().trim().toLowerCase(java.util.Locale.US);
+                if ("normal_image".equals(t) || "normal_video".equals(t)) {
+                    firstHalf = i;
+                    break;
+                }
+            }
+            if (firstHalf < 0 || cur != firstHalf) return;
+            // FlipView recycles prev/current/next — do not use getChildAt(feedIndex).
+            final View child = mFlipView.getCurrentPageView();
             if (child == null) return;
             adapter.refreshLiveReadersBadgeOnVisiblePage(child, cur);
         } catch (Exception ignored) {
@@ -6126,7 +6149,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /** Opens Telugu calendar in the HomePage content host (footer stays visible). */
     private void onHomeActionChromeCalendar() {
-        performCalendarOpen();
+        performCalendarOpen(false);
     }
 
     /**
@@ -6205,7 +6228,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             if (!isDeviceOnline()) {
                                 return;
                             }
-                            performCalendarOpen();
+                            performCalendarOpen(false);
+                        }
+
+                        @Override
+                        public void openRashiFromDailyUpdates() {
+                            if (!isDeviceOnline()) {
+                                return;
+                            }
+                            performCalendarOpen(true);
                         }
                     });
         } catch (Exception e) {
@@ -6287,135 +6318,43 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             homeCalendarTtdToggleRoot = findViewById(R.id.calendar_ttd_toggle_root);
         }
         if (homeCalendarTtdToggleRoot == null) return;
-        homeCalendarTtdThumb = homeCalendarTtdToggleRoot.findViewById(R.id.calendar_ttd_thumb);
-        homeCalendarTtdSegCalendar =
-                homeCalendarTtdToggleRoot.findViewById(R.id.calendar_seg_calendar);
-        homeCalendarTtdSegTtd = homeCalendarTtdToggleRoot.findViewById(R.id.calendar_seg_ttd);
-        if (homeCalendarTtdSegCalendar != null) {
-            homeCalendarTtdSegCalendar.setText(CalendarRaasiLabels.segPanchangam(this));
-            homeCalendarTtdSegCalendar.setOnClickListener(v -> {
-                bumpHomeCalendarTtdAutoHide();
-                layoutHomeCalendarTtdThumb(false);
-                ensureCalendarController();
-                if (calendarController != null) {
-                    calendarController.selectPanchangamPage(true);
-                }
-            });
-        }
-        if (homeCalendarTtdSegTtd != null) {
-            homeCalendarTtdSegTtd.setText(CalendarRaasiLabels.segRaasiPhalalu(this));
-            homeCalendarTtdSegTtd.setOnClickListener(v -> {
-                bumpHomeCalendarTtdAutoHide();
-                layoutHomeCalendarTtdThumb(true);
-                ensureCalendarController();
-                if (calendarController != null) {
-                    calendarController.selectRaasiPage(true);
-                }
-            });
-        }
-        homeCalendarTtdToggleRoot.setOnClickListener(v -> bumpHomeCalendarTtdAutoHide());
+        // Panchangam and Rashi are separate Daily Updates tiles — no top segment toggle.
         homeCalendarTtdToggleRoot.setVisibility(View.GONE);
         homeCalendarTtdUserHidden = true;
+        homeCalendarTtdThumb = null;
+        homeCalendarTtdSegCalendar = null;
+        homeCalendarTtdSegTtd = null;
     }
 
     private void layoutHomeCalendarTtdThumb(boolean raasiSelected) {
-        if (homeCalendarTtdThumb == null
-                || homeCalendarTtdSegCalendar == null
-                || homeCalendarTtdSegTtd == null) {
-            return;
-        }
-        final View thumb = homeCalendarTtdThumb;
-        final TextView left = homeCalendarTtdSegCalendar;
-        final TextView right = homeCalendarTtdSegTtd;
-        Runnable place = () -> {
-            int leftW = Math.max(left.getWidth(), (int) (110 * getResources().getDisplayMetrics().density));
-            int rightW = Math.max(right.getWidth(), (int) (110 * getResources().getDisplayMetrics().density));
-            ViewGroup.LayoutParams lp = thumb.getLayoutParams();
-            if (lp != null) {
-                lp.width = raasiSelected ? rightW : leftW;
-                thumb.setLayoutParams(lp);
-            }
-            thumb.setTranslationX(raasiSelected ? leftW : 0f);
-            left.setAlpha(raasiSelected ? 0.75f : 1f);
-            right.setAlpha(raasiSelected ? 1f : 0.75f);
-        };
-        if (left.getWidth() <= 0) left.post(place);
-        else place.run();
+        // Top Panchangam|Raasi chrome removed.
     }
 
     /** Keep HomePage pill thumb in sync when controller flips pages (back / segment). */
     public void syncHomeCalendarSegmentThumb(boolean raasiSelected) {
-        layoutHomeCalendarTtdThumb(raasiSelected);
+        // no-op — segment chrome removed
     }
 
     private void setHomeCalendarTtdChromeVisible(boolean visible, boolean animate) {
         if (homeCalendarTtdToggleRoot == null) return;
-        // No longer gated on TTD admin flag — TTD is Daily Updates only.
-        homeCalendarTtdUserHidden = !visible;
-        if (visible) {
-            scheduleHomeCalendarTtdAutoHide(true);
-            homeCalendarTtdToggleRoot.bringToFront();
-            homeCalendarTtdToggleRoot.setElevation(48f * getResources().getDisplayMetrics().density);
-            homeCalendarTtdToggleRoot.setVisibility(View.VISIBLE);
-            if (animate) {
-                homeCalendarTtdToggleRoot.animate().cancel();
-                homeCalendarTtdToggleRoot.setAlpha(0f);
-                homeCalendarTtdToggleRoot.setTranslationY(-48f);
-                homeCalendarTtdToggleRoot.animate()
-                        .alpha(1f)
-                        .translationY(0f)
-                        .setDuration(280L)
-                        .start();
-            } else {
-                homeCalendarTtdToggleRoot.animate().cancel();
-                homeCalendarTtdToggleRoot.setAlpha(1f);
-                homeCalendarTtdToggleRoot.setTranslationY(0f);
-            }
-            boolean raasi = calendarController != null && calendarController.isRaasiPageVisible();
-            layoutHomeCalendarTtdThumb(raasi);
-        } else {
-            cancelHomeCalendarTtdAutoHide();
-            if (animate) {
-                homeCalendarTtdToggleRoot.animate().cancel();
-                homeCalendarTtdToggleRoot.animate()
-                        .alpha(0f)
-                        .translationY(-48f)
-                        .setDuration(280L)
-                        .withEndAction(() -> {
-                            if (homeCalendarTtdToggleRoot != null && homeCalendarTtdUserHidden) {
-                                homeCalendarTtdToggleRoot.setVisibility(View.GONE);
-                            }
-                        })
-                        .start();
-            } else {
-                homeCalendarTtdToggleRoot.animate().cancel();
-                homeCalendarTtdToggleRoot.setVisibility(View.GONE);
-            }
-        }
+        // Always keep hidden: Rashi / Panchangam open as dedicated Daily Updates entries.
+        homeCalendarTtdUserHidden = true;
+        cancelHomeCalendarTtdAutoHide();
+        homeCalendarTtdToggleRoot.animate().cancel();
+        homeCalendarTtdToggleRoot.setVisibility(View.GONE);
+        homeCalendarTtdToggleRoot.setAlpha(0f);
     }
 
     private void scheduleHomeCalendarTtdAutoHide(boolean restartIfPending) {
-        if (!restartIfPending && homeCalendarTtdAutoHidePending) return;
-        if (homeCalendarTtdUserHidden || homeCalendarTtdToggleRoot == null) return;
-        int seconds = HomeModeChromeConfig.getAutoHideSeconds(this);
-        if (seconds <= 0) {
-            cancelHomeCalendarTtdAutoHide();
-            return;
-        }
-        homeCalendarTtdHandler.removeCallbacks(homeCalendarTtdAutoHideRunnable);
-        homeCalendarTtdAutoHidePending = true;
-        homeCalendarTtdHandler.postDelayed(homeCalendarTtdAutoHideRunnable, seconds * 1000L);
+        // no-op
     }
 
     private void bumpHomeCalendarTtdAutoHide() {
-        if (homeCalendarTtdUserHidden) return;
-        scheduleHomeCalendarTtdAutoHide(true);
+        // no-op
     }
 
     private void runHomeCalendarTtdAutoHide() {
         homeCalendarTtdAutoHidePending = false;
-        if (homeCalendarTtdUserHidden) return;
-        setHomeCalendarTtdChromeVisible(false, true);
     }
 
     private void cancelHomeCalendarTtdAutoHide() {
@@ -6424,29 +6363,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Reveal Panchangam|Raasi chrome after auto-hide (tap calendar / raasi content).
-     * Treats a non-visible pill as hidden even if the flag drifted — so both Flip pages
-     * can always re-show the HomePage-hosted toggle for ~3s.
+     * Former Panchangam|Raasi chrome reveal — disabled; tiles open each page directly.
      */
     public void revealHomeCalendarTtdChrome() {
-        if (!isCalendarMode()) return;
-        boolean visiblyShown = homeCalendarTtdToggleRoot != null
-                && homeCalendarTtdToggleRoot.getVisibility() == View.VISIBLE
-                && homeCalendarTtdToggleRoot.getAlpha() > 0.05f;
-        if (!homeCalendarTtdUserHidden && visiblyShown) {
-            bumpHomeCalendarTtdAutoHide();
-            return;
-        }
-        setHomeCalendarTtdChromeVisible(true, true);
+        // no-op
     }
 
     /**
-     * News|Read style: tap content to show chrome if hidden, or hide if visible.
-     * Auto-hide re-arms for {@link HomeModeChromeConfig} seconds (default 3).
+     * Former calendar chrome toggle — disabled (no top segment pill).
      */
     public void toggleHomeCalendarChrome() {
-        if (!isCalendarMode()) return;
-        setHomeCalendarTtdChromeVisible(homeCalendarTtdUserHidden, true);
+        // no-op
     }
 
     private void ensureCalendarController() {
@@ -6465,12 +6392,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Soft Calendar open: show panchang FlipView in content area above footer.
+     * Soft Calendar open: show panchang / raasi FlipView in content area above footer.
      * Does not start {@link TeluguCalendarActivity}.
      * Entry is Daily Updates (footer Panchangam tab is product-hidden).
+     *
+     * @param openRaasi true → Raasi Phalalu page; false → Panchangam calendar page
      */
-    private void performCalendarOpen() {
-        showLog("performCalendarOpen");
+    private void performCalendarOpen(boolean openRaasi) {
+        showLog("performCalendarOpen raasi=" + openRaasi);
         if (!isDeviceOnline()) {
             return;
         }
@@ -6512,26 +6441,41 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         return;
                     }
                     ensureCalendarController();
-                    setHomeCalendarTtdChromeVisible(true, false);
+                    setHomeCalendarTtdChromeVisible(false, false);
                     if (calendarController != null) {
+                        if (openRaasi) {
+                            calendarController.selectRaasiPage(false);
+                        } else {
+                            calendarController.selectPanchangamPage(false);
+                        }
                         calendarController.onHostResume();
                     }
                 });
             } else {
                 ensureCalendarController();
-                setHomeCalendarTtdChromeVisible(true, false);
+                setHomeCalendarTtdChromeVisible(false, false);
                 if (calendarController != null) {
+                    if (openRaasi) {
+                        calendarController.selectRaasiPage(false);
+                    } else {
+                        calendarController.selectPanchangamPage(false);
+                    }
                     calendarController.onHostResume();
                 }
             }
         } catch (Exception ignored) {
             ensureCalendarController();
             try {
-                setHomeCalendarTtdChromeVisible(true, false);
+                setHomeCalendarTtdChromeVisible(false, false);
             } catch (Exception ignored2) {
             }
             if (calendarController != null) {
                 try {
+                    if (openRaasi) {
+                        calendarController.selectRaasiPage(false);
+                    } else {
+                        calendarController.selectPanchangamPage(false);
+                    }
                     calendarController.onHostResume();
                 } catch (Exception ignored2) {
                 }
@@ -14208,7 +14152,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         homeActivityResumed = true;
         try {
             if (isCalendarMode()) {
-                setHomeCalendarTtdChromeVisible(true, false);
+                setHomeCalendarTtdChromeVisible(false, false);
                 if (calendarController != null) {
                     calendarController.onHostResume();
                 }
@@ -14336,7 +14280,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onResume();
         updateSpecialTabBlinkIndicator();
         try {
-            // Warm reopen: FlipView kept the page after badge fade — re-show on this open.
+            // After resume: only show if not yet consumed this process and still on first half.
             final android.view.View decor =
                     getWindow() != null ? getWindow().getDecorView() : null;
             if (decor != null) {
@@ -14703,7 +14647,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } else if (item.getItemId() == R.id.navigation_stricker) {
                 if (ProfileHubConfigHelper.isFooterShowCalendar(HomePage.this)
                         && isDeviceOnline()) {
-                    performCalendarOpen();
+                    performCalendarOpen(false);
                 }
             }
         }
@@ -14769,7 +14713,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         return false;
                     }
                     closeCenterPlusMenu(true);
-                    performCalendarOpen();
+                    performCalendarOpen(false);
                     return true;
                 case R.id.navigation_profile:
                     // Profile is online-only (hidden offline with Special / Video / Calendar).

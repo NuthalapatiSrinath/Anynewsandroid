@@ -258,10 +258,22 @@ public class Constants {
      */
     public static String NEWS_TAP_HALF_HIDE_ENGAGEMENT = "news_tap_half_hide_engagement";
     /**
-     * Hide district pin/label on main News feed; show only in Local.
-     * Default true. Splash/session: {@code hide_district_on_main_feed}.
+     * Hide district pin/label on main News feed for non-district posts.
+     * District/local posts and Local feed still show district. Default true.
+     * Splash/session: {@code hide_district_on_main_feed}.
      */
     public static String HIDE_DISTRICT_ON_MAIN_FEED = "hide_district_on_main_feed";
+    /**
+     * Rewards feature master (Profile row + optional main-feed slot). Default false.
+     * Splash/session: {@code rewards_master}.
+     */
+    public static String REWARDS_MASTER = "rewards_master";
+    /**
+     * When hide-district is ON, show rewards promo in the main-feed district slot
+     * for non-district posts. Never on Local / district posts. Default false.
+     * Splash/session: {@code rewards_in_main_feed_slot}.
+     */
+    public static String REWARDS_IN_MAIN_FEED_SLOT = "rewards_in_main_feed_slot";
     /**
      * Way2-style live readers badge on half articles (splash/session/articles).
      * Default OFF.

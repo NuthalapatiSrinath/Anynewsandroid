@@ -22,6 +22,7 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.ProfileHubLabels;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.bumptech.glide.Glide;
@@ -375,6 +376,11 @@ public class BecomeAReporterActivity extends AppCompatActivity {
         body.addProperty("draft_id",
                 SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
         body.addProperty("source", "become_a_reporter");
+        try {
+            body.addProperty("language_id",
+                    SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME));
+        } catch (Exception ignored) {
+        }
         return body;
     }
 
@@ -416,8 +422,24 @@ public class BecomeAReporterActivity extends AppCompatActivity {
                         return;
                     }
                     if (!data.optBoolean("hiring_enabled", true)) {
-                        statusView.setText("Hiring is currently closed.");
-                        finish();
+                        String msg = data.optString("not_hiring_message", "").trim();
+                        if (TextUtils.isEmpty(msg)) {
+                            msg = ProfileHubConfigHelper.getNotHiringMessage(
+                                    BecomeAReporterActivity.this);
+                        }
+                        try {
+                            ProfileHubConfigHelper.saveNotHiringMessages(
+                                    BecomeAReporterActivity.this,
+                                    data.optJSONObject("not_hiring_messages"));
+                        } catch (Exception ignored) {
+                        }
+                        statusView.setText(msg);
+                        new android.app.AlertDialog.Builder(BecomeAReporterActivity.this)
+                                .setMessage(msg)
+                                .setPositiveButton(android.R.string.ok,
+                                        (d, w) -> finish())
+                                .setCancelable(false)
+                                .show();
                         return;
                     }
                     if (!data.optBoolean("logged_in", false)) {

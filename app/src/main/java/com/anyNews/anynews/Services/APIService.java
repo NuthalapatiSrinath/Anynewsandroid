@@ -399,6 +399,10 @@ public interface APIService {
     @POST("app/{version}/get_jobs")
     Call<JsonObject> get_jobs(@Path("version") String version, @Body JsonObject body);
 
+    /** Udyogalu — report a job (reason + mobile). */
+    @POST("app/{version}/report_job")
+    Call<JsonObject> report_job(@Path("version") String version, @Body JsonObject body);
+
     @POST("app/{version}/reporter_applicant_get")
     Call<JsonObject> reporter_applicant_get(@Path("version") String version, @Body JsonObject body);
 
@@ -451,6 +455,28 @@ public interface APIService {
     /** Batched real native-ad impressions (AdImpressionReporter) — no per-ad calls. */
     @POST("app/{version}/report_ad_impressions")
     Call<JsonObject> report_ad_impressions(@Path("version") String version, @Body JsonObject payload);
+
+    /** AnyNews Coins / Rewards (master flag gated server-side). */
+    @POST("app/{version}/rewards_hub")
+    Call<JsonObject> rewards_hub(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_leaderboard")
+    Call<JsonObject> rewards_leaderboard(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_events_batch")
+    Call<JsonObject> rewards_events_batch(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_join")
+    Call<JsonObject> rewards_join(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_update_upi")
+    Call<JsonObject> rewards_update_upi(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_withdraw")
+    Call<JsonObject> rewards_withdraw(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_history")
+    Call<JsonObject> rewards_history(@Path("version") String version, @Body JsonObject body);
 
     @POST("app/{version}/session")
     Call<JsonObject> post_session(@Path("version") String version, @Body JsonObject session);

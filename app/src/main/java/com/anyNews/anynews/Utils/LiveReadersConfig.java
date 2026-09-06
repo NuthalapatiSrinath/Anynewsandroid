@@ -22,7 +22,23 @@ public final class LiveReadersConfig {
     public static final int DEFAULT_SHOW_SECONDS = 4;
     public static final int DEFAULT_MIN_COUNT = 1;
 
+    /**
+     * Process-scoped: badge may appear at most once per app process (cold or warm
+     * open until process death). Scroll / rebind / resume must not re-show.
+     */
+    private static volatile boolean sShownThisSession = false;
+
     private LiveReadersConfig() {}
+
+    /** True after the session badge was started (or skipped permanently). */
+    public static boolean hasShownThisSession() {
+        return sShownThisSession;
+    }
+
+    /** Mark badge consumed for this process — never show again until process death. */
+    public static void markShownThisSession() {
+        sShownThisSession = true;
+    }
 
     public static void saveFromServer(
             @Nullable Context context,

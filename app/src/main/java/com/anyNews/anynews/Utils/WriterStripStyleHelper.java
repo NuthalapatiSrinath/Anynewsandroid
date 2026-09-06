@@ -144,8 +144,8 @@ public final class WriterStripStyleHelper {
             location.setVisibility(View.VISIBLE);
             location.setAlpha(1f);
             try {
-                // Match footer layout: district may wrap to 2 lines under reporter.
-                location.setMaxLines(2);
+                // Single-row footer: ellipsize long district names; never wrap to a 2nd row.
+                location.setMaxLines(1);
                 location.setEllipsize(TextUtils.TruncateAt.END);
             } catch (Exception ignored) {
             }
