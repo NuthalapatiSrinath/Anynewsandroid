@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/advertise_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#FFF7F2"
+    android:fitsSystemWindows="false"
     android:orientation="vertical">
 
     <LinearLayout
+        android:id="@+id/advertise_header"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="#FFFF6B00"
@@ -117,7 +120,7 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- Chat -->
+    <!-- Chat (text only) -->
     <LinearLayout
         android:id="@+id/advertise_chat"
         android:layout_width="match_parent"
@@ -141,24 +144,6 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:padding="8dp">
-
-            <ImageButton
-                android:id="@+id/advertise_attach"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/advertise_attach"
-                android:src="@drawable/ic_hub_share"
-                app:tint="#FF6B00" />
-
-            <ImageButton
-                android:id="@+id/advertise_voice"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/advertise_voice"
-                android:src="@drawable/ic_hub_feedback"
-                app:tint="#FF6B00" />
 
             <EditText
                 android:id="@+id/advertise_input"

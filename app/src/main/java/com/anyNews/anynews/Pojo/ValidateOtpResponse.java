@@ -33,6 +33,18 @@ public class ValidateOtpResponse implements Serializable {
         @SerializedName("is_reporter")
         @Expose
         private Boolean isReporter;
+        @SerializedName("language_id")
+        @Expose
+        private Integer languageId;
+        @SerializedName("state_id")
+        @Expose
+        private Integer stateId;
+        @SerializedName("dist_id")
+        @Expose
+        private Integer distId;
+        @SerializedName("location")
+        @Expose
+        private String location;
         private final static long serialVersionUID = -5867418139714542685L;
 
         public Integer getUserId() {
@@ -89,6 +101,38 @@ public class ValidateOtpResponse implements Serializable {
 
         public void setIsReporter(Boolean isReporter) {
             this.isReporter = isReporter;
+        }
+
+        public Integer getLanguageId() {
+            return languageId;
+        }
+
+        public void setLanguageId(Integer languageId) {
+            this.languageId = languageId;
+        }
+
+        public Integer getStateId() {
+            return stateId;
+        }
+
+        public void setStateId(Integer stateId) {
+            this.stateId = stateId;
+        }
+
+        public Integer getDistId() {
+            return distId;
+        }
+
+        public void setDistId(Integer distId) {
+            this.distId = distId;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
         }
     }
 

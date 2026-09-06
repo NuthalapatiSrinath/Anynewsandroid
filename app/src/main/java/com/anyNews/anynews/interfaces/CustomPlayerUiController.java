@@ -82,7 +82,7 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
         playPauseButton.setVisibility(View.GONE);
         playPauseButton.setOnClickListener((view) -> {
             if (playerTracker.getState() == PlayerConstants.PlayerState.PLAYING) {
-                playPauseButton.setImageResource(R.drawable.ic_video_play);
+                playPauseButton.setImageResource(R.drawable.ic_way2_play_circle);
                 youTubePlayer.pause();
                 if (onUserPausePlayback != null) {
                     onUserPausePlayback.run();
@@ -186,7 +186,7 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
             panel.setBackgroundColor(ContextCompat.getColor(context, android.R.color.transparent));
             progressbar.setVisibility(View.GONE);
             showFullScreenVideo.showProgressOnMainPage(false);
-            playPauseButton.setImageResource(R.drawable.ic_video_play);
+            playPauseButton.setImageResource(R.drawable.ic_way2_play_circle);
         } else {
             AppHelper.showLog("onStateChange: OTHER $$");
             if (state == PlayerConstants.PlayerState.BUFFERING) {

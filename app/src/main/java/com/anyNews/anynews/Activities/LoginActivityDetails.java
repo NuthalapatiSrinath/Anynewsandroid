@@ -62,6 +62,7 @@ import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AppSignatureHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.SmsBroadcastReceiver;
 import com.google.android.gms.auth.api.phone.SmsRetriever;
@@ -398,6 +399,37 @@ public class LoginActivityDetails extends AppCompatActivity {
             txt_mobile_otp.setText("We have sent a 4 digit OTP\nOn +91 " + num);
         }
         focusFirstOtpBox();
+    }
+
+    /**
+     * On OTP success, overwrite SharedPreferences language/state/district from the
+     * logged-in account (server Writers/Users). Logout intentionally keeps the prior
+     * device geography — without this, Profile still shows the previous user's district.
+     */
+    private void applyAccountGeographyFromLogin(ValidateOtpResponse.Data loginData) {
+        if (loginData == null) return;
+        Context app = getApplicationContext();
+        int langId = loginData.getLanguageId() != null ? loginData.getLanguageId() : 0;
+        int stateId = loginData.getStateId() != null ? loginData.getStateId() : 0;
+        int distId = loginData.getDistId() != null ? loginData.getDistId() : 0;
+        String location = loginData.getLocation() != null ? loginData.getLocation().trim() : "";
+        if (langId > 0) {
+            SharedPrefsData.putInt(app, Constants.LanguageID, langId, Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.reporter_language_id, langId, Constants.PREF_NAME);
+        }
+        if (stateId > 0) {
+            SharedPrefsData.putInt(app, Constants.StateID, stateId, Constants.PREF_NAME);
+        }
+        if (distId > 0 || DistrictLabelHelper.isUsable(location)) {
+            int langForSave = langId > 0
+                    ? langId
+                    : SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+            if (DistrictLabelHelper.isUsable(location)) {
+                DistrictLabelHelper.saveFromServer(app, langForSave, distId, location);
+            } else if (distId > 0) {
+                SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
+            }
+        }
     }
 
     /** Step 3: name + email after OTP — pre-fill for existing mobiles. Never "Guest". */
@@ -802,6 +834,9 @@ public class LoginActivityDetails extends AppCompatActivity {
                                 SharedPrefsData.putString(getApplicationContext(),
                                         Constants.Email, se, Constants.PREF_NAME);
                             }
+                            // Switch device geography to this account (clear previous
+                            // user's Kadapa / language prefs left behind after logout).
+                            applyAccountGeographyFromLogin(loginData);
                         }
                     } catch (Exception ignored) {
                     }

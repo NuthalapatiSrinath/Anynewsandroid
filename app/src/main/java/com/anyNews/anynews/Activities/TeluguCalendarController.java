@@ -872,6 +872,11 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             // Same instance: still refresh detail text for selected day/rashi.
             bindRaasiDetail();
         }
+        // Nakshatra/yoga come from yearPack DayData. Opening Raasi first can wire
+        // this page before (or without) calendar page's ensureYearAndBind.
+        if (yearPack == null || currentYearLoaded != displayMonth.get(Calendar.YEAR)) {
+            ensureYearAndBind();
+        }
         updateFlipIndicators(flipPager != null ? flipPager.getCurrentPage() : 0);
         // Raasi page taps must re-show the same top Panchangam|Raasi toggle (~3s).
         installRaasiChromeRevealTargets();
@@ -1102,6 +1107,12 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         bindGrid();
         bindDetailCards();
         bindFestivalStrip();
+        // Year pack may arrive after the first Raasi bind (Daily Updates → Rashi
+        // opens page 1 while loadYear is still in flight). Without this, the info
+        // bar keeps "—" for nakshatra until the user taps another rashi.
+        if (raasiDetail != null) {
+            bindRaasiDetail();
+        }
     }
 
     private void bindMonthHeader() {

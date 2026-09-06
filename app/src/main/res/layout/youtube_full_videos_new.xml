@@ -49,11 +49,12 @@
 
             <ImageView
                 android:id="@+id/imageViewPlayVideo"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
                 android:clickable="true"
                 android:visibility="visible"
-                android:src="@drawable/ic_video_play"
+                android:src="@drawable/ic_way2_play_circle"
+                android:scaleType="fitCenter"
                 android:layout_centerInParent="true"
                 android:focusable="true" />
 

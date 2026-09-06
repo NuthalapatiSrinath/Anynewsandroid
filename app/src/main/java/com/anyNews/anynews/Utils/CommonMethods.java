@@ -113,6 +113,17 @@ public class CommonMethods {
         return formatter.format(date1);
     }
 
+    /** Reporter desk list: always a calendar date (never "Few hours ago"). */
+    public String getReporterListDate(long dateMs) {
+        if (dateMs <= 0) return "";
+        try {
+            return new SimpleDateFormat("dd MMM yyyy", java.util.Locale.ENGLISH)
+                    .format(new Date(dateMs));
+        } catch (Exception e) {
+            return getHrsFormatfromDateForMonth(dateMs);
+        }
+    }
+
     public String getHrsFormatfromDate(long date) {
         String formattedDate = null;
         // SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");

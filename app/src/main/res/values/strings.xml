@@ -348,6 +348,18 @@
     <string name="profile_likes_received">Likes received</string>
     <string name="profile_comments">Comments</string>
     <string name="profile_total_views">Total views</string>
+
+    <!-- Reporter articles date filter + pager (Telugu defaults; translator overrides when present) -->
+    <string name="posts_date_from">నుండి</string>
+    <string name="posts_date_to">వరకు</string>
+    <string name="posts_date_apply">వర్తింపజేయి</string>
+    <string name="posts_date_clear">క్లియర్</string>
+    <string name="posts_date_order_error">నుండి తేదీ వరకు తేదీ కంటే ముందు ఉండాలి</string>
+    <string name="posts_date_range_applied">%1$s నుండి %2$s వరకు వర్తింపజేయబడింది</string>
+    <string name="posts_page_prev">మునుపటి</string>
+    <string name="posts_page_next">తదుపరి</string>
+    <string name="posts_page_label">పేజీ %1$d</string>
+    <string name="posts_page_of">పేజీ %1$d / %2$d</string>
     <string name="profile_followers_label">Followers</string>
     <string name="profile_follow_action">Follow</string>
     <string name="profile_share_app">Share app</string>

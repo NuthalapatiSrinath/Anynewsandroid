@@ -1,12 +1,9 @@
 package com.anyNews.anynews.Activities;
 
-import android.Manifest;
-import android.content.Intent;
-import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.media.MediaRecorder;
-import android.net.Uri;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
@@ -14,18 +11,20 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -38,23 +37,22 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.TimeZone;
 
-import okhttp3.MediaType;
-import okhttp3.MultipartBody;
-import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
- * Profile → Advertise on AnyNews: offer banner, lead form, then chat
- * (text / image / video / voice). No continuous polling — refresh on resume only.
+ * Profile → Advertise on AnyNews: offer banner, lead form, then text-only chat.
+ * No continuous polling — refresh on resume only.
  */
 public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
 
@@ -72,31 +70,15 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
     private MessagesAdapter adapter;
     private long threadId;
     private boolean busy;
-    private MediaRecorder recorder;
-    private File voiceFile;
-    private boolean recording;
-
-    private final ActivityResultLauncher<String> pickMedia =
-            registerForActivityResult(
-                    new ActivityResultContracts.GetContent(),
-                    uri -> {
-                        if (uri != null) uploadAndSendMedia(uri);
-                    });
-
-    private final ActivityResultLauncher<String> askMic =
-            registerForActivityResult(
-                    new ActivityResultContracts.RequestPermission(),
-                    granted -> {
-                        if (granted) toggleVoiceRecord();
-                        else
-                            Toast.makeText(this, R.string.advertise_mic_denied, Toast.LENGTH_SHORT)
-                                    .show();
-                    });
+    private boolean systemBarInsetsInstalled;
+    /** Guards overlapping full/delta fetches that previously duplicated the list. */
+    private boolean messagesLoading;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_advertise_on_anynews);
+        applySystemBarInsets();
 
         offerText = findViewById(R.id.advertise_offer_text);
         formScroll = findViewById(R.id.advertise_form_scroll);
@@ -121,15 +103,6 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         TextView sendBtn = findViewById(R.id.advertise_send);
         if (sendBtn != null) sendBtn.setOnClickListener(v -> sendText());
 
-        ImageButton attach = findViewById(R.id.advertise_attach);
-        if (attach != null) {
-            attach.setOnClickListener(v -> showAttachChooser());
-        }
-        ImageButton voice = findViewById(R.id.advertise_voice);
-        if (voice != null) {
-            voice.setOnClickListener(v -> onVoiceClick());
-        }
-
         adapter = new MessagesAdapter();
         if (messagesList != null) {
             messagesList.setLayoutManager(new LinearLayoutManager(this));
@@ -149,15 +122,76 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        applySystemBarInsets();
         if (threadId > 0) {
-            loadMessages(true);
+            // Prefer delta when we already have messages; otherwise full replace.
+            loadMessages(adapter != null && adapter.lastId() > 0);
         }
     }
 
-    @Override
-    protected void onDestroy() {
-        stopRecorderQuiet();
-        super.onDestroy();
+    /**
+     * targetSdk edge-to-edge draws under the status bar — pad orange header so back/title
+     * sit below the clock while orange fills the status-bar region.
+     */
+    private void applySystemBarInsets() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        int orange = Color.parseColor("#FFFF6B00");
+        getWindow().setStatusBarColor(orange);
+        getWindow().setNavigationBarColor(Color.parseColor("#FFF7F2"));
+
+        WindowInsetsControllerCompat controller =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        if (controller != null) {
+            controller.setAppearanceLightStatusBars(false);
+            boolean lightNav =
+                    (getResources().getConfiguration().uiMode
+                                    & Configuration.UI_MODE_NIGHT_MASK)
+                            != Configuration.UI_MODE_NIGHT_YES;
+            controller.setAppearanceLightNavigationBars(lightNav);
+        }
+
+        final View root = findViewById(R.id.advertise_root);
+        final View header = findViewById(R.id.advertise_header);
+        if (root == null || header == null) return;
+
+        if (!systemBarInsetsInstalled) {
+            systemBarInsetsInstalled = true;
+            final int baseHeaderHeightPx = header.getLayoutParams().height;
+            final int headerPadL = header.getPaddingLeft();
+            final int headerPadT = header.getPaddingTop();
+            final int headerPadR = header.getPaddingRight();
+            final int headerPadB = header.getPaddingBottom();
+            final int rootPadBottom = root.getPaddingBottom();
+
+            ViewCompat.setOnApplyWindowInsetsListener(
+                    root,
+                    (v, windowInsets) -> {
+                        Insets status =
+                                windowInsets.getInsets(WindowInsetsCompat.Type.statusBars());
+                        Insets bars =
+                                windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+                        int top = status.top;
+                        if (baseHeaderHeightPx > 0) {
+                            ViewGroup.LayoutParams lp = header.getLayoutParams();
+                            lp.height = baseHeaderHeightPx + top;
+                            header.setLayoutParams(lp);
+                        }
+                        header.setPadding(
+                                headerPadL + bars.left,
+                                headerPadT + top,
+                                headerPadR + bars.right,
+                                headerPadB);
+                        v.setPadding(
+                                v.getPaddingLeft(),
+                                v.getPaddingTop(),
+                                v.getPaddingRight(),
+                                rootPadBottom + bars.bottom);
+                        return WindowInsetsCompat.CONSUMED;
+                    });
+        }
+        ViewCompat.requestApplyInsets(root);
     }
 
     private void prefillIdentity() {
@@ -321,11 +355,14 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
     }
 
     private void loadMessages(boolean deltaOnly) {
-        if (threadId <= 0) return;
+        if (threadId <= 0 || messagesLoading) return;
+        messagesLoading = true;
+        final boolean useAfter = deltaOnly && adapter.lastId() > 0;
+        final long afterId = useAfter ? adapter.lastId() : 0;
         JsonObject body = new JsonObject();
         body.addProperty("thread_id", threadId);
-        if (deltaOnly && adapter.lastId() > 0) {
-            body.addProperty("after_id", adapter.lastId());
+        if (useAfter) {
+            body.addProperty("after_id", afterId);
         }
         body.addProperty("limit", 80);
         APIService api = RestApiClient.getClient().create(APIService.class);
@@ -335,13 +372,14 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                             @Override
                             public void onResponse(
                                     Call<JsonObject> call, Response<JsonObject> response) {
+                                messagesLoading = false;
                                 try {
                                     JsonObject root = response.body();
                                     if (root == null || !root.has("data")) return;
                                     JsonArray msgs =
                                             root.getAsJsonObject("data").getAsJsonArray("messages");
                                     List<ChatMsg> list = parseMessages(msgs);
-                                    if (deltaOnly && adapter.lastId() > 0) {
+                                    if (useAfter) {
                                         adapter.append(list);
                                     } else {
                                         adapter.setAll(list);
@@ -352,7 +390,9 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                             }
 
                             @Override
-                            public void onFailure(Call<JsonObject> call, Throwable t) {}
+                            public void onFailure(Call<JsonObject> call, Throwable t) {
+                                messagesLoading = false;
+                            }
                         });
     }
 
@@ -360,18 +400,17 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         if (busy || threadId <= 0) return;
         String text = messageInput != null ? messageInput.getText().toString().trim() : "";
         if (TextUtils.isEmpty(text)) return;
-        sendMessage("text", text, "");
+        sendMessage(text);
         if (messageInput != null) messageInput.setText("");
     }
 
-    private void sendMessage(String type, String text, String mediaUrl) {
+    private void sendMessage(String text) {
         if (busy || threadId <= 0) return;
         busy = true;
         JsonObject body = new JsonObject();
         body.addProperty("thread_id", threadId);
-        body.addProperty("type", type);
+        body.addProperty("type", "text");
         body.addProperty("text", text != null ? text : "");
-        body.addProperty("media_url", mediaUrl != null ? mediaUrl : "");
         try {
             int draft =
                     SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
@@ -428,185 +467,6 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                         });
     }
 
-    private void showAttachChooser() {
-        CharSequence[] items =
-                new CharSequence[] {
-                    getString(R.string.advertise_pick_image),
-                    getString(R.string.advertise_pick_video)
-                };
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.advertise_attach)
-                .setItems(
-                        items,
-                        (d, which) -> {
-                            if (which == 0) pickMedia.launch("image/*");
-                            else pickMedia.launch("video/*");
-                        })
-                .show();
-    }
-
-    private void onVoiceClick() {
-        if (recording) {
-            stopAndSendVoice();
-            return;
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-            askMic.launch(Manifest.permission.RECORD_AUDIO);
-        } else {
-            toggleVoiceRecord();
-        }
-    }
-
-    private void toggleVoiceRecord() {
-        if (recording) {
-            stopAndSendVoice();
-            return;
-        }
-        try {
-            voiceFile = new File(getCacheDir(), "adv_voice_" + System.currentTimeMillis() + ".m4a");
-            recorder = new MediaRecorder();
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-            recorder.setOutputFile(voiceFile.getAbsolutePath());
-            recorder.prepare();
-            recorder.start();
-            recording = true;
-            Toast.makeText(this, R.string.advertise_recording, Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            stopRecorderQuiet();
-            Toast.makeText(this, R.string.advertise_record_failed, Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void stopAndSendVoice() {
-        try {
-            if (recorder != null) {
-                recorder.stop();
-            }
-        } catch (Exception ignored) {
-        }
-        stopRecorderQuiet();
-        recording = false;
-        if (voiceFile != null && voiceFile.exists() && voiceFile.length() > 0) {
-            uploadFileBytes(voiceFile, "audio/mp4", voiceFile.getName(), "voice");
-        }
-    }
-
-    private void stopRecorderQuiet() {
-        try {
-            if (recorder != null) {
-                recorder.release();
-            }
-        } catch (Exception ignored) {
-        }
-        recorder = null;
-        recording = false;
-    }
-
-    private void uploadAndSendMedia(Uri uri) {
-        if (busy || threadId <= 0) return;
-        busy = true;
-        Toast.makeText(this, R.string.advertise_uploading, Toast.LENGTH_SHORT).show();
-        try {
-            String mime = getContentResolver().getType(uri);
-            if (mime == null) mime = "application/octet-stream";
-            String type = mime.startsWith("video") ? "video" : "image";
-            String name =
-                    "adv_"
-                            + System.currentTimeMillis()
-                            + (type.equals("video") ? ".mp4" : ".jpg");
-            InputStream is = getContentResolver().openInputStream(uri);
-            if (is == null) {
-                busy = false;
-                return;
-            }
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
-            is.close();
-            uploadBytes(bos.toByteArray(), mime, name, type);
-        } catch (Exception e) {
-            busy = false;
-            Toast.makeText(this, R.string.advertise_upload_failed, Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void uploadFileBytes(File file, String mime, String name, String type) {
-        busy = true;
-        try {
-            byte[] bytes = readFile(file);
-            uploadBytes(bytes, mime, name, type);
-        } catch (Exception e) {
-            busy = false;
-            Toast.makeText(this, R.string.advertise_upload_failed, Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void uploadBytes(byte[] bytes, String mime, String name, String type) {
-        RequestBody req = RequestBody.create(MediaType.parse(mime), bytes);
-        MultipartBody.Part part = MultipartBody.Part.createFormData("file", name, req);
-        APIService api = RestApiClient.getClient().create(APIService.class);
-        api.uploadFile(part)
-                .enqueue(
-                        new Callback<JsonObject>() {
-                            @Override
-                            public void onResponse(
-                                    Call<JsonObject> call, Response<JsonObject> response) {
-                                busy = false;
-                                try {
-                                    JsonObject root = response.body();
-                                    String url = null;
-                                    if (root != null
-                                            && root.has("extras")
-                                            && root.getAsJsonObject("extras").has("url")) {
-                                        url =
-                                                root.getAsJsonObject("extras")
-                                                        .get("url")
-                                                        .getAsString();
-                                    }
-                                    if (TextUtils.isEmpty(url)) {
-                                        Toast.makeText(
-                                                        AdvertiseOnAnyNewsActivity.this,
-                                                        R.string.advertise_upload_failed,
-                                                        Toast.LENGTH_SHORT)
-                                                .show();
-                                        return;
-                                    }
-                                    sendMessage(type, "", url);
-                                } catch (Exception e) {
-                                    Toast.makeText(
-                                                    AdvertiseOnAnyNewsActivity.this,
-                                                    R.string.advertise_upload_failed,
-                                                    Toast.LENGTH_SHORT)
-                                            .show();
-                                }
-                            }
-
-                            @Override
-                            public void onFailure(Call<JsonObject> call, Throwable t) {
-                                busy = false;
-                                Toast.makeText(
-                                                AdvertiseOnAnyNewsActivity.this,
-                                                R.string.advertise_upload_failed,
-                                                Toast.LENGTH_SHORT)
-                                        .show();
-                            }
-                        });
-    }
-
-    private static byte[] readFile(File file) throws Exception {
-        FileInputStream fis = new FileInputStream(file);
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = fis.read(buf)) > 0) bos.write(buf, 0, n);
-        fis.close();
-        return bos.toByteArray();
-    }
-
     private void scrollToEnd() {
         if (messagesList == null || adapter.getItemCount() == 0) return;
         messagesList.post(
@@ -632,11 +492,39 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         m.sender = o.has("sender") ? o.get("sender").getAsString() : "user";
         m.type = o.has("type") ? o.get("type").getAsString() : "text";
         m.text = o.has("text") && !o.get("text").isJsonNull() ? o.get("text").getAsString() : "";
-        m.mediaUrl =
-                o.has("media_url") && !o.get("media_url").isJsonNull()
-                        ? o.get("media_url").getAsString()
-                        : "";
+        m.createdAtMs = parseCreatedAtMs(o);
         return m;
+    }
+
+    private static long parseCreatedAtMs(JsonObject o) {
+        if (o == null || !o.has("createdAt") || o.get("createdAt").isJsonNull()) {
+            return System.currentTimeMillis();
+        }
+        try {
+            JsonElement el = o.get("createdAt");
+            if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isNumber()) {
+                return el.getAsLong();
+            }
+            String s = el.getAsString();
+            if (TextUtils.isEmpty(s)) return System.currentTimeMillis();
+            SimpleDateFormat[] formats =
+                    new SimpleDateFormat[] {
+                        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US),
+                        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US),
+                        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX", Locale.US),
+                        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US),
+                    };
+            for (SimpleDateFormat f : formats) {
+                f.setTimeZone(TimeZone.getTimeZone("UTC"));
+                try {
+                    Date d = f.parse(s);
+                    if (d != null) return d.getTime();
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return System.currentTimeMillis();
     }
 
     static final class ChatMsg {
@@ -644,27 +532,44 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         String sender;
         String type;
         String text;
-        String mediaUrl;
+        long createdAtMs;
     }
 
     final class MessagesAdapter extends RecyclerView.Adapter<MessagesAdapter.VH> {
         private final List<ChatMsg> items = new ArrayList<>();
+        private final Set<Long> seenIds = new HashSet<>();
+        private final SimpleDateFormat timeFmt =
+                new SimpleDateFormat("h:mm a", Locale.getDefault());
 
         void setAll(List<ChatMsg> list) {
             items.clear();
-            if (list != null) items.addAll(list);
+            seenIds.clear();
+            if (list != null) {
+                for (ChatMsg m : list) {
+                    if (m == null) continue;
+                    if (m.id > 0 && !seenIds.add(m.id)) continue;
+                    items.add(m);
+                }
+            }
             notifyDataSetChanged();
         }
 
         void append(List<ChatMsg> list) {
             if (list == null || list.isEmpty()) return;
             int start = items.size();
-            items.addAll(list);
-            notifyItemRangeInserted(start, list.size());
+            int added = 0;
+            for (ChatMsg m : list) {
+                if (m == null) continue;
+                if (m.id > 0 && !seenIds.add(m.id)) continue;
+                items.add(m);
+                added++;
+            }
+            if (added > 0) notifyItemRangeInserted(start, added);
         }
 
         void appendOne(ChatMsg m) {
             if (m == null) return;
+            if (m.id > 0 && !seenIds.add(m.id)) return;
             items.add(m);
             notifyItemInserted(items.size() - 1);
         }
@@ -674,47 +579,80 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             return items.get(items.size() - 1).id;
         }
 
+        private float dp(float v) {
+            return v * getResources().getDisplayMetrics().density;
+        }
+
+        private GradientDrawable bubbleBg(boolean mine) {
+            GradientDrawable gd = new GradientDrawable();
+            gd.setShape(GradientDrawable.RECTANGLE);
+            float r = dp(16);
+            float tip = dp(4);
+            if (mine) {
+                gd.setColor(Color.parseColor("#FFFF6B00"));
+                gd.setCornerRadii(new float[] {r, r, tip, tip, r, r, r, r});
+            } else {
+                gd.setColor(Color.parseColor("#FFFFFFFF"));
+                gd.setCornerRadii(new float[] {tip, tip, r, r, r, r, r, r});
+            }
+            return gd;
+        }
+
         @Override
         public VH onCreateViewHolder(ViewGroup parent, int viewType) {
-            TextView tv = new TextView(parent.getContext());
-            int pad = (int) (12 * getResources().getDisplayMetrics().density);
-            tv.setPadding(pad, pad, pad, pad);
-            LinearLayout.LayoutParams lp =
-                    new LinearLayout.LayoutParams(
+            LinearLayout row = new LinearLayout(parent.getContext());
+            row.setOrientation(LinearLayout.VERTICAL);
+            RecyclerView.LayoutParams rowLp =
+                    new RecyclerView.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.bottomMargin = pad / 2;
-            tv.setLayoutParams(lp);
-            tv.setTextSize(14f);
-            return new VH(tv);
+            int gap = (int) dp(8);
+            rowLp.bottomMargin = gap;
+            row.setLayoutParams(rowLp);
+
+            TextView bubble = new TextView(parent.getContext());
+            int padH = (int) dp(12);
+            int padV = (int) dp(8);
+            bubble.setPadding(padH, padV, padH, padV);
+            bubble.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+            bubble.setMaxWidth((int) (parent.getResources().getDisplayMetrics().widthPixels * 0.78f));
+
+            TextView time = new TextView(parent.getContext());
+            time.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+            time.setTextColor(Color.parseColor("#FF9A8F86"));
+            LinearLayout.LayoutParams timeLp =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            timeLp.topMargin = (int) dp(2);
+            time.setLayoutParams(timeLp);
+
+            row.addView(
+                    bubble,
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT));
+            row.addView(time);
+            return new VH(row, bubble, time);
         }
 
         @Override
         public void onBindViewHolder(VH holder, int position) {
             ChatMsg m = items.get(position);
-            boolean admin = "admin".equals(m.sender);
-            holder.tv.setBackgroundColor(
-                    admin ? Color.parseColor("#FFFF6B00") : Color.parseColor("#FFF0E8"));
-            holder.tv.setTextColor(admin ? Color.WHITE : Color.parseColor("#FF333333"));
-            holder.tv.setGravity(admin ? Gravity.END : Gravity.START);
-            String body;
-            if ("text".equals(m.type) || TextUtils.isEmpty(m.mediaUrl)) {
-                body = m.text;
-            } else {
-                body = "[" + m.type + "] " + m.mediaUrl;
-                if (!TextUtils.isEmpty(m.text)) body = m.text + "\n" + body;
+            boolean mine = !"admin".equals(m.sender);
+            holder.row.setGravity(mine ? Gravity.END : Gravity.START);
+            holder.bubble.setBackground(bubbleBg(mine));
+            holder.bubble.setTextColor(mine ? Color.WHITE : Color.parseColor("#FF1C1917"));
+            String body = m.text;
+            if (TextUtils.isEmpty(body) && !"text".equals(m.type)) {
+                body = "[" + m.type + "]";
             }
-            holder.tv.setText(body);
-            holder.tv.setOnClickListener(
-                    v -> {
-                        if (!TextUtils.isEmpty(m.mediaUrl)) {
-                            try {
-                                startActivity(
-                                        new Intent(Intent.ACTION_VIEW, Uri.parse(m.mediaUrl)));
-                            } catch (Exception ignored) {
-                            }
-                        }
-                    });
+            holder.bubble.setText(body != null ? body : "");
+            holder.time.setText(timeFmt.format(new Date(m.createdAtMs)));
+            LinearLayout.LayoutParams timeLp =
+                    (LinearLayout.LayoutParams) holder.time.getLayoutParams();
+            timeLp.gravity = mine ? Gravity.END : Gravity.START;
+            holder.time.setLayoutParams(timeLp);
         }
 
         @Override
@@ -723,11 +661,15 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         }
 
         class VH extends RecyclerView.ViewHolder {
-            final TextView tv;
+            final LinearLayout row;
+            final TextView bubble;
+            final TextView time;
 
-            VH(TextView itemView) {
+            VH(LinearLayout itemView, TextView bubble, TextView time) {
                 super(itemView);
-                tv = itemView;
+                this.row = itemView;
+                this.bubble = bubble;
+                this.time = time;
             }
         }
     }

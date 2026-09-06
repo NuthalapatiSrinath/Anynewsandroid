@@ -125,6 +125,12 @@
             android:theme="@style/AppTheme"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".rewards.RewardsWalletActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".Activities.AdvertiseOnAnyNewsActivity"
             android:exported="false"
             android:theme="@style/AppTheme"

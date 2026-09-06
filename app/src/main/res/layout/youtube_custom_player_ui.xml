@@ -17,12 +17,13 @@
 
     <ImageButton
         android:id="@+id/play_pause_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
         android:background="@color/transparent"
         android:layout_centerInParent="true"
         android:visibility="gone"
-        android:src="@drawable/ic_video_play" />
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_way2_play_circle" />
 
     <ProgressBar
         android:id="@+id/progressbar"

@@ -4,11 +4,17 @@
     android:height="72dp"
     android:viewportWidth="72"
     android:viewportHeight="72">
+    <!-- Soft dark disc so the control stays high-contrast on busy frames -->
     <path
-        android:pathData="M36,36m-34,0a34,34 0,1 1,68 0a34,34 0,1 1,-68 0"
+        android:pathData="M36,36m-31,0a31,31 0,1 1,62 0a31,31 0,1 1,-62 0"
+        android:fillColor="#66000000" />
+    <!-- Thick white circular ring (Way2News-style idle/paused affordance) -->
+    <path
+        android:pathData="M36,36m-28,0a28,28 0,1 1,56 0a28,28 0,1 1,-56 0"
         android:fillColor="#00000000"
-        android:strokeWidth="2.5"
+        android:strokeWidth="6.5"
         android:strokeColor="#FFFFFF" />
+    <!-- Solid white play triangle -->
     <path
         android:pathData="M30,22 L30,50 L52,36 Z"
         android:fillColor="#FFFFFF" />

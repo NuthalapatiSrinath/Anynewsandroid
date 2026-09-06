@@ -607,6 +607,20 @@
                 android:orientation="vertical"
                 android:visibility="gone" />
 
+            <!-- Outside reportLayout (parent was always GONE) so admin Notify is visible to reporters. -->
+            <TextView
+                android:id="@+id/tv_upcoming_payment_banner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="14dp"
+                android:background="@drawable/bg_profile_guest_card"
+                android:padding="12dp"
+                android:textColor="@color/warm_grey"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
             <LinearLayout
                 android:id="@+id/reportLayout"
                 android:layout_width="match_parent"
@@ -615,19 +629,6 @@
                 android:visibility="gone"
                 android:background="@color/profile_hub_scrim"
                 android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/tv_upcoming_payment_banner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="14dp"
-                    android:layout_marginTop="10dp"
-                    android:layout_marginEnd="14dp"
-                    android:background="@drawable/bg_profile_guest_card"
-                    android:padding="12dp"
-                    android:textColor="@color/warm_grey"
-                    android:textSize="13sp"
-                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

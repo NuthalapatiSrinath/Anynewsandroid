@@ -327,6 +327,82 @@ public final class RewardsLabels {
         }
     }
 
+    public static String goToWallet(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "വാലറ്റിലേക്ക് പോകുക";
+            case 2: return "वॉलेट पर जाएँ";
+            case 3: return "వాలెట్‌కు వెళ్లండి";
+            case 4: return "வாலட்டிற்குச் செல்லவும்";
+            case 5: return "ವಾಲೆಟ್‌ಗೆ ಹೋಗಿ";
+            case 6: return "ଓୟାଲେଟ୍‌କୁ ଯାଆନ୍ତୁ";
+            default: return "Go to Wallet";
+        }
+    }
+
+    public static String walletScreenTitle(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "വാലറ്റ്";
+            case 2: return "वॉलेट";
+            case 3: return "వాలెట్";
+            case 4: return "வாலட்";
+            case 5: return "ವಾಲೆಟ್";
+            case 6: return "ଓୟାଲେଟ୍";
+            default: return "Wallet";
+        }
+    }
+
+    public static String balanceLabel(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "ബാലൻസ്";
+            case 2: return "बैलेंस";
+            case 3: return "బ్యాలెన్స్";
+            case 4: return "இருப்பு";
+            case 5: return "ಬ್ಯಾಲೆನ್ಸ್";
+            case 6: return "ବାଲାନ୍ସ";
+            default: return "Balance";
+        }
+    }
+
+    public static String coinsWord(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "നാണയങ്ങൾ";
+            case 2: return "कॉइन्स";
+            case 3: return "కాయిన్లు";
+            case 4: return "காய்கள்";
+            case 5: return "ನಾಣ್ಯಗಳು";
+            case 6: return "କଏନ୍ସ";
+            default: return "coins";
+        }
+    }
+
+    public static String upiHint(@Nullable Context c) {
+        return "UPI ID";
+    }
+
+    public static String enterUpi(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "UPI ID നൽകുക";
+            case 2: return "UPI ID दर्ज करें";
+            case 3: return "UPI ID నమోదు చేయండి";
+            case 4: return "UPI ID உள்ளிடவும்";
+            case 5: return "UPI ID ನಮೂದಿಸಿ";
+            case 6: return "UPI ID ଲେଖନ୍ତୁ";
+            default: return "Enter UPI ID";
+        }
+    }
+
+    public static String noHistory(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "ചരിത്രമില്ല";
+            case 2: return "अभी कोई इतिहास नहीं";
+            case 3: return "ఇంకా చరిత్ర లేదు";
+            case 4: return "இன்னும் வரலாறு இல்லை";
+            case 5: return "ಇನ್ನೂ ಇತಿಹಾಸವಿಲ್ಲ";
+            case 6: return "ଏପର୍ଯ୍ୟନ୍ତ ଇତିହାସ ନାହିଁ";
+            default: return "No history yet";
+        }
+    }
+
     private static int languageId(@Nullable Context context) {
         if (context == null) return 0;
         try {

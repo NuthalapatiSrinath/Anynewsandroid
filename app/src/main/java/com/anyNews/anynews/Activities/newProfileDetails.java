@@ -2580,6 +2580,35 @@ public class newProfileDetails extends AppCompatActivity {
             local_distic_name.setVisibility(View.GONE);
             if (d.getLocation() != null) local_distic_name.setText(d.getLocation());
         }
+        // Persist account geography from profile API so Profile location row
+        // (prefs-backed) matches Writers/Users after login / admin location edit.
+        try {
+            int langId = d.getLanguageId() != null ? d.getLanguageId() : 0;
+            int stateId = d.getStateId() != null ? d.getStateId() : 0;
+            int distId = d.getDistId() != null ? d.getDistId() : 0;
+            String loc = d.getLocation() != null ? d.getLocation().trim() : "";
+            if (langId > 0) {
+                SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID,
+                        langId, Constants.PREF_NAME);
+            }
+            if (stateId > 0) {
+                SharedPrefsData.putInt(getApplicationContext(), Constants.StateID,
+                        stateId, Constants.PREF_NAME);
+            }
+            if (distId > 0 || DistrictLabelHelper.isUsable(loc)) {
+                int langForSave = langId > 0
+                        ? langId
+                        : SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+                if (DistrictLabelHelper.isUsable(loc)) {
+                    DistrictLabelHelper.saveFromServer(
+                            getApplicationContext(), langForSave, distId, loc);
+                } else if (distId > 0) {
+                    SharedPrefsData.putInt(getApplicationContext(),
+                            Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
+                }
+            }
+        } catch (Exception ignored) {
+        }
         // Prefer real name over draft "Guest" (login prefs often already have it).
         ProfileAchievementHelper.mergeIdentityFromPrefs(this, d);
         if (username_text != null && d.getUserName() != null
@@ -4309,6 +4338,9 @@ public class newProfileDetails extends AppCompatActivity {
         View layoutRewards = findViewById(R.id.layout_profile_rewards);
         TextView rewardsLabel = findViewById(R.id.profile_rewards_label);
         TextView rewardsSubtitle = findViewById(R.id.profile_rewards_subtitle);
+        View layoutWallet = findViewById(R.id.layout_profile_rewards_wallet);
+        TextView walletLabel = findViewById(R.id.profile_rewards_wallet_label);
+        TextView walletSubtitle = findViewById(R.id.profile_rewards_wallet_subtitle);
         boolean on = DistrictPinVisibilityConfig.rewardsVisibleForUser(this);
         if (rewardsLabel != null) {
             rewardsLabel.setTextSize(menuSp);
@@ -4321,15 +4353,11 @@ public class newProfileDetails extends AppCompatActivity {
         }
         if (rewardsSubtitle != null) {
             try {
-                String wallet =
-                        SharedPrefsData.getString(
-                                this, "rewards_wallet_rupees", Constants.PREF_NAME);
                 String coins =
                         SharedPrefsData.getString(
                                 this, "rewards_period_coins", Constants.PREF_NAME);
-                if (TextUtils.isEmpty(wallet)) wallet = "0";
                 if (TextUtils.isEmpty(coins)) coins = "0";
-                rewardsSubtitle.setText("₹" + wallet + " · " + coins + " coins");
+                rewardsSubtitle.setText(coins + " coins");
                 rewardsSubtitle.setVisibility(View.VISIBLE);
             } catch (Exception ignored) {
                 rewardsSubtitle.setVisibility(View.GONE);
@@ -4339,6 +4367,47 @@ public class newProfileDetails extends AppCompatActivity {
             layoutRewards.setVisibility(on ? View.VISIBLE : View.GONE);
             layoutRewards.setOnClickListener(v -> openRewardsFromProfile());
         }
+        if (walletLabel != null) {
+            walletLabel.setTextSize(menuSp);
+            try {
+                walletLabel.setText(
+                        com.anyNews.anynews.rewards.RewardsLabels.walletScreenTitle(this));
+            } catch (Exception ignored) {
+            }
+        }
+        if (walletSubtitle != null) {
+            try {
+                String wallet =
+                        SharedPrefsData.getString(
+                                this, "rewards_wallet_rupees", Constants.PREF_NAME);
+                if (TextUtils.isEmpty(wallet)) wallet = "0";
+                walletSubtitle.setText("₹" + wallet);
+                walletSubtitle.setVisibility(View.VISIBLE);
+            } catch (Exception ignored) {
+                walletSubtitle.setVisibility(View.GONE);
+            }
+        }
+        if (layoutWallet != null) {
+            layoutWallet.setVisibility(on ? View.VISIBLE : View.GONE);
+            layoutWallet.setOnClickListener(v -> openRewardsWalletFromProfile());
+        }
+    }
+
+    private void openRewardsWalletFromProfile() {
+        if (!DistrictPinVisibilityConfig.rewardsVisibleForUser(this)) {
+            Toast.makeText(this, "Wallet is currently off", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        boolean loggedIn =
+                SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        if (!loggedIn) {
+            Intent login = new Intent(this, LoginActivityDetails.class);
+            login.putExtra(LoginActivityDetails.EXTRA_OPEN_REWARDS, true);
+            startActivity(login);
+            return;
+        }
+        startActivity(
+                new Intent(this, com.anyNews.anynews.rewards.RewardsWalletActivity.class));
     }
 
     private void openRewardsFromProfile() {

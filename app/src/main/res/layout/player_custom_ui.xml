@@ -32,7 +32,7 @@
         app:layout_constraintTop_toTopOf="parent"
         android:contentDescription="@null" />
 
-    <!-- Idle / paused: large thin white play circle centered on video -->
+    <!-- Idle / paused: thick white play circle centered on video -->
     <ImageButton
         android:id="@+id/exo_play"
         style="@style/ExoMediaButton.Play"

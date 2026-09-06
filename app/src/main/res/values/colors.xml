@@ -105,6 +105,8 @@
     <color name="ayp_red">#FF0000</color>
 
     <color name="white">#ffffff</color>
+    <!-- Multi-image pager: inactive dots (muted on dark pill) -->
+    <color name="gallery_dot_inactive">#99FFFFFF</color>
     <color name="whitewithblack">#FFFFFF</color>
     <color name="red">#FF6300</color>
     <color name="red_one">#FF6300</color>

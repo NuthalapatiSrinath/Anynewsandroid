@@ -47,24 +47,28 @@
 
                             <LinearLayout
                                 android:id="@+id/video_side_menu"
-                                android:layout_width="@dimen/_150sdp"
-                                android:layout_height="@dimen/_26sdp"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
                                 android:gravity="center"
-                                android:background="@drawable/gallery_strip"
+                                android:paddingLeft="8dp"
+                                android:paddingRight="8dp"
+                                android:paddingTop="4dp"
+                                android:paddingBottom="4dp"
+                                android:background="@drawable/bg_gallery_dots_pill"
                                 android:orientation="vertical"
                                 android:visibility="visible">
 
-                                <com.tbuonomo.viewpagerdotsindicator.WormDotsIndicator
+                                <com.tbuonomo.viewpagerdotsindicator.DotsIndicator
                                     android:id="@+id/indicator"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_gravity="center"
-                                    app:dotsColor="@color/colorPrimary"
-                                    app:dotsCornerRadius="8dp"
-                                    app:dotsSize="12dp"
-                                    app:dotsSpacing="4dp"
-                                    app:dotsStrokeColor="@color/white"
-                                    app:dotsWidthFactor="2.5" />
+                                    app:dotsColor="@color/gallery_dot_inactive"
+                                    app:selectedDotColor="@color/brand_orange"
+                                    app:dotsCornerRadius="2.5dp"
+                                    app:dotsSize="5dp"
+                                    app:dotsSpacing="3dp"
+                                    app:dotsWidthFactor="1" />
                             </LinearLayout>
 
                         </LinearLayout>

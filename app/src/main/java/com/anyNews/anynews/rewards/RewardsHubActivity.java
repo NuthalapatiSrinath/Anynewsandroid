@@ -9,7 +9,6 @@ import android.util.TypedValue;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -37,6 +36,10 @@ import com.google.gson.JsonObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -46,7 +49,8 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
- * Profile → Rewards hub: coins, rank, rate, wallet ₹, UPI, withdraw, history, leaderboard.
+ * Profile → Rewards hub: coins, earn actions, leaderboard, coin history (+N/−N + time).
+ * Wallet / UPI / withdraw live on {@link RewardsWalletActivity}.
  */
 public class RewardsHubActivity extends AppCompatActivity {
 
@@ -55,15 +59,11 @@ public class RewardsHubActivity extends AppCompatActivity {
     private TextView rateView;
     private TextView weekView;
     private TextView subtitleView;
-    private TextView walletView;
-    private TextView withdrawEtaView;
     private TextView rulesView;
     private TextView joinBtn;
-    private EditText upiInput;
-    private EditText amountInput;
+    private TextView goWalletBtn;
     private LinearLayout leaderboard;
     private LinearLayout history;
-    private View walletCard;
     private TextView checkinBtn;
     private TextView watchAdsBtn;
     private TextView ratingBtn;
@@ -73,16 +73,12 @@ public class RewardsHubActivity extends AppCompatActivity {
     private TextView leaderboardTitle;
     private TextView leaderboardHint;
     private TextView historyTitle;
-    private TextView walletTitle;
-    private TextView saveUpiBtn;
-    private TextView withdrawBtn;
     private boolean joined;
     private boolean guest;
-    private double walletRupees;
-    private double minWithdraw = 10;
     private int watchAdsRequired = 3;
     private int watchAdsCoins = 40;
     private String watchAdsUnit = "";
+    private String watchAdsFormat = "native";
     private int checkinCoins = 25;
     private int ratingCoins = 100;
     private boolean checkinAvailable;
@@ -90,8 +86,6 @@ public class RewardsHubActivity extends AppCompatActivity {
     private boolean ratingAvailable;
     private int watchCooldownSec;
     private boolean pendingScreenshotAfterStore;
-    private int minCoinsToConvert = 100;
-    private TextView convertBtn;
 
     private final ActivityResultLauncher<String> pickScreenshot =
             registerForActivityResult(
@@ -122,12 +116,9 @@ public class RewardsHubActivity extends AppCompatActivity {
         applyStaticLabels();
         findViewById(R.id.rewards_back).setOnClickListener(v -> finish());
         joinBtn.setOnClickListener(v -> onJoin());
-        if (saveUpiBtn != null) saveUpiBtn.setOnClickListener(v -> onSaveUpi());
-        else findViewById(R.id.rewards_save_upi).setOnClickListener(v -> onSaveUpi());
-        if (withdrawBtn != null) withdrawBtn.setOnClickListener(v -> onWithdraw());
-        else findViewById(R.id.rewards_withdraw_btn).setOnClickListener(v -> onWithdraw());
-        convertBtn = findViewById(R.id.rewards_convert_btn);
-        if (convertBtn != null) convertBtn.setOnClickListener(v -> onConvert());
+        if (goWalletBtn != null) {
+            goWalletBtn.setOnClickListener(v -> openWallet());
+        }
         if (checkinBtn != null) checkinBtn.setOnClickListener(v -> onCheckin());
         if (watchAdsBtn != null) watchAdsBtn.setOnClickListener(v -> onWatchAds());
         if (ratingBtn != null) ratingBtn.setOnClickListener(v -> onRating());
@@ -139,7 +130,6 @@ public class RewardsHubActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Flush pending engagement so hub coins refresh after reading.
         try {
             RewardsEngagementBatcher.get().flushNow(this);
         } catch (Exception ignored) {
@@ -149,7 +139,6 @@ public class RewardsHubActivity extends AppCompatActivity {
             toast("Pick your Play Store rating screenshot");
             pickScreenshot.launch("image/*");
         }
-        // Refresh after Profile/Rewards OTP return so guest → joined paints immediately.
         if (joinBtn != null) {
             loadHub();
             loadLeaderboard();
@@ -179,15 +168,11 @@ public class RewardsHubActivity extends AppCompatActivity {
         rateView = findViewById(R.id.rewards_rate);
         weekView = findViewById(R.id.rewards_week);
         subtitleView = findViewById(R.id.rewards_subtitle);
-        walletView = findViewById(R.id.rewards_wallet);
-        withdrawEtaView = findViewById(R.id.rewards_withdraw_eta);
         rulesView = findViewById(R.id.rewards_rules);
         joinBtn = findViewById(R.id.rewards_join_btn);
-        upiInput = findViewById(R.id.rewards_upi);
-        amountInput = findViewById(R.id.rewards_withdraw_amount);
+        goWalletBtn = findViewById(R.id.rewards_go_wallet_btn);
         leaderboard = findViewById(R.id.rewards_leaderboard);
         history = findViewById(R.id.rewards_history);
-        walletCard = findViewById(R.id.rewards_wallet_card);
         checkinBtn = findViewById(R.id.rewards_checkin_btn);
         watchAdsBtn = findViewById(R.id.rewards_watch_ads_btn);
         ratingBtn = findViewById(R.id.rewards_rating_btn);
@@ -197,9 +182,6 @@ public class RewardsHubActivity extends AppCompatActivity {
         leaderboardTitle = findViewById(R.id.rewards_leaderboard_title);
         leaderboardHint = findViewById(R.id.rewards_leaderboard_hint);
         historyTitle = findViewById(R.id.rewards_history_title);
-        walletTitle = findViewById(R.id.rewards_wallet_title);
-        saveUpiBtn = findViewById(R.id.rewards_save_upi);
-        withdrawBtn = findViewById(R.id.rewards_withdraw_btn);
     }
 
     private void applyStaticLabels() {
@@ -208,9 +190,12 @@ public class RewardsHubActivity extends AppCompatActivity {
         if (leaderboardTitle != null) leaderboardTitle.setText(RewardsLabels.leaderboard(this));
         if (leaderboardHint != null) leaderboardHint.setVisibility(View.GONE);
         if (historyTitle != null) historyTitle.setText(RewardsLabels.history(this));
-        if (walletTitle != null) walletTitle.setText(RewardsLabels.walletTitle(this));
-        if (saveUpiBtn != null) saveUpiBtn.setText(RewardsLabels.saveUpi(this));
-        if (withdrawBtn != null) withdrawBtn.setText(RewardsLabels.withdraw(this));
+        if (goWalletBtn != null) goWalletBtn.setText(RewardsLabels.goToWallet(this));
+    }
+
+    private void openWallet() {
+        if (!requireLogin()) return;
+        startActivity(new Intent(this, RewardsWalletActivity.class));
     }
 
     private JsonObject authBody() {
@@ -283,7 +268,6 @@ public class RewardsHubActivity extends AppCompatActivity {
                 joined
                         ? optStr(copy, "joined_hub_title", RewardsLabels.joinedHubTitle(this))
                         : optStr(copy, "guest_hub_title", RewardsLabels.guestHubTitle(this));
-        // Prefer localized defaults when server still has English stock copy.
         if (!joined && "Join AnyNews Rewards".equals(title)) {
             title = RewardsLabels.guestHubTitle(this);
         }
@@ -335,15 +319,8 @@ public class RewardsHubActivity extends AppCompatActivity {
                             + optStr(w, "status", ""));
         }
 
-        walletRupees =
+        double walletRupees =
                 body.has("wallet_rupees") ? body.get("wallet_rupees").getAsDouble() : 0;
-        walletView.setText("₹" + formatMoney(walletRupees));
-        minWithdraw =
-                body.has("min_withdraw_rupees")
-                        ? body.get("min_withdraw_rupees").getAsDouble()
-                        : 10;
-        withdrawEtaView.setText(
-                optStr(copy, "withdraw_eta", "Credit usually takes 24–48 hours."));
         String rules = optStr(copy, "rules_summary", "");
         if (TextUtils.isEmpty(rules)
                 || rules.startsWith("Earn AnyNews Coins for quality reading")) {
@@ -351,31 +328,12 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
         rulesView.setText(rules);
 
-        if (body.has("min_coins_to_convert") && !body.get("min_coins_to_convert").isJsonNull()) {
-            minCoinsToConvert = body.get("min_coins_to_convert").getAsInt();
-        }
-        if (convertBtn != null) {
-            convertBtn.setText(RewardsLabels.convertCoins(this));
-            convertBtn.setVisibility(joined && !guest ? View.VISIBLE : View.GONE);
-        }
-
-        // Persist wallet snapshot for Profile
         try {
             SharedPrefsData.putString(
-                    this,
-                    "rewards_wallet_rupees",
-                    String.valueOf(walletRupees),
-                    Constants.PREF_NAME);
+                    this, "rewards_wallet_rupees", String.valueOf(walletRupees), Constants.PREF_NAME);
             SharedPrefsData.putString(
-                    this,
-                    "rewards_period_coins",
-                    String.valueOf(coins),
-                    Constants.PREF_NAME);
+                    this, "rewards_period_coins", String.valueOf(coins), Constants.PREF_NAME);
         } catch (Exception ignored) {
-        }
-
-        if (body.has("upi_id") && !body.get("upi_id").isJsonNull()) {
-            upiInput.setText(body.get("upi_id").getAsString());
         }
 
         if (guest || !joined) {
@@ -384,6 +342,10 @@ public class RewardsHubActivity extends AppCompatActivity {
                     guest ? RewardsLabels.loginToJoin(this) : RewardsLabels.joinRewards(this));
         } else {
             joinBtn.setVisibility(View.GONE);
+        }
+        if (goWalletBtn != null) {
+            goWalletBtn.setVisibility(View.VISIBLE);
+            goWalletBtn.setText(RewardsLabels.goToWallet(this));
         }
 
         applyEarnState(body);
@@ -418,6 +380,12 @@ public class RewardsHubActivity extends AppCompatActivity {
             if (w.has("ad_unit_id") && !w.get("ad_unit_id").isJsonNull()) {
                 watchAdsUnit = w.get("ad_unit_id").getAsString();
             }
+            if (w.has("ad_format") && !w.get("ad_format").isJsonNull()) {
+                String fmt = w.get("ad_format").getAsString();
+                if (!TextUtils.isEmpty(fmt)) {
+                    watchAdsFormat = fmt.trim().toLowerCase(Locale.US);
+                }
+            }
             if (watchAdsBtn != null) {
                 if (watchCooldownSec > 0) {
                     int m = Math.max(1, (int) Math.ceil(watchCooldownSec / 60.0));
@@ -444,9 +412,7 @@ public class RewardsHubActivity extends AppCompatActivity {
                 ratingBtn.setAlpha(ratingBtn.isEnabled() ? 1f : 0.45f);
             }
         }
-        if (earnCard != null) {
-            earnCard.setVisibility(View.VISIBLE);
-        }
+        if (earnCard != null) earnCard.setVisibility(View.VISIBLE);
         if (earnTitle != null) earnTitle.setText(RewardsLabels.earnMore(this));
     }
 
@@ -497,6 +463,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         Intent intent = new Intent(this, RewardsWatchAdsActivity.class);
         intent.putExtra(RewardsWatchAdsActivity.EXTRA_ADS_REQUIRED, watchAdsRequired);
         intent.putExtra(RewardsWatchAdsActivity.EXTRA_COINS, watchAdsCoins);
+        intent.putExtra(RewardsWatchAdsActivity.EXTRA_AD_FORMAT, watchAdsFormat);
         if (!TextUtils.isEmpty(watchAdsUnit)) {
             intent.putExtra(RewardsWatchAdsActivity.EXTRA_AD_UNIT, watchAdsUnit);
         }
@@ -510,13 +477,10 @@ public class RewardsHubActivity extends AppCompatActivity {
             return;
         }
         try {
-            // Open main Play Store listing (Open + Your review / rate stars).
             String pkg = getPackageName();
             if (TextUtils.isEmpty(pkg)) pkg = "com.anyNews.anynews";
             Intent market =
-                    new Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("market://details?id=" + pkg));
+                    new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + pkg));
             market.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try {
                 startActivity(market);
@@ -556,30 +520,31 @@ public class RewardsHubActivity extends AppCompatActivity {
                     .enqueue(
                             new Callback<UserImagePojoResponse>() {
                                 @Override
-                            public void onResponse(
-                                    Call<UserImagePojoResponse> call,
-                                    Response<UserImagePojoResponse> response) {
-                                try {
-                                    String url = null;
-                                    if (response.body() != null
-                                            && response.body().getExtras() != null) {
-                                        UserImagePojoResponse.Extras ex =
-                                                response.body().getExtras();
-                                        url = firstNonEmpty(
-                                                ex.getImageOriginal(),
-                                                ex.getImage900(),
-                                                ex.getImage550(),
-                                                ex.getImage250());
-                                    }
-                                    if (TextUtils.isEmpty(url)) {
+                                public void onResponse(
+                                        Call<UserImagePojoResponse> call,
+                                        Response<UserImagePojoResponse> response) {
+                                    try {
+                                        String url = null;
+                                        if (response.body() != null
+                                                && response.body().getExtras() != null) {
+                                            UserImagePojoResponse.Extras ex =
+                                                    response.body().getExtras();
+                                            url =
+                                                    firstNonEmpty(
+                                                            ex.getImageOriginal(),
+                                                            ex.getImage900(),
+                                                            ex.getImage550(),
+                                                            ex.getImage250());
+                                        }
+                                        if (TextUtils.isEmpty(url)) {
+                                            toast("Upload failed");
+                                            return;
+                                        }
+                                        submitRatingUrl(url);
+                                    } catch (Exception e) {
                                         toast("Upload failed");
-                                        return;
                                     }
-                                    submitRatingUrl(url);
-                                } catch (Exception e) {
-                                    toast("Upload failed");
                                 }
-                            }
 
                                 @Override
                                 public void onFailure(
@@ -623,14 +588,15 @@ public class RewardsHubActivity extends AppCompatActivity {
                         });
     }
 
+    /** User history: only +N / −N and time — no task/factor names. */
     private void renderHistory(JsonObject body) {
         history.removeAllViews();
-        addCoinHistorySection(body);
-        addHistorySection(body, "withdrawals", "Withdrawals");
-        addHistorySection(body, "conversions", "Wallet credits");
+        addSignedCoinRows(body);
+        addSignedMoneyRows(body, "conversions", true);
+        addSignedMoneyRows(body, "withdrawals", false);
         if (history.getChildCount() == 0) {
             TextView empty = new TextView(this);
-            empty.setText("No history yet");
+            empty.setText(RewardsLabels.noHistory(this));
             empty.setTextColor(Color.parseColor("#FFA8A29E"));
             empty.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             empty.setPadding(12, 16, 12, 16);
@@ -638,106 +604,45 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
     }
 
-    private void addCoinHistorySection(JsonObject body) {
+    private void addSignedCoinRows(JsonObject body) {
         if (!body.has("coin_history") || !body.get("coin_history").isJsonArray()) return;
         JsonArray arr = body.getAsJsonArray("coin_history");
-        if (arr.size() == 0) return;
-        TextView h = new TextView(this);
-        h.setText(RewardsLabels.coinEarns(this));
-        h.setTextColor(Color.parseColor("#FF78716C"));
-        h.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        h.setPadding(12, 8, 12, 4);
-        history.addView(h);
         int n = Math.min(12, arr.size());
         for (int i = 0; i < n; i++) {
             JsonObject row = arr.get(i).getAsJsonObject();
-            TextView line = new TextView(this);
-            String factor = optStr(row, "factor", "earn");
             int coins = optInt(row, "coins");
-            String day = optStr(row, "day_key", "");
-            line.setText("+" + coins + " · " + factor + (TextUtils.isEmpty(day) ? "" : " · " + day));
+            if (coins == 0) continue;
+            String sign = coins > 0 ? "+" : "";
+            String when = formatWhen(row);
+            TextView line = new TextView(this);
+            line.setText(sign + coins + (TextUtils.isEmpty(when) ? "" : "  ·  " + when));
             line.setTextColor(Color.parseColor("#FF44403C"));
             line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            line.setPadding(12, 6, 12, 6);
+            line.setPadding(12, 8, 12, 8);
             history.addView(line);
         }
     }
 
-    private void onConvert() {
-        if (!requireLogin()) return;
-        if (!joined) {
-            toast(RewardsLabels.joinFirst(this));
-            return;
-        }
-        JsonObject body = authBody();
-        APIService api = RestApiClient.getClient().create(APIService.class);
-        api.rewards_convert("v3", body)
-                .enqueue(
-                        new Callback<JsonObject>() {
-                            @Override
-                            public void onResponse(
-                                    Call<JsonObject> call, Response<JsonObject> response) {
-                                JsonObject b = response.body();
-                                if (b != null
-                                        && b.has("success")
-                                        && b.get("success").getAsBoolean()) {
-                                    double rupees =
-                                            b.has("rupees") ? b.get("rupees").getAsDouble() : 0;
-                                    toast("+" + formatMoney(rupees) + " to wallet");
-                                    loadHub();
-                                } else {
-                                    toast(
-                                            b != null && b.has("msg")
-                                                    ? b.get("msg").getAsString()
-                                                    : "Convert failed");
-                                }
-                            }
-
-                            @Override
-                            public void onFailure(Call<JsonObject> call, Throwable t) {
-                                toast("Network error");
-                            }
-                        });
-    }
-
-    private void addHistorySection(JsonObject body, String key, String title) {
+    private void addSignedMoneyRows(JsonObject body, String key, boolean credit) {
         if (!body.has(key) || !body.get(key).isJsonArray()) return;
         JsonArray arr = body.getAsJsonArray(key);
-        if (arr.size() == 0) return;
-        TextView h = new TextView(this);
-        h.setText(title);
-        h.setTextColor(Color.parseColor("#FF78716C"));
-        h.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        h.setPadding(12, 8, 12, 4);
-        history.addView(h);
         int n = Math.min(8, arr.size());
         for (int i = 0; i < n; i++) {
             JsonObject row = arr.get(i).getAsJsonObject();
+            double amt =
+                    credit ? optDouble(row, "rupees") : optDouble(row, "amount_rupees");
+            if (amt <= 0) continue;
+            String sign = credit ? "+" : "−";
+            String when = formatWhen(row);
             TextView line = new TextView(this);
-            String text;
-            if ("withdrawals".equals(key)) {
-                text =
-                        "₹"
-                                + optNum(row, "amount_rupees")
-                                + " · "
-                                + optStr(row, "status_label", "")
-                                + " · "
-                                + optStr(row, "upi_id", "");
-            } else {
-                text =
-                        "+"
-                                + "₹"
-                                + optNum(row, "rupees")
-                                + " from "
-                                + optNum(row, "coins")
-                                + " coins ("
-                                + optStr(row, "week_key", "")
-                                + ")";
-            }
-            line.setText(text);
+            line.setText(
+                    sign
+                            + "₹"
+                            + formatMoney(amt)
+                            + (TextUtils.isEmpty(when) ? "" : "  ·  " + when));
             line.setTextColor(Color.parseColor("#FF44403C"));
             line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            line.setPadding(12, 6, 12, 6);
+            line.setPadding(12, 8, 12, 8);
             history.addView(line);
         }
     }
@@ -802,10 +707,7 @@ public class RewardsHubActivity extends AppCompatActivity {
     private void onJoin() {
         if (!requireLogin()) return;
         APIService api = RestApiClient.getClient().create(APIService.class);
-        JsonObject body = authBody();
-        String upi = upiInput.getText() != null ? upiInput.getText().toString().trim() : "";
-        if (!TextUtils.isEmpty(upi)) body.addProperty("upi_id", upi);
-        api.rewards_join("v3", body).enqueue(new Callback<JsonObject>() {
+        api.rewards_join("v3", authBody()).enqueue(new Callback<JsonObject>() {
             @Override
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
                 JsonObject b = response.body();
@@ -816,77 +718,6 @@ public class RewardsHubActivity extends AppCompatActivity {
                     loadHub();
                 } else {
                     toast(b != null && b.has("msg") ? b.get("msg").getAsString() : "Join failed");
-                }
-            }
-
-            @Override
-            public void onFailure(Call<JsonObject> call, Throwable t) {
-                toast("Network error");
-            }
-        });
-    }
-
-    private void onSaveUpi() {
-        if (!requireLogin()) return;
-        String upi = upiInput.getText() != null ? upiInput.getText().toString().trim() : "";
-        if (TextUtils.isEmpty(upi)) {
-            toast("Enter UPI ID");
-            return;
-        }
-        JsonObject body = authBody();
-        body.addProperty("upi_id", upi);
-        APIService api = RestApiClient.getClient().create(APIService.class);
-        api.rewards_update_upi("v3", body).enqueue(new Callback<JsonObject>() {
-            @Override
-            public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
-                JsonObject b = response.body();
-                if (b != null && b.has("success") && b.get("success").getAsBoolean()) {
-                    toast("UPI saved");
-                    if (!joined) loadHub();
-                } else {
-                    toast(b != null && b.has("msg") ? b.get("msg").getAsString() : "Failed");
-                }
-            }
-
-            @Override
-            public void onFailure(Call<JsonObject> call, Throwable t) {
-                toast("Network error");
-            }
-        });
-    }
-
-    private void onWithdraw() {
-        if (!requireLogin()) return;
-        if (!joined) {
-            toast(RewardsLabels.joinFirst(this));
-            return;
-        }
-        String amtStr =
-                amountInput.getText() != null ? amountInput.getText().toString().trim() : "";
-        double amt;
-        try {
-            amt = Double.parseDouble(amtStr);
-        } catch (Exception e) {
-            toast("Enter amount");
-            return;
-        }
-        if (amt < minWithdraw) {
-            toast("Minimum ₹" + formatMoney(minWithdraw));
-            return;
-        }
-        JsonObject body = authBody();
-        body.addProperty("amount_rupees", amt);
-        APIService api = RestApiClient.getClient().create(APIService.class);
-        api.rewards_withdraw("v3", body).enqueue(new Callback<JsonObject>() {
-            @Override
-            public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
-                JsonObject b = response.body();
-                if (b != null && b.has("success") && b.get("success").getAsBoolean()) {
-                    toast("Withdraw requested");
-                    amountInput.setText("");
-                    loadHub();
-                } else {
-                    toast(b != null && b.has("msg") ? b.get("msg").getAsString() : "Failed");
                 }
             }
 
@@ -917,19 +748,52 @@ public class RewardsHubActivity extends AppCompatActivity {
         return 0;
     }
 
-    private static String optNum(JsonObject o, String k) {
+    private static double optDouble(JsonObject o, String k) {
         try {
-            if (o != null && o.has(k) && !o.get(k).isJsonNull()) {
-                return formatMoney(o.get(k).getAsDouble());
-            }
+            if (o != null && o.has(k) && !o.get(k).isJsonNull()) return o.get(k).getAsDouble();
         } catch (Exception ignored) {
         }
-        return "0";
+        return 0;
     }
 
     private static String formatMoney(double v) {
         if (Math.abs(v - Math.rint(v)) < 0.001) return String.valueOf((long) Math.rint(v));
-        return String.format(java.util.Locale.US, "%.2f", v);
+        return String.format(Locale.US, "%.2f", v);
+    }
+
+    private static String formatWhen(JsonObject row) {
+        String raw = optStr(row, "updatedAt", null);
+        if (TextUtils.isEmpty(raw)) raw = optStr(row, "createdAt", null);
+        if (TextUtils.isEmpty(raw)) return optStr(row, "day_key", "");
+        try {
+            String iso = raw.trim();
+            if (iso.endsWith("Z")) {
+                SimpleDateFormat in =
+                        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+                in.setTimeZone(TimeZone.getTimeZone("UTC"));
+                String trunc = iso;
+                int dot = iso.indexOf('.');
+                if (dot > 0) {
+                    String frac = iso.substring(dot + 1).replace("Z", "");
+                    if (frac.length() < 3) {
+                        while (frac.length() < 3) frac += "0";
+                    } else if (frac.length() > 3) {
+                        frac = frac.substring(0, 3);
+                    }
+                    trunc = iso.substring(0, dot + 1) + frac + "Z";
+                } else {
+                    in = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+                    in.setTimeZone(TimeZone.getTimeZone("UTC"));
+                }
+                Date d = in.parse(trunc);
+                if (d != null) {
+                    return new SimpleDateFormat("dd MMM, h:mm a", Locale.getDefault()).format(d);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (raw.length() >= 16) return raw.substring(0, 16).replace('T', ' ');
+        return raw;
     }
 
     private int dp(int v) {

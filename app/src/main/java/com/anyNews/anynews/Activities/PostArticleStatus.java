@@ -8,7 +8,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -110,17 +109,30 @@ public class PostArticleStatus extends AppCompatActivity {
     private TextView dateToView;
     private TextView dateApplyView;
     private TextView dateClearView;
+    private TextView dateAppliedLabel;
     /** yyyy-MM-dd or empty */
     private String filterStart = "";
     private String filterTo = "";
+    /** True after both dates are set and filter was applied (auto or Apply). */
+    private boolean dateFilterApplied;
     private int nextSkip = 0;
     private long firstPostId = 0L;
     private boolean hasMore = false;
-    private boolean loadingMore = false;
-    /** Flat article rows (no week headers) for pagination append. */
+    private boolean loadingPage = false;
+    /** 1-based page index (admin-style pager, not endless scroll). */
+    private int currentPage = 1;
+    /** Flat article rows for the current page only. */
     private final ArrayList<PostsModel.Datum> flatArticles = new ArrayList<>();
 
-    private static final int PAGE_LIMIT = 50;
+    private View pagerRow;
+    private TextView pagePrevView;
+    private TextView pageNextView;
+    private TextView pageLabelView;
+    private String labelPrev = "Prev";
+    private String labelNext = "Next";
+
+    /** Match admin Local default band; smaller pages for thousands of articles. */
+    private static final int PAGE_LIMIT = 25;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -178,20 +190,13 @@ public class PostArticleStatus extends AppCompatActivity {
         dateToView = findViewById(R.id.posts_date_to);
         dateApplyView = findViewById(R.id.posts_date_apply);
         dateClearView = findViewById(R.id.posts_date_clear);
+        dateAppliedLabel = findViewById(R.id.posts_date_applied_label);
+        pagerRow = findViewById(R.id.posts_pager_row);
+        pagePrevView = findViewById(R.id.posts_page_prev);
+        pageNextView = findViewById(R.id.posts_page_next);
+        pageLabelView = findViewById(R.id.posts_page_label);
         setupDateFilterUi();
-
-        post_status.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
-                if (dy <= 0 || loadingMore || !hasMore || isMetricMode()) return;
-                if (linearLayoutManager == null) return;
-                int last = linearLayoutManager.findLastVisibleItemPosition();
-                int total = postsStatusAdopter != null ? postsStatusAdopter.getItemCount() : 0;
-                if (total > 0 && last >= total - 4) {
-                    fetchUserPosts(currentStatus, false, true);
-                }
-            }
-        });
+        setupPagerUi();
 
         applyMetricChrome();
         if (!isMetricMode()) {
@@ -230,8 +235,8 @@ public class PostArticleStatus extends AppCompatActivity {
             swipeRefresh.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
                 @Override
                 public void onRefresh() {
-                    // User pull: soft network refresh; keep existing list until response.
-                    fetchUserPosts(currentStatus, true, false);
+                    // Soft refresh current page; keep list until response.
+                    fetchUserPosts(currentStatus, true, currentPage);
                 }
             });
         }
@@ -249,6 +254,8 @@ public class PostArticleStatus extends AppCompatActivity {
         if (!isMetricMode()) return;
         if (tabsRow != null) tabsRow.setVisibility(View.GONE);
         if (dateFilterRow != null) dateFilterRow.setVisibility(View.GONE);
+        if (dateAppliedLabel != null) dateAppliedLabel.setVisibility(View.GONE);
+        if (pagerRow != null) pagerRow.setVisibility(View.GONE);
         if (pageTitle != null) {
             pageTitle.setVisibility(View.VISIBLE);
             pageTitle.setText(buildMetricTitle());
@@ -259,40 +266,101 @@ public class PostArticleStatus extends AppCompatActivity {
         if (dateFilterRow == null) return;
         if (isMetricMode()) {
             dateFilterRow.setVisibility(View.GONE);
+            if (dateAppliedLabel != null) dateAppliedLabel.setVisibility(View.GONE);
             return;
         }
         dateFilterRow.setVisibility(View.VISIBLE);
         if (dateFromView != null) {
+            dateFromView.setHint(getString(R.string.posts_date_from));
             dateFromView.setOnClickListener(v -> pickDate(true));
         }
         if (dateToView != null) {
+            dateToView.setHint(getString(R.string.posts_date_to));
             dateToView.setOnClickListener(v -> pickDate(false));
         }
         if (dateApplyView != null) {
-            dateApplyView.setOnClickListener(v -> {
-                if (!TextUtils.isEmpty(filterStart) && !TextUtils.isEmpty(filterTo)
-                        && filterStart.compareTo(filterTo) > 0) {
-                    Toast.makeText(this, "From date must be before To date", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                resetPaging();
-                fetchUserPosts(currentStatus, true, false);
-            });
+            dateApplyView.setText(getString(R.string.posts_date_apply));
+            // Hidden: end-date selection auto-applies; keep as optional fallback.
+            dateApplyView.setOnClickListener(v -> applyDateFilter());
         }
         if (dateClearView != null) {
-            dateClearView.setOnClickListener(v -> {
-                filterStart = "";
-                filterTo = "";
-                if (dateFromView != null) dateFromView.setText("");
-                if (dateToView != null) dateToView.setText("");
-                resetPaging();
-                fetchUserPosts(currentStatus, true, false);
+            dateClearView.setText(getString(R.string.posts_date_clear));
+            dateClearView.setOnClickListener(v -> clearDateFilter());
+        }
+        updateDateAppliedLabel();
+    }
+
+    private void setupPagerUi() {
+        if (pagerRow == null || isMetricMode()) {
+            if (pagerRow != null) pagerRow.setVisibility(View.GONE);
+            return;
+        }
+        if (pagePrevView != null) {
+            pagePrevView.setText(labelPrev);
+            pagePrevView.setOnClickListener(v -> {
+                if (currentPage <= 1 || loadingPage) return;
+                fetchUserPosts(currentStatus, false, currentPage - 1);
             });
         }
+        if (pageNextView != null) {
+            pageNextView.setText(labelNext);
+            pageNextView.setOnClickListener(v -> {
+                if (!canGoNextPage() || loadingPage) return;
+                fetchUserPosts(currentStatus, false, currentPage + 1);
+            });
+        }
+        refreshPagerUi();
+    }
+
+    private void clearDateFilter() {
+        filterStart = "";
+        filterTo = "";
+        dateFilterApplied = false;
+        if (dateFromView != null) dateFromView.setText("");
+        if (dateToView != null) dateToView.setText("");
+        updateDateAppliedLabel();
+        resetPaging();
+        fetchUserPosts(currentStatus, true, 1);
+    }
+
+    private void applyDateFilter() {
+        if (!TextUtils.isEmpty(filterStart) && !TextUtils.isEmpty(filterTo)
+                && filterStart.compareTo(filterTo) > 0) {
+            Toast.makeText(this, getString(R.string.posts_date_order_error), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        dateFilterApplied = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
+        updateDateAppliedLabel();
+        resetPaging();
+        fetchUserPosts(currentStatus, true, 1);
+    }
+
+    private void updateDateAppliedLabel() {
+        if (dateAppliedLabel == null) return;
+        if (isMetricMode() || !dateFilterApplied
+                || TextUtils.isEmpty(filterStart) || TextUtils.isEmpty(filterTo)) {
+            dateAppliedLabel.setVisibility(View.GONE);
+            dateAppliedLabel.setText("");
+            return;
+        }
+        dateAppliedLabel.setText(getString(
+                R.string.posts_date_range_applied, filterStart, filterTo));
+        dateAppliedLabel.setVisibility(View.VISIBLE);
     }
 
     private void pickDate(final boolean isFrom) {
         Calendar c = Calendar.getInstance();
+        // Seed picker from existing selection when present.
+        try {
+            String seed = isFrom ? filterStart : filterTo;
+            if (!TextUtils.isEmpty(seed) && seed.length() >= 10) {
+                String[] p = seed.split("-");
+                if (p.length == 3) {
+                    c.set(Integer.parseInt(p[0]), Integer.parseInt(p[1]) - 1, Integer.parseInt(p[2]));
+                }
+            }
+        } catch (Exception ignored) {
+        }
         DatePickerDialog dlg = new DatePickerDialog(
                 this,
                 (view, year, month, dayOfMonth) -> {
@@ -300,9 +368,23 @@ public class PostArticleStatus extends AppCompatActivity {
                     if (isFrom) {
                         filterStart = iso;
                         if (dateFromView != null) dateFromView.setText(iso);
+                        // From changed — wait for To before treating as applied.
+                        dateFilterApplied = false;
+                        updateDateAppliedLabel();
+                        // After From: open To picker next (no Apply required).
+                        View anchor = dateFromView != null ? dateFromView : dateFilterRow;
+                        if (anchor != null) {
+                            anchor.post(() -> {
+                                if (!isFinishing()) pickDate(false);
+                            });
+                        } else {
+                            pickDate(false);
+                        }
                     } else {
                         filterTo = iso;
                         if (dateToView != null) dateToView.setText(iso);
+                        // After To: auto-apply and show filtered list.
+                        applyDateFilter();
                     }
                 },
                 c.get(Calendar.YEAR),
@@ -315,8 +397,63 @@ public class PostArticleStatus extends AppCompatActivity {
         nextSkip = 0;
         firstPostId = 0L;
         hasMore = false;
-        loadingMore = false;
+        loadingPage = false;
+        currentPage = 1;
         flatArticles.clear();
+        refreshPagerUi();
+    }
+
+    private int statusTotalCount(int status) {
+        if (status == 1) return Math.max(0, countApproved);
+        if (status == 0) return Math.max(0, countPending);
+        if (status == 2) return Math.max(0, countRejected);
+        return 0;
+    }
+
+    private int totalPagesForCurrent() {
+        boolean dateFilterOn = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
+        if (dateFilterOn) {
+            // Filtered totals are not returned by the API — use has_more.
+            return hasMore ? currentPage + 1 : Math.max(1, currentPage);
+        }
+        int total = statusTotalCount(currentStatus);
+        if (total <= 0) return Math.max(1, currentPage);
+        return Math.max(1, (int) Math.ceil(total / (double) PAGE_LIMIT));
+    }
+
+    private boolean canGoNextPage() {
+        if (hasMore) return true;
+        boolean dateFilterOn = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
+        if (dateFilterOn) return false;
+        return currentPage < totalPagesForCurrent();
+    }
+
+    private void refreshPagerUi() {
+        if (pagerRow == null || isMetricMode()) {
+            if (pagerRow != null) pagerRow.setVisibility(View.GONE);
+            return;
+        }
+        int pages = totalPagesForCurrent();
+        boolean show = pages > 1 || currentPage > 1 || hasMore
+                || statusTotalCount(currentStatus) > PAGE_LIMIT;
+        pagerRow.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (pagePrevView != null) {
+            pagePrevView.setEnabled(currentPage > 1 && !loadingPage);
+            pagePrevView.setAlpha(currentPage > 1 ? 1f : 0.4f);
+        }
+        if (pageNextView != null) {
+            boolean next = canGoNextPage() && !loadingPage;
+            pageNextView.setEnabled(next);
+            pageNextView.setAlpha(next ? 1f : 0.4f);
+        }
+        if (pageLabelView != null) {
+            boolean dateFilterOn = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
+            if (!dateFilterOn && pages > 1) {
+                pageLabelView.setText(getString(R.string.posts_page_of, currentPage, pages));
+            } else {
+                pageLabelView.setText(getString(R.string.posts_page_label, currentPage));
+            }
+        }
     }
 
     private String buildMetricTitle() {
@@ -440,9 +577,22 @@ public class PostArticleStatus extends AppCompatActivity {
             if (!TextUtils.isEmpty(lang.getData().getRejected())) {
                 labelRejected = lang.getData().getRejected();
             }
+            if (!TextUtils.isEmpty(lang.getData().getNext())) {
+                labelNext = lang.getData().getNext();
+                if (pageNextView != null) pageNextView.setText(labelNext);
+            }
         } catch (Exception e) {
             showLog("PostArticleStatus tab labels: " + e.getMessage());
         }
+        // Prefer string resources (Telugu defaults) when translator has no prev/next.
+        if (TextUtils.isEmpty(labelPrev) || "Prev".equals(labelPrev)) {
+            labelPrev = getString(R.string.posts_page_prev);
+        }
+        if (TextUtils.isEmpty(labelNext) || "Next".equals(labelNext)) {
+            labelNext = getString(R.string.posts_page_next);
+        }
+        if (pagePrevView != null) pagePrevView.setText(labelPrev);
+        if (pageNextView != null) pageNextView.setText(labelNext);
     }
 
     /** Offline / before network: use cached list sizes until API totals arrive. */
@@ -483,6 +633,7 @@ public class PostArticleStatus extends AppCompatActivity {
         setTabPairText(tabApprovedSelected, tabApprovedUnselected, labelApproved, countApproved);
         setTabPairText(tabPendingSelected, tabPendingUnselected, labelPending, countPending);
         setTabPairText(tabRejectedSelected, tabRejectedUnselected, labelRejected, countRejected);
+        refreshPagerUi();
     }
 
     private static void setTabPairText(
@@ -520,9 +671,11 @@ public class PostArticleStatus extends AppCompatActivity {
                 : PostStatusListCache.load(this, draftId, resolvedMobile, status);
         boolean hasCache = cached != null;
 
-        if (hasCache) {
+        if (hasCache && currentPage == 1) {
             flatArticles.clear();
-            for (PostsModel.Datum d : cached) {
+            int max = Math.min(cached.size(), PAGE_LIMIT);
+            for (int i = 0; i < max; i++) {
+                PostsModel.Datum d = cached.get(i);
                 if (d != null && !d.isWeekHeader) flatArticles.add(d);
             }
             paintList(status, withWeekHeaders(flatArticles));
@@ -539,10 +692,11 @@ public class PostArticleStatus extends AppCompatActivity {
             if (!hasCache) {
                 showEmpty("Offline — no cached articles.");
             }
+            refreshPagerUi();
             return;
         }
 
-        fetchUserPosts(status, false, false);
+        fetchUserPosts(status, false, 1);
 
         if (isInitialOpen && !isMetricMode()) {
             prefetchOtherTabs(status);
@@ -557,7 +711,7 @@ public class PostArticleStatus extends AppCompatActivity {
             if (isFinishing()) return;
             for (int s : ALL_STATUSES) {
                 if (s == visibleStatus) continue;
-                fetchUserPosts(s, false, false);
+                fetchUserPosts(s, false, 1);
             }
         });
     }
@@ -631,6 +785,8 @@ public class PostArticleStatus extends AppCompatActivity {
         requestModel.setSkip(skip);
         requestModel.setLimit(PAGE_LIMIT);
         requestModel.setGroupByWeek(true);
+        // Metric screens need likes/comments/views; status tabs stay lean.
+        requestModel.setIncludeEngagement(isMetricMode());
         if (!TextUtils.isEmpty(filterStart)) {
             requestModel.setStartTime(filterStart);
         }
@@ -647,12 +803,12 @@ public class PostArticleStatus extends AppCompatActivity {
     }
 
     /**
-     * Network load for one status. Does not clear the current adapter.
+     * Network load for one status page. Does not clear the current adapter until response.
      *
-     * @param userPull true only for SwipeRefresh pull — shows small pull indicator.
-     * @param append   true to load next page and append.
+     * @param userPull true only for SwipeRefresh / explicit filter apply.
+     * @param page     1-based page index (admin-style skip/limit).
      */
-    private void fetchUserPosts(final int status, final boolean userPull, final boolean append) {
+    private void fetchUserPosts(final int status, final boolean userPull, final int page) {
         final int draftId = SharedPrefsData.getInt(
                 getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
         if (draftId <= 0 && TextUtils.isEmpty(resolvedMobile)) {
@@ -661,36 +817,52 @@ public class PostArticleStatus extends AppCompatActivity {
         }
         if (status < 0 || status > 2) return;
 
-        if (append) {
-            if (loadingMore || !hasMore || status != currentStatus) return;
-            loadingMore = true;
+        final int targetPage = Math.max(1, page);
+        final boolean isVisible = status == currentStatus;
+
+        if (isVisible) {
+            if (loadingPage && !userPull && targetPage == currentPage) {
+                return;
+            }
+            loadingPage = true;
         } else {
-            // Avoid stacking identical background fetches for the same tab.
+            // Prefetch other tabs: avoid stacking identical background fetches.
             if (!userPull && inflight[status]) {
                 return;
             }
             inflight[status] = true;
-            // Only reset visible-tab paging; prefetch must not wipe the active list.
-            if (status == currentStatus) {
-                nextSkip = 0;
-                firstPostId = 0L;
-                hasMore = false;
-                loadingMore = false;
-                flatArticles.clear();
-            }
         }
-        final int gen = append ? requestGen.get(status) : requestGen.incrementAndGet(status);
-        final int reqSkip = append ? nextSkip : 0;
-        final long reqFirst = append ? firstPostId : 0L;
 
-        if (userPull && swipeRefresh != null && status == currentStatus) {
+        // Page 1 resets the sticky cursor; later pages reuse firstPostId.
+        final long reqFirst;
+        final int reqSkip = (targetPage - 1) * PAGE_LIMIT;
+        if (isVisible) {
+            if (targetPage == 1) {
+                firstPostId = 0L;
+                nextSkip = 0;
+                hasMore = false;
+                // Keep flatArticles until response so soft refresh does not flash empty.
+            }
+            currentPage = targetPage;
+            reqFirst = targetPage == 1 ? 0L : firstPostId;
+            refreshPagerUi();
+        } else {
+            reqFirst = 0L;
+        }
+
+        final int gen = requestGen.incrementAndGet(status);
+
+        if (userPull && swipeRefresh != null && isVisible) {
             swipeRefresh.setRefreshing(true);
         }
 
         if (!BookmarkStore.isNetworkAvailable(this)) {
-            inflight[status] = false;
-            loadingMore = false;
-            if (userPull && status == currentStatus) {
+            if (isVisible) {
+                loadingPage = false;
+            } else {
+                inflight[status] = false;
+            }
+            if (userPull && isVisible) {
                 stopRefreshing();
                 if (list == null || list.isEmpty()) {
                     showEmpty("Offline — no cached articles.");
@@ -698,6 +870,7 @@ public class PostArticleStatus extends AppCompatActivity {
                     Toast.makeText(this, "Offline — showing cached list", Toast.LENGTH_SHORT).show();
                 }
             }
+            refreshPagerUi();
             return;
         }
 
@@ -709,17 +882,19 @@ public class PostArticleStatus extends AppCompatActivity {
         apiResponse.enqueue(new Callback<EncreptionRequest>() {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-                if (!append) inflight[status] = false;
-                loadingMore = false;
-                if (status == currentStatus) {
+                if (isVisible) {
+                    loadingPage = false;
                     stopRefreshing();
+                } else {
+                    inflight[status] = false;
                 }
 
                 try {
                     if (!response.isSuccessful() || response.body() == null || response.body().getData() == null) {
-                        if (status == currentStatus && gen == requestGen.get(status) && !append) {
+                        if (isVisible && gen == requestGen.get(status)) {
                             handleFetchError(status, "Could not load articles.",
                                     "Failed to load posts (" + response.code() + ")", true);
+                            refreshPagerUi();
                         }
                         return;
                     }
@@ -731,40 +906,44 @@ public class PostArticleStatus extends AppCompatActivity {
 
                     PostsModel postsModel = new Gson().fromJson(plain, PostsModel.class);
                     if (postsModel == null) {
-                        if (status == currentStatus && gen == requestGen.get(status) && !append) {
+                        if (isVisible && gen == requestGen.get(status)) {
                             handleFetchError(status, "Invalid response.", null, false);
+                            refreshPagerUi();
                         }
                         return;
                     }
 
                     if (Boolean.TRUE.equals(postsModel.getSuccess())) {
                         List<PostsModel.Datum> data = postsModel.getData();
-                        ArrayList<PostsModel.Datum> page = new ArrayList<>();
+                        ArrayList<PostsModel.Datum> pageRows = new ArrayList<>();
                         if (data != null) {
                             for (PostsModel.Datum d : data) {
-                                if (d != null && !d.isWeekHeader) page.add(d);
+                                if (d != null && !d.isWeekHeader) pageRows.add(d);
                             }
                         }
 
-                        if (status == currentStatus && gen == requestGen.get(status)) {
-                            if (!append) {
-                                flatArticles.clear();
-                            }
-                            flatArticles.addAll(page);
+                        if (isVisible && gen == requestGen.get(status)) {
+                            flatArticles.clear();
+                            flatArticles.addAll(pageRows);
                             if (postsModel.getSkip() != null) {
                                 nextSkip = postsModel.getSkip();
                             } else {
-                                nextSkip = reqSkip + page.size();
+                                nextSkip = reqSkip + pageRows.size();
                             }
-                            if (postsModel.getFirstPostId() != null && postsModel.getFirstPostId() > 0) {
-                                firstPostId = postsModel.getFirstPostId();
-                            } else if (!flatArticles.isEmpty() && flatArticles.get(0).getCreatedAt() != null) {
-                                firstPostId = flatArticles.get(0).getCreatedAt();
+                            if (targetPage == 1) {
+                                if (postsModel.getFirstPostId() != null && postsModel.getFirstPostId() > 0) {
+                                    firstPostId = postsModel.getFirstPostId();
+                                } else if (!flatArticles.isEmpty() && flatArticles.get(0).getCreatedAt() != null) {
+                                    firstPostId = flatArticles.get(0).getCreatedAt();
+                                } else {
+                                    firstPostId = 0L;
+                                }
                             }
                             hasMore = Boolean.TRUE.equals(postsModel.getHasMore());
 
                             boolean dateFilterOn = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
-                            if (!append && !dateFilterOn) {
+                            // Cache page-1 only (instant tab paint); never cache filtered pages.
+                            if (targetPage == 1 && !dateFilterOn) {
                                 PostStatusListCache.save(
                                         getApplicationContext(), draftId, resolvedMobile, status,
                                         new ArrayList<>(flatArticles));
@@ -772,13 +951,14 @@ public class PostArticleStatus extends AppCompatActivity {
 
                             applyStatusCountsFromResponse(postsModel);
                             paintList(status, withWeekHeaders(flatArticles));
-                        } else if (!append) {
-                            // Prefetch other tabs: cache flat list only
+                            refreshPagerUi();
+                        } else if (!isVisible) {
+                            // Prefetch other tabs: cache page-1 flat list only
                             applyStatusCountsFromResponse(postsModel);
                             boolean dateFilterOn = !TextUtils.isEmpty(filterStart) || !TextUtils.isEmpty(filterTo);
-                            if (!dateFilterOn) {
+                            if (!dateFilterOn && targetPage == 1) {
                                 PostStatusListCache.save(
-                                        getApplicationContext(), draftId, resolvedMobile, status, page);
+                                        getApplicationContext(), draftId, resolvedMobile, status, pageRows);
                             }
                         }
                     } else {
@@ -790,32 +970,36 @@ public class PostArticleStatus extends AppCompatActivity {
                             }
                         } catch (Exception ignored) {
                         }
-                        if (status == currentStatus && gen == requestGen.get(status) && !append) {
+                        if (isVisible && gen == requestGen.get(status)) {
                             if (list == null || list.isEmpty()) {
                                 showEmpty(msg);
                             }
                             Toast.makeText(PostArticleStatus.this, msg, Toast.LENGTH_LONG).show();
+                            refreshPagerUi();
                         }
                     }
                 } catch (Exception e) {
                     showLog("get_user_posts parse error: " + e.getMessage());
-                    if (status == currentStatus && gen == requestGen.get(status) && !append) {
+                    if (isVisible && gen == requestGen.get(status)) {
                         handleFetchError(status, "Error showing articles.", "Error loading articles", true);
+                        refreshPagerUi();
                     }
                 }
             }
 
             @Override
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-                if (!append) inflight[status] = false;
-                loadingMore = false;
-                if (status == currentStatus) {
+                if (isVisible) {
+                    loadingPage = false;
                     stopRefreshing();
+                } else {
+                    inflight[status] = false;
                 }
                 showLog("get_user_posts onFailure: " + (t != null ? t.getMessage() : "null"));
-                if (status == currentStatus && gen == requestGen.get(status) && !append) {
+                if (isVisible && gen == requestGen.get(status)) {
                     handleFetchError(status, "Network error.",
                             "Network error loading articles", true);
+                    refreshPagerUi();
                 }
             }
         });

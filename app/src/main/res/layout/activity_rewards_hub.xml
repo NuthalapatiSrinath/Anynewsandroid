@@ -272,122 +272,20 @@
                 android:textSize="12sp"
                 tools:text="Rules summary" />
 
-            <!-- (4) Rewards wallet at bottom -->
-            <LinearLayout
-                android:id="@+id/rewards_wallet_card"
+            <!-- Wallet lives on Profile → Wallet; hub only links there -->
+            <TextView
+                android:id="@+id/rewards_go_wallet_btn"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="48dp"
                 android:layout_marginStart="14dp"
                 android:layout_marginTop="16dp"
                 android:layout_marginEnd="14dp"
-                android:background="@drawable/bg_rewards_card"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:id="@+id/rewards_wallet_title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Rewards wallet"
-                    android:textColor="#FF78716C"
-                    android:textSize="12sp"
-                    android:textAllCaps="true" />
-
-                <TextView
-                    android:id="@+id/rewards_wallet"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="₹0"
-                    android:textColor="#FF1C1917"
-                    android:textSize="28sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/rewards_withdraw_eta"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="Credit usually takes 24–48 hours."
-                    android:textColor="#FFA8A29E"
-                    android:textSize="12sp" />
-
-                <EditText
-                    android:id="@+id/rewards_upi"
-                    android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/bg_rewards_input"
-                    android:hint="yourname@upi"
-                    android:inputType="textEmailAddress"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:textColor="#FF1C1917"
-                    android:textColorHint="#FFA8A29E"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:id="@+id/rewards_convert_btn"
-                    android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_rewards_btn_secondary"
-                    android:gravity="center"
-                    android:text="Convert coins → ₹"
-                    android:textColor="#FF44403C"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/rewards_save_upi"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_rewards_btn_secondary"
-                        android:gravity="center"
-                        android:text="Save UPI"
-                        android:textColor="#FF44403C"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <Space
-                        android:layout_width="10dp"
-                        android:layout_height="1dp" />
-
-                    <TextView
-                        android:id="@+id/rewards_withdraw_btn"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_rewards_btn_primary"
-                        android:gravity="center"
-                        android:text="Withdraw"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <EditText
-                    android:id="@+id/rewards_withdraw_amount"
-                    android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_rewards_input"
-                    android:hint="Amount ₹"
-                    android:inputType="numberDecimal"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:textColor="#FF1C1917"
-                    android:textColorHint="#FFA8A29E"
-                    android:textSize="14sp" />
-            </LinearLayout>
+                android:background="@drawable/bg_rewards_btn_secondary"
+                android:gravity="center"
+                android:text="Go to Wallet"
+                android:textColor="#FFB45309"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/rewards_empty"

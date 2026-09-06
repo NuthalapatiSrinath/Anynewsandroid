@@ -693,7 +693,7 @@
         android:paddingStart="10dp"
         android:paddingTop="6dp"
         android:paddingEnd="10dp"
-        android:paddingBottom="6dp">
+        android:paddingBottom="4dp">
 
         <TextView
             android:id="@+id/posts_date_from"
@@ -703,7 +703,7 @@
             android:layout_weight="1"
             android:background="@drawable/bg_profile_guest_card"
             android:gravity="center"
-            android:hint="From"
+            android:hint="@string/posts_date_from"
             android:textColor="@color/warm_grey"
             android:textSize="12sp" />
 
@@ -715,7 +715,7 @@
             android:layout_weight="1"
             android:background="@drawable/bg_profile_guest_card"
             android:gravity="center"
-            android:hint="To"
+            android:hint="@string/posts_date_to"
             android:textColor="@color/warm_grey"
             android:textSize="12sp" />
 
@@ -727,10 +727,11 @@
             android:gravity="center"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"
-            android:text="Apply"
+            android:text="@string/posts_date_apply"
             android:textColor="@color/on_brand_text"
             android:textSize="12sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/posts_date_clear"
@@ -740,10 +741,21 @@
             android:gravity="center"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
-            android:text="Clear"
+            android:text="@string/posts_date_clear"
             android:textColor="@color/greyish"
             android:textSize="12sp" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/posts_date_applied_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="6dp"
+        android:textColor="@color/warm_grey"
+        android:textSize="12sp"
+        android:visibility="gone" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -776,5 +788,54 @@
             android:visibility="gone" />
 
     </FrameLayout>
+
+    <!-- Admin-style page pager (prev / page / next) — not endless scroll -->
+    <LinearLayout
+        android:id="@+id/posts_pager_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/posts_page_prev"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_profile_guest_card"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="@string/posts_page_prev"
+            android:textColor="@color/warm_grey"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/posts_page_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textColor="@color/warm_grey"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/posts_page_next"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_profile_guest_card"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="@string/posts_page_next"
+            android:textColor="@color/warm_grey"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
 </LinearLayout>

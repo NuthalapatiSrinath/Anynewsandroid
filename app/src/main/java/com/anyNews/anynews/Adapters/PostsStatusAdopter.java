@@ -3,6 +3,7 @@ package com.anyNews.anynews.Adapters;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,6 +25,8 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     private static final int TYPE_WEEK = 0;
     private static final int TYPE_POST = 1;
+    /** ~2 lines on the lean desk card. */
+    private static final int DESC_MAX_CHARS = 140;
 
     Context context;
     ArrayList<PostsModel.Datum> postsModels;
@@ -67,7 +70,7 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<RecyclerView.ViewHo
             View view = layoutInflater.inflate(R.layout.item_posts_week_header, parent, false);
             return new WeekHolder(view);
         }
-        View view = layoutInflater.inflate(R.layout.post_status_rejected_item, parent, false);
+        View view = layoutInflater.inflate(R.layout.post_status_list_item, parent, false);
         return new ViewHolder(view);
     }
 
@@ -83,10 +86,12 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<RecyclerView.ViewHo
         }
 
         ViewHolder vh = (ViewHolder) holder;
-        vh.post_discrepton.setText(datum.getDescription() != null ? datum.getDescription() : "");
         vh.post_title.setText(datum.getTitle() != null ? datum.getTitle() : "");
+        vh.post_discrepton.setText(truncateForCard(datum.getDescription()));
         Long createdAt = datum.getCreatedAt();
-        vh.post_time.setText(createdAt != null ? "" + commonMethods.getHrsFormatfromDate(createdAt) : "");
+        vh.post_time.setText(createdAt != null && createdAt > 0
+                ? commonMethods.getReporterListDate(createdAt)
+                : "");
 
         boolean metricList = metricMode != null && !metricMode.isEmpty();
         if (metricList) {
@@ -99,7 +104,9 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<RecyclerView.ViewHo
             return;
         }
 
-        vh.post_reject.setText(datum.getReason() != null ? datum.getReason() : "");
+        String reason = datum.getReason() != null ? datum.getReason() : "";
+        vh.post_reject.setText(reason);
+        vh.post_reject.setVisibility(TextUtils.isEmpty(reason) ? View.GONE : View.VISIBLE);
 
         long status = datum.getPost_status() == null ? -1 : datum.getPost_status();
 
@@ -132,6 +139,13 @@ public class PostsStatusAdopter extends RecyclerView.Adapter<RecyclerView.ViewHo
             vh.btn_edit_resubmit.setVisibility(View.GONE);
             vh.btn_edit_resubmit.setOnClickListener(null);
         }
+    }
+
+    private static String truncateForCard(String raw) {
+        if (raw == null) return "";
+        String s = raw.replaceAll("\\s+", " ").trim();
+        if (s.length() <= DESC_MAX_CHARS) return s;
+        return s.substring(0, DESC_MAX_CHARS - 1).trim() + "…";
     }
 
     private String formatMetricLine(PostsModel.Datum datum) {

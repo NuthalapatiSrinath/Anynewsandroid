@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lean reporter desk card: title + 1–2 lines content + date. No thumbnail (no OCI). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/background_color"
+    android:minHeight="@dimen/_72sdp"
+    android:orientation="vertical">
+
+    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="@dimen/_72sdp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:neomorph_background_color="@color/white"
+        app:neomorph_corner_radius="10dp"
+        app:neomorph_elevation="5dp"
+        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+        app:neomorph_layer_type="hardware"
+        app:neomorph_shadow_color="#D0D2D5"
+        app:neomorph_shadow_type="outer"
+        app:neomorph_view_type="rectangular">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:minHeight="@dimen/_72sdp"
+            android:orientation="horizontal">
+
+            <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="@dimen/two"
+                android:minHeight="@dimen/_68sdp"
+                app:neomorph_background_color="@color/payment_history_border"
+                app:neomorph_corner_radius="10dp"
+                app:neomorph_elevation="0dp"
+                app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                app:neomorph_layer_type="hardware"
+                app:neomorph_shadow_color="#D0D2D5"
+                app:neomorph_shadow_type="outer"
+                app:neomorph_view_type="rectangular">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:minHeight="@dimen/_68sdp"
+                    android:orientation="horizontal">
+
+                    <com.anyNews.anynews.Ui.NeomorphFrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_margin="0.001dp"
+                        android:minHeight="@dimen/_66sdp"
+                        app:neomorph_background_color="@color/payment_history_background"
+                        app:neomorph_corner_radius="10dp"
+                        app:neomorph_elevation="0dp"
+                        app:neomorph_highlight_color="@color/neomorph_highlight_color"
+                        app:neomorph_layer_type="hardware"
+                        app:neomorph_shadow_color="#D0D2D5"
+                        app:neomorph_shadow_type="outer"
+                        app:neomorph_view_type="rectangular">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:minHeight="@dimen/_66sdp"
+                            android:orientation="horizontal"
+                            android:paddingTop="@dimen/three"
+                            android:paddingBottom="@dimen/three">
+
+                            <LinearLayout
+                                android:layout_width="10dp"
+                                android:layout_height="match_parent"
+                                android:gravity="left|center"
+                                android:minHeight="@dimen/_60sdp"
+                                android:orientation="vertical">
+
+                                <LinearLayout
+                                    android:id="@+id/reject"
+                                    android:layout_width="10dp"
+                                    android:layout_height="match_parent"
+                                    android:gravity="left|center"
+                                    android:orientation="vertical" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginLeft="@dimen/five"
+                                android:layout_marginRight="@dimen/_8sdp"
+                                android:layout_weight="1"
+                                android:gravity="center_vertical"
+                                android:orientation="vertical"
+                                android:paddingTop="@dimen/three"
+                                android:paddingBottom="@dimen/three">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/post_title"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:ellipsize="end"
+                                        android:maxLines="2"
+                                        android:text="War between brothers"
+                                        android:textColor="@color/payment_history_border_title"
+                                        android:textSize="@dimen/_11sdp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/btn_edit_resubmit"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginLeft="@dimen/three"
+                                        android:background="@drawable/button_background_red"
+                                        android:paddingLeft="@dimen/_10sdp"
+                                        android:paddingTop="@dimen/three"
+                                        android:paddingRight="@dimen/_10sdp"
+                                        android:paddingBottom="@dimen/three"
+                                        android:text="Edit"
+                                        android:textAllCaps="false"
+                                        android:textColor="@color/on_brand_text"
+                                        android:textSize="@dimen/_9sdp"
+                                        android:textStyle="bold"
+                                        android:visibility="gone" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/post_discrepton"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="@dimen/three"
+                                    android:ellipsize="end"
+                                    android:gravity="left"
+                                    android:maxLines="2"
+                                    android:text="Under"
+                                    android:textColor="@color/payment_history_border_discreption"
+                                    android:textSize="@dimen/_8sdp"
+                                    android:textStyle="normal" />
+
+                                <TextView
+                                    android:id="@+id/post_reject"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="@dimen/three"
+                                    android:ellipsize="end"
+                                    android:gravity="left"
+                                    android:maxLines="1"
+                                    android:text="Under"
+                                    android:textColor="@color/red_one"
+                                    android:textSize="@dimen/_8sdp"
+                                    android:textStyle="normal" />
+
+                                <TextView
+                                    android:id="@+id/post_time"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="@dimen/three"
+                                    android:layout_marginRight="@dimen/two"
+                                    android:gravity="right|center"
+                                    android:maxLines="1"
+                                    android:text="07 Sep 2026"
+                                    android:textColor="@color/payment_history_border_discreption"
+                                    android:textSize="@dimen/_10sdp"
+                                    android:textStyle="normal" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+                </LinearLayout>
+            </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+        </LinearLayout>
+    </com.anyNews.anynews.Ui.NeomorphFrameLayout>
+</LinearLayout>

@@ -32,6 +32,10 @@ public class PostNewsRequest {
     @SerializedName("group_by_week")
     @Expose
     private Boolean groupByWeek;
+    /** When true, server attaches likes/comments/views (metric screens only). */
+    @SerializedName("include_engagement")
+    @Expose
+    private Boolean includeEngagement;
 
     public Integer getDraftId() {
         return draftId;
@@ -103,5 +107,13 @@ public class PostNewsRequest {
 
     public void setGroupByWeek(Boolean groupByWeek) {
         this.groupByWeek = groupByWeek;
+    }
+
+    public Boolean getIncludeEngagement() {
+        return includeEngagement;
+    }
+
+    public void setIncludeEngagement(Boolean includeEngagement) {
+        this.includeEngagement = includeEngagement;
     }
 }
