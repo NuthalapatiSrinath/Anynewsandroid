@@ -139,8 +139,9 @@
         <activity
             android:name=".rewards.RewardsWatchAdsActivity"
             android:exported="false"
-            android:theme="@style/AppTheme"
-            android:screenOrientation="portrait" />
+            android:theme="@style/RewardsAdFullscreenTheme"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".Activities.QuizPageActivity"  android:theme="@style/AppTheme"/>
         <activity android:name=".Activities.HomeActivityN" android:theme="@style/AppTheme"/>
         <activity android:name=".Activities.Report_Demo_Activity" android:theme="@style/AppTheme"/>

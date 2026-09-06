@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.RatingBar;
@@ -13,10 +14,15 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
+import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdListener;
 import com.google.android.gms.ads.AdLoader;
@@ -44,8 +50,7 @@ import retrofit2.Response;
 
 /**
  * Ads-only earn flow: show N ads (native / interstitial / rewarded per admin), then claim coins.
- * Progress is in-memory only; coins are awarded only via claim after N completions.
- * Default unit is the production feed native (not Google test units).
+ * Progress may persist across reopen when admin enables persist_progress (default on).
  */
 public class RewardsWatchAdsActivity extends AppCompatActivity {
 
@@ -53,12 +58,15 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
     public static final String EXTRA_AD_UNIT = "ad_unit_id";
     public static final String EXTRA_AD_FORMAT = "ad_format";
     public static final String EXTRA_COINS = "coins";
+    public static final String EXTRA_PERSIST_PROGRESS = "persist_progress";
 
     public static final String FORMAT_NATIVE = "native";
     public static final String FORMAT_INTERSTITIAL = "interstitial";
     public static final String FORMAT_REWARDED = "rewarded";
 
-    /** Same production native unit as HomePage / feed between articles. */
+    private static final String PREF_WATCH_PROGRESS = "rewards_watch_ads_progress";
+    private static final String PREF_WATCH_REQUIRED = "rewards_watch_ads_required_at";
+
     private static final String FEED_NATIVE_UNIT =
             "ca-app-pub-8562336752221105/4901277505";
     private static final String WATCH_ADS_REWARDED_UNIT =
@@ -73,25 +81,29 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
     private int coins = 40;
     private String adUnit = WATCH_ADS_REWARDED_UNIT;
     private String adFormat = FORMAT_REWARDED;
+    private boolean persistProgress = true;
     @Nullable private NativeAd loadedNative;
     @Nullable private InterstitialAd loadedInterstitial;
     @Nullable private RewardedAd loadedRewarded;
     private boolean loading;
     private boolean claiming;
     private boolean fullscreenShowing;
-    /** Rewarded: count only if OnUserEarnedReward fired before dismiss. */
     private boolean rewardedEarnedThisShow;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        applyImmersiveFullscreen();
         setContentView(R.layout.activity_rewards_watch_ads);
+        if (getSupportActionBar() != null) getSupportActionBar().hide();
+        setTitle("");
         try {
             MobileAds.initialize(this);
         } catch (Exception ignored) {
         }
         required = Math.max(1, getIntent().getIntExtra(EXTRA_ADS_REQUIRED, 3));
         coins = Math.max(0, getIntent().getIntExtra(EXTRA_COINS, 40));
+        persistProgress = getIntent().getBooleanExtra(EXTRA_PERSIST_PROGRESS, true);
         String fmt = getIntent().getStringExtra(EXTRA_AD_FORMAT);
         if (!TextUtils.isEmpty(fmt)) {
             fmt = fmt.trim().toLowerCase(Locale.US);
@@ -123,8 +135,71 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
         adContainer = findViewById(R.id.watch_ads_container);
         findViewById(R.id.watch_ads_close_btn).setOnClickListener(v -> finish());
         nextBtn.setOnClickListener(v -> onNext());
+
+        restoreProgressIfEnabled();
         paint();
         preload();
+        if (isFullscreenFormat()) {
+            nextBtn.postDelayed(
+                    () -> {
+                        if (!isFinishing() && hasFullscreenReady() && !fullscreenShowing) {
+                            showFullscreen();
+                        }
+                    },
+                    400);
+        }
+    }
+
+    private void applyImmersiveFullscreen() {
+        try {
+            WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+            getWindow()
+                    .setFlags(
+                            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                            WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            WindowInsetsControllerCompat c =
+                    WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+            if (c != null) {
+                c.hide(WindowInsetsCompat.Type.statusBars() | WindowInsetsCompat.Type.navigationBars());
+                c.setSystemBarsBehavior(
+                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void restoreProgressIfEnabled() {
+        if (!persistProgress) {
+            clearSavedProgress();
+            return;
+        }
+        try {
+            int savedReq =
+                    SharedPrefsData.getInt(this, PREF_WATCH_REQUIRED, Constants.PREF_NAME);
+            int saved =
+                    SharedPrefsData.getInt(this, PREF_WATCH_PROGRESS, Constants.PREF_NAME);
+            if (savedReq == required && saved > 0 && saved < required) {
+                watched = saved;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void saveProgress() {
+        if (!persistProgress) return;
+        try {
+            SharedPrefsData.putInt(this, PREF_WATCH_PROGRESS, watched, Constants.PREF_NAME);
+            SharedPrefsData.putInt(this, PREF_WATCH_REQUIRED, required, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void clearSavedProgress() {
+        try {
+            SharedPrefsData.putInt(this, PREF_WATCH_PROGRESS, 0, Constants.PREF_NAME);
+            SharedPrefsData.putInt(this, PREF_WATCH_REQUIRED, 0, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -201,11 +276,11 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
             return;
         }
         if (loadedNative != null) {
-            // User finished viewing the painted native ad
             loadedNative.destroy();
             loadedNative = null;
             if (adContainer != null) adContainer.removeAllViews();
             watched++;
+            saveProgress();
             paint();
             if (watched < required) preload();
             return;
@@ -267,6 +342,9 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                         loading = false;
                         loadedInterstitial = ad;
                         paint();
+                        if (!fullscreenShowing && watched < required) {
+                            showFullscreen();
+                        }
                     }
 
                     @Override
@@ -290,6 +368,9 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                         loading = false;
                         loadedRewarded = ad;
                         paint();
+                        if (!fullscreenShowing && watched < required) {
+                            showFullscreen();
+                        }
                     }
 
                     @Override
@@ -313,6 +394,7 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
     }
 
     private void showFullscreen() {
+        applyImmersiveFullscreen();
         if (FORMAT_INTERSTITIAL.equals(adFormat) && loadedInterstitial != null) {
             fullscreenShowing = true;
             InterstitialAd ad = loadedInterstitial;
@@ -323,8 +405,10 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                         public void onAdDismissedFullScreenContent() {
                             fullscreenShowing = false;
                             watched++;
+                            saveProgress();
                             paint();
                             if (watched < required) preload();
+                            else if (watched >= required) claim();
                         }
 
                         @Override
@@ -355,6 +439,7 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                             fullscreenShowing = false;
                             if (rewardedEarnedThisShow) {
                                 watched++;
+                                saveProgress();
                             } else {
                                 Toast.makeText(
                                                 RewardsWatchAdsActivity.this,
@@ -364,6 +449,7 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                             }
                             paint();
                             if (watched < required) preload();
+                            else if (watched >= required) claim();
                         }
 
                         @Override
@@ -468,6 +554,7 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                                 if (b != null
                                         && b.has("success")
                                         && b.get("success").getAsBoolean()) {
+                                    clearSavedProgress();
                                     int awarded =
                                             b.has("coins_awarded")
                                                     ? b.get("coins_awarded").getAsInt()

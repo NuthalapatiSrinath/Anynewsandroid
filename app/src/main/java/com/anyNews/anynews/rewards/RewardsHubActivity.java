@@ -1,14 +1,19 @@
 package com.anyNews.anynews.rewards;
 
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -37,9 +42,15 @@ import com.google.gson.JsonObject;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -55,6 +66,7 @@ import retrofit2.Response;
 public class RewardsHubActivity extends AppCompatActivity {
 
     private TextView coinsView;
+    private TextView redeemedLine;
     private TextView rankView;
     private TextView rateView;
     private TextView weekView;
@@ -73,12 +85,14 @@ public class RewardsHubActivity extends AppCompatActivity {
     private TextView leaderboardTitle;
     private TextView leaderboardHint;
     private TextView historyTitle;
+    private TextView historyHint;
     private boolean joined;
     private boolean guest;
     private int watchAdsRequired = 3;
     private int watchAdsCoins = 40;
     private String watchAdsUnit = "";
     private String watchAdsFormat = "rewarded";
+    private boolean watchPersistProgress = true;
     private int checkinCoins = 25;
     private int ratingCoins = 100;
     private boolean checkinAvailable;
@@ -86,6 +100,26 @@ public class RewardsHubActivity extends AppCompatActivity {
     private boolean ratingAvailable;
     private int watchCooldownSec;
     private boolean pendingScreenshotAfterStore;
+    private String leaderboardSubtitle = "";
+    private String historyShowingLast = "";
+    private final Handler cooldownHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService uploadExecutor = Executors.newSingleThreadExecutor();
+    private final Runnable cooldownTick =
+            new Runnable() {
+                @Override
+                public void run() {
+                    if (watchCooldownSec > 0) {
+                        watchCooldownSec--;
+                        paintWatchAdsButton();
+                        if (watchCooldownSec > 0) {
+                            cooldownHandler.postDelayed(this, 1000);
+                        } else {
+                            watchAdsAvailable = joined && !guest;
+                            paintWatchAdsButton();
+                        }
+                    }
+                }
+            };
 
     private final ActivityResultLauncher<String> pickScreenshot =
             registerForActivityResult(
@@ -128,6 +162,16 @@ public class RewardsHubActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onDestroy() {
+        cooldownHandler.removeCallbacks(cooldownTick);
+        try {
+            uploadExecutor.shutdownNow();
+        } catch (Exception ignored) {
+        }
+        super.onDestroy();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         try {
@@ -164,6 +208,7 @@ public class RewardsHubActivity extends AppCompatActivity {
 
     private void bindViews() {
         coinsView = findViewById(R.id.rewards_coins);
+        redeemedLine = findViewById(R.id.rewards_redeemed_line);
         rankView = findViewById(R.id.rewards_rank);
         rateView = findViewById(R.id.rewards_rate);
         weekView = findViewById(R.id.rewards_week);
@@ -182,13 +227,17 @@ public class RewardsHubActivity extends AppCompatActivity {
         leaderboardTitle = findViewById(R.id.rewards_leaderboard_title);
         leaderboardHint = findViewById(R.id.rewards_leaderboard_hint);
         historyTitle = findViewById(R.id.rewards_history_title);
+        historyHint = findViewById(R.id.rewards_history_hint);
     }
 
     private void applyStaticLabels() {
         if (coinsCaption != null) coinsCaption.setText(RewardsLabels.coinsThisWeek(this));
         if (earnTitle != null) earnTitle.setText(RewardsLabels.earnMore(this));
         if (leaderboardTitle != null) leaderboardTitle.setText(RewardsLabels.leaderboard(this));
-        if (leaderboardHint != null) leaderboardHint.setVisibility(View.GONE);
+        if (leaderboardHint != null) {
+            leaderboardHint.setText(RewardsLabels.leaderboardHint(this));
+            leaderboardHint.setVisibility(View.VISIBLE);
+        }
         if (historyTitle != null) historyTitle.setText(RewardsLabels.history(this));
         if (goWalletBtn != null) goWalletBtn.setText(RewardsLabels.goToWallet(this));
     }
@@ -294,8 +343,30 @@ public class RewardsHubActivity extends AppCompatActivity {
         subtitleView.setText(subtitle);
 
         int coins = body.has("coins") ? body.get("coins").getAsInt() : 0;
+        int earned =
+                body.has("earned_coins") ? body.get("earned_coins").getAsInt() : coins;
+        int converted =
+                body.has("converted_coins") ? body.get("converted_coins").getAsInt() : 0;
+        // Hub balance = spendable; show gross in rank context via redeemed line
         coinsView.setText(String.valueOf(coins));
+        if (redeemedLine != null) {
+            if (converted > 0) {
+                redeemedLine.setVisibility(View.VISIBLE);
+                redeemedLine.setText(RewardsLabels.redeemedThisWeek(this, converted));
+            } else {
+                redeemedLine.setVisibility(View.GONE);
+            }
+        }
         if (coinsCaption != null) coinsCaption.setText(RewardsLabels.coinsThisWeek(this));
+
+        leaderboardSubtitle =
+                optStr(copy, "leaderboard_subtitle", RewardsLabels.leaderboardHint(this));
+        historyShowingLast =
+                optStr(copy, "history_showing_last", RewardsLabels.historyShowingLast(this));
+        if (leaderboardHint != null) {
+            leaderboardHint.setText(leaderboardSubtitle);
+            leaderboardHint.setVisibility(View.VISIBLE);
+        }
 
         if (body.has("rank") && !body.get("rank").isJsonNull()) {
             rankView.setText(RewardsLabels.rankPrefix(this, body.get("rank").getAsInt()));
@@ -308,7 +379,10 @@ public class RewardsHubActivity extends AppCompatActivity {
                 body.has("rate_label")
                         ? body.get("rate_label").getAsString()
                         : RewardsConfigHelper.rateLabel(this);
-        rateView.setText(rate);
+        if (TextUtils.isEmpty(rate) && body.has("coins_per_rupee")) {
+            rate = body.get("coins_per_rupee").getAsInt() + " coins = ₹1";
+        }
+        rateView.setText(rate != null ? rate : "");
 
         if (body.has("week") && body.get("week").isJsonObject()) {
             JsonObject w = body.getAsJsonObject("week");
@@ -333,6 +407,8 @@ public class RewardsHubActivity extends AppCompatActivity {
                     this, "rewards_wallet_rupees", String.valueOf(walletRupees), Constants.PREF_NAME);
             SharedPrefsData.putString(
                     this, "rewards_period_coins", String.valueOf(coins), Constants.PREF_NAME);
+            SharedPrefsData.putString(
+                    this, "rewards_earned_coins", String.valueOf(earned), Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
 
@@ -350,6 +426,34 @@ public class RewardsHubActivity extends AppCompatActivity {
 
         applyEarnState(body);
         renderHistory(body);
+        animateHeroIn();
+    }
+
+    private void animateHeroIn() {
+        View hero = findViewById(R.id.rewards_coins);
+        if (hero == null || hero.getAlpha() < 1f && hero.getTranslationY() == 0) {
+            /* soft */
+        }
+        if (coinsView != null) {
+            coinsView.setAlpha(0f);
+            coinsView.setTranslationY(12f);
+            coinsView
+                    .animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(320)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+        if (earnCard != null) {
+            earnCard.setAlpha(0.85f);
+            earnCard
+                    .animate()
+                    .alpha(1f)
+                    .setDuration(280)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
     }
 
     private void applyEarnState(JsonObject body) {
@@ -377,6 +481,9 @@ public class RewardsHubActivity extends AppCompatActivity {
                     w.has("cooldown_remaining_sec")
                             ? w.get("cooldown_remaining_sec").getAsInt()
                             : 0;
+            if (w.has("persist_progress") && !w.get("persist_progress").isJsonNull()) {
+                watchPersistProgress = w.get("persist_progress").getAsBoolean();
+            }
             if (w.has("ad_unit_id") && !w.get("ad_unit_id").isJsonNull()) {
                 watchAdsUnit = w.get("ad_unit_id").getAsString();
             }
@@ -386,16 +493,10 @@ public class RewardsHubActivity extends AppCompatActivity {
                     watchAdsFormat = fmt.trim().toLowerCase(Locale.US);
                 }
             }
-            if (watchAdsBtn != null) {
-                if (watchCooldownSec > 0) {
-                    int m = Math.max(1, (int) Math.ceil(watchCooldownSec / 60.0));
-                    watchAdsBtn.setText("Watch ads — wait " + m + "m");
-                } else {
-                    watchAdsBtn.setText(
-                            RewardsLabels.watchAds(this, watchAdsRequired, watchAdsCoins));
-                }
-                watchAdsBtn.setEnabled(watchAdsAvailable && joined && !guest);
-                watchAdsBtn.setAlpha(watchAdsBtn.isEnabled() ? 1f : 0.45f);
+            cooldownHandler.removeCallbacks(cooldownTick);
+            paintWatchAdsButton();
+            if (watchCooldownSec > 0) {
+                cooldownHandler.postDelayed(cooldownTick, 1000);
             }
         }
         if (body.has("play_rating") && body.get("play_rating").isJsonObject()) {
@@ -406,7 +507,7 @@ public class RewardsHubActivity extends AppCompatActivity {
             if (ratingBtn != null) {
                 ratingBtn.setText(
                         pending
-                                ? "Rating screenshot pending review"
+                                ? RewardsLabels.ratingPending(this)
                                 : RewardsLabels.ratingAction(this, ratingCoins));
                 ratingBtn.setEnabled(ratingAvailable && joined && !guest);
                 ratingBtn.setAlpha(ratingBtn.isEnabled() ? 1f : 0.45f);
@@ -414,6 +515,20 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
         if (earnCard != null) earnCard.setVisibility(View.VISIBLE);
         if (earnTitle != null) earnTitle.setText(RewardsLabels.earnMore(this));
+    }
+
+    private void paintWatchAdsButton() {
+        if (watchAdsBtn == null) return;
+        if (watchCooldownSec > 0) {
+            watchAdsBtn.setText(RewardsLabels.watchAdsWait(this, watchCooldownSec));
+            watchAdsBtn.setEnabled(false);
+            watchAdsBtn.setAlpha(0.45f);
+        } else {
+            watchAdsBtn.setText(
+                    RewardsLabels.watchAds(this, watchAdsRequired, watchAdsCoins));
+            watchAdsBtn.setEnabled(watchAdsAvailable && joined && !guest);
+            watchAdsBtn.setAlpha(watchAdsBtn.isEnabled() ? 1f : 0.45f);
+        }
     }
 
     private void onCheckin() {
@@ -464,6 +579,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         intent.putExtra(RewardsWatchAdsActivity.EXTRA_ADS_REQUIRED, watchAdsRequired);
         intent.putExtra(RewardsWatchAdsActivity.EXTRA_COINS, watchAdsCoins);
         intent.putExtra(RewardsWatchAdsActivity.EXTRA_AD_FORMAT, watchAdsFormat);
+        intent.putExtra(RewardsWatchAdsActivity.EXTRA_PERSIST_PROGRESS, watchPersistProgress);
         if (!TextUtils.isEmpty(watchAdsUnit)) {
             intent.putExtra(RewardsWatchAdsActivity.EXTRA_AD_UNIT, watchAdsUnit);
         }
@@ -500,60 +616,117 @@ public class RewardsHubActivity extends AppCompatActivity {
     }
 
     private void uploadRatingScreenshot(Uri uri) {
+        // Optimistic UI — don't block on spinner forever
+        if (ratingBtn != null) {
+            ratingBtn.setEnabled(false);
+            ratingBtn.setAlpha(0.45f);
+            ratingBtn.setText(RewardsLabels.ratingSubmitting(this));
+        }
+        toast(RewardsLabels.ratingSubmitting(this));
+        uploadExecutor.execute(
+                () -> {
+                    try {
+                        byte[] bytes = compressScreenshot(uri);
+                        if (bytes == null || bytes.length == 0) {
+                            runOnUiThread(
+                                    () -> {
+                                        toast("Could not read image");
+                                        loadHub();
+                                    });
+                            return;
+                        }
+                        RequestBody req =
+                                RequestBody.create(MediaType.parse("image/jpeg"), bytes);
+                        MultipartBody.Part part =
+                                MultipartBody.Part.createFormData(
+                                        "file", "rewards_rating.jpg", req);
+                        APIService api = RestApiClient.getClient().create(APIService.class);
+                        api.uploadImage(part)
+                                .enqueue(
+                                        new Callback<UserImagePojoResponse>() {
+                                            @Override
+                                            public void onResponse(
+                                                    Call<UserImagePojoResponse> call,
+                                                    Response<UserImagePojoResponse> response) {
+                                                try {
+                                                    String url = null;
+                                                    if (response.body() != null
+                                                            && response.body().getExtras()
+                                                                    != null) {
+                                                        UserImagePojoResponse.Extras ex =
+                                                                response.body().getExtras();
+                                                        url =
+                                                                firstNonEmpty(
+                                                                        ex.getImageOriginal(),
+                                                                        ex.getImage900(),
+                                                                        ex.getImage550(),
+                                                                        ex.getImage250());
+                                                    }
+                                                    if (TextUtils.isEmpty(url)) {
+                                                        toast("Upload failed");
+                                                        loadHub();
+                                                        return;
+                                                    }
+                                                    submitRatingUrl(url);
+                                                } catch (Exception e) {
+                                                    toast("Upload failed");
+                                                    loadHub();
+                                                }
+                                            }
+
+                                            @Override
+                                            public void onFailure(
+                                                    Call<UserImagePojoResponse> call,
+                                                    Throwable t) {
+                                                toast("Upload network error");
+                                                loadHub();
+                                            }
+                                        });
+                    } catch (Exception e) {
+                        runOnUiThread(
+                                () -> {
+                                    toast("Could not read image");
+                                    loadHub();
+                                });
+                    }
+                });
+    }
+
+    @Nullable
+    private byte[] compressScreenshot(Uri uri) {
         try {
             InputStream in = getContentResolver().openInputStream(uri);
-            if (in == null) {
-                toast("Could not read image");
-                return;
+            if (in == null) return null;
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeStream(in, null, bounds);
+            in.close();
+            int sample = 1;
+            int maxSide = Math.max(bounds.outWidth, bounds.outHeight);
+            while (maxSide / sample > 1600) sample *= 2;
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = Math.max(1, sample);
+            in = getContentResolver().openInputStream(uri);
+            if (in == null) return null;
+            Bitmap bmp = BitmapFactory.decodeStream(in, null, opts);
+            in.close();
+            if (bmp == null) {
+                // Fallback raw copy
+                in = getContentResolver().openInputStream(uri);
+                if (in == null) return null;
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) >= 0) bos.write(buf, 0, n);
+                in.close();
+                return bos.toByteArray();
             }
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) >= 0) bos.write(buf, 0, n);
-            in.close();
-            byte[] bytes = bos.toByteArray();
-            RequestBody req = RequestBody.create(MediaType.parse("image/jpeg"), bytes);
-            MultipartBody.Part part =
-                    MultipartBody.Part.createFormData("file", "rewards_rating.jpg", req);
-            APIService api = RestApiClient.getClient().create(APIService.class);
-            api.uploadImage(part)
-                    .enqueue(
-                            new Callback<UserImagePojoResponse>() {
-                                @Override
-                                public void onResponse(
-                                        Call<UserImagePojoResponse> call,
-                                        Response<UserImagePojoResponse> response) {
-                                    try {
-                                        String url = null;
-                                        if (response.body() != null
-                                                && response.body().getExtras() != null) {
-                                            UserImagePojoResponse.Extras ex =
-                                                    response.body().getExtras();
-                                            url =
-                                                    firstNonEmpty(
-                                                            ex.getImageOriginal(),
-                                                            ex.getImage900(),
-                                                            ex.getImage550(),
-                                                            ex.getImage250());
-                                        }
-                                        if (TextUtils.isEmpty(url)) {
-                                            toast("Upload failed");
-                                            return;
-                                        }
-                                        submitRatingUrl(url);
-                                    } catch (Exception e) {
-                                        toast("Upload failed");
-                                    }
-                                }
-
-                                @Override
-                                public void onFailure(
-                                        Call<UserImagePojoResponse> call, Throwable t) {
-                                    toast("Upload network error");
-                                }
-                            });
+            bmp.compress(Bitmap.CompressFormat.JPEG, 82, bos);
+            bmp.recycle();
+            return bos.toByteArray();
         } catch (Exception e) {
-            toast("Could not read image");
+            return null;
         }
     }
 
@@ -571,7 +744,7 @@ public class RewardsHubActivity extends AppCompatActivity {
                                 if (b != null
                                         && b.has("success")
                                         && b.get("success").getAsBoolean()) {
-                                    toast("Submitted — pending admin approval");
+                                    toast(RewardsLabels.ratingSubmitting(RewardsHubActivity.this));
                                     loadHub();
                                 } else {
                                     toast(
@@ -588,12 +761,43 @@ public class RewardsHubActivity extends AppCompatActivity {
                         });
     }
 
-    /** User history: only +N / −N and time — no task/factor names. */
+    /** User history: only +N / −N and time — no task/factor names. Last 10. */
     private void renderHistory(JsonObject body) {
         history.removeAllViews();
-        addSignedCoinRows(body);
-        addSignedMoneyRows(body, "conversions", true);
-        addSignedMoneyRows(body, "withdrawals", false);
+        List<HistoryRow> rows = new ArrayList<>();
+        collectCoinRows(body, rows);
+        collectMoneyRows(body, "conversions", true, rows);
+        collectMoneyRows(body, "withdrawals", false, rows);
+        Collections.sort(
+                rows,
+                new Comparator<HistoryRow>() {
+                    @Override
+                    public int compare(HistoryRow a, HistoryRow b) {
+                        return Long.compare(b.atMs, a.atMs);
+                    }
+                });
+        int n = Math.min(10, rows.size());
+        for (int i = 0; i < n; i++) {
+            HistoryRow r = rows.get(i);
+            TextView line = new TextView(this);
+            line.setText(r.text);
+            line.setTextColor(Color.parseColor("#FF44403C"));
+            line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            line.setPadding(12, 8, 12, 8);
+            history.addView(line);
+        }
+        if (historyHint != null) {
+            if (n >= 10) {
+                String hint =
+                        !TextUtils.isEmpty(historyShowingLast)
+                                ? historyShowingLast
+                                : RewardsLabels.historyShowingLast(this);
+                historyHint.setText(hint);
+                historyHint.setVisibility(View.VISIBLE);
+            } else {
+                historyHint.setVisibility(View.GONE);
+            }
+        }
         if (history.getChildCount() == 0) {
             TextView empty = new TextView(this);
             empty.setText(RewardsLabels.noHistory(this));
@@ -604,57 +808,95 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
     }
 
-    private void addSignedCoinRows(JsonObject body) {
+    private static final class HistoryRow {
+        final String text;
+        final long atMs;
+
+        HistoryRow(String text, long atMs) {
+            this.text = text;
+            this.atMs = atMs;
+        }
+    }
+
+    private void collectCoinRows(JsonObject body, List<HistoryRow> out) {
         if (!body.has("coin_history") || !body.get("coin_history").isJsonArray()) return;
         JsonArray arr = body.getAsJsonArray("coin_history");
-        int n = Math.min(12, arr.size());
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < arr.size(); i++) {
             JsonObject row = arr.get(i).getAsJsonObject();
             int coins = optInt(row, "coins");
             if (coins == 0) continue;
             String sign = coins > 0 ? "+" : "";
             String when = formatWhen(row);
-            TextView line = new TextView(this);
-            line.setText(sign + coins + (TextUtils.isEmpty(when) ? "" : "  ·  " + when));
-            line.setTextColor(Color.parseColor("#FF44403C"));
-            line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            line.setPadding(12, 8, 12, 8);
-            history.addView(line);
+            out.add(
+                    new HistoryRow(
+                            sign + coins + (TextUtils.isEmpty(when) ? "" : "  ·  " + when),
+                            parseWhenMs(row)));
         }
     }
 
-    private void addSignedMoneyRows(JsonObject body, String key, boolean credit) {
+    private void collectMoneyRows(
+            JsonObject body, String key, boolean credit, List<HistoryRow> out) {
         if (!body.has(key) || !body.get(key).isJsonArray()) return;
         JsonArray arr = body.getAsJsonArray(key);
-        int n = Math.min(8, arr.size());
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < arr.size(); i++) {
             JsonObject row = arr.get(i).getAsJsonObject();
             double amt =
                     credit ? optDouble(row, "rupees") : optDouble(row, "amount_rupees");
             if (amt <= 0) continue;
             String sign = credit ? "+" : "−";
             String when = formatWhen(row);
-            TextView line = new TextView(this);
-            line.setText(
-                    sign
-                            + "₹"
-                            + formatMoney(amt)
-                            + (TextUtils.isEmpty(when) ? "" : "  ·  " + when));
-            line.setTextColor(Color.parseColor("#FF44403C"));
-            line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            line.setPadding(12, 8, 12, 8);
-            history.addView(line);
+            out.add(
+                    new HistoryRow(
+                            sign
+                                    + "₹"
+                                    + formatMoney(amt)
+                                    + (TextUtils.isEmpty(when) ? "" : "  ·  " + when),
+                            parseWhenMs(row)));
         }
+    }
+
+    private long parseWhenMs(JsonObject row) {
+        String raw = optStr(row, "updatedAt", null);
+        if (TextUtils.isEmpty(raw)) raw = optStr(row, "createdAt", null);
+        if (TextUtils.isEmpty(raw)) return 0L;
+        try {
+            String iso = raw.trim();
+            if (iso.endsWith("Z")) {
+                SimpleDateFormat in =
+                        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+                in.setTimeZone(TimeZone.getTimeZone("UTC"));
+                int dot = iso.indexOf('.');
+                String trunc = iso;
+                if (dot > 0) {
+                    String frac = iso.substring(dot + 1).replace("Z", "");
+                    if (frac.length() < 3) {
+                        while (frac.length() < 3) frac += "0";
+                    } else if (frac.length() > 3) {
+                        frac = frac.substring(0, 3);
+                    }
+                    trunc = iso.substring(0, dot + 1) + frac + "Z";
+                } else {
+                    in = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+                    in.setTimeZone(TimeZone.getTimeZone("UTC"));
+                }
+                Date d = in.parse(trunc);
+                return d != null ? d.getTime() : 0L;
+            }
+        } catch (Exception ignored) {
+        }
+        return 0L;
     }
 
     private void loadLeaderboard() {
         APIService api = RestApiClient.getClient().create(APIService.class);
-        api.rewards_leaderboard("v3", authBody()).enqueue(new Callback<JsonObject>() {
+        JsonObject body = authBody();
+        body.addProperty("limit", 10);
+        api.rewards_leaderboard("v3", body).enqueue(new Callback<JsonObject>() {
             @Override
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
-                JsonObject body = response.body();
+                JsonObject resp = response.body();
                 leaderboard.removeAllViews();
-                if (body == null || !body.has("rows") || !body.get("rows").isJsonArray()) {
+                if (resp == null || !resp.has("rows") || !resp.get("rows").isJsonArray()) {
                     TextView empty = new TextView(RewardsHubActivity.this);
                     empty.setText("Leaderboard empty");
                     empty.setPadding(16, 16, 16, 16);
@@ -662,13 +904,14 @@ public class RewardsHubActivity extends AppCompatActivity {
                     leaderboard.addView(empty);
                     return;
                 }
-                JsonArray rows = body.getAsJsonArray("rows");
-                int n = Math.min(20, rows.size());
+                JsonArray rows = resp.getAsJsonArray("rows");
+                int n = Math.min(10, rows.size());
                 for (int i = 0; i < n; i++) {
                     JsonObject r = rows.get(i).getAsJsonObject();
                     LinearLayout row = new LinearLayout(RewardsHubActivity.this);
                     row.setOrientation(LinearLayout.HORIZONTAL);
                     row.setPadding(14, 12, 14, 12);
+                    row.setAlpha(0f);
                     TextView rank = new TextView(RewardsHubActivity.this);
                     rank.setText("#" + optInt(r, "rank"));
                     rank.setTextColor(Color.parseColor("#FFB45309"));
@@ -686,6 +929,12 @@ public class RewardsHubActivity extends AppCompatActivity {
                     row.addView(name);
                     row.addView(coins);
                     leaderboard.addView(row);
+                    row.animate()
+                            .alpha(1f)
+                            .setStartDelay(i * 40L)
+                            .setDuration(220)
+                            .setInterpolator(new DecelerateInterpolator())
+                            .start();
                     if (i < n - 1) {
                         View divider = new View(RewardsHubActivity.this);
                         divider.setBackgroundColor(Color.parseColor("#FFF5F5F4"));

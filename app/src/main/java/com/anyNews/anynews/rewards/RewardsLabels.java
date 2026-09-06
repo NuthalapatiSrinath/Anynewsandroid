@@ -148,8 +148,79 @@ public final class RewardsLabels {
     }
 
     public static String leaderboardHint(@Nullable Context c) {
-        // Deprecated — leaderboard subtitle removed from hub UI.
-        return "";
+        switch (languageId(c)) {
+            case 1: return "ഈ ആഴ്ചയിലെ മികച്ച നേട്ടക്കാർ";
+            case 2: return "इस सप्ताह के टॉप अर्नर्स";
+            case 3: return "ఈ వారం టాప్ సంపాదనదారులు";
+            case 4: return "இந்த வாரத்தின் சிறந்த சம்பாதிப்பாளர்கள்";
+            case 5: return "ಈ ವಾರದ ಟಾಪ್ ಗಳಿಕೆದಾರರು";
+            case 6: return "ଏହି ସପ୍ତାହର ଶୀର୍ଷ ରୋଜଗାରୀ";
+            default: return "Top earning performers this week";
+        }
+    }
+
+    public static String historyShowingLast(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "അവസാന 10 കാണിക്കുന്നു";
+            case 2: return "पिछले 10 दिखा रहे हैं";
+            case 3: return "చివరి 10 చూపిస్తున్నాం";
+            case 4: return "கடைசி 10 காட்டப்படுகிறது";
+            case 5: return "ಕೊನೆಯ 10 ತೋರಿಸಲಾಗುತ್ತಿದೆ";
+            case 6: return "ଶେଷ 10 ଦେଖାଯାଉଛି";
+            default: return "Showing last 10";
+        }
+    }
+
+    public static String redeemedThisWeek(@Nullable Context c, int redeemed) {
+        switch (languageId(c)) {
+            case 1: return "(" + redeemed + " ഈ ആഴ്ച റിഡീം ചെയ്തു)";
+            case 2: return "(" + redeemed + " इस सप्ताह रिडीम)";
+            case 3: return "(" + redeemed + " ఈ వారం రిడీమ్)";
+            case 4: return "(" + redeemed + " இந்த வாரம் ரிடீம்)";
+            case 5: return "(" + redeemed + " ಈ ವಾರ ರಿಡೀಮ್)";
+            case 6: return "(" + redeemed + " ଏହି ସପ୍ତାହ ରିଡିମ୍)";
+            default: return "(" + redeemed + " redeemed this week)";
+        }
+    }
+
+    public static String watchAdsWait(@Nullable Context c, int totalSec) {
+        int sec = Math.max(0, totalSec);
+        int m = sec / 60;
+        int s = sec % 60;
+        String clock = String.format(java.util.Locale.US, "%d:%02d", m, s);
+        switch (languageId(c)) {
+            case 1: return "പരസ്യങ്ങൾ — " + clock + " കാത്തിരിക്കുക";
+            case 2: return "विज्ञापन — " + clock + " प्रतीक्षा";
+            case 3: return "యాడ్స్ — " + clock + " వేచి ఉండండి";
+            case 4: return "விளம்பரங்கள் — " + clock + " காத்திருங்கள்";
+            case 5: return "ಜಾಹೀರಾತು — " + clock + " ನಿರೀಕ್ಷಿಸಿ";
+            case 6: return "ବିଜ୍ଞାପନ — " + clock + " ଅପେକ୍ଷା";
+            default: return "Watch ads — wait " + clock;
+        }
+    }
+
+    public static String ratingPending(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "റേറ്റിംഗ് സ്ക്രീൻഷോട്ട് അവലോകനത്തിലാണ്";
+            case 2: return "रेटिंग स्क्रीनशॉट समीक्षा में";
+            case 3: return "రేటింగ్ స్క్రీన్‌షాట్ సమీక్షలో";
+            case 4: return "மதிப்பீட்டு ஸ்கிரீன்ஷாட் மதிப்பாய்வில்";
+            case 5: return "ರೇಟಿಂಗ್ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಪರಿಶೀಲನೆಯಲ್ಲಿ";
+            case 6: return "ରେଟିଂ ସ୍କ୍ରିନସଟ୍ ସମୀକ୍ଷାରେ";
+            default: return "Rating screenshot pending review";
+        }
+    }
+
+    public static String ratingSubmitting(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "സമർപ്പിച്ചു — അംഗീകാരം കാത്തിരിക്കുന്നു";
+            case 2: return "भेजा गया — स्वीकृति की प्रतीक्षा";
+            case 3: return "సమర్పించబడింది — ఆమోదం కోసం వేచి";
+            case 4: return "சமர்ப்பிக்கப்பட்டது — ஒப்புதலுக்காக காத்திருக்கிறது";
+            case 5: return "ಸಲ್ಲಿಸಲಾಗಿದೆ — ಅನುಮೋದನೆಗಾಗಿ ನಿರೀಕ್ಷೆ";
+            case 6: return "ଦାଖଲ — ଅନୁମୋଦନ ଅପେକ୍ଷାରେ";
+            default: return "Submitted — pending approval";
+        }
     }
 
     public static String rulesSummary(@Nullable Context c) {

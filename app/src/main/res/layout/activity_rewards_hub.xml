@@ -85,6 +85,16 @@
                     android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/rewards_redeemed_line"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFA8A29E"
+                    android:textSize="12sp"
+                    android:visibility="gone"
+                    tools:text="(48 redeemed this week)"
+                    tools:visibility="visible" />
+
+                <TextView
                     android:id="@+id/rewards_coins_caption"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -112,9 +122,10 @@
                         android:id="@+id/rewards_rate"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="100 coins = ₹1"
+                        android:text=""
                         android:textColor="#FF78716C"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        tools:text="100 coins = ₹1" />
                 </LinearLayout>
 
                 <TextView
@@ -220,7 +231,6 @@
                 android:layout_marginStart="18dp"
                 android:layout_marginTop="2dp"
                 android:layout_marginEnd="18dp"
-                android:visibility="gone"
                 android:text=""
                 android:textColor="#FFA8A29E"
                 android:textSize="12sp" />
@@ -235,7 +245,8 @@
                 android:background="@drawable/bg_rewards_card"
                 android:orientation="vertical"
                 android:paddingTop="4dp"
-                android:paddingBottom="4dp" />
+                android:paddingBottom="4dp"
+                android:animateLayoutChanges="true" />
 
             <!-- History -->
             <TextView
@@ -250,6 +261,18 @@
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/rewards_history_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="18dp"
+                android:layout_marginTop="2dp"
+                android:layout_marginEnd="18dp"
+                android:visibility="gone"
+                android:text=""
+                android:textColor="#FFA8A29E"
+                android:textSize="12sp" />
+
             <LinearLayout
                 android:id="@+id/rewards_history"
                 android:layout_width="match_parent"
@@ -259,7 +282,8 @@
                 android:layout_marginEnd="14dp"
                 android:background="@drawable/bg_rewards_card"
                 android:orientation="vertical"
-                android:padding="8dp" />
+                android:padding="8dp"
+                android:animateLayoutChanges="true" />
 
             <TextView
                 android:id="@+id/rewards_rules"

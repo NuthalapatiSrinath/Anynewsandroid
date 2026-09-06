@@ -92,7 +92,7 @@ public final class RewardsConfigHelper {
     }
 
     public static String rateLabel(@Nullable Context context) {
-        return read(context, PREF_RATE_LABEL, "100 coins = ₹1");
+        return read(context, PREF_RATE_LABEL, "");
     }
 
     public static String chipColor(@Nullable Context context) {

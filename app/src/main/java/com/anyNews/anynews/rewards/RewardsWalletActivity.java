@@ -61,7 +61,7 @@ public class RewardsWalletActivity extends AppCompatActivity {
     private double walletRupees;
     private double minWithdraw = 10;
     private int periodCoins;
-    private int minCoinsToConvert = 100;
+    private int minCoinsToConvert = 200;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -194,6 +194,8 @@ public class RewardsWalletActivity extends AppCompatActivity {
                         : 10;
         if (body.has("min_coins_to_convert") && !body.get("min_coins_to_convert").isJsonNull()) {
             minCoinsToConvert = body.get("min_coins_to_convert").getAsInt();
+        } else {
+            minCoinsToConvert = 200;
         }
 
         balanceView.setText("₹" + formatMoney(walletRupees));
@@ -202,7 +204,10 @@ public class RewardsWalletActivity extends AppCompatActivity {
                 body.has("rate_label")
                         ? body.get("rate_label").getAsString()
                         : RewardsConfigHelper.rateLabel(this);
-        rateView.setText(rate);
+        if (TextUtils.isEmpty(rate) && body.has("coins_per_rupee")) {
+            rate = body.get("coins_per_rupee").getAsInt() + " coins = ₹1";
+        }
+        rateView.setText(rate != null ? rate : "");
         withdrawEtaView.setText(
                 optStr(
                         copy,
