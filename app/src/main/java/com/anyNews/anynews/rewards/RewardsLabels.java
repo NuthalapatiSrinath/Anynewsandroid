@@ -53,13 +53,13 @@ public final class RewardsLabels {
 
     public static String joinedHubSubtitle(@Nullable Context c) {
         switch (languageId(c)) {
-            case 1: return "വായിച്ച് നാണയങ്ങൾ നേടുക. ലീഡർബോർഡ് നാണയങ്ങൾ മാത്രം — രൂപ ഒരിക്കലുമില്ല.";
-            case 2: return "पढ़कर कॉइन्स कमाएँ. लीडरबोर्ड में सिर्फ कॉइन्स — कभी रुपये नहीं.";
-            case 3: return "చదివి కాయిన్లు సంపాదించండి. లీడర్‌బోర్డ్‌లో కాయిన్లు మాత్రమే — రూపాయలు కాదు.";
-            case 4: return "படித்து காய்கள் சம்பாதிக்கவும். லீடர்போர்டில் காய்கள் மட்டும் — ரூபாய் இல்லை.";
-            case 5: return "ಓದಿ ನಾಣ್ಯಗಳನ್ನು ಗಳಿಸಿ. ಲೀಡರ್‌ಬೋರ್ಡ್‌ನಲ್ಲಿ ನಾಣ್ಯಗಳು ಮಾತ್ರ — ರೂಪಾಯಿ ಎಂದಿಗೂ ಅಲ್ಲ.";
-            case 6: return "ପଢ଼ି କଏନ୍ ରୋଜଗାର କରନ୍ତୁ। ଲିଡରବୋର୍ଡରେ କେବଳ କଏନ୍ — ଟଙ୍କା ନୁହେଁ।";
-            default: return "Earn coins by reading. Leaderboard shows coins only — never rupees.";
+            case 1: return "വായിച്ച് നാണയങ്ങൾ നേടുക.";
+            case 2: return "पढ़कर कॉइन्स कमाएँ.";
+            case 3: return "చదివి కాయిన్లు సంపాదించండి.";
+            case 4: return "படித்து காய்கள் சம்பாதிக்கவும்.";
+            case 5: return "ಓದಿ ನಾಣ್ಯಗಳನ್ನು ಗಳಿಸಿ.";
+            case 6: return "ପଢ଼ି କଏନ୍ ରୋଜଗାର କରନ୍ତୁ।";
+            default: return "Read and earn coins for the leaderboard.";
         }
     }
 
@@ -148,14 +148,50 @@ public final class RewardsLabels {
     }
 
     public static String leaderboardHint(@Nullable Context c) {
+        // Deprecated — leaderboard subtitle removed from hub UI.
+        return "";
+    }
+
+    public static String rulesSummary(@Nullable Context c) {
         switch (languageId(c)) {
-            case 1: return "നാണയങ്ങളും റാങ്കും മാത്രം — രൂപ ഒരിക്കലുമില്ല";
-            case 2: return "सिर्फ कॉइन्स और रैंक — कभी रुपये नहीं";
-            case 3: return "కాయిన్లు & ర్యాంక్ మాత్రమే — రూపాయలు కాదు";
-            case 4: return "காய்கள் & ரேங்க் மட்டும் — ரூபாய் இல்லை";
-            case 5: return "ನಾಣ್ಯಗಳು & ರ್ಯಾಂಕ್ ಮಾತ್ರ — ರೂಪಾಯಿ ಎಂದಿಗೂ ಅಲ್ಲ";
-            case 6: return "କେବଳ କଏନ୍ ଓ ର୍ୟାଙ୍କ — ଟଙ୍କା ନୁହେଁ";
-            default: return "Coins & rank only — never rupees";
+            case 1:
+                return "നിലവാരമുള്ള വായനയ്ക്ക് AnyNews നാണയങ്ങൾ നേടുക. യോഗ്യമായ നാണയങ്ങൾ വാലറ്റിലേക്ക് മാറ്റി UPI-യിലേക്ക് പിൻവലിക്കാം.";
+            case 2:
+                return "क्वालिटी रीडिंग पर AnyNews कॉइन्स कमाएँ. योग्य कॉइन्स वॉलेट में बदलें और UPI पर निकालें.";
+            case 3:
+                return "నాణ్యమైన చదవడానికి AnyNews కాయిన్లు సంపాదించండి. అర్హత ఉన్న కాయిన్లను వాలెట్‌కు మార్చి UPIకి విత్‌డ్రా చేయండి.";
+            case 4:
+                return "தரமான வாசிப்பிற்கு AnyNews காய்கள் சம்பாதியுங்கள். தகுதியான காய்களை வாலட்டிற்கு மாற்றி UPI-க்கு எடுக்கவும்.";
+            case 5:
+                return "ಗುಣಮಟ್ಟದ ಓದಿಗೆ AnyNews ನಾಣ್ಯಗಳನ್ನು ಗಳಿಸಿ. ಅರ್ಹ ನಾಣ್ಯಗಳನ್ನು ವಾಲೆಟ್‌ಗೆ ಪರಿವರ್ತಿಸಿ UPIಗೆ ಹಿಂಪಡೆಯಿರಿ.";
+            case 6:
+                return "ଗୁଣବତ୍ତା ପଢ଼ିବା ପାଇଁ AnyNews କଏନ୍ ରୋଜଗାର କରନ୍ତୁ। ଯୋଗ୍ୟ କଏନ୍ ଓୟାଲେଟ୍‌କୁ ରୂପାନ୍ତର କରି UPIରେ ଉଠାନ୍ତୁ।";
+            default:
+                return "Earn AnyNews Coins for quality reading. Convert eligible coins to your Rewards wallet, then withdraw to UPI when ready.";
+        }
+    }
+
+    public static String convertCoins(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "നാണയങ്ങൾ → ₹";
+            case 2: return "कॉइन्स → ₹";
+            case 3: return "కాయిన్లు → ₹";
+            case 4: return "காய்கள் → ₹";
+            case 5: return "ನಾಣ್ಯಗಳು → ₹";
+            case 6: return "କଏନ୍ → ₹";
+            default: return "Convert coins → ₹";
+        }
+    }
+
+    public static String coinEarns(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "നാണയ ലാഭങ്ങൾ";
+            case 2: return "कॉइन कमाई";
+            case 3: return "కాయిన్ సంపాదన";
+            case 4: return "காய் வருவாய்";
+            case 5: return "ನಾಣ್ಯ ಗಳಿಕೆ";
+            case 6: return "କଏନ୍ ରୋଜଗାର";
+            default: return "Coin earnings";
         }
     }
 

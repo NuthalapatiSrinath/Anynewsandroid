@@ -57,7 +57,7 @@ public final class RewardsAuth {
         if (draftId > 0) {
             body.addProperty("draft_id", draftId);
         }
-        if (languageId > 0) {
+        if (languageId >= 0) {
             body.addProperty("language_id", languageId);
         }
 

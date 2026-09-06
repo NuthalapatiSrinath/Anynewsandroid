@@ -26,6 +26,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.MediaStore;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -4213,27 +4214,28 @@ public class newProfileDetails extends AppCompatActivity {
         if (edit_profile_icon != null) {
             edit_profile_icon.setVisibility(vis);
         }
-        // Rewards row: gated by admin rewards_master (hub + legacy tile).
+        // Rewards row: gated by admin rewards_master + reporter exclusion.
         bindProfileRewardsRow(15f);
         if (profile_layout_rewards != null) {
             profile_layout_rewards.setVisibility(
-                    DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
+                    DistrictPinVisibilityConfig.rewardsVisibleForUser(this)
                             ? View.VISIBLE
                             : View.GONE);
         }
         if (profile_refer_list != null) {
             profile_refer_list.setVisibility(
-                    DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
+                    DistrictPinVisibilityConfig.rewardsVisibleForUser(this)
                             ? View.VISIBLE
                             : View.GONE);
         }
     }
 
-    /** Profile hub Rewards entry — must show when rewards_master ON. */
+    /** Profile hub Rewards entry — must show when rewards_master ON (not for excluded reporters). */
     private void bindProfileRewardsRow(float menuSp) {
         View layoutRewards = findViewById(R.id.layout_profile_rewards);
         TextView rewardsLabel = findViewById(R.id.profile_rewards_label);
-        boolean on = DistrictPinVisibilityConfig.rewardsMasterEnabled(this);
+        TextView rewardsSubtitle = findViewById(R.id.profile_rewards_subtitle);
+        boolean on = DistrictPinVisibilityConfig.rewardsVisibleForUser(this);
         if (rewardsLabel != null) {
             rewardsLabel.setTextSize(menuSp);
             try {
@@ -4243,6 +4245,22 @@ public class newProfileDetails extends AppCompatActivity {
                 rewardsLabel.setText("Rewards");
             }
         }
+        if (rewardsSubtitle != null) {
+            try {
+                String wallet =
+                        SharedPrefsData.getString(
+                                this, "rewards_wallet_rupees", Constants.PREF_NAME);
+                String coins =
+                        SharedPrefsData.getString(
+                                this, "rewards_period_coins", Constants.PREF_NAME);
+                if (TextUtils.isEmpty(wallet)) wallet = "0";
+                if (TextUtils.isEmpty(coins)) coins = "0";
+                rewardsSubtitle.setText("₹" + wallet + " · " + coins + " coins");
+                rewardsSubtitle.setVisibility(View.VISIBLE);
+            } catch (Exception ignored) {
+                rewardsSubtitle.setVisibility(View.GONE);
+            }
+        }
         if (layoutRewards != null) {
             layoutRewards.setVisibility(on ? View.VISIBLE : View.GONE);
             layoutRewards.setOnClickListener(v -> openRewardsFromProfile());
@@ -4250,7 +4268,7 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     private void openRewardsFromProfile() {
-        if (!DistrictPinVisibilityConfig.rewardsMasterEnabled(this)) {
+        if (!DistrictPinVisibilityConfig.rewardsVisibleForUser(this)) {
             Toast.makeText(this, "Rewards is currently off", Toast.LENGTH_SHORT).show();
             return;
         }

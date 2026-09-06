@@ -406,6 +406,18 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String rewardsChipWeight;
 
+        @SerializedName("rewards_exclude_reporters")
+        @Expose
+        private Boolean rewardsExcludeReporters;
+
+        @SerializedName("rewards_period_unit")
+        @Expose
+        private String rewardsPeriodUnit;
+
+        @SerializedName("play_store_package")
+        @Expose
+        private String playStorePackage;
+
         /** Way2-style live readers badge (half articles). Null on old servers. */
         @SerializedName("live_readers_enabled")
         @Expose
@@ -807,6 +819,18 @@ public class StartActivityReqModel implements Serializable {
 
         public String getRewardsChipWeight() {
             return rewardsChipWeight;
+        }
+
+        public Boolean getRewardsExcludeReporters() {
+            return rewardsExcludeReporters;
+        }
+
+        public String getRewardsPeriodUnit() {
+            return rewardsPeriodUnit;
+        }
+
+        public String getPlayStorePackage() {
+            return playStorePackage;
         }
 
         public Boolean getLiveReadersEnabled() {

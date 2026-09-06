@@ -28,7 +28,9 @@ import com.anyNews.anynews.Activities.LoginActivityDetails;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
+import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
+import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Pojo.UserImagePojoResponse;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -87,6 +89,9 @@ public class RewardsHubActivity extends AppCompatActivity {
     private boolean watchAdsAvailable;
     private boolean ratingAvailable;
     private int watchCooldownSec;
+    private boolean pendingScreenshotAfterStore;
+    private int minCoinsToConvert = 100;
+    private TextView convertBtn;
 
     private final ActivityResultLauncher<String> pickScreenshot =
             registerForActivityResult(
@@ -105,7 +110,8 @@ public class RewardsHubActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (!DistrictPinVisibilityConfig.rewardsMasterEnabled(this)) {
+        if (!DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
+                || !DistrictPinVisibilityConfig.rewardsVisibleForUser(this)) {
             Toast.makeText(this, "Rewards is currently off", Toast.LENGTH_SHORT).show();
             finish();
             return;
@@ -120,6 +126,8 @@ public class RewardsHubActivity extends AppCompatActivity {
         else findViewById(R.id.rewards_save_upi).setOnClickListener(v -> onSaveUpi());
         if (withdrawBtn != null) withdrawBtn.setOnClickListener(v -> onWithdraw());
         else findViewById(R.id.rewards_withdraw_btn).setOnClickListener(v -> onWithdraw());
+        convertBtn = findViewById(R.id.rewards_convert_btn);
+        if (convertBtn != null) convertBtn.setOnClickListener(v -> onConvert());
         if (checkinBtn != null) checkinBtn.setOnClickListener(v -> onCheckin());
         if (watchAdsBtn != null) watchAdsBtn.setOnClickListener(v -> onWatchAds());
         if (ratingBtn != null) ratingBtn.setOnClickListener(v -> onRating());
@@ -131,6 +139,16 @@ public class RewardsHubActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Flush pending engagement so hub coins refresh after reading.
+        try {
+            RewardsEngagementBatcher.get().flushNow(this);
+        } catch (Exception ignored) {
+        }
+        if (pendingScreenshotAfterStore) {
+            pendingScreenshotAfterStore = false;
+            toast("Pick your Play Store rating screenshot");
+            pickScreenshot.launch("image/*");
+        }
         // Refresh after Profile/Rewards OTP return so guest → joined paints immediately.
         if (joinBtn != null) {
             loadHub();
@@ -188,7 +206,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         if (coinsCaption != null) coinsCaption.setText(RewardsLabels.coinsThisWeek(this));
         if (earnTitle != null) earnTitle.setText(RewardsLabels.earnMore(this));
         if (leaderboardTitle != null) leaderboardTitle.setText(RewardsLabels.leaderboard(this));
-        if (leaderboardHint != null) leaderboardHint.setText(RewardsLabels.leaderboardHint(this));
+        if (leaderboardHint != null) leaderboardHint.setVisibility(View.GONE);
         if (historyTitle != null) historyTitle.setText(RewardsLabels.history(this));
         if (walletTitle != null) walletTitle.setText(RewardsLabels.walletTitle(this));
         if (saveUpiBtn != null) saveUpiBtn.setText(RewardsLabels.saveUpi(this));
@@ -221,6 +239,11 @@ public class RewardsHubActivity extends AppCompatActivity {
                 }
                 if (body.has("enabled") && !body.get("enabled").getAsBoolean()) {
                     toast("Rewards is currently off");
+                    finish();
+                    return;
+                }
+                if (body.has("excluded") && body.get("excluded").getAsBoolean()) {
+                    toast("Rewards is not available for reporter accounts");
                     finish();
                     return;
                 }
@@ -321,7 +344,35 @@ public class RewardsHubActivity extends AppCompatActivity {
                         : 10;
         withdrawEtaView.setText(
                 optStr(copy, "withdraw_eta", "Credit usually takes 24–48 hours."));
-        rulesView.setText(optStr(copy, "rules_summary", ""));
+        String rules = optStr(copy, "rules_summary", "");
+        if (TextUtils.isEmpty(rules)
+                || rules.startsWith("Earn AnyNews Coins for quality reading")) {
+            rules = RewardsLabels.rulesSummary(this);
+        }
+        rulesView.setText(rules);
+
+        if (body.has("min_coins_to_convert") && !body.get("min_coins_to_convert").isJsonNull()) {
+            minCoinsToConvert = body.get("min_coins_to_convert").getAsInt();
+        }
+        if (convertBtn != null) {
+            convertBtn.setText(RewardsLabels.convertCoins(this));
+            convertBtn.setVisibility(joined && !guest ? View.VISIBLE : View.GONE);
+        }
+
+        // Persist wallet snapshot for Profile
+        try {
+            SharedPrefsData.putString(
+                    this,
+                    "rewards_wallet_rupees",
+                    String.valueOf(walletRupees),
+                    Constants.PREF_NAME);
+            SharedPrefsData.putString(
+                    this,
+                    "rewards_period_coins",
+                    String.valueOf(coins),
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
 
         if (body.has("upi_id") && !body.get("upi_id").isJsonNull()) {
             upiInput.setText(body.get("upi_id").getAsString());
@@ -459,12 +510,14 @@ public class RewardsHubActivity extends AppCompatActivity {
             return;
         }
         try {
-            // Open Play Store listing for rating, then pick screenshot.
+            // Open main Play Store listing (Open + Your review / rate stars).
             String pkg = getPackageName();
+            if (TextUtils.isEmpty(pkg)) pkg = "com.anyNews.anynews";
             Intent market =
                     new Intent(
                             Intent.ACTION_VIEW,
                             Uri.parse("market://details?id=" + pkg));
+            market.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try {
                 startActivity(market);
             } catch (Exception e) {
@@ -475,10 +528,11 @@ public class RewardsHubActivity extends AppCompatActivity {
                                         "https://play.google.com/store/apps/details?id="
                                                 + pkg)));
             }
+            pendingScreenshotAfterStore = true;
+            toast("Rate 5★ on Play Store, then return here");
         } catch (Exception ignored) {
+            toast("Could not open Play Store");
         }
-        toast("After rating, pick your screenshot");
-        pickScreenshot.launch("image/*");
     }
 
     private void uploadRatingScreenshot(Uri uri) {
@@ -571,6 +625,7 @@ public class RewardsHubActivity extends AppCompatActivity {
 
     private void renderHistory(JsonObject body) {
         history.removeAllViews();
+        addCoinHistorySection(body);
         addHistorySection(body, "withdrawals", "Withdrawals");
         addHistorySection(body, "conversions", "Wallet credits");
         if (history.getChildCount() == 0) {
@@ -581,6 +636,68 @@ public class RewardsHubActivity extends AppCompatActivity {
             empty.setPadding(12, 16, 12, 16);
             history.addView(empty);
         }
+    }
+
+    private void addCoinHistorySection(JsonObject body) {
+        if (!body.has("coin_history") || !body.get("coin_history").isJsonArray()) return;
+        JsonArray arr = body.getAsJsonArray("coin_history");
+        if (arr.size() == 0) return;
+        TextView h = new TextView(this);
+        h.setText(RewardsLabels.coinEarns(this));
+        h.setTextColor(Color.parseColor("#FF78716C"));
+        h.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        h.setPadding(12, 8, 12, 4);
+        history.addView(h);
+        int n = Math.min(12, arr.size());
+        for (int i = 0; i < n; i++) {
+            JsonObject row = arr.get(i).getAsJsonObject();
+            TextView line = new TextView(this);
+            String factor = optStr(row, "factor", "earn");
+            int coins = optInt(row, "coins");
+            String day = optStr(row, "day_key", "");
+            line.setText("+" + coins + " · " + factor + (TextUtils.isEmpty(day) ? "" : " · " + day));
+            line.setTextColor(Color.parseColor("#FF44403C"));
+            line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            line.setPadding(12, 6, 12, 6);
+            history.addView(line);
+        }
+    }
+
+    private void onConvert() {
+        if (!requireLogin()) return;
+        if (!joined) {
+            toast(RewardsLabels.joinFirst(this));
+            return;
+        }
+        JsonObject body = authBody();
+        APIService api = RestApiClient.getClient().create(APIService.class);
+        api.rewards_convert("v3", body)
+                .enqueue(
+                        new Callback<JsonObject>() {
+                            @Override
+                            public void onResponse(
+                                    Call<JsonObject> call, Response<JsonObject> response) {
+                                JsonObject b = response.body();
+                                if (b != null
+                                        && b.has("success")
+                                        && b.get("success").getAsBoolean()) {
+                                    double rupees =
+                                            b.has("rupees") ? b.get("rupees").getAsDouble() : 0;
+                                    toast("+" + formatMoney(rupees) + " to wallet");
+                                    loadHub();
+                                } else {
+                                    toast(
+                                            b != null && b.has("msg")
+                                                    ? b.get("msg").getAsString()
+                                                    : "Convert failed");
+                                }
+                            }
+
+                            @Override
+                            public void onFailure(Call<JsonObject> call, Throwable t) {
+                                toast("Network error");
+                            }
+                        });
     }
 
     private void addHistorySection(JsonObject body, String key, String title) {

@@ -275,6 +275,11 @@ public class Constants {
      */
     public static String REWARDS_IN_MAIN_FEED_SLOT = "rewards_in_main_feed_slot";
     /**
+     * When true (default), reporters cannot see Rewards / rewards wallet UI.
+     * Splash: rewards_exclude_reporters.
+     */
+    public static String REWARDS_EXCLUDE_REPORTERS = "rewards_exclude_reporters";
+    /**
      * Way2-style live readers badge on half articles (splash/session/articles).
      * Default OFF.
      */

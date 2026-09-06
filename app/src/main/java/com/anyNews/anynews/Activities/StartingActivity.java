@@ -1734,7 +1734,8 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getHideDistrictOnMainFeed(),
                                 startActivityReqModel.getData().getRewardsMaster(),
-                                startActivityReqModel.getData().getRewardsInMainFeedSlot());
+                                startActivityReqModel.getData().getRewardsInMainFeedSlot(),
+                                startActivityReqModel.getData().getRewardsExcludeReporters());
                         com.anyNews.anynews.rewards.RewardsConfigHelper.saveChipCopyFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsGuestChip(),

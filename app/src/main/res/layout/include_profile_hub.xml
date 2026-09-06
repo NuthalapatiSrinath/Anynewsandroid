@@ -504,22 +504,35 @@
                     android:src="@drawable/ic_hub_rewards"
                     app:tint="@color/profile_way2_menu_icon" />
 
-                <TextView
-                    android:id="@+id/profile_rewards_label"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="14dp"
-                    android:ellipsize="end"
-                    android:includeFontPadding="false"
-                    android:maxLines="1"
-                    android:text="Rewards"
-                    android:textColor="@color/profile_way2_menu_text"
-                    android:textSize="15sp" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
+                    <TextView
+                        android:id="@+id/profile_rewards_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:text="Rewards"
+                        android:textColor="@color/profile_way2_menu_text"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/profile_rewards_subtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:textColor="@color/profile_way2_chevron"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <ImageView
                     android:layout_width="18dp"

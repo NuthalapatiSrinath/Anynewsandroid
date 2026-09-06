@@ -220,7 +220,8 @@
                 android:layout_marginStart="18dp"
                 android:layout_marginTop="2dp"
                 android:layout_marginEnd="18dp"
-                android:text="Coins &amp; rank only — never rupees"
+                android:visibility="gone"
+                android:text=""
                 android:textColor="#FFA8A29E"
                 android:textSize="12sp" />
 
@@ -324,6 +325,19 @@
                     android:textColor="#FF1C1917"
                     android:textColorHint="#FFA8A29E"
                     android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/rewards_convert_btn"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_rewards_btn_secondary"
+                    android:gravity="center"
+                    android:text="Convert coins → ₹"
+                    android:textColor="#FF44403C"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

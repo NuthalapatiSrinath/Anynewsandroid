@@ -31,7 +31,7 @@ import retrofit2.Response;
 public final class RewardsEngagementBatcher {
 
     private static final String TAG = "RewardsBatcher";
-    private static final long FLUSH_MS = 45_000L;
+    private static final long FLUSH_MS = 12_000L;
     private static final int MAX_BUFFER = 36;
 
     private static final RewardsEngagementBatcher INSTANCE = new RewardsEngagementBatcher();

@@ -475,6 +475,9 @@ public interface APIService {
     @POST("app/{version}/rewards_withdraw")
     Call<JsonObject> rewards_withdraw(@Path("version") String version, @Body JsonObject body);
 
+    @POST("app/{version}/rewards_convert")
+    Call<JsonObject> rewards_convert(@Path("version") String version, @Body JsonObject body);
+
     @POST("app/{version}/rewards_history")
     Call<JsonObject> rewards_history(@Path("version") String version, @Body JsonObject body);
 

@@ -29,6 +29,8 @@ public final class DistrictPinVisibilityConfig {
     public static final boolean DEFAULT_REWARDS_MASTER = false;
     /** Show rewards promo in main-feed district slot when district would be hidden. */
     public static final boolean DEFAULT_REWARDS_IN_MAIN_FEED_SLOT = false;
+    /** Default ON: reporters excluded from rewards / rewards wallet. */
+    public static final boolean DEFAULT_EXCLUDE_REPORTERS = true;
 
     /** Local desk category id (server {@code categoryMap.local}). */
     public static final int LOCAL_CATEGORY_ID = 11;
@@ -41,6 +43,15 @@ public final class DistrictPinVisibilityConfig {
             @Nullable Boolean hideOnMainFeed,
             @Nullable Boolean rewardsMaster,
             @Nullable Boolean rewardsInMainFeedSlot) {
+        saveFromServer(context, hideOnMainFeed, rewardsMaster, rewardsInMainFeedSlot, null);
+    }
+
+    public static void saveFromServer(
+            @Nullable Context context,
+            @Nullable Boolean hideOnMainFeed,
+            @Nullable Boolean rewardsMaster,
+            @Nullable Boolean rewardsInMainFeedSlot,
+            @Nullable Boolean excludeReporters) {
         if (context == null) return;
         Context app = context.getApplicationContext();
         if (hideOnMainFeed != null) {
@@ -64,6 +75,13 @@ public final class DistrictPinVisibilityConfig {
                     rewardsInMainFeedSlot ? "true" : "false",
                     Constants.PREF_NAME);
         }
+        if (excludeReporters != null) {
+            SharedPrefsData.putString(
+                    app,
+                    Constants.REWARDS_EXCLUDE_REPORTERS,
+                    excludeReporters ? "true" : "false",
+                    Constants.PREF_NAME);
+        }
     }
 
     /** Backward-compatible overload used by older call sites. */
@@ -79,6 +97,28 @@ public final class DistrictPinVisibilityConfig {
     /** Master switch for rewards UI (Profile row + optional main-feed slot). */
     public static boolean rewardsMasterEnabled(@Nullable Context context) {
         return readBool(context, Constants.REWARDS_MASTER, DEFAULT_REWARDS_MASTER);
+    }
+
+    /** When true, logged-in reporters must not see rewards / rewards wallet. */
+    public static boolean excludeReporters(@Nullable Context context) {
+        return readBool(
+                context, Constants.REWARDS_EXCLUDE_REPORTERS, DEFAULT_EXCLUDE_REPORTERS);
+    }
+
+    /** True when this device user may use rewards (master ON and not an excluded reporter). */
+    public static boolean rewardsVisibleForUser(@Nullable Context context) {
+        if (!rewardsMasterEnabled(context)) return false;
+        if (!excludeReporters(context)) return true;
+        try {
+            boolean isReporter =
+                    SharedPrefsData.getBool(
+                            context.getApplicationContext(),
+                            Constants.is_reporter,
+                            Constants.PREF_NAME);
+            return !isReporter;
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 
     /**
@@ -147,6 +187,7 @@ public final class DistrictPinVisibilityConfig {
         if (isDistrictOrLocalPost(post)) return false;
         if (!hideOnMainFeed(context)) return false;
         if (!rewardsMasterEnabled(context)) return false;
+        if (!rewardsVisibleForUser(context)) return false;
         return rewardsInMainFeedSlotEnabled(context);
     }
 
