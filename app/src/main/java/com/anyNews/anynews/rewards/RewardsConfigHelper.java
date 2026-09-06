@@ -76,11 +76,19 @@ public final class RewardsConfigHelper {
     }
 
     public static String guestChip(@Nullable Context context) {
-        return read(context, PREF_GUEST_CHIP, "Join rewards");
+        String v = read(context, PREF_GUEST_CHIP, "");
+        if (!TextUtils.isEmpty(v) && !"Join rewards".equalsIgnoreCase(v.trim())) {
+            return v;
+        }
+        return RewardsLabels.guestChip(context);
     }
 
     public static String joinedChip(@Nullable Context context) {
-        return read(context, PREF_JOINED_CHIP, "Rewards");
+        String v = read(context, PREF_JOINED_CHIP, "");
+        if (!TextUtils.isEmpty(v) && !"Rewards".equalsIgnoreCase(v.trim())) {
+            return v;
+        }
+        return RewardsLabels.joinedChip(context);
     }
 
     public static String rateLabel(@Nullable Context context) {

@@ -6,7 +6,6 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 import android.accounts.AccountManager;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -63,7 +62,6 @@ import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AppSignatureHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
-import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.SmsBroadcastReceiver;
 import com.google.android.gms.auth.api.phone.SmsRetriever;
@@ -402,7 +400,7 @@ public class LoginActivityDetails extends AppCompatActivity {
         focusFirstOtpBox();
     }
 
-    /** Step 3: name + email after OTP — pre-fill for existing mobiles. */
+    /** Step 3: name + email after OTP — pre-fill for existing mobiles. Never "Guest". */
     private void showProfileDetailsUi(ValidateOtpResponse.Data loginData) {
         loginStep = STEP_PROFILE;
         otp_layout.setVisibility(View.GONE);
@@ -427,6 +425,9 @@ public class LoginActivityDetails extends AppCompatActivity {
                 prefillEmail = loginData.getEmailId().trim();
             }
         }
+        if (isBlankOrGuestName(prefillName)) {
+            prefillName = "";
+        }
         username_et.setText(prefillName);
         emailIdEdittext.setText(prefillEmail);
         username_et.requestFocus();
@@ -437,13 +438,21 @@ public class LoginActivityDetails extends AppCompatActivity {
         }
     }
 
+    private static boolean isBlankOrGuestName(String name) {
+        if (name == null) return true;
+        String t = name.trim();
+        return t.isEmpty() || "guest".equalsIgnoreCase(t);
+    }
+
     private void confirmProfileAndFinish() {
         String name = username_et.getText() != null
                 ? username_et.getText().toString().trim() : "";
         String email = emailIdEdittext.getText() != null
                 ? emailIdEdittext.getText().toString().trim() : "";
-        if (name.isEmpty()) {
+        if (name.isEmpty() || isBlankOrGuestName(name)) {
             Toast.makeText(this, "Please Enter User Name", Toast.LENGTH_SHORT).show();
+            username_et.setText("");
+            username_et.requestFocus();
             return;
         }
         if (email.isEmpty() || !email.contains("@")) {
@@ -546,43 +555,9 @@ public class LoginActivityDetails extends AppCompatActivity {
         }
 
         if (pendingOpenBecomeReporter) {
-            if (!ProfileHubConfigHelper.isBecomeAReporterEnabled(this)) {
-                // Hiring OFF: convert guest via OTP, then show not-hiring message — no BAR form.
-                try {
-                    String msg = ProfileHubConfigHelper.getNotHiringMessage(this);
-                    new AlertDialog.Builder(this)
-                            .setMessage(msg)
-                            .setPositiveButton(android.R.string.ok, (d, w) -> {
-                                Intent intent = new Intent(
-                                        LoginActivityDetails.this, HomePage.class);
-                                intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP
-                                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                                if (pendingReturnToProfile) {
-                                    intent.putExtra(
-                                            HomePage.EXTRA_FOOTER_TAB, R.id.navigation_profile);
-                                }
-                                startActivity(intent);
-                                finish();
-                            })
-                            .setCancelable(false)
-                            .show();
-                } catch (Exception e) {
-                    Toast.makeText(this,
-                            ProfileHubConfigHelper.getNotHiringMessage(this),
-                            Toast.LENGTH_LONG).show();
-                    Intent intent = new Intent(LoginActivityDetails.this, HomePage.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    if (pendingReturnToProfile) {
-                        intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_profile);
-                    }
-                    startActivity(intent);
-                    finish();
-                }
-                return;
-            }
+            // Always return to BAR page; not-hiring dialog lives on BAR only (never on login).
             Intent become = new Intent(LoginActivityDetails.this, BecomeAReporterActivity.class);
-            become.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            become.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(become);
             finish();
             return;
@@ -818,7 +793,7 @@ public class LoginActivityDetails extends AppCompatActivity {
                                     ? loginData.getUserName().trim() : "";
                             String se = loginData.getEmailId() != null
                                     ? loginData.getEmailId().trim() : "";
-                            if (!sn.isEmpty()) {
+                            if (!sn.isEmpty() && !"guest".equalsIgnoreCase(sn)) {
                                 SharedPrefsData.putString(getApplicationContext(),
                                         Constants.USER_NAME, sn, Constants.PREF_NAME);
                             }
@@ -838,7 +813,11 @@ public class LoginActivityDetails extends AppCompatActivity {
                     pendingOpenRewards = getIntent() != null
                             && getIntent().getBooleanExtra(EXTRA_OPEN_REWARDS, false);
                     try {
-                        if (!pendingOpenBecomeReporter) {
+                        // Sticky BAR flag only when no other login source was set.
+                        // Never let a prior BAR attempt leak into Profile/Rewards login.
+                        if (!pendingOpenBecomeReporter
+                                && !pendingOpenRewards
+                                && !pendingReturnToProfile) {
                             pendingOpenBecomeReporter = SharedPrefsData.getBool(
                                     getApplicationContext(),
                                     Constants.LOGIN_SOURCE_BECOME_REPORTER,

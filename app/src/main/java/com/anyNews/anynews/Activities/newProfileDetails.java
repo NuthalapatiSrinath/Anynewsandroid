@@ -3473,7 +3473,7 @@ public class newProfileDetails extends AppCompatActivity {
         startActivity(intent);
     }
 
-    /** Become-a-Reporter entry: require login; form if hiring ON, else not-hiring message. */
+    /** Become-a-Reporter entry: require login; BAR page shows form or not-hiring. */
     private void openBecomeAReporterFlow() {
         markBecomeReporterBadgeSeen();
         boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
@@ -3485,10 +3485,7 @@ public class newProfileDetails extends AppCompatActivity {
             startActivity(intent);
             return;
         }
-        if (!ProfileHubConfigHelper.isBecomeAReporterEnabled(this)) {
-            showNotHiringReporterDialog();
-            return;
-        }
+        // Always open BAR page — not-hiring dialog is shown there only (never on Profile).
         startActivity(new Intent(newProfileDetails.this, BecomeAReporterActivity.class));
     }
 
@@ -4262,7 +4259,6 @@ public class newProfileDetails extends AppCompatActivity {
         if (!loggedIn) {
             Intent login = new Intent(this, LoginActivityDetails.class);
             login.putExtra(LoginActivityDetails.EXTRA_OPEN_REWARDS, true);
-            login.putExtra(LoginActivityDetails.EXTRA_RETURN_TO_PROFILE, true);
             startActivity(login);
             return;
         }

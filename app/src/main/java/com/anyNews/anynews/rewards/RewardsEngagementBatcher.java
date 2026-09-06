@@ -13,6 +13,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.WalletUserId;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -138,14 +139,49 @@ public final class RewardsEngagementBatcher {
             buffer.clear();
         }
 
-        String userId = SharedPrefsData.getString(appContext, Constants.UserID, Constants.PREF_NAME);
-        String session =
-                SharedPrefsData.getString(appContext, Constants.SessionID, Constants.PREF_NAME);
-        if (TextUtils.isEmpty(userId) || TextUtils.isEmpty(session)) return;
+        String userId;
+        String session;
+        int draftId;
+        long numericId = 0L;
+        try {
+            numericId = WalletUserId.resolve(appContext);
+        } catch (Exception ignored) {
+        }
+        if (numericId <= 0) {
+            try {
+                numericId =
+                        SharedPrefsData.getLong(appContext, Constants.USER_ID, Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
+        }
+        if (numericId <= 0) return;
+        userId = String.valueOf(numericId);
+        try {
+            draftId = SharedPrefsData.getInt(appContext, Constants.DraftID, Constants.PREF_NAME);
+        } catch (Exception e) {
+            draftId = 0;
+        }
+        try {
+            session =
+                    SharedPrefsData.getString(
+                            appContext, Constants.USER_SESSION_ID, Constants.PREF_NAME);
+            if (TextUtils.isEmpty(session)) {
+                session =
+                        SharedPrefsData.getString(
+                                appContext, Constants.SessionID, Constants.PREF_NAME);
+            }
+        } catch (Exception e) {
+            session = "";
+        }
 
         JsonObject body = new JsonObject();
         body.addProperty("USERID", userId);
-        body.addProperty("SessionID", session);
+        body.addProperty("user_id", numericId);
+        if (draftId > 0) body.addProperty("draft_id", draftId);
+        if (!TextUtils.isEmpty(session)) {
+            body.addProperty("SessionID", session);
+            body.addProperty("user_session_id", session);
+        }
         JsonArray events = new JsonArray();
         for (JsonObject e : batch) events.add(e);
         body.add("events", events);

@@ -28,9 +28,7 @@ import com.anyNews.anynews.Activities.LoginActivityDetails;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
-import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
-import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Pojo.UserImagePojoResponse;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -68,6 +66,14 @@ public class RewardsHubActivity extends AppCompatActivity {
     private TextView watchAdsBtn;
     private TextView ratingBtn;
     private View earnCard;
+    private TextView coinsCaption;
+    private TextView earnTitle;
+    private TextView leaderboardTitle;
+    private TextView leaderboardHint;
+    private TextView historyTitle;
+    private TextView walletTitle;
+    private TextView saveUpiBtn;
+    private TextView withdrawBtn;
     private boolean joined;
     private boolean guest;
     private double walletRupees;
@@ -107,16 +113,29 @@ public class RewardsHubActivity extends AppCompatActivity {
         setContentView(R.layout.activity_rewards_hub);
         applySystemBars();
         bindViews();
+        applyStaticLabels();
         findViewById(R.id.rewards_back).setOnClickListener(v -> finish());
         joinBtn.setOnClickListener(v -> onJoin());
-        findViewById(R.id.rewards_save_upi).setOnClickListener(v -> onSaveUpi());
-        findViewById(R.id.rewards_withdraw_btn).setOnClickListener(v -> onWithdraw());
+        if (saveUpiBtn != null) saveUpiBtn.setOnClickListener(v -> onSaveUpi());
+        else findViewById(R.id.rewards_save_upi).setOnClickListener(v -> onSaveUpi());
+        if (withdrawBtn != null) withdrawBtn.setOnClickListener(v -> onWithdraw());
+        else findViewById(R.id.rewards_withdraw_btn).setOnClickListener(v -> onWithdraw());
         if (checkinBtn != null) checkinBtn.setOnClickListener(v -> onCheckin());
         if (watchAdsBtn != null) watchAdsBtn.setOnClickListener(v -> onWatchAds());
         if (ratingBtn != null) ratingBtn.setOnClickListener(v -> onRating());
         RewardsEngagementBatcher.get().trackActiveDay(this);
         loadHub();
         loadLeaderboard();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Refresh after Profile/Rewards OTP return so guest → joined paints immediately.
+        if (joinBtn != null) {
+            loadHub();
+            loadLeaderboard();
+        }
     }
 
     private void applySystemBars() {
@@ -155,22 +174,36 @@ public class RewardsHubActivity extends AppCompatActivity {
         watchAdsBtn = findViewById(R.id.rewards_watch_ads_btn);
         ratingBtn = findViewById(R.id.rewards_rating_btn);
         earnCard = findViewById(R.id.rewards_earn_card);
+        coinsCaption = findViewById(R.id.rewards_coins_caption);
+        earnTitle = findViewById(R.id.rewards_earn_title);
+        leaderboardTitle = findViewById(R.id.rewards_leaderboard_title);
+        leaderboardHint = findViewById(R.id.rewards_leaderboard_hint);
+        historyTitle = findViewById(R.id.rewards_history_title);
+        walletTitle = findViewById(R.id.rewards_wallet_title);
+        saveUpiBtn = findViewById(R.id.rewards_save_upi);
+        withdrawBtn = findViewById(R.id.rewards_withdraw_btn);
+    }
+
+    private void applyStaticLabels() {
+        if (coinsCaption != null) coinsCaption.setText(RewardsLabels.coinsThisWeek(this));
+        if (earnTitle != null) earnTitle.setText(RewardsLabels.earnMore(this));
+        if (leaderboardTitle != null) leaderboardTitle.setText(RewardsLabels.leaderboard(this));
+        if (leaderboardHint != null) leaderboardHint.setText(RewardsLabels.leaderboardHint(this));
+        if (historyTitle != null) historyTitle.setText(RewardsLabels.history(this));
+        if (walletTitle != null) walletTitle.setText(RewardsLabels.walletTitle(this));
+        if (saveUpiBtn != null) saveUpiBtn.setText(RewardsLabels.saveUpi(this));
+        if (withdrawBtn != null) withdrawBtn.setText(RewardsLabels.withdraw(this));
     }
 
     private JsonObject authBody() {
-        JsonObject body = new JsonObject();
-        String uid = SharedPrefsData.getString(this, Constants.UserID, Constants.PREF_NAME);
-        String sid = SharedPrefsData.getString(this, Constants.SessionID, Constants.PREF_NAME);
-        if (!TextUtils.isEmpty(uid)) body.addProperty("USERID", uid);
-        if (!TextUtils.isEmpty(sid)) body.addProperty("SessionID", sid);
-        return body;
+        return RewardsAuth.authBody(this);
     }
 
     private boolean requireLogin() {
-        boolean loggedIn =
-                SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
-        if (!loggedIn) {
-            startActivity(new Intent(this, LoginActivityDetails.class));
+        if (!RewardsAuth.isLoggedIn(this)) {
+            Intent login = new Intent(this, LoginActivityDetails.class);
+            login.putExtra(LoginActivityDetails.EXTRA_OPEN_REWARDS, true);
+            startActivity(login);
             return false;
         }
         return true;
@@ -225,23 +258,43 @@ public class RewardsHubActivity extends AppCompatActivity {
 
         String title =
                 joined
-                        ? optStr(copy, "joined_hub_title", "AnyNews Coins")
-                        : optStr(copy, "guest_hub_title", "Join AnyNews Rewards");
+                        ? optStr(copy, "joined_hub_title", RewardsLabels.joinedHubTitle(this))
+                        : optStr(copy, "guest_hub_title", RewardsLabels.guestHubTitle(this));
+        // Prefer localized defaults when server still has English stock copy.
+        if (!joined && "Join AnyNews Rewards".equals(title)) {
+            title = RewardsLabels.guestHubTitle(this);
+        }
+        if (joined && "AnyNews Coins".equals(title)) {
+            title = RewardsLabels.joinedHubTitle(this);
+        }
         TextView top = findViewById(R.id.rewards_top_title);
         if (top != null) top.setText(title);
 
-        subtitleView.setText(
+        String subtitle =
                 joined
-                        ? optStr(copy, "joined_hub_subtitle", "Keep reading to earn coins.")
-                        : optStr(copy, "guest_hub_subtitle", "Login and join to earn coins."));
+                        ? optStr(copy, "joined_hub_subtitle", RewardsLabels.joinedHubSubtitle(this))
+                        : optStr(copy, "guest_hub_subtitle", RewardsLabels.guestHubSubtitle(this));
+        if (!joined
+                && subtitle != null
+                && subtitle.startsWith("Login and keep reading")) {
+            subtitle = RewardsLabels.guestHubSubtitle(this);
+        }
+        if (joined
+                && subtitle != null
+                && subtitle.startsWith("Earn coins by reading")) {
+            subtitle = RewardsLabels.joinedHubSubtitle(this);
+        }
+        subtitleView.setText(subtitle);
 
         int coins = body.has("coins") ? body.get("coins").getAsInt() : 0;
         coinsView.setText(String.valueOf(coins));
+        if (coinsCaption != null) coinsCaption.setText(RewardsLabels.coinsThisWeek(this));
 
         if (body.has("rank") && !body.get("rank").isJsonNull()) {
-            rankView.setText("Rank #" + body.get("rank").getAsInt());
+            rankView.setText(RewardsLabels.rankPrefix(this, body.get("rank").getAsInt()));
         } else {
-            rankView.setText(joined ? "Rank —" : "Login to rank");
+            rankView.setText(
+                    joined ? "Rank —" : RewardsLabels.loginToRank(this));
         }
 
         String rate =
@@ -276,7 +329,8 @@ public class RewardsHubActivity extends AppCompatActivity {
 
         if (guest || !joined) {
             joinBtn.setVisibility(View.VISIBLE);
-            joinBtn.setText(guest ? "Login to join" : "Join Rewards");
+            joinBtn.setText(
+                    guest ? RewardsLabels.loginToJoin(this) : RewardsLabels.joinRewards(this));
         } else {
             joinBtn.setVisibility(View.GONE);
         }
@@ -294,8 +348,8 @@ public class RewardsHubActivity extends AppCompatActivity {
                 boolean already = c.has("already_today") && c.get("already_today").getAsBoolean();
                 checkinBtn.setText(
                         already
-                                ? "Checked in today"
-                                : "Daily check-in (+" + checkinCoins + ")");
+                                ? RewardsLabels.checkedInToday(this)
+                                : RewardsLabels.dailyCheckin(this, checkinCoins));
                 checkinBtn.setEnabled(checkinAvailable && joined && !guest);
                 checkinBtn.setAlpha(checkinBtn.isEnabled() ? 1f : 0.45f);
             }
@@ -319,7 +373,7 @@ public class RewardsHubActivity extends AppCompatActivity {
                     watchAdsBtn.setText("Watch ads — wait " + m + "m");
                 } else {
                     watchAdsBtn.setText(
-                            "Watch " + watchAdsRequired + " ads (+" + watchAdsCoins + ")");
+                            RewardsLabels.watchAds(this, watchAdsRequired, watchAdsCoins));
                 }
                 watchAdsBtn.setEnabled(watchAdsAvailable && joined && !guest);
                 watchAdsBtn.setAlpha(watchAdsBtn.isEnabled() ? 1f : 0.45f);
@@ -334,7 +388,7 @@ public class RewardsHubActivity extends AppCompatActivity {
                 ratingBtn.setText(
                         pending
                                 ? "Rating screenshot pending review"
-                                : "Play Store 5★ + screenshot (+" + ratingCoins + ")");
+                                : RewardsLabels.ratingAction(this, ratingCoins));
                 ratingBtn.setEnabled(ratingAvailable && joined && !guest);
                 ratingBtn.setAlpha(ratingBtn.isEnabled() ? 1f : 0.45f);
             }
@@ -342,12 +396,13 @@ public class RewardsHubActivity extends AppCompatActivity {
         if (earnCard != null) {
             earnCard.setVisibility(View.VISIBLE);
         }
+        if (earnTitle != null) earnTitle.setText(RewardsLabels.earnMore(this));
     }
 
     private void onCheckin() {
         if (!requireLogin()) return;
         if (!joined) {
-            toast("Join rewards first");
+            toast(RewardsLabels.joinFirst(this));
             return;
         }
         APIService api = RestApiClient.getClient().create(APIService.class);
@@ -385,7 +440,7 @@ public class RewardsHubActivity extends AppCompatActivity {
     private void onWatchAds() {
         if (!requireLogin()) return;
         if (!joined) {
-            toast("Join rewards first");
+            toast(RewardsLabels.joinFirst(this));
             return;
         }
         Intent intent = new Intent(this, RewardsWatchAdsActivity.class);
@@ -400,7 +455,7 @@ public class RewardsHubActivity extends AppCompatActivity {
     private void onRating() {
         if (!requireLogin()) return;
         if (!joined) {
-            toast("Join rewards first");
+            toast(RewardsLabels.joinFirst(this));
             return;
         }
         try {
@@ -686,7 +741,7 @@ public class RewardsHubActivity extends AppCompatActivity {
     private void onWithdraw() {
         if (!requireLogin()) return;
         if (!joined) {
-            toast("Join rewards first");
+            toast(RewardsLabels.joinFirst(this));
             return;
         }
         String amtStr =

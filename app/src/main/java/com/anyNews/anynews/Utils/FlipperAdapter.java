@@ -2286,7 +2286,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         });
     }
 
-    /** Orange solid dot + expanding pulse ring (LIVE-style); dynamic chip text style. */
+    /** Orange solid dot + expanding pulse ring (LIVE-style); open text, no pill border. */
     private void applyRewardsChipVisual(
             @Nullable TextView labelView, @Nullable ImageView pinView, @Nullable View pill) {
         try {
@@ -2307,6 +2307,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         bold
                                 ? android.graphics.Typeface.BOLD
                                 : android.graphics.Typeface.NORMAL);
+            }
+            if (pill != null) {
+                // Open/plain: no district-style pill stroke/fill — pulse + text only.
+                try {
+                    pill.setBackground(null);
+                } catch (Exception ignored) {
+                }
+                try {
+                    pill.setPadding(0, pill.getPaddingTop(), 0, pill.getPaddingBottom());
+                } catch (Exception ignored) {
+                }
             }
             if (!(pill instanceof android.view.ViewGroup) || pinView == null) return;
             android.view.ViewGroup group = (android.view.ViewGroup) pill;
@@ -2356,25 +2367,30 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     : null;
             if (ring != null) {
                 ring.clearAnimation();
-                android.view.animation.ScaleAnimation scale =
-                        new android.view.animation.ScaleAnimation(
-                                0.15f, 1.35f, 0.15f, 1.35f,
-                                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f,
-                                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
-                scale.setDuration(900);
-                scale.setRepeatMode(android.view.animation.Animation.RESTART);
-                scale.setRepeatCount(android.view.animation.Animation.INFINITE);
-                android.view.animation.AlphaAnimation fade =
-                        new android.view.animation.AlphaAnimation(0.85f, 0f);
-                fade.setDuration(900);
-                fade.setRepeatMode(android.view.animation.Animation.RESTART);
-                fade.setRepeatCount(android.view.animation.Animation.INFINITE);
-                android.view.animation.AnimationSet set =
-                        new android.view.animation.AnimationSet(true);
-                set.addAnimation(scale);
-                set.addAnimation(fade);
-                set.setInterpolator(new android.view.animation.LinearInterpolator());
-                ring.startAnimation(set);
+                // ValueAnimator loops reliably forever (AnimationSet child repeats often stop).
+                android.animation.ValueAnimator pulse =
+                        android.animation.ValueAnimator.ofFloat(0f, 1f);
+                pulse.setDuration(900);
+                pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+                pulse.setRepeatMode(android.animation.ValueAnimator.RESTART);
+                pulse.setInterpolator(new android.view.animation.LinearInterpolator());
+                final View ringView = ring;
+                pulse.addUpdateListener(anim -> {
+                    float t = (float) anim.getAnimatedValue();
+                    float scale = 0.15f + (1.35f - 0.15f) * t;
+                    ringView.setScaleX(scale);
+                    ringView.setScaleY(scale);
+                    ringView.setAlpha(0.85f * (1f - t));
+                });
+                try {
+                    Object prev = ring.getTag(com.anyNews.anynews.R.id.my_feed);
+                    if (prev instanceof android.animation.ValueAnimator) {
+                        ((android.animation.ValueAnimator) prev).cancel();
+                    }
+                } catch (Exception ignored) {
+                }
+                ring.setTag(com.anyNews.anynews.R.id.my_feed, pulse);
+                pulse.start();
             }
         } catch (Exception ignored) {
         }
@@ -2388,8 +2404,26 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     View ring = host instanceof android.view.ViewGroup
                             ? ((android.view.ViewGroup) host).findViewWithTag("rewards_pulse_ring")
                             : null;
-                    if (ring != null) ring.clearAnimation();
+                    if (ring != null) {
+                        try {
+                            Object anim = ring.getTag(com.anyNews.anynews.R.id.my_feed);
+                            if (anim instanceof android.animation.ValueAnimator) {
+                                ((android.animation.ValueAnimator) anim).cancel();
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        ring.clearAnimation();
+                        ring.setScaleX(1f);
+                        ring.setScaleY(1f);
+                        ring.setAlpha(1f);
+                    }
                     host.setVisibility(View.GONE);
+                }
+                // Restore district pill chrome.
+                try {
+                    pill.setBackgroundResource(
+                            com.anyNews.anynews.R.drawable.circle_article_location);
+                } catch (Exception ignored) {
                 }
             }
             if (pinView != null) {
@@ -2413,9 +2447,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } catch (Exception ignored) {
         }
         if (loggedIn && joined) {
-            return com.anyNews.anynews.rewards.RewardsConfigHelper.joinedChip(context);
+            String server = com.anyNews.anynews.rewards.RewardsConfigHelper.joinedChip(context);
+            if (server != null && !server.trim().isEmpty()
+                    && !"Rewards".equalsIgnoreCase(server.trim())) {
+                return server;
+            }
+            return com.anyNews.anynews.rewards.RewardsLabels.joinedChip(context);
         }
-        return com.anyNews.anynews.rewards.RewardsConfigHelper.guestChip(context);
+        String guest = com.anyNews.anynews.rewards.RewardsConfigHelper.guestChip(context);
+        if (guest != null && !guest.trim().isEmpty()
+                && !"Join rewards".equalsIgnoreCase(guest.trim())) {
+            return guest;
+        }
+        return com.anyNews.anynews.rewards.RewardsLabels.guestChip(context);
     }
 
     /**

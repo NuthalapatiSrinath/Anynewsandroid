@@ -12,8 +12,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
-import com.anyNews.anynews.Utils.Constants;
-import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.google.android.gms.ads.AdError;
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.FullScreenContentCallback;
@@ -151,11 +149,7 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
     private void claim() {
         if (claiming) return;
         claiming = true;
-        JsonObject body = new JsonObject();
-        String uid = SharedPrefsData.getString(this, Constants.UserID, Constants.PREF_NAME);
-        String sid = SharedPrefsData.getString(this, Constants.SessionID, Constants.PREF_NAME);
-        if (!TextUtils.isEmpty(uid)) body.addProperty("USERID", uid);
-        if (!TextUtils.isEmpty(sid)) body.addProperty("SessionID", sid);
+        JsonObject body = RewardsAuth.authBody(this);
         body.addProperty("ads_watched", watched);
         APIService api = RestApiClient.getClient().create(APIService.class);
         api.rewards_watch_ads_claim("v3", body)
