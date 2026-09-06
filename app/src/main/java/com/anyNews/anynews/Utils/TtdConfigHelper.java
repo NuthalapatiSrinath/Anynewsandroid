@@ -101,7 +101,8 @@ public final class TtdConfigHelper {
 
     public static boolean isEnabled(@Nullable Context context) {
         // Default ON until splash says otherwise (matches server default).
-        return readBool(context, Constants.TTD_ENABLED, true);
+        return readBool(context, Constants.TTD_ENABLED, true)
+                && DailyUpdatesConfigHelper.isTtdLanguageAllowed(context);
     }
 
     /**

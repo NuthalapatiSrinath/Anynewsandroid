@@ -56,19 +56,23 @@ public final class LocalUpdatesConfigHelper {
     }
 
     public static boolean isWeatherEnabled(@Nullable Context context) {
-        return readBool(context, Constants.WEATHER_ENABLED, true);
+        return readBool(context, Constants.WEATHER_ENABLED, true)
+                && DailyUpdatesConfigHelper.isWeatherLanguageAllowed(context);
     }
 
     public static boolean isFuelEnabled(@Nullable Context context) {
-        return readBool(context, Constants.FUEL_ENABLED, true);
+        return readBool(context, Constants.FUEL_ENABLED, true)
+                && DailyUpdatesConfigHelper.isFuelLanguageAllowed(context);
     }
 
     public static boolean isGoldEnabled(@Nullable Context context) {
-        return readBool(context, Constants.GOLD_ENABLED, true);
+        return readBool(context, Constants.GOLD_ENABLED, true)
+                && DailyUpdatesConfigHelper.isGoldLanguageAllowed(context);
     }
 
     public static boolean isJobsEnabled(@Nullable Context context) {
-        return readBool(context, Constants.JOBS_ENABLED, true);
+        return readBool(context, Constants.JOBS_ENABLED, true)
+                && DailyUpdatesConfigHelper.isJobsLanguageAllowed(context);
     }
 
     @Nullable

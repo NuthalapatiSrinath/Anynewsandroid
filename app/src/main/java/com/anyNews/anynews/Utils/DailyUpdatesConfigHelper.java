@@ -45,6 +45,7 @@ public final class DailyUpdatesConfigHelper {
             SharedPrefsData.putString(
                     app, Constants.DAILY_UPDATES_CONFIG_JSON, o.toString(), Constants.PREF_NAME);
             putBool(app, Constants.DU_PANCHANGAM_ENABLED, o.optBoolean("panchangam_enabled", true));
+            putBool(app, Constants.DU_RASHI_ENABLED, o.optBoolean("rashi_enabled", true));
             putBool(app, Constants.DU_MANA_ZILLA_ENABLED, o.optBoolean("mana_zilla_enabled", true));
             putBool(app, Constants.DU_FLASH_NEWS_ENABLED, o.optBoolean("flash_news_enabled", true));
             putBool(app, Constants.DU_STOCK_ENABLED, o.optBoolean("stock_enabled", true));
@@ -111,6 +112,9 @@ public final class DailyUpdatesConfigHelper {
             putIntClamped(app, Constants.DU_PANCHANGAM_CONTENT_START_DP,
                     migrateContentStart(splashNumber(o, "panchangam_content_start_dp",
                             DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
+            putIntClamped(app, Constants.DU_RASHI_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "rashi_content_start_dp",
+                            DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
             putIntClamped(app, Constants.DU_STOCK_CONTENT_START_DP,
                     migrateContentStart(splashNumber(o, "stock_content_start_dp",
                             DEFAULT_STOCK_CONTENT_START_DP), DEFAULT_STOCK_CONTENT_START_DP), 100, 180);
@@ -135,6 +139,18 @@ public final class DailyUpdatesConfigHelper {
             if (csv.length() == 0) csv.append(TELUGU_LANGUAGE_ID);
             SharedPrefsData.putString(
                     app, Constants.DU_MANA_ZILLA_LANGUAGE_IDS, csv.toString(), Constants.PREF_NAME);
+
+            // Per-feature language allow-lists (empty CSV = all languages).
+            saveFeatureLangCsv(app, o, "weather_language_ids", Constants.DU_WEATHER_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "fuel_language_ids", Constants.DU_FUEL_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "gold_language_ids", Constants.DU_GOLD_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "ttd_language_ids", Constants.DU_TTD_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "jobs_language_ids", Constants.DU_JOBS_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "panchangam_language_ids", Constants.DU_PANCHANGAM_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "rashi_language_ids", Constants.DU_RASHI_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "flash_news_language_ids", Constants.DU_FLASH_NEWS_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "stock_language_ids", Constants.DU_STOCK_LANGUAGE_IDS);
+
             SharedPrefsData.putBool(app, Constants.DAILY_UPDATES_CONFIG_SET, true, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
@@ -254,15 +270,44 @@ public final class DailyUpdatesConfigHelper {
     }
 
     public static boolean isPanchangamEnabled(@Nullable Context context) {
-        return readBool(context, Constants.DU_PANCHANGAM_ENABLED, true);
+        return readBool(context, Constants.DU_PANCHANGAM_ENABLED, true)
+                && isFeatureLanguageAllowed(context, Constants.DU_PANCHANGAM_LANGUAGE_IDS);
+    }
+
+    public static boolean isRashiEnabled(@Nullable Context context) {
+        return readBool(context, Constants.DU_RASHI_ENABLED, true)
+                && isFeatureLanguageAllowed(context, Constants.DU_RASHI_LANGUAGE_IDS);
     }
 
     public static boolean isFlashNewsEnabled(@Nullable Context context) {
-        return readBool(context, Constants.DU_FLASH_NEWS_ENABLED, true);
+        return readBool(context, Constants.DU_FLASH_NEWS_ENABLED, true)
+                && isFeatureLanguageAllowed(context, Constants.DU_FLASH_NEWS_LANGUAGE_IDS);
     }
 
     public static boolean isStockEnabled(@Nullable Context context) {
-        return readBool(context, Constants.DU_STOCK_ENABLED, true);
+        return readBool(context, Constants.DU_STOCK_ENABLED, true)
+                && isFeatureLanguageAllowed(context, Constants.DU_STOCK_LANGUAGE_IDS);
+    }
+
+    /** Weather/Fuel/Gold/TTD/Jobs language gate (master enabled checked by callers). */
+    public static boolean isWeatherLanguageAllowed(@Nullable Context context) {
+        return isFeatureLanguageAllowed(context, Constants.DU_WEATHER_LANGUAGE_IDS);
+    }
+
+    public static boolean isFuelLanguageAllowed(@Nullable Context context) {
+        return isFeatureLanguageAllowed(context, Constants.DU_FUEL_LANGUAGE_IDS);
+    }
+
+    public static boolean isGoldLanguageAllowed(@Nullable Context context) {
+        return isFeatureLanguageAllowed(context, Constants.DU_GOLD_LANGUAGE_IDS);
+    }
+
+    public static boolean isTtdLanguageAllowed(@Nullable Context context) {
+        return isFeatureLanguageAllowed(context, Constants.DU_TTD_LANGUAGE_IDS);
+    }
+
+    public static boolean isJobsLanguageAllowed(@Nullable Context context) {
+        return isFeatureLanguageAllowed(context, Constants.DU_JOBS_LANGUAGE_IDS);
     }
 
     @NonNull
@@ -402,6 +447,54 @@ public final class DailyUpdatesConfigHelper {
         return false;
     }
 
+    /**
+     * Empty / missing CSV → all languages allowed (backward compatible).
+     * Non-empty → only listed language ids.
+     */
+    public static boolean isFeatureLanguageAllowed(
+            @Nullable Context context, @NonNull String prefsKey) {
+        if (context == null) return true;
+        int languageId = 0;
+        try {
+            languageId = SharedPrefsData.getInt(
+                    context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        String csv = "";
+        try {
+            csv = SharedPrefsData.getString(
+                    context.getApplicationContext(), prefsKey, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        if (TextUtils.isEmpty(csv)) return true;
+        String[] parts = csv.split(",");
+        for (String p : parts) {
+            try {
+                if (Integer.parseInt(p.trim()) == languageId) return true;
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
+    }
+
+    private static void saveFeatureLangCsv(
+            @NonNull Context app,
+            @NonNull JSONObject o,
+            @NonNull String jsonKey,
+            @NonNull String prefsKey) {
+        JSONArray langs = o.optJSONArray(jsonKey);
+        StringBuilder csv = new StringBuilder();
+        if (langs != null && langs.length() > 0) {
+            for (int i = 0; i < langs.length(); i++) {
+                int id = langs.optInt(i, 0);
+                if (id <= 0) continue;
+                if (csv.length() > 0) csv.append(',');
+                csv.append(id);
+            }
+        }
+        SharedPrefsData.putString(app, prefsKey, csv.toString(), Constants.PREF_NAME);
+    }
+
     public static int cardImageOffsetDp(@Nullable Context context) {
         return readInt(context, Constants.DU_CARD_IMAGE_OFFSET_DP, DEFAULT_CARD_OFFSET_DP, -40, 40);
     }
@@ -490,6 +583,11 @@ public final class DailyUpdatesConfigHelper {
     public static int panchangamContentStartDp(@Nullable Context context) {
         return readContentStartDp(context, Constants.DU_PANCHANGAM_CONTENT_START_DP,
                 "panchangam_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
+    }
+
+    public static int rashiContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_RASHI_CONTENT_START_DP,
+                "rashi_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
     }
 
     public static int stockContentStartDp(@Nullable Context context) {

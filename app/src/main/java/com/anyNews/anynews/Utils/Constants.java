@@ -410,6 +410,8 @@ public class Constants {
     public static String DAILY_UPDATES_CONFIG_SET = "daily_updates_config_set";
     public static String DAILY_UPDATES_CONFIG_JSON = "daily_updates_config_json";
     public static String DU_PANCHANGAM_ENABLED = "du_panchangam_enabled";
+    /** Rashi Phalalu Daily Updates card (splash daily_updates.rashi_enabled). */
+    public static String DU_RASHI_ENABLED = "du_rashi_enabled";
     public static String DU_MANA_ZILLA_ENABLED = "du_mana_zilla_enabled";
     public static String DU_FLASH_NEWS_ENABLED = "du_flash_news_enabled";
     /** Stock Market row kill switch (splash daily_updates.stock_enabled). */
@@ -419,10 +421,22 @@ public class Constants {
     public static String DU_STOCK_OFFSET_Y_DP = "du_stock_offset_y_dp";
     /** Cached splash stock summary JSON (nifty/sensex) — real prices only. */
     public static String DU_STOCK_SUMMARY_JSON = "du_stock_summary_json";
+    /** CSV of user-pinned stock symbols (local SharedPreferences). */
+    public static String STOCK_PINNED_SYMBOLS = "stock_pinned_symbols";
     /** dp; negative shifts card bg art left. */
     public static String DU_CARD_IMAGE_OFFSET_DP = "du_card_image_offset_dp";
     /** CSV of language ids allowed for Mana Zilla (default "3" = Telugu). */
     public static String DU_MANA_ZILLA_LANGUAGE_IDS = "du_mana_zilla_language_ids";
+    /** Per-feature language allow-lists (CSV). Empty = all languages ON. */
+    public static String DU_WEATHER_LANGUAGE_IDS = "du_weather_language_ids";
+    public static String DU_FUEL_LANGUAGE_IDS = "du_fuel_language_ids";
+    public static String DU_GOLD_LANGUAGE_IDS = "du_gold_language_ids";
+    public static String DU_TTD_LANGUAGE_IDS = "du_ttd_language_ids";
+    public static String DU_JOBS_LANGUAGE_IDS = "du_jobs_language_ids";
+    public static String DU_PANCHANGAM_LANGUAGE_IDS = "du_panchangam_language_ids";
+    public static String DU_RASHI_LANGUAGE_IDS = "du_rashi_language_ids";
+    public static String DU_FLASH_NEWS_LANGUAGE_IDS = "du_flash_news_language_ids";
+    public static String DU_STOCK_LANGUAGE_IDS = "du_stock_language_ids";
     public static String DU_MANA_HEADLINE_OFFSET_X_DP = "du_mana_headline_offset_x_dp";
     public static String DU_MANA_HEADLINE_OFFSET_Y_DP = "du_mana_headline_offset_y_dp";
     public static String DU_MANA_HEADLINE_TEXT_SIZE_SP = "du_mana_headline_text_size_sp";
@@ -452,6 +466,7 @@ public class Constants {
     public static String DU_TTD_CONTENT_START_DP = "du_ttd_content_start_dp";
     public static String DU_JOBS_CONTENT_START_DP = "du_jobs_content_start_dp";
     public static String DU_PANCHANGAM_CONTENT_START_DP = "du_panchangam_content_start_dp";
+    public static String DU_RASHI_CONTENT_START_DP = "du_rashi_content_start_dp";
     public static String DU_STOCK_CONTENT_START_DP = "du_stock_content_start_dp";
 
     // Flash chrome

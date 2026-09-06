@@ -1,18 +1,24 @@
 package com.anyNews.anynews.Activities;
 
+import android.app.Dialog;
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.Outline;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.text.method.LinkMovementMethod;
+import android.text.style.ClickableSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.UnderlineSpan;
+import android.util.Base64;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewOutlineProvider;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.EditText;
@@ -23,7 +29,6 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -34,32 +39,41 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
+import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.JobsConfigHelper;
 import com.anyNews.anynews.Utils.JobsLabels;
+import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.bumptech.glide.Glide;
 import com.google.gson.JsonObject;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
- * Jobs hub — Daily Updates card → this activity.
- * Data from splash cache + optional /get_jobs refresh. Empty until admin posts.
+ * Udyogalu — Way2-style jobs feed.
+ * Title only (no district). Cards: logo, title, time, description, salary, report/share/call.
  */
 public class JobsPageActivity extends AppCompatActivity {
+
+    private static final Pattern PHONE_PATTERN =
+            Pattern.compile("(?:\\+?\\d[\\d\\s\\-]{8,}\\d)");
 
     private LinearLayout listContainer;
     private TextView emptyView;
     private String selectedCategory = "all";
     private String searchQuery = "";
     private final List<JSONObject> allItems = new ArrayList<>();
+    private final List<JSONObject> categories = new ArrayList<>();
 
     private static final int[] PLACEHOLDER_LOGOS = {
             R.drawable.jobs_company_01,
@@ -79,18 +93,21 @@ public class JobsPageActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (!JobsConfigHelper.isEnabled(this)) {
-            Toast.makeText(this, JobsLabels.pageTitle(this), Toast.LENGTH_SHORT).show();
-            finish();
-            return;
-        }
         setContentView(R.layout.activity_jobs_page);
+        // Hub flag from splash — still show UI so local debug / offline works;
+        // empty list when disabled or no posts.
         applySystemBars();
-        clipBanner();
         listContainer = findViewById(R.id.jobs_list);
         emptyView = findViewById(R.id.jobs_empty);
         bindChrome();
-        wireClicks();
+        View back = findViewById(R.id.jobs_back);
+        if (back != null) back.setOnClickListener(v -> finish());
+        if (!JobsConfigHelper.isEnabled(this)) {
+            if (emptyView != null) {
+                emptyView.setVisibility(View.VISIBLE);
+                emptyView.setText(JobsLabels.empty(this));
+            }
+        }
         loadFromCache();
         refreshFromNetwork();
     }
@@ -100,13 +117,13 @@ public class JobsPageActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(window, false);
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.parseColor("#060B18"));
-        window.setNavigationBarColor(Color.parseColor("#060B18"));
+        window.setStatusBarColor(Color.parseColor("#FFF2F3F5"));
+        window.setNavigationBarColor(Color.parseColor("#FFF2F3F5"));
         WindowInsetsControllerCompat c =
                 WindowCompat.getInsetsController(window, window.getDecorView());
         if (c != null) {
-            c.setAppearanceLightStatusBars(false);
-            c.setAppearanceLightNavigationBars(false);
+            c.setAppearanceLightStatusBars(true);
+            c.setAppearanceLightNavigationBars(true);
         }
         View root = findViewById(R.id.jobs_root);
         if (root == null) return;
@@ -122,32 +139,9 @@ public class JobsPageActivity extends AppCompatActivity {
         ViewCompat.requestApplyInsets(root);
     }
 
-    private void clipBanner() {
-        View frame = findViewById(R.id.jobs_banner_frame);
-        if (frame == null) return;
-        final float radius = 14f * getResources().getDisplayMetrics().density;
-        frame.setOutlineProvider(new ViewOutlineProvider() {
-            @Override
-            public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
-            }
-        });
-        frame.setClipToOutline(true);
-    }
-
     private void bindChrome() {
         setText(R.id.jobs_top_title, JobsLabels.pageTitle(this));
-        setText(R.id.jobs_banner_title, JobsLabels.bannerTitle(this));
-        setText(R.id.jobs_banner_subtitle, JobsLabels.bannerSubtitle(this));
-        setText(R.id.jobs_filter_label, JobsLabels.filter(this));
-        setText(R.id.jobs_stat_total_label, JobsLabels.statTotal(this));
-        setText(R.id.jobs_stat_companies_label, JobsLabels.statCompanies(this));
-        setText(R.id.jobs_stat_locations_label, JobsLabels.statLocations(this));
-        setText(R.id.jobs_stat_new_label, JobsLabels.statNew(this));
-        setText(R.id.jobs_stat_new_sub, JobsLabels.today(this));
-        setText(R.id.jobs_list_title, JobsLabels.latestJobs(this));
-        setText(R.id.jobs_sort_label, JobsLabels.sortLatest(this));
-        setText(R.id.jobs_see_more_label, JobsLabels.seeMore(this));
+        setText(R.id.jobs_warning_text, JobsLabels.feeWarning(this));
         if (emptyView != null) emptyView.setText(JobsLabels.empty(this));
         EditText search = findViewById(R.id.jobs_search);
         if (search != null) {
@@ -165,43 +159,8 @@ public class JobsPageActivity extends AppCompatActivity {
         rebuildCategories();
     }
 
-    private void wireClicks() {
-        View back = findViewById(R.id.jobs_back);
-        if (back != null) back.setOnClickListener(v -> finish());
-        View share = findViewById(R.id.jobs_share);
-        if (share != null) {
-            share.setOnClickListener(v -> {
-                try {
-                    Intent i = new Intent(Intent.ACTION_SEND);
-                    i.setType("text/plain");
-                    i.putExtra(Intent.EXTRA_SUBJECT, JobsLabels.pageTitle(this));
-                    i.putExtra(Intent.EXTRA_TEXT, JobsLabels.bannerTitle(this)
-                            + "\n" + JobsLabels.bannerSubtitle(this));
-                    startActivity(Intent.createChooser(i, JobsLabels.pageTitle(this)));
-                } catch (Exception ignored) {
-                }
-            });
-        }
-        View filter = findViewById(R.id.jobs_filter_btn);
-        if (filter != null) {
-            filter.setOnClickListener(v -> showCategoryPicker());
-        }
-        View more = findViewById(R.id.jobs_see_more);
-        if (more != null) {
-            more.setOnClickListener(v -> {
-                selectedCategory = "all";
-                EditText search = findViewById(R.id.jobs_search);
-                if (search != null) search.setText("");
-                searchQuery = "";
-                rebuildCategories();
-                renderList();
-            });
-        }
-    }
-
     private void loadFromCache() {
-        JSONObject payload = JobsConfigHelper.jobsJson(this);
-        applyPayload(payload);
+        applyPayload(JobsConfigHelper.jobsJson(this));
     }
 
     private void refreshFromNetwork() {
@@ -209,6 +168,12 @@ public class JobsPageActivity extends AppCompatActivity {
             APIService api = RestApiClient.getClient().create(APIService.class);
             JsonObject body = new JsonObject();
             body.addProperty("limit", 100);
+            try {
+                int lang = SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+                if (lang > 0) body.addProperty("language_id", lang);
+            } catch (Exception ignored) {
+            }
             Call<JsonObject> call = api.get_jobs("v3", body);
             call.enqueue(new Callback<JsonObject>() {
                 @Override
@@ -228,7 +193,6 @@ public class JobsPageActivity extends AppCompatActivity {
 
                 @Override
                 public void onFailure(@NonNull Call<JsonObject> call, @NonNull Throwable t) {
-                    // Keep splash cache.
                 }
             });
         } catch (Exception ignored) {
@@ -237,10 +201,8 @@ public class JobsPageActivity extends AppCompatActivity {
 
     private void applyPayload(@Nullable JSONObject payload) {
         allItems.clear();
-        JSONObject stats = JobsConfigHelper.emptyStats();
+        categories.clear();
         if (payload != null) {
-            JSONObject s = payload.optJSONObject("stats");
-            if (s != null) stats = s;
             JSONArray items = payload.optJSONArray("items");
             if (items != null) {
                 for (int i = 0; i < items.length(); i++) {
@@ -248,11 +210,15 @@ public class JobsPageActivity extends AppCompatActivity {
                     if (j != null) allItems.add(j);
                 }
             }
+            JSONArray cats = payload.optJSONArray("categories");
+            if (cats != null) {
+                for (int i = 0; i < cats.length(); i++) {
+                    JSONObject c = cats.optJSONObject(i);
+                    if (c != null && c.optBoolean("enabled", true)) categories.add(c);
+                }
+            }
         }
-        setText(R.id.jobs_stat_total, String.valueOf(stats.optInt("total_jobs", allItems.size())));
-        setText(R.id.jobs_stat_companies, String.valueOf(stats.optInt("total_companies", 0)));
-        setText(R.id.jobs_stat_locations, String.valueOf(stats.optInt("total_locations", 0)));
-        setText(R.id.jobs_stat_new, String.valueOf(stats.optInt("new_today", 0)));
+        rebuildCategories();
         renderList();
     }
 
@@ -260,126 +226,49 @@ public class JobsPageActivity extends AppCompatActivity {
         LinearLayout row = findViewById(R.id.jobs_categories);
         if (row == null) return;
         row.removeAllViews();
-        // No "More/మరిన్ని" chip — all categories in the horizontal scroller.
-        // Zip has a More Categories asset; deliberately unused.
-        addCategoryChip(row, "all", JobsLabels.catAll(this), 0, R.drawable.jobs_cat_all);
-        addCategoryChip(row, "it", JobsLabels.catIt(this), 0, R.drawable.jobs_cat_it);
-        addCategoryChip(row, "banking", JobsLabels.catBanking(this), 0, R.drawable.jobs_cat_banking);
-        addCategoryChip(row, "teaching", JobsLabels.catTeaching(this), 0, R.drawable.jobs_cat_teaching);
-        addCategoryChip(row, "healthcare", JobsLabels.catHealthcare(this), 0, R.drawable.jobs_cat_healthcare);
-        addCategoryChip(row, "government", JobsLabels.catGovernment(this), 0, R.drawable.jobs_cat_government);
-        addCategoryChip(row, "engineering", JobsLabels.catEngineering(this), 0, R.drawable.jobs_cat_engineering);
-        addCategoryChip(row, "sales", JobsLabels.catSales(this), 0, R.drawable.jobs_cat_sales);
-        addCategoryChip(row, "support", JobsLabels.catSupport(this), 0, R.drawable.jobs_cat_support);
-        addCategoryChip(row, "manufacturing", JobsLabels.catManufacturing(this), 0, R.drawable.jobs_cat_manufacturing);
-        addCategoryChip(row, "logistics", JobsLabels.catLogistics(this), 0, R.drawable.jobs_cat_logistics);
-        addCategoryChip(row, "hospitality", JobsLabels.catHospitality(this), 0, R.drawable.jobs_cat_hospitality);
-        addCategoryChip(row, "remote", JobsLabels.catRemote(this), 0, R.drawable.jobs_cat_remote);
+        addCategoryChip(row, "all", JobsLabels.catAll(this));
+        if (categories.isEmpty()) {
+            // Fallback chips until admin categories load
+            addCategoryChip(row, "office", "ఆఫీస్");
+            addCategoryChip(row, "hotel", "హోటల్");
+            addCategoryChip(row, "teaching", "టీచింగ్");
+            addCategoryChip(row, "sales", "సేల్స్");
+            addCategoryChip(row, "banking", "బ్యాంకింగ్");
+            return;
+        }
+        for (JSONObject c : categories) {
+            String key = c.optString("key", "");
+            if (TextUtils.isEmpty(key)) continue;
+            String label = JobsConfigHelper.localized(this, c, "label_te", "label_en");
+            if (TextUtils.isEmpty(label)) label = key;
+            addCategoryChip(row, key, label);
+        }
     }
 
     private void addCategoryChip(@NonNull LinearLayout row, @NonNull String key,
-                                 @NonNull String label, int bgRes, int iconRes) {
+                                 @NonNull String label) {
         float dens = getResources().getDisplayMetrics().density;
-        LinearLayout chip = new LinearLayout(this);
-        chip.setOrientation(LinearLayout.VERTICAL);
-        chip.setGravity(Gravity.CENTER_HORIZONTAL);
+        boolean selected = key.equals(selectedCategory);
+        TextView chip = new TextView(this);
+        chip.setText(label);
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        chip.setTextColor(selected ? Color.parseColor("#FF1E88E5") : Color.parseColor("#FF475569"));
+        chip.setBackgroundResource(selected
+                ? R.drawable.bg_jobs_chip_selected
+                : R.drawable.bg_jobs_chip);
+        int hPad = (int) (14 * dens);
+        int vPad = (int) (7 * dens);
+        chip.setPadding(hPad, vPad, hPad, vPad);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                (int) (68 * dens), ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins((int) (4 * dens), 0, (int) (4 * dens), 0);
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, 0, (int) (8 * dens), 0);
         chip.setLayoutParams(lp);
-
-        FrameCircle iconWrap = new FrameCircle(this);
-        int size = (int) (52 * dens);
-        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(size, size);
-        iconWrap.setLayoutParams(ilp);
-        iconWrap.setOutlineProvider(new ViewOutlineProvider() {
-            @Override
-            public void getOutline(View view, Outline outline) {
-                outline.setOval(0, 0, view.getWidth(), view.getHeight());
-            }
-        });
-        iconWrap.setClipToOutline(true);
-
-        ImageView iv = new ImageView(this);
-        FrameCircle.LayoutParams ivlp = new FrameCircle.LayoutParams(size, size);
-        iv.setLayoutParams(ivlp);
-
-        if (iconRes != 0) {
-            // Zip category assets already include the circular artwork — fill chip, no nested padding.
-            iv.setPadding(0, 0, 0, 0);
-            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            iv.setImageResource(iconRes);
-        } else {
-            // "All" chip: solid blue circle + briefcase.
-            iconWrap.setBackgroundResource(bgRes != 0 ? bgRes : R.drawable.bg_jobs_cat_all);
-            int pad = (int) (12 * dens);
-            iv.setPadding(pad, pad, pad, pad);
-            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            iv.setImageResource(R.drawable.ic_jobs_briefcase);
-            iv.setColorFilter(Color.WHITE);
-        }
-        iconWrap.addView(iv);
-        chip.addView(iconWrap);
-
-        TextView tv = new TextView(this);
-        tv.setText(label);
-        tv.setTextColor(key.equals(selectedCategory) ? Color.WHITE : Color.parseColor("#FF94A3B8"));
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        tv.setGravity(Gravity.CENTER);
-        tv.setMaxLines(2);
-        tv.setPadding(0, (int) (4 * dens), 0, 0);
-        chip.addView(tv);
-
-        if (key.equals(selectedCategory)) {
-            iconWrap.setAlpha(1f);
-            iconWrap.setScaleX(1.06f);
-            iconWrap.setScaleY(1.06f);
-        } else {
-            iconWrap.setAlpha(0.9f);
-        }
-
         chip.setOnClickListener(v -> {
             selectedCategory = key;
             rebuildCategories();
             renderList();
         });
         row.addView(chip);
-    }
-
-    /** Tiny FrameLayout subclass name for LayoutParams typing. */
-    private static final class FrameCircle extends android.widget.FrameLayout {
-        FrameCircle(android.content.Context c) { super(c); }
-    }
-
-    private void showCategoryPicker() {
-        String[] keys = {
-                "all", "it", "banking", "teaching", "healthcare",
-                "government", "engineering", "sales", "support",
-                "manufacturing", "logistics", "hospitality", "remote"
-        };
-        String[] labels = {
-                JobsLabels.catAll(this),
-                JobsLabels.catIt(this),
-                JobsLabels.catBanking(this),
-                JobsLabels.catTeaching(this),
-                JobsLabels.catHealthcare(this),
-                JobsLabels.catGovernment(this),
-                JobsLabels.catEngineering(this),
-                JobsLabels.catSales(this),
-                JobsLabels.catSupport(this),
-                JobsLabels.catManufacturing(this),
-                JobsLabels.catLogistics(this),
-                JobsLabels.catHospitality(this),
-                JobsLabels.catRemote(this),
-        };
-        new AlertDialog.Builder(this)
-                .setTitle(JobsLabels.filter(this))
-                .setItems(labels, (d, which) -> {
-                    selectedCategory = keys[which];
-                    rebuildCategories();
-                    renderList();
-                })
-                .show();
     }
 
     private void renderList() {
@@ -398,14 +287,17 @@ public class JobsPageActivity extends AppCompatActivity {
             emptyView.setVisibility(shown == 0 ? View.VISIBLE : View.GONE);
             emptyView.setText(JobsLabels.empty(this));
         }
-        View seeMore = findViewById(R.id.jobs_see_more);
-        if (seeMore != null) {
-            // Hide CTA when there are no jobs to browse.
-            seeMore.setVisibility(shown == 0 ? View.GONE : View.VISIBLE);
-        }
     }
 
     private boolean matchesFilter(@NonNull JSONObject job) {
+        try {
+            int appLang = SharedPrefsData.getInt(
+                    getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+            int jobLang = job.optInt("language_id", 0);
+            // Language-specific jobs: hide other languages when job has a language_id.
+            if (appLang > 0 && jobLang > 0 && appLang != jobLang) return false;
+        } catch (Exception ignored) {
+        }
         if (!"all".equals(selectedCategory)) {
             String cat = job.optString("category", "");
             if (!selectedCategory.equalsIgnoreCase(cat)) return false;
@@ -414,53 +306,57 @@ public class JobsPageActivity extends AppCompatActivity {
         String blob = (
                 JobsConfigHelper.localized(this, job, "title_te", "title_en") + " "
                         + JobsConfigHelper.localized(this, job, "company_te", "company_en") + " "
-                        + JobsConfigHelper.localized(this, job, "location_te", "location_en")
+                        + JobsConfigHelper.localized(this, job, "location_te", "location_en") + " "
+                        + JobsConfigHelper.localized(this, job, "description_te", "description_en") + " "
+                        + job.optString("phone", "")
         ).toLowerCase();
         return blob.contains(searchQuery);
     }
 
     private void bindJobCard(@NonNull View card, @NonNull JSONObject job) {
         TextView title = card.findViewById(R.id.job_title);
-        TextView company = card.findViewById(R.id.job_company);
-        TextView location = card.findViewById(R.id.job_location);
-        TextView experience = card.findViewById(R.id.job_experience);
-        TextView salary = card.findViewById(R.id.job_salary);
         TextView time = card.findViewById(R.id.job_time);
-        TextView badge = card.findViewById(R.id.job_new_badge);
+        TextView description = card.findViewById(R.id.job_description);
+        TextView salary = card.findViewById(R.id.job_salary);
         ImageView logo = card.findViewById(R.id.job_logo);
-        ImageView verified = card.findViewById(R.id.job_verified);
-        ImageView bookmark = card.findViewById(R.id.job_bookmark);
+        ImageView report = card.findViewById(R.id.job_report);
+        ImageView share = card.findViewById(R.id.job_share);
+        ImageView call = card.findViewById(R.id.job_call);
 
-        if (title != null) {
-            title.setText(JobsConfigHelper.localized(this, job, "title_te", "title_en"));
-        }
-        if (company != null) {
-            company.setText(JobsConfigHelper.localized(this, job, "company_te", "company_en"));
-        }
-        if (location != null) {
-            location.setText(JobsConfigHelper.localized(this, job, "location_te", "location_en"));
-        }
-        if (experience != null) {
-            experience.setText(JobsConfigHelper.localized(this, job, "experience_te", "experience_en"));
-        }
-        if (salary != null) {
-            salary.setText(JobsConfigHelper.localized(this, job, "salary_te", "salary_en"));
-        }
-        if (verified != null) {
-            verified.setVisibility(job.optBoolean("verified", true) ? View.VISIBLE : View.GONE);
-        }
-        if (badge != null) {
-            badge.setVisibility(job.optBoolean("is_new", false) ? View.VISIBLE : View.GONE);
-        }
+        String titleText = JobsConfigHelper.localized(this, job, "title_te", "title_en");
+        if (title != null) title.setText(titleText);
+
         long pubMs = 0L;
         String pub = job.optString("published_at", "");
-        if (!TextUtils.isEmpty(pub)) {
-            pubMs = parseIsoMs(pub);
-        }
+        if (!TextUtils.isEmpty(pub)) pubMs = parseIsoMs(pub);
         if (time != null) {
             if (pubMs <= 0) pubMs = System.currentTimeMillis();
             time.setText(JobsLabels.timeAgo(this, pubMs));
         }
+
+        String desc = JobsConfigHelper.localized(this, job, "description_te", "description_en");
+        if (TextUtils.isEmpty(desc)) {
+            // Fallback: company + location blurb
+            String company = JobsConfigHelper.localized(this, job, "company_te", "company_en");
+            String location = JobsConfigHelper.localized(this, job, "location_te", "location_en");
+            StringBuilder sb = new StringBuilder();
+            if (!TextUtils.isEmpty(company)) sb.append(company);
+            if (!TextUtils.isEmpty(location)) {
+                if (sb.length() > 0) sb.append(" · ");
+                sb.append(location);
+            }
+            desc = sb.toString();
+        }
+        String phone = resolvePhone(job, desc);
+        if (description != null) {
+            bindDescriptionWithPhone(description, desc, phone);
+        }
+
+        if (salary != null) {
+            String sal = JobsConfigHelper.localized(this, job, "salary_te", "salary_en");
+            salary.setText(TextUtils.isEmpty(sal) ? "—" : sal);
+        }
+
         if (logo != null) {
             String url = job.optString("logo_url", "");
             int ph = job.optInt("logo_placeholder", job.optInt("job_id", 1));
@@ -471,18 +367,208 @@ public class JobsPageActivity extends AppCompatActivity {
                 logo.setImageResource(res);
             }
         }
-        if (bookmark != null) {
-            bookmark.setOnClickListener(v ->
-                    Toast.makeText(this, JobsLabels.pageTitle(this), Toast.LENGTH_SHORT).show());
+
+        if (report != null) {
+            report.setOnClickListener(v -> showReportDialog(job));
         }
-        String apply = job.optString("apply_url", "");
-        card.setOnClickListener(v -> {
-            if (TextUtils.isEmpty(apply)) return;
+        if (share != null) {
+            share.setOnClickListener(v -> shareJob(job));
+        }
+        if (call != null) {
+            final String dialPhone = phone;
+            call.setOnClickListener(v -> dialNumber(dialPhone));
+        }
+    }
+
+    @NonNull
+    private String resolvePhone(@NonNull JSONObject job, @Nullable String desc) {
+        String phone = job.optString("phone", "").trim();
+        if (!TextUtils.isEmpty(phone)) return phone.replaceAll("[^\\d+]", "");
+        if (desc != null) {
+            Matcher m = PHONE_PATTERN.matcher(desc);
+            if (m.find()) return m.group().replaceAll("[^\\d+]", "");
+        }
+        return "";
+    }
+
+    private void bindDescriptionWithPhone(
+            @NonNull TextView tv, @Nullable String desc, @Nullable String phone) {
+        if (TextUtils.isEmpty(desc)) {
+            tv.setText("");
+            return;
+        }
+        SpannableString ss = new SpannableString(desc);
+        Matcher m = PHONE_PATTERN.matcher(desc);
+        boolean linked = false;
+        while (m.find()) {
+            final String raw = m.group();
+            final String digits = raw.replaceAll("[^\\d+]", "");
+            int start = m.start();
+            int end = m.end();
+            ss.setSpan(new UnderlineSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            ss.setSpan(new ForegroundColorSpan(Color.parseColor("#FF1565C0")),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            ss.setSpan(new ClickableSpan() {
+                @Override
+                public void onClick(@NonNull View widget) {
+                    dialNumber(digits);
+                }
+            }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            linked = true;
+        }
+        // If phone field set but not in text, append tappable number
+        if (!linked && !TextUtils.isEmpty(phone)) {
+            String append = (desc.endsWith(" ") || desc.endsWith("\n") ? "" : " ") + "☎ " + phone;
+            SpannableString full = new SpannableString(desc + append);
+            int start = desc.length() + (append.startsWith(" ") ? 1 : 0);
+            // underline from phone digits
+            int phoneStart = full.toString().lastIndexOf(phone);
+            if (phoneStart >= 0) {
+                int phoneEnd = phoneStart + phone.length();
+                full.setSpan(new UnderlineSpan(), phoneStart, phoneEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                full.setSpan(new ForegroundColorSpan(Color.parseColor("#FF1565C0")),
+                        phoneStart, phoneEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                full.setSpan(new ClickableSpan() {
+                    @Override
+                    public void onClick(@NonNull View widget) {
+                        dialNumber(phone);
+                    }
+                }, phoneStart, phoneEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            tv.setText(full);
+            tv.setMovementMethod(LinkMovementMethod.getInstance());
+            tv.setHighlightColor(Color.TRANSPARENT);
+            return;
+        }
+        tv.setText(ss);
+        if (linked) {
+            tv.setMovementMethod(LinkMovementMethod.getInstance());
+            tv.setHighlightColor(Color.TRANSPARENT);
+        }
+    }
+
+    private void dialNumber(@Nullable String phone) {
+        if (TextUtils.isEmpty(phone)) {
+            Toast.makeText(this, JobsLabels.noPhone(this), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            Intent i = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + phone));
+            startActivity(i);
+        } catch (Exception e) {
+            Toast.makeText(this, JobsLabels.noPhone(this), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void shareJob(@NonNull JSONObject job) {
+        String title = JobsConfigHelper.localized(this, job, "title_te", "title_en");
+        String location = JobsConfigHelper.localized(this, job, "location_te", "location_en");
+        if (TextUtils.isEmpty(location)) {
+            location = JobsConfigHelper.localized(this, job, "company_te", "company_en");
+        }
+        String url = job.optString("share_url", "");
+        if (TextUtils.isEmpty(url)) {
+            int jobId = job.optInt("job_id", 0);
+            String encoded = Base64.encodeToString(
+                    String.valueOf(jobId).getBytes(StandardCharsets.UTF_8),
+                    Base64.NO_WRAP);
+            url = "https://anynews.co.in/job-" + encoded;
+        }
+        String text = JobsLabels.shareMessage(this, title, location, url);
+        try {
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType("text/plain");
+            i.putExtra(Intent.EXTRA_SUBJECT, title);
+            i.putExtra(Intent.EXTRA_TEXT, text);
+            // Prefer WhatsApp when available (Way2-style share)
             try {
-                startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(apply)));
+                i.setPackage("com.whatsapp");
+                startActivity(i);
+            } catch (Exception noWa) {
+                i.setPackage(null);
+                startActivity(Intent.createChooser(i, JobsLabels.pageTitle(this)));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void showReportDialog(@NonNull JSONObject job) {
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_report_job);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            dialog.getWindow().setLayout(
+                    (int) (getResources().getDisplayMetrics().widthPixels * 0.9f),
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        TextView title = dialog.findViewById(R.id.report_title);
+        TextView reasonLabel = dialog.findViewById(R.id.report_reason_label);
+        TextView mobileLabel = dialog.findViewById(R.id.report_mobile_label);
+        EditText reason = dialog.findViewById(R.id.report_reason);
+        EditText mobile = dialog.findViewById(R.id.report_mobile);
+        TextView close = dialog.findViewById(R.id.report_close);
+        TextView submit = dialog.findViewById(R.id.report_submit);
+
+        if (title != null) title.setText(JobsLabels.reportTitle(this));
+        if (reasonLabel != null) reasonLabel.setText(JobsLabels.reportReasonLabel(this));
+        if (mobileLabel != null) mobileLabel.setText(JobsLabels.reportMobileLabel(this));
+        if (reason != null) reason.setHint(JobsLabels.reportReasonHint(this));
+        if (mobile != null) mobile.setHint(JobsLabels.reportMobileHint(this));
+        if (close != null) {
+            close.setText(JobsLabels.reportClose(this));
+            close.setOnClickListener(v -> dialog.dismiss());
+        }
+        if (submit != null) {
+            submit.setText(JobsLabels.reportSubmit(this));
+            submit.setOnClickListener(v -> {
+                String r = reason != null ? reason.getText().toString().trim() : "";
+                String m = mobile != null ? mobile.getText().toString().trim() : "";
+                if (TextUtils.isEmpty(r)) {
+                    Toast.makeText(this, JobsLabels.reportNeedReason(this), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                submitReport(job.optInt("job_id", 0), r, m, dialog);
+            });
+        }
+        dialog.show();
+    }
+
+    private void submitReport(int jobId, @NonNull String reason, @NonNull String mobile,
+                              @NonNull Dialog dialog) {
+        try {
+            APIService api = RestApiClient.getClient().create(APIService.class);
+            JsonObject body = new JsonObject();
+            body.addProperty("job_id", jobId);
+            body.addProperty("reason", reason);
+            body.addProperty("mobile", mobile);
+            try {
+                int uid = SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.USER_ID, Constants.PREF_NAME);
+                if (uid > 0) body.addProperty("user_id", uid);
             } catch (Exception ignored) {
             }
-        });
+            api.report_job("v3", body).enqueue(new Callback<JsonObject>() {
+                @Override
+                public void onResponse(@NonNull Call<JsonObject> call,
+                                       @NonNull Response<JsonObject> response) {
+                    dialog.dismiss();
+                    Toast.makeText(JobsPageActivity.this,
+                            JobsLabels.reportThanks(JobsPageActivity.this),
+                            Toast.LENGTH_SHORT).show();
+                }
+
+                @Override
+                public void onFailure(@NonNull Call<JsonObject> call, @NonNull Throwable t) {
+                    dialog.dismiss();
+                    Toast.makeText(JobsPageActivity.this,
+                            JobsLabels.reportThanks(JobsPageActivity.this),
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
+        } catch (Exception e) {
+            dialog.dismiss();
+        }
     }
 
     private void setText(int id, @Nullable String text) {
@@ -497,7 +583,6 @@ public class JobsPageActivity extends AppCompatActivity {
                 s = s.substring(0, s.length() - 1) + "+0000";
             } else if (s.length() > 5 && (s.charAt(s.length() - 3) == ':'
                     && (s.charAt(s.length() - 6) == '+' || s.charAt(s.length() - 6) == '-'))) {
-                // +05:30 → +0530
                 s = s.substring(0, s.length() - 3) + s.substring(s.length() - 2);
             }
             java.text.SimpleDateFormat[] formats = new java.text.SimpleDateFormat[] {

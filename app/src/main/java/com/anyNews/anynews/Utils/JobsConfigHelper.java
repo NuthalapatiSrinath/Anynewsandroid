@@ -54,8 +54,12 @@ public final class JobsConfigHelper {
         try {
             String v = SharedPrefsData.getString(
                     context.getApplicationContext(), Constants.JOBS_ENABLED, Constants.PREF_NAME);
-            if (TextUtils.isEmpty(v)) return true;
-            return "true".equalsIgnoreCase(v) || "1".equals(v);
+            if (TextUtils.isEmpty(v)) {
+                // fall through to language check with default ON
+            } else if (!("true".equalsIgnoreCase(v) || "1".equals(v))) {
+                return false;
+            }
+            return DailyUpdatesConfigHelper.isJobsLanguageAllowed(context);
         } catch (Exception e) {
             return true;
         }
