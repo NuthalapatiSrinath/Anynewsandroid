@@ -151,7 +151,7 @@ public final class RewardsEngagementBatcher {
         body.add("events", events);
 
         try {
-            APIService api = RestApiClient.getClient(appContext).create(APIService.class);
+            APIService api = RestApiClient.getClient().create(APIService.class);
             api.rewards_events_batch("v3", body).enqueue(new Callback<JsonObject>() {
                 @Override
                 public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {

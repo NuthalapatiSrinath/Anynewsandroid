@@ -133,7 +133,7 @@ public class RewardsHubActivity extends AppCompatActivity {
     }
 
     private void loadHub() {
-        APIService api = RestApiClient.getClient(this).create(APIService.class);
+        APIService api = RestApiClient.getClient().create(APIService.class);
         api.rewards_hub("v3", authBody()).enqueue(new Callback<JsonObject>() {
             @Override
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
@@ -285,7 +285,7 @@ public class RewardsHubActivity extends AppCompatActivity {
     }
 
     private void loadLeaderboard() {
-        APIService api = RestApiClient.getClient(this).create(APIService.class);
+        APIService api = RestApiClient.getClient().create(APIService.class);
         api.rewards_leaderboard("v3", authBody()).enqueue(new Callback<JsonObject>() {
             @Override
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
@@ -309,7 +309,7 @@ public class RewardsHubActivity extends AppCompatActivity {
                     TextView rank = new TextView(RewardsHubActivity.this);
                     rank.setText("#" + optInt(r, "rank"));
                     rank.setTextColor(Color.parseColor("#FFB45309"));
-                    rank.setTextStyle(android.graphics.Typeface.BOLD);
+                    rank.setTypeface(rank.getTypeface(), android.graphics.Typeface.BOLD);
                     rank.setMinWidth(dp(42));
                     TextView name = new TextView(RewardsHubActivity.this);
                     name.setText(optStr(r, "name", "Reader"));
@@ -343,7 +343,7 @@ public class RewardsHubActivity extends AppCompatActivity {
 
     private void onJoin() {
         if (!requireLogin()) return;
-        APIService api = RestApiClient.getClient(this).create(APIService.class);
+        APIService api = RestApiClient.getClient().create(APIService.class);
         JsonObject body = authBody();
         String upi = upiInput.getText() != null ? upiInput.getText().toString().trim() : "";
         if (!TextUtils.isEmpty(upi)) body.addProperty("upi_id", upi);
@@ -377,7 +377,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
         JsonObject body = authBody();
         body.addProperty("upi_id", upi);
-        APIService api = RestApiClient.getClient(this).create(APIService.class);
+        APIService api = RestApiClient.getClient().create(APIService.class);
         api.rewards_update_upi("v3", body).enqueue(new Callback<JsonObject>() {
             @Override
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
@@ -418,7 +418,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
         JsonObject body = authBody();
         body.addProperty("amount_rupees", amt);
-        APIService api = RestApiClient.getClient(this).create(APIService.class);
+        APIService api = RestApiClient.getClient().create(APIService.class);
         api.rewards_withdraw("v3", body).enqueue(new Callback<JsonObject>() {
             @Override
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
