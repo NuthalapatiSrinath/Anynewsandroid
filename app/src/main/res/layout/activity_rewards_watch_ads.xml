@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/watch_ads_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFF8F4EC"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="Watch ads"
+        android:textColor="#FF1C1917"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/watch_ads_progress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:gravity="center"
+        android:text="0 / 3"
+        android:textColor="#FFB45309"
+        android:textSize="28sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/watch_ads_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:text="Complete the ads to earn coins. Cooldown applies after each session."
+        android:textColor="#FF78716C"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/watch_ads_next_btn"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="28dp"
+        android:background="@drawable/bg_rewards_btn_primary"
+        android:gravity="center"
+        android:text="Watch next ad"
+        android:textColor="#FFFFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/watch_ads_close_btn"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:text="Close"
+        android:textColor="#FF78716C"
+        android:textSize="14sp" />
+</LinearLayout>

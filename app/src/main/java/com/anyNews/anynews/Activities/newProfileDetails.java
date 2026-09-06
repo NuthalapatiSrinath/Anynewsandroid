@@ -480,6 +480,14 @@ public class newProfileDetails extends AppCompatActivity {
                 DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
                         ? View.VISIBLE
                         : View.GONE);
+        // Parent of legacy rewards tile was GONE in XML — surface when master ON.
+        if (profile_refer_list != null) {
+            profile_refer_list.setVisibility(
+                    DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
+                            ? View.VISIBLE
+                            : View.GONE);
+        }
+        bindProfileRewardsRow(15f);
         profile_layout_shareToearn.setVisibility(View.VISIBLE);
         // Keep avatar tappable (guest → login; signed-in → pick/crop).
         img_upload_photo.setVisibility(View.VISIBLE);
@@ -640,13 +648,7 @@ public class newProfileDetails extends AppCompatActivity {
         profile_layout_rewards.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (!DistrictPinVisibilityConfig.rewardsMasterEnabled(newProfileDetails.this)) {
-                    Toast.makeText(newProfileDetails.this, "Rewards is currently off", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                Intent intent = new Intent(newProfileDetails.this,
-                        com.anyNews.anynews.rewards.RewardsHubActivity.class);
-                startActivity(intent);
+                openRewardsFromProfile();
             }
         });
 
@@ -4079,6 +4081,9 @@ public class newProfileDetails extends AppCompatActivity {
             });
         }
 
+        // Rewards — visible when admin rewards_master is ON (splash/session prefs).
+        bindProfileRewardsRow(menuSp);
+
         // Become a Reporter — always visible for non-reporters; hiring controls form vs message
         View layoutBecome = findViewById(R.id.layout_become_a_reporter);
         TextView becomeLabel = findViewById(R.id.profile_become_a_reporter_label);
@@ -4211,13 +4216,57 @@ public class newProfileDetails extends AppCompatActivity {
         if (edit_profile_icon != null) {
             edit_profile_icon.setVisibility(vis);
         }
-        // Rewards row: gated by admin rewards_master (placeholder until full payout).
+        // Rewards row: gated by admin rewards_master (hub + legacy tile).
+        bindProfileRewardsRow(15f);
         if (profile_layout_rewards != null) {
             profile_layout_rewards.setVisibility(
                     DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
                             ? View.VISIBLE
                             : View.GONE);
         }
+        if (profile_refer_list != null) {
+            profile_refer_list.setVisibility(
+                    DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
+                            ? View.VISIBLE
+                            : View.GONE);
+        }
+    }
+
+    /** Profile hub Rewards entry — must show when rewards_master ON. */
+    private void bindProfileRewardsRow(float menuSp) {
+        View layoutRewards = findViewById(R.id.layout_profile_rewards);
+        TextView rewardsLabel = findViewById(R.id.profile_rewards_label);
+        boolean on = DistrictPinVisibilityConfig.rewardsMasterEnabled(this);
+        if (rewardsLabel != null) {
+            rewardsLabel.setTextSize(menuSp);
+            try {
+                rewardsLabel.setText(
+                        com.anyNews.anynews.rewards.RewardsConfigHelper.joinedChip(this));
+            } catch (Exception ignored) {
+                rewardsLabel.setText("Rewards");
+            }
+        }
+        if (layoutRewards != null) {
+            layoutRewards.setVisibility(on ? View.VISIBLE : View.GONE);
+            layoutRewards.setOnClickListener(v -> openRewardsFromProfile());
+        }
+    }
+
+    private void openRewardsFromProfile() {
+        if (!DistrictPinVisibilityConfig.rewardsMasterEnabled(this)) {
+            Toast.makeText(this, "Rewards is currently off", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        boolean loggedIn =
+                SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        if (!loggedIn) {
+            Intent login = new Intent(this, LoginActivityDetails.class);
+            login.putExtra(LoginActivityDetails.EXTRA_OPEN_REWARDS, true);
+            login.putExtra(LoginActivityDetails.EXTRA_RETURN_TO_PROFILE, true);
+            startActivity(login);
+            return;
+        }
+        startActivity(new Intent(this, com.anyNews.anynews.rewards.RewardsHubActivity.class));
     }
 
     private void loadProfileCategories(RecyclerView catList, View categoriesBlock) {

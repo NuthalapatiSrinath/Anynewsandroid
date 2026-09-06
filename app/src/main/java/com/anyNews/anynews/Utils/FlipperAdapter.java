@@ -203,7 +203,7 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTube
 import com.pierfrancescosoffritti.youtubeplayer.player.YouTubePlayerFullScreenListener;
 import com.squareup.picasso.LruCache;
 import com.squareup.picasso.Picasso;
-import com.tbuonomo.viewpagerdotsindicator.WormDotsIndicator;
+import com.tbuonomo.viewpagerdotsindicator.DotsIndicator;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -2205,19 +2205,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
             }
         }
-        if (pinView != null) {
-            pinView.setVisibility(View.VISIBLE);
+            if (pinView != null) {
             if (rewardsMode) {
-                // Soft placeholder icon until full rewards UI ships.
-                try {
-                    pinView.setBackgroundResource(ic_news_icon);
-                } catch (Exception ignored) {
-                    pinView.setBackgroundResource(ic_location_icon);
-                }
-            } else if (categery_id == 0) {
-                pinView.setBackgroundResource(ic_location_icon);
+                // Pulse host replaces district logo circle.
+                pinView.setVisibility(View.GONE);
             } else {
-                pinView.setBackgroundResource(ic_news_icon);
+                pinView.setVisibility(View.VISIBLE);
+                if (categery_id == 0) {
+                    pinView.setBackgroundResource(ic_location_icon);
+                } else {
+                    pinView.setBackgroundResource(ic_news_icon);
+                }
             }
         }
         if (pill != null) {
@@ -2226,34 +2224,178 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (rewardsMode) {
                 try {
                     pill.clearAnimation();
-                    android.view.animation.AlphaAnimation blink =
-                            new android.view.animation.AlphaAnimation(0.45f, 1f);
-                    blink.setDuration(700);
-                    blink.setRepeatMode(android.view.animation.Animation.REVERSE);
-                    blink.setRepeatCount(android.view.animation.Animation.INFINITE);
-                    pill.startAnimation(blink);
                 } catch (Exception ignored) {
                 }
-                pill.setOnClickListener(v -> {
-                    try {
-                        android.content.Intent intent =
-                                new android.content.Intent(
-                                        context,
-                                        com.anyNews.anynews.rewards.RewardsHubActivity.class);
-                        if (!(context instanceof android.app.Activity)) {
-                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                        }
-                        context.startActivity(intent);
-                    } catch (Exception ignored) {
-                    }
-                });
+                // Pulse handled on the indicator; click bound later via
+                // bindDistrictOrRewardsClick (must win over Local-news listener).
+                applyRewardsChipVisual(labelView, pinView, pill);
             } else {
                 try {
                     pill.clearAnimation();
                 } catch (Exception ignored) {
                 }
-                // District pill keeps its own listeners elsewhere; don't steal clicks.
+                clearRewardsChipVisual(pinView, pill);
+                // District pill click bound later via bindDistrictOrRewardsClick.
             }
+        }
+    }
+
+    /**
+     * Opens Rewards hub; guests go through login first, then Rewards.
+     * Never routes to Local news.
+     */
+    private void openRewardsHubFromChip() {
+        try {
+            boolean loggedIn = SharedPrefsData.getBool(
+                    context.getApplicationContext(), Constants.is_login, Constants.PREF_NAME);
+            android.content.Intent intent;
+            if (!loggedIn) {
+                intent = new android.content.Intent(
+                        context,
+                        com.anyNews.anynews.Activities.LoginActivityDetails.class);
+                intent.putExtra(
+                        com.anyNews.anynews.Activities.LoginActivityDetails.EXTRA_OPEN_REWARDS,
+                        true);
+            } else {
+                intent = new android.content.Intent(
+                        context,
+                        com.anyNews.anynews.rewards.RewardsHubActivity.class);
+            }
+            if (!(context instanceof android.app.Activity)) {
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            }
+            context.startActivity(intent);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * District pill → Local picker; rewards chip → Rewards hub (never Local).
+     * Must be called <b>after</b> any legacy location listeners so Rewards wins.
+     */
+    private void bindDistrictOrRewardsClick(View pill, @Nullable ModelClass.Datum post) {
+        if (pill == null) return;
+        final ModelClass.Datum boundPost = post;
+        pill.setOnClickListener(v -> {
+            if (DistrictPinVisibilityConfig.shouldShowRewardsInDistrictSlot(
+                    context, categery_id, boundPost)) {
+                openRewardsHubFromChip();
+            } else if (callbacks != null) {
+                callbacks.callLocationRequest(0);
+            }
+        });
+    }
+
+    /** Orange solid dot + expanding pulse ring (LIVE-style); dynamic chip text style. */
+    private void applyRewardsChipVisual(
+            @Nullable TextView labelView, @Nullable ImageView pinView, @Nullable View pill) {
+        try {
+            if (labelView != null) {
+                String colorHex =
+                        com.anyNews.anynews.rewards.RewardsConfigHelper.chipColor(context);
+                try {
+                    labelView.setTextColor(android.graphics.Color.parseColor(colorHex));
+                } catch (Exception e) {
+                    labelView.setTextColor(android.graphics.Color.parseColor("#FFFF6B00"));
+                }
+                float sp = com.anyNews.anynews.rewards.RewardsConfigHelper.chipSizeSp(context);
+                labelView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp);
+                boolean bold =
+                        com.anyNews.anynews.rewards.RewardsConfigHelper.chipBold(context);
+                labelView.setTypeface(
+                        labelView.getTypeface(),
+                        bold
+                                ? android.graphics.Typeface.BOLD
+                                : android.graphics.Typeface.NORMAL);
+            }
+            if (!(pill instanceof android.view.ViewGroup) || pinView == null) return;
+            android.view.ViewGroup group = (android.view.ViewGroup) pill;
+            View pulseHost = group.findViewWithTag("rewards_pulse_host");
+            if (pulseHost == null) {
+                android.widget.FrameLayout host = new android.widget.FrameLayout(context);
+                host.setTag("rewards_pulse_host");
+                int size = (int) (18 * context.getResources().getDisplayMetrics().density);
+                android.widget.LinearLayout.LayoutParams lp =
+                        new android.widget.LinearLayout.LayoutParams(size, size);
+                lp.setMargins(0, 0, (int) (6 * context.getResources().getDisplayMetrics().density), 0);
+                host.setLayoutParams(lp);
+
+                View ring = new View(context);
+                ring.setTag("rewards_pulse_ring");
+                ring.setBackgroundResource(
+                        com.anyNews.anynews.R.drawable.bg_rewards_chip_ring);
+                android.widget.FrameLayout.LayoutParams ringLp =
+                        new android.widget.FrameLayout.LayoutParams(
+                                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                                android.widget.FrameLayout.LayoutParams.MATCH_PARENT);
+                host.addView(ring, ringLp);
+
+                View dot = new View(context);
+                dot.setTag("rewards_pulse_dot");
+                dot.setBackgroundResource(
+                        com.anyNews.anynews.R.drawable.bg_rewards_chip_dot);
+                int dotSize = (int) (8 * context.getResources().getDisplayMetrics().density);
+                android.widget.FrameLayout.LayoutParams dotLp =
+                        new android.widget.FrameLayout.LayoutParams(dotSize, dotSize);
+                dotLp.gravity = android.view.Gravity.CENTER;
+                host.addView(dot, dotLp);
+
+                int pinIdx = group.indexOfChild(pinView);
+                if (pinIdx >= 0) {
+                    group.addView(host, pinIdx);
+                } else {
+                    group.addView(host, 0);
+                }
+                pulseHost = host;
+            }
+            pinView.setVisibility(View.GONE);
+            pinView.setBackground(null);
+            pulseHost.setVisibility(View.VISIBLE);
+            View ring = pulseHost instanceof android.view.ViewGroup
+                    ? ((android.view.ViewGroup) pulseHost).findViewWithTag("rewards_pulse_ring")
+                    : null;
+            if (ring != null) {
+                ring.clearAnimation();
+                android.view.animation.ScaleAnimation scale =
+                        new android.view.animation.ScaleAnimation(
+                                0.15f, 1.35f, 0.15f, 1.35f,
+                                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f,
+                                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
+                scale.setDuration(900);
+                scale.setRepeatMode(android.view.animation.Animation.RESTART);
+                scale.setRepeatCount(android.view.animation.Animation.INFINITE);
+                android.view.animation.AlphaAnimation fade =
+                        new android.view.animation.AlphaAnimation(0.85f, 0f);
+                fade.setDuration(900);
+                fade.setRepeatMode(android.view.animation.Animation.RESTART);
+                fade.setRepeatCount(android.view.animation.Animation.INFINITE);
+                android.view.animation.AnimationSet set =
+                        new android.view.animation.AnimationSet(true);
+                set.addAnimation(scale);
+                set.addAnimation(fade);
+                set.setInterpolator(new android.view.animation.LinearInterpolator());
+                ring.startAnimation(set);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void clearRewardsChipVisual(@Nullable ImageView pinView, @Nullable View pill) {
+        try {
+            if (pill instanceof android.view.ViewGroup) {
+                View host = ((android.view.ViewGroup) pill).findViewWithTag("rewards_pulse_host");
+                if (host != null) {
+                    View ring = host instanceof android.view.ViewGroup
+                            ? ((android.view.ViewGroup) host).findViewWithTag("rewards_pulse_ring")
+                            : null;
+                    if (ring != null) ring.clearAnimation();
+                    host.setVisibility(View.GONE);
+                }
+            }
+            if (pinView != null) {
+                pinView.setVisibility(View.VISIBLE);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -4740,6 +4882,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 fullVideoNewYoutubeViewHolder.full_video_share,
                 convertView.findViewById(R.id.full_img_whtsapp_text), position);
         final ImageView imageViewYoutubePlayVideo = convertView.findViewById(R.id.imageViewPlayVideo);
+        if (imageViewYoutubePlayVideo != null) {
+            imageViewYoutubePlayVideo.setImageResource(R.drawable.ic_way2_play_circle);
+        }
         RelativeLayout layoutYoutubeFullView = convertView.findViewById(R.id.layoutYoutubeFullView);
         final YouTubePlayerView youTubePlayerView = convertView.findViewById(R.id.youtube_full_video);
         final RelativeLayout parent_layout = convertView.findViewById(R.id.parent_layout);
@@ -5953,19 +6098,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         }
         showLog("Check Point Adapter:: 7");
-        halfImageActivity.ll_refer_and_earn_half.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-//                showLog("halfImageActivity ll_refer_and_earn_half");
-//                Intent intent = new Intent("CURRENT_LOCATION");
-//                intent.putExtra("message", "click_event");
-//                LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
-                callbacks.callLocationRequest(0);
-
-
-
-            }
-        });
+        // Must run after bindLocationPill so Rewards chip never falls through to Local.
+        bindDistrictOrRewardsClick(
+                halfImageActivity.ll_refer_and_earn_half, list.get(position));
         final View finalConvertView1 = convertView;
         showLog("Check Point Adapter:: 9");
         halfImageActivity.half_image_share.setOnClickListener(new View.OnClickListener() {
@@ -6216,7 +6351,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 halfImageActivity.galleryImageLayout.setVisibility(VISIBLE);
                 halfImageActivity.new_half_image.setVisibility(GONE);
                 new_half_image.setVisibility(GONE);
-                WormDotsIndicator indicator = convertView.findViewById(R.id.indicator);
+                DotsIndicator indicator = convertView.findViewById(R.id.indicator);
 
                 // half gallery images — prefer offline files when pack warmed
                 halfImageGallery = new ArrayList<>();
@@ -6759,19 +6894,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             halfVideoExoPlayerHolder.ll_refer_and_earn_halfy.startAnimation(myAnimHalfy);*/
 
 
-        halfVideoExoPlayerHolder.ll_refer_and_earn_halfy.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-//
-//
-//                Intent intent = new Intent("CURRENT_LOCATION");
-//                intent.putExtra("message", "click_event");
-//
-//                LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
-
-                callbacks.callLocationRequest(0);
-            }
-        });
+        bindDistrictOrRewardsClick(
+                halfVideoExoPlayerHolder.ll_refer_and_earn_halfy, list.get(position));
 
         //
                         /*Picasso.with(context).load(list.get(position).getWriterProfile()).skipMemoryCache()
@@ -6958,6 +7082,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         layoutParentTop = convertView.findViewById(R.id.layoutParentTop);
         half_youTubePlayerHolder.layoutParentTop = convertView.findViewById(R.id.layoutParentTop);
         ImageView imageViewYoutubePlayVideo = convertView.findViewById(R.id.imageViewPlayVideo);
+        if (imageViewYoutubePlayVideo != null) {
+            imageViewYoutubePlayVideo.setImageResource(R.drawable.ic_way2_play_circle);
+        }
         half_youTubePlayerHolder.layoutParentTop.getLayoutParams().height = getVideoLayoutTopHeight();
         imageViewItems.setVisibility(VISIBLE);
         halfyoutubecontainer.setVisibility(GONE);
@@ -7262,18 +7389,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (half_youTubePlayerHolder.strip_text_name.getText().toString().matches("null")) {
             half_youTubePlayerHolder.strip_text_name.setText("" + " The Best Regional News App ");
         }
-        half_youTubePlayerHolder.ll_refer_and_earn_halfy.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-
-//                Intent intent = new Intent("CURRENT_LOCATION");
-//                intent.putExtra("message", "click_event");
-//
-//                LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
-                callbacks.callLocationRequest(0);
-            }
-        });
+        bindDistrictOrRewardsClick(
+                half_youTubePlayerHolder.ll_refer_and_earn_halfy, list.get(position));
 
         //
                         /*Picasso.with(context).load(list.get(position).getWriterProfile()).skipMemoryCache()
@@ -8430,7 +8547,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public static class HalfImageActivityHolder {
         public LinearLayout layoutParentDate;
         public ViewPager viewPager;
-        WormDotsIndicator indicator;
+        DotsIndicator indicator;
         RelativeLayout galleryImageLayout;
         public TextView textViewPostDate;
         TextView half_content_title, half_content_description, test_folloew;
@@ -8494,7 +8611,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         RelativeLayout relativeLayoutShareOpt;
         TextView textViewAllPage,textViewSinglePage;
         RelativeLayout scrren_icon;
-        WormDotsIndicator indicator;
+        DotsIndicator indicator;
         ViewPager viewpager;
         ImageView image_gallary_share;
         LinearLayout dotIndicatior;

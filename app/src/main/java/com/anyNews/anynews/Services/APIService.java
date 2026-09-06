@@ -478,6 +478,18 @@ public interface APIService {
     @POST("app/{version}/rewards_history")
     Call<JsonObject> rewards_history(@Path("version") String version, @Body JsonObject body);
 
+    @POST("app/{version}/rewards_checkin")
+    Call<JsonObject> rewards_checkin(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_watch_ads_claim")
+    Call<JsonObject> rewards_watch_ads_claim(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_rating_submit")
+    Call<JsonObject> rewards_rating_submit(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/rewards_earnings_status")
+    Call<JsonObject> rewards_earnings_status(@Path("version") String version, @Body JsonObject body);
+
     @POST("app/{version}/session")
     Call<JsonObject> post_session(@Path("version") String version, @Body JsonObject session);
 

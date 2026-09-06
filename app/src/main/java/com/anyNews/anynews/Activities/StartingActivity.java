@@ -1739,7 +1739,10 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsGuestChip(),
                                 startActivityReqModel.getData().getRewardsJoinedChip(),
-                                startActivityReqModel.getData().getRewardsRateLabel());
+                                startActivityReqModel.getData().getRewardsRateLabel(),
+                                startActivityReqModel.getData().getRewardsChipColor(),
+                                startActivityReqModel.getData().getRewardsChipSizeSp(),
+                                startActivityReqModel.getData().getRewardsChipWeight());
                         LiveReadersConfig.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getLiveReadersEnabled(),

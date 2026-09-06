@@ -394,6 +394,18 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String rewardsRateLabel;
 
+        @SerializedName("rewards_chip_color")
+        @Expose
+        private String rewardsChipColor;
+
+        @SerializedName("rewards_chip_size_sp")
+        @Expose
+        private Integer rewardsChipSizeSp;
+
+        @SerializedName("rewards_chip_weight")
+        @Expose
+        private String rewardsChipWeight;
+
         /** Way2-style live readers badge (half articles). Null on old servers. */
         @SerializedName("live_readers_enabled")
         @Expose
@@ -783,6 +795,18 @@ public class StartActivityReqModel implements Serializable {
 
         public String getRewardsRateLabel() {
             return rewardsRateLabel;
+        }
+
+        public String getRewardsChipColor() {
+            return rewardsChipColor;
+        }
+
+        public Integer getRewardsChipSizeSp() {
+            return rewardsChipSizeSp;
+        }
+
+        public String getRewardsChipWeight() {
+            return rewardsChipWeight;
         }
 
         public Boolean getLiveReadersEnabled() {

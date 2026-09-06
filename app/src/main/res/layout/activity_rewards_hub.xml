@@ -244,6 +244,63 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
+            <!-- Earn actions -->
+            <LinearLayout
+                android:id="@+id/rewards_earn_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_marginTop="14dp"
+                android:layout_marginEnd="14dp"
+                android:background="@drawable/bg_rewards_card"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Earn more"
+                    android:textColor="#FF1C1917"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/rewards_checkin_btn"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_rewards_btn_secondary"
+                    android:gravity="center"
+                    android:text="Daily check-in"
+                    android:textColor="#FFB45309"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/rewards_watch_ads_btn"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rewards_btn_secondary"
+                    android:gravity="center"
+                    android:text="Watch ads"
+                    android:textColor="#FFB45309"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/rewards_rating_btn"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_rewards_btn_secondary"
+                    android:gravity="center"
+                    android:text="Play Store 5★ + screenshot"
+                    android:textColor="#FFB45309"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <!-- Leaderboard -->
             <TextView
                 android:layout_width="match_parent"

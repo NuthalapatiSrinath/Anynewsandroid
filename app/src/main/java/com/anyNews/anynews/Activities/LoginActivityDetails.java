@@ -89,6 +89,8 @@ public class LoginActivityDetails extends AppCompatActivity {
     public static final String EXTRA_RETURN_TO_PROFILE = "extra_return_to_profile";
     /** When true, after OTP open Become-a-Reporter applicant flow (login source flag). */
     public static final String EXTRA_OPEN_BECOME_A_REPORTER = "extra_open_become_a_reporter";
+    /** When true, after OTP open Rewards hub (Join rewards chip / Profile). */
+    public static final String EXTRA_OPEN_REWARDS = "extra_open_rewards";
 
     private static final int STEP_MOBILE = 1;
     private static final int STEP_OTP = 2;
@@ -126,6 +128,7 @@ public class LoginActivityDetails extends AppCompatActivity {
     private int loginStep = STEP_MOBILE;
     private boolean pendingReturnToProfile = false;
     private boolean pendingOpenBecomeReporter = false;
+    private boolean pendingOpenRewards = false;
 
 
     @Override
@@ -584,6 +587,17 @@ public class LoginActivityDetails extends AppCompatActivity {
             finish();
             return;
         }
+        if (pendingOpenRewards) {
+            try {
+                Intent rewards = new Intent(
+                        LoginActivityDetails.this,
+                        com.anyNews.anynews.rewards.RewardsHubActivity.class);
+                startActivity(rewards);
+            } catch (Exception ignored) {
+            }
+            finish();
+            return;
+        }
         Intent intent = new Intent(LoginActivityDetails.this, HomePage.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         if (pendingReturnToProfile) {
@@ -821,6 +835,8 @@ public class LoginActivityDetails extends AppCompatActivity {
                             && getIntent().getBooleanExtra(EXTRA_RETURN_TO_PROFILE, false);
                     pendingOpenBecomeReporter = getIntent() != null
                             && getIntent().getBooleanExtra(EXTRA_OPEN_BECOME_A_REPORTER, false);
+                    pendingOpenRewards = getIntent() != null
+                            && getIntent().getBooleanExtra(EXTRA_OPEN_REWARDS, false);
                     try {
                         if (!pendingOpenBecomeReporter) {
                             pendingOpenBecomeReporter = SharedPrefsData.getBool(
