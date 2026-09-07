@@ -12883,8 +12883,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         // Do NOT use reqPos < 0 as replace — that wrongly wiped the feed on held apply.
                         final boolean page0Replace = fromCache || replacePage0 || list.isEmpty();
                         if (page0Replace) {
+                            // Clear then append-unique so a single page-0 payload that
+                            // contains the same post_id twice (push/share sticky + chrono
+                            // companion, or sticky pin + list) cannot paint two cards.
                             list.clear();
-                            list.addAll(validateUserOtp.getData());
+                            addUniqueArticles(validateUserOtp.getData());
                             listSizeBeforeAppend = 0;
                         } else {
                             addUniqueArticles(validateUserOtp.getData());
