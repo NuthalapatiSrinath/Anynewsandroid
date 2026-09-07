@@ -338,8 +338,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private static final long FLIP_VIDEO_TEARDOWN_MS = 48L;
     private static final long FLIP_TRACKING_DEFER_MS = 72L;
     private static final long FLIP_RESTORE_DEFER_MS = 160L;
-    /** Prefetch coalescing — avoid AdLoader storms on rapid flips. */
-    private static final long AD_PREFETCH_DEBOUNCE_MS = 280L;
+    /** Prefetch coalescing — short so next-seat loads start soon (was 280ms). */
+    private static final long AD_PREFETCH_DEBOUNCE_MS = 90L;
     /**
      * After flip settle, wait this long (plus {@link FlipAdWorkGate#SETTLE_GRACE_MS})
      * before AdMob load / pool refill / MediaView bind. Cancelled on the next flip.
@@ -935,10 +935,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         AdMobInitializer.initializeFromManifestIfNeeded(this);
-        // Warm share/house-ad seat early (idle after first frames; does not show here).
+        // Warm next share/ad seat early (idle after first frames; does not show here).
         try {
             adPrefetchHandler.postDelayed(
-                    () -> AdPreloader.get().prefetch(getApplicationContext()), 1_200L);
+                    () -> AdPreloader.get().prefetch(getApplicationContext()), 280L);
         } catch (Exception ignored) {
         }
 //        RequestConfiguration.Builder requestConfiguration=new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("CEB66515B6C9B2ECD92786955DF252CD"));
@@ -2283,6 +2283,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             pendingFlipSafeAdRebind = false;
         } catch (Exception ignored) {
         }
+        // Background AdLoader only (no view bind) — keep one creative warm for the next seat.
+        try {
+            AdPreloader.get().prefetch(getApplicationContext());
+        } catch (Exception ignored) {
+        }
+        // Soft warm: one upcoming seat load mid-flip (capped by FlipAdWorkGate).
+        try {
+            warmNextAdSeatDuringFlip();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * During an active flip, start at most one AdLoader for the nearest upcoming ad
+     * seat so the creative is ready when the user lands. Bind/paint still waits for settle.
+     */
+    private void warmNextAdSeatDuringFlip() {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        if (FeedAdConfig.isInterstitial(this)) {
+            return;
+        }
+        int from = Math.max(0, positionx);
+        try {
+            if (mFlipView != null) {
+                int cur = mFlipView.getCurrentPage();
+                if (cur >= 0) from = cur;
+            }
+        } catch (Exception ignored) {
+        }
+        // Prefer seats ahead of the current page (next-seat warm).
+        int look = Math.min(2, getAdPrefetchLookahead());
+        prefetchUpcomingNativeAdsImmediate(from, look, list);
     }
 
     /**
@@ -15437,9 +15471,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (isFinishing() || isDestroyed()) {
                 return;
             }
-            // Wait out an active flip / settle grace before starting AdLoader work.
+            // Mid-flip: still warm next seat(s) under the in-flight cap — do not wait
+            // for full settle (that delayed first paint ~1s on development).
             if (shouldDeferAdWork()) {
-                prefetchUpcomingNativeAds(pendingAdPrefetchFrom, pendingAdPrefetchLookahead);
+                int look = Math.min(2, pendingAdPrefetchLookahead);
+                prefetchUpcomingNativeAdsImmediate(pendingAdPrefetchFrom, look, list);
+                try {
+                    AdPreloader.get().prefetch(getApplicationContext());
+                } catch (Exception ignored) {
+                }
                 return;
             }
             prefetchUpcomingNativeAdsImmediate(

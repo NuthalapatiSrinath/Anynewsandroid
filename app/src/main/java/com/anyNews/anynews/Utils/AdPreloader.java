@@ -21,7 +21,8 @@ import com.google.android.gms.ads.nativead.NativeAdOptions;
  * Holds at most one preloaded Google native for feed ad seats that show the
  * share-with-friends / house placeholder while waiting for fill.
  *
- * <p>Prefetch early (splash / home idle / profile). On seat open, callers
+ * <p>Prefetch early (splash / home idle / profile / mid-flip). Safe during flip
+ * because this path only runs AdLoader — no FlipView bind. On seat open, callers
  * {@link #takeReady()} if available; otherwise the existing HomePage load path
  * runs after arrival. Does not show ads on unrelated screens.
  */

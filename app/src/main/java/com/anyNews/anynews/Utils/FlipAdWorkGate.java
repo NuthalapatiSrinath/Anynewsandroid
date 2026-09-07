@@ -12,8 +12,8 @@ import android.os.SystemClock;
  */
 public final class FlipAdWorkGate {
 
-    /** Wait after last flip interaction before starting heavy ad work. */
-    public static final long SETTLE_GRACE_MS = 220L;
+    /** Wait after last flip interaction before heavy bind/paint ad work. */
+    public static final long SETTLE_GRACE_MS = 160L;
 
     /**
      * During an active fling / grace window, allow at most this many concurrent
