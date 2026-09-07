@@ -265,6 +265,27 @@ public class ModelClass implements Serializable {
         @SerializedName("is_gallery")
         @Expose
         private boolean is_gallery;
+        /**
+         * Admin Upload Original → "contain" (fitCenter / letterbox).
+         * Upload Cropped / default → "cover" (fill slot).
+         */
+        @SerializedName("feed_image_fit")
+        @Expose
+        private String feed_image_fit;
+
+        public String getFeed_image_fit() {
+            return feed_image_fit;
+        }
+
+        public void setFeed_image_fit(String feed_image_fit) {
+            this.feed_image_fit = feed_image_fit;
+        }
+
+        /** True when admin chose Upload Original (fit full frame in Normal slot). */
+        public boolean usesContainFeedImage() {
+            return feed_image_fit != null && "contain".equalsIgnoreCase(feed_image_fit.trim());
+        }
+
         @SerializedName("ad_type")
         @Expose
         private String ad_type;

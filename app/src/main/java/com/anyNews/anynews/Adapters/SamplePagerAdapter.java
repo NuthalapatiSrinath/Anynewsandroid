@@ -48,7 +48,18 @@ public class SamplePagerAdapter extends PagerAdapter {
     Context context;
     boolean fromHalfGallery;
     int layoutHeight=0;
+    /** When true, use FIT_CENTER (Upload Original); else FIT_XY. */
+    boolean useContainFit = false;
     public SamplePagerAdapter(Context context ,ArrayList<String> arrayList,int height,boolean value) {
+        this(context, arrayList, height, value, false);
+    }
+
+    public SamplePagerAdapter(
+            Context context,
+            ArrayList<String> arrayList,
+            int height,
+            boolean value,
+            boolean useContainFit) {
         mSize = arrayList.size();
         this.arrayList=arrayList;
         this.context=context;
@@ -56,8 +67,7 @@ public class SamplePagerAdapter extends PagerAdapter {
         imageLoader.init(ImageLoaderConfiguration.createDefault(getApplicationContext()));
         this.fromHalfGallery=value;
         this.layoutHeight=height;
-
-
+        this.useContainFit = useContainFit;
     }
 
     public SamplePagerAdapter(int count) {
@@ -79,7 +89,11 @@ public class SamplePagerAdapter extends PagerAdapter {
 
     @NonNull @Override public Object instantiateItem(@NonNull ViewGroup view, int position) {
         ImageView imageView = new ImageView(view.getContext());
-        imageView.setScaleType(ImageView.ScaleType.FIT_XY);
+        imageView.setScaleType(
+                useContainFit ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.FIT_XY);
+        if (useContainFit) {
+            imageView.setBackgroundColor(Color.BLACK);
+        }
         if(fromHalfGallery){
             ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, layoutHeight);
             imageView.setLayoutParams(params);

@@ -6078,11 +6078,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (list.get(position).getImages() != null && !list.get(position).getImages().isEmpty()) {
             String halfImageUrl = list.get(position).getImages().get(0);
             showLog("Check Point normal image:: " + halfImageUrl);
+            applyHalfFeedImageScale(halfImageActivity.new_half_image, list.get(position));
             displayArticleImage(halfImageActivity.new_half_image, list.get(position), halfImageUrl);
         } else if (list.get(position) != null) {
             // Fallback: thumbnail / background when images[] empty
             String alt = OfflineImageStore.primaryImageUrl(list.get(position));
             if (!TextUtils.isEmpty(alt)) {
+                applyHalfFeedImageScale(halfImageActivity.new_half_image, list.get(position));
                 displayArticleImage(halfImageActivity.new_half_image, list.get(position), alt);
             }
         }
@@ -6423,7 +6425,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     OfflineImageStore.enqueueArticle(context, list.get(position));
                 } catch (Exception ignored) {
                 }
-                halfImageActivity.viewPager.setAdapter(new SamplePagerAdapter(context, halfImageGallery, layoutHeight, true));
+                halfImageActivity.viewPager.setAdapter(
+                        new SamplePagerAdapter(
+                                context,
+                                halfImageGallery,
+                                layoutHeight,
+                                true,
+                                list.get(position).usesContainFeedImage()));
 
                 // added to increase speed in view pager
                 halfImageActivity.viewPager.setOffscreenPageLimit(Math.max(1, Math.min(2, listSample.size() - 1)));
@@ -9629,6 +9637,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         }
         return true;
+    }
+
+    /**
+     * Upload Original → FIT_CENTER (full frame, letterbox OK).
+     * Upload Cropped / default → FIT_XY (fill Normal Post slot).
+     */
+    private void applyHalfFeedImageScale(
+            @Nullable ImageView target, @Nullable ModelClass.Datum item) {
+        if (target == null) return;
+        boolean contain = item != null && item.usesContainFeedImage();
+        target.setScaleType(
+                contain ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.FIT_XY);
+        if (contain) {
+            target.setBackgroundColor(Color.BLACK);
+        }
     }
 
     /**
