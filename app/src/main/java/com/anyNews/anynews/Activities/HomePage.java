@@ -11538,8 +11538,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Soft Flash News open (reuses videoFeedModeActive): page 0 with
-     * {@code push_posts=true} (language-scoped push history). Not main My Feed.
+     * Soft Flash News open (reuses videoFeedModeActive): page 0 via
+     * {@code Flash_News} (Redis live:flash). Not main My Feed.
      * <p>
      * Uses {@link #isNetworkConnected()} (not {@link #isDeviceOnline()}) so a brief
      * ServerAvailabilityMonitor "unavailable" while Daily Updates still shows splash
@@ -11921,7 +11921,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
 
         APIService apiService = RestApiClient.getClient().create(APIService.class);
-        Call<EncreptionRequest> otp_generation = apiService.List_All_Articles("v3", otp);
+        // Flash News: lean Redis API (no List_All_Articles push hist scan).
+        Call<EncreptionRequest> otp_generation = videoFeed
+                ? apiService.Flash_News("v3", otp)
+                : apiService.List_All_Articles("v3", otp);
 
         // Consume one-shot reload force now that we are committing to network.
         if (OpenPathCache.isForceFeedNetworkPending()) {
@@ -12061,7 +12064,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         + " special=" + special + " video=" + videoFeed + " sticky=" + stickyPushOrShare);
                 otp_generation.enqueue(feedCallback);
             } else {
-                String dedupeKey = "articles_v3_" + category_id + "_" + dedupeSkip + "_" + dedupeLastPostId
+                String dedupeKey = (videoFeed ? "flash_v3_" : "articles_v3_")
+                        + SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME)
+                        + "_" + category_id + "_" + dedupeSkip + "_" + dedupeLastPostId
                         + "_" + TITLE_VALUE + "_" + SHARE_ID + "_" + special + "_" + videoFeed;
                 NetworkCallDeduper.enqueueUnique(dedupeKey, otp_generation, feedCallback);
             }
@@ -12817,18 +12822,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 && ReadArticleStore.countPaintableArticles(list) > 0) {
                             onlineNewsAllReadSkipStreak = 0;
                         }
-                        // Video News: keep next-page trigger inside the loaded list so short
-                        // first pages (1–7) still prefetch page N+1 before the end.
+                        // Flash News: keep next-page trigger early + prefetch page N+1
+                        // immediately so flips stay on Redis Flash_News (fast).
                         if (!fromCache && isVideoFeedMode() && list != null && !list.isEmpty()) {
                             int n = list.size();
-                            // Load more when flipping near the end (or sooner if list is tiny).
-                            requestPostition = Math.max(1, Math.min(n - 1, Math.max(1, n - 3)));
-                            // If first batches look full (or near-full), prefetch immediately so
-                            // the user can scroll through hundreds of videos without stalling.
-                            final boolean maybeMore = validateUserOtp.getData().size() >= 6;
+                            // Prefetch sooner than main News (n-3) — load at ~index 2.
+                            requestPostition = Math.max(1, Math.min(n - 1, 2));
+                            final boolean maybeMore = validateUserOtp.getData().size() >= 4;
                             if (maybeMore && !isApiRequested && dummyResponse == null && isDeviceOnline()) {
                                 final int prefetchAt = requestPostition;
-                                showLog("video feed prefetch at pos=" + prefetchAt
+                                showLog("Flash feed prefetch at pos=" + prefetchAt
                                         + " list=" + n + " skip=" + skip);
                                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                                     @Override

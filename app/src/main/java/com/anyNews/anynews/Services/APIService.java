@@ -301,6 +301,10 @@ public interface APIService {
     @POST("app/{version}/List_All_Articles")
     Call<EncreptionRequest> List_All_Articles(@Path("version") String version, @Body JsonObject newsss);
 
+    /** Dedicated Flash / push feed — Redis-backed; same envelope as List_All_Articles. */
+    @POST("app/{version}/Flash_News")
+    Call<EncreptionRequest> Flash_News(@Path("version") String version, @Body JsonObject body);
+
     @POST("app/{version}/{langId}/articles")
     Call<EncreptionRequest> List_All_Articles1(@Path("version") String version,@Path("langId") String langid, @Body JsonObject newsss);
 
