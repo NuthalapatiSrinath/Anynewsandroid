@@ -160,14 +160,43 @@ public final class RewardsLabels {
     }
 
     public static String historyShowingLast(@Nullable Context c) {
+        return historyShowingLastN(c, 10);
+    }
+
+    public static String historyShowingLastN(@Nullable Context c, int n) {
+        int lim = Math.max(1, n);
         switch (languageId(c)) {
-            case 1: return "അവസാന 10 കാണിക്കുന്നു";
-            case 2: return "पिछले 10 दिखा रहे हैं";
-            case 3: return "చివరి 10 చూపిస్తున్నాం";
-            case 4: return "கடைசி 10 காட்டப்படுகிறது";
-            case 5: return "ಕೊನೆಯ 10 ತೋರಿಸಲಾಗುತ್ತಿದೆ";
-            case 6: return "ଶେଷ 10 ଦେଖାଯାଉଛି";
-            default: return "Showing last 10";
+            case 1: return "അവസാന " + lim + " കാണിക്കുന്നു";
+            case 2: return "पिछले " + lim + " दिखा रहे हैं";
+            case 3: return "చివరి " + lim + " చూపిస్తున్నాం";
+            case 4: return "கடைசி " + lim + " காட்டப்படுகிறது";
+            case 5: return "ಕೊನೆಯ " + lim + " ತೋರಿಸಲಾಗುತ್ತಿದೆ";
+            case 6: return "ଶେଷ " + lim + " ଦେଖାଯାଉଛି";
+            default: return "Showing last " + lim;
+        }
+    }
+
+    public static String outOfTop10(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "കൂടുതൽ വായിക്കൂ — ലീഡർബോർഡിൽ ഉയരൂ";
+            case 2: return "और पढ़ें — लीडरबोर्ड पर चढ़ें";
+            case 3: return "మరింత చదవండి — లీడర్‌బోర్డ్‌లో ఎక్కండి";
+            case 4: return "மேலும் படியுங்கள் — லீடர்போர்டில் ஏறுங்கள்";
+            case 5: return "ಹೆಚ್ಚು ಓದಿ — ಲೀಡರ್‌ಬೋರ್ಡ್‌ನಲ್ಲಿ ಏರಿ";
+            case 6: return "ଅଧିକ ପଢ଼ନ୍ତୁ — ଲିଡରବୋର୍ଡରେ ଉପରକୁ ଯାଆନ୍ତୁ";
+            default: return "Engage more — read news to climb the leaderboard";
+        }
+    }
+
+    public static String earnBlocked(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "നിങ്ങളുടെ അക്കൗണ്ടിന് റിവാർഡ് നേടൽ തടഞ്ഞിരിക്കുന്നു";
+            case 2: return "इस अकाउंट के लिए रिवॉर्ड कमाई ब्लॉक है";
+            case 3: return "ఈ ఖాతాకు రివార్డ్స్ సంపాదన బ్లాక్ చేయబడింది";
+            case 4: return "இந்த கணக்கிற்கு ரிவார்டு சம்பாதிப்பு தடுக்கப்பட்டுள்ளது";
+            case 5: return "ಈ ಖಾತೆಗೆ ರಿವಾರ್ಡ್ ಗಳಿಕೆ ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ";
+            case 6: return "ଏହି ଆକାଉଣ୍ଟ ପାଇଁ ରିୱାର୍ଡ ରୋଜଗାର ବ୍ଲକ୍ ହୋଇଛି";
+            default: return "Rewards earning is blocked for this account";
         }
     }
 

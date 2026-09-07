@@ -32,6 +32,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
+import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.models.LanguageModel;
@@ -104,6 +105,8 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
 
                 SharedPrefsData.putInt(context,Constants.LanguageID,arrayList.get(position).getId(),Constants.PREF_NAME);
                 SharedPrefsData.putString(context, Constants.Lang, arrayList.get(position).getName(), Constants.PREF_NAME);
+                // Drop previous-language OpenPath / offline pack before Update_User_Language returns.
+                LanguageFeedInvalidator.onLanguageChanged(context, arrayList.get(position).getId());
                 LanguageSelection(arrayList.get(position).getId(), arrayList.get(position).getName());
 
             }

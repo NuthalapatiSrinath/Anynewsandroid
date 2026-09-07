@@ -86,8 +86,12 @@ public class RewardsHubActivity extends AppCompatActivity {
     private TextView leaderboardHint;
     private TextView historyTitle;
     private TextView historyHint;
+    private View historyRow;
     private boolean joined;
     private boolean guest;
+    private boolean earnBlocked;
+    private int historyLimit = 20;
+    private String outOfTop10Copy = "";
     private int watchAdsRequired = 3;
     private int watchAdsCoins = 40;
     private String watchAdsUnit = "";
@@ -194,7 +198,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(window, false);
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.parseColor("#FFF8F4EC"));
+        window.setStatusBarColor(Color.parseColor("#FFFFE4C4"));
         WindowInsetsControllerCompat c =
                 WindowCompat.getInsetsController(window, window.getDecorView());
         if (c != null) c.setAppearanceLightStatusBars(true);
@@ -228,6 +232,10 @@ public class RewardsHubActivity extends AppCompatActivity {
         leaderboardHint = findViewById(R.id.rewards_leaderboard_hint);
         historyTitle = findViewById(R.id.rewards_history_title);
         historyHint = findViewById(R.id.rewards_history_hint);
+        historyRow = findViewById(R.id.rewards_history_row);
+        if (historyRow != null) {
+            historyRow.setOnClickListener(v -> openHistory());
+        }
     }
 
     private void applyStaticLabels() {
@@ -245,6 +253,13 @@ public class RewardsHubActivity extends AppCompatActivity {
     private void openWallet() {
         if (!requireLogin()) return;
         startActivity(new Intent(this, RewardsWalletActivity.class));
+    }
+
+    private void openHistory() {
+        if (!requireLogin()) return;
+        Intent i = new Intent(this, RewardsHistoryActivity.class);
+        i.putExtra("history_limit", historyLimit);
+        startActivity(i);
     }
 
     private JsonObject authBody() {
@@ -363,34 +378,50 @@ public class RewardsHubActivity extends AppCompatActivity {
                 optStr(copy, "leaderboard_subtitle", RewardsLabels.leaderboardHint(this));
         historyShowingLast =
                 optStr(copy, "history_showing_last", RewardsLabels.historyShowingLast(this));
+        outOfTop10Copy =
+                optStr(copy, "out_of_top10", RewardsLabels.outOfTop10(this));
+        if (body.has("out_of_top10_copy") && !body.get("out_of_top10_copy").isJsonNull()) {
+            String s = body.get("out_of_top10_copy").getAsString();
+            if (!TextUtils.isEmpty(s)) outOfTop10Copy = s;
+        }
+        if (body.has("history_limit") && !body.get("history_limit").isJsonNull()) {
+            historyLimit = Math.max(5, body.get("history_limit").getAsInt());
+        }
+        earnBlocked = body.has("earn_blocked") && body.get("earn_blocked").getAsBoolean();
         if (leaderboardHint != null) {
             leaderboardHint.setText(leaderboardSubtitle);
             leaderboardHint.setVisibility(View.VISIBLE);
         }
 
-        if (body.has("rank") && !body.get("rank").isJsonNull()) {
+        String rankDisplay =
+                body.has("rank_display") ? optStr(body, "rank_display", "") : "";
+        if ("top10".equals(rankDisplay)
+                && body.has("rank")
+                && !body.get("rank").isJsonNull()) {
             rankView.setText(RewardsLabels.rankPrefix(this, body.get("rank").getAsInt()));
-        } else {
+        } else if (joined && !guest) {
             rankView.setText(
-                    joined ? "Rank —" : RewardsLabels.loginToRank(this));
+                    !TextUtils.isEmpty(outOfTop10Copy)
+                            ? outOfTop10Copy
+                            : RewardsLabels.outOfTop10(this));
+        } else {
+            rankView.setText(RewardsLabels.loginToRank(this));
         }
 
-        String rate =
-                body.has("rate_label")
-                        ? body.get("rate_label").getAsString()
-                        : RewardsConfigHelper.rateLabel(this);
-        if (TextUtils.isEmpty(rate) && body.has("coins_per_rupee")) {
-            rate = body.get("coins_per_rupee").getAsInt() + " coins = ₹1";
+        // Conversion rate only on Wallet — keep hidden on hub.
+        if (rateView != null) {
+            rateView.setVisibility(View.GONE);
+            rateView.setText("");
         }
-        rateView.setText(rate != null ? rate : "");
 
         if (body.has("week") && body.get("week").isJsonObject()) {
             JsonObject w = body.getAsJsonObject("week");
-            weekView.setText(
-                    "Week "
-                            + optStr(w, "week_key", "")
-                            + " · "
-                            + optStr(w, "status", ""));
+            String label = optStr(w, "period_label", "");
+            if (TextUtils.isEmpty(label)) {
+                // Fallback for older servers
+                label = optStr(w, "week_key", "");
+            }
+            weekView.setText(label != null ? label : "");
         }
 
         double walletRupees =
@@ -425,33 +456,69 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
 
         applyEarnState(body);
-        renderHistory(body);
+        if (earnBlocked && earnCard != null) {
+            // Soft-disable earn actions; wallet still reachable
+            if (checkinBtn != null) {
+                checkinBtn.setEnabled(false);
+                checkinBtn.setAlpha(0.45f);
+            }
+            if (watchAdsBtn != null) {
+                watchAdsBtn.setEnabled(false);
+                watchAdsBtn.setAlpha(0.45f);
+            }
+            if (ratingBtn != null) {
+                ratingBtn.setEnabled(false);
+                ratingBtn.setAlpha(0.45f);
+            }
+        }
         animateHeroIn();
     }
 
     private void animateHeroIn() {
-        View hero = findViewById(R.id.rewards_coins);
-        if (hero == null || hero.getAlpha() < 1f && hero.getTranslationY() == 0) {
-            /* soft */
+        View hero = findViewById(R.id.rewards_hero_card);
+        if (hero != null) {
+            hero.setAlpha(0.92f);
+            hero.setTranslationY(10f);
+            hero.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(380)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
         }
         if (coinsView != null) {
             coinsView.setAlpha(0f);
-            coinsView.setTranslationY(12f);
+            coinsView.setScaleX(0.94f);
+            coinsView.setScaleY(0.94f);
             coinsView
                     .animate()
                     .alpha(1f)
-                    .translationY(0f)
-                    .setDuration(320)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(420)
+                    .setStartDelay(60)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
         }
         if (earnCard != null) {
             earnCard.setAlpha(0.85f);
+            earnCard.setTranslationY(16f);
             earnCard
                     .animate()
                     .alpha(1f)
-                    .setDuration(280)
+                    .translationY(0f)
+                    .setDuration(360)
+                    .setStartDelay(90)
                     .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+        if (historyRow != null) {
+            historyRow.setAlpha(0.8f);
+            historyRow
+                    .animate()
+                    .alpha(1f)
+                    .setDuration(300)
+                    .setStartDelay(140)
                     .start();
         }
     }

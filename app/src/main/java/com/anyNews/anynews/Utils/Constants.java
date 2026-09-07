@@ -107,6 +107,11 @@ public class Constants {
 
 
     public static String LanguageID = "LanguageID";
+    /**
+     * Language id of the last successful main page-0 feed paint. Used so Home can
+     * detect a language switch that left a previous-language OpenPath/offline pack.
+     */
+    public static String LAST_FEED_LANGUAGE_ID = "LastFeedLanguageID";
     public static String RegionID = "RegionID";
 
 
@@ -203,6 +208,10 @@ public class Constants {
     public static String ENABLE_VIDEO_POST = "enable_video_post";
     public static String ENABLE_ARTICLE_POST = "enable_article_post";
     public static String ENABLE_FULL_POST = "enable_full_post";
+    /** Admin: require 100% profile (name/email/mobile/photo) before compose / Create_User_Post. */
+    public static String REQUIRE_FULL_PROFILE_TO_POST = "require_full_profile_to_post";
+    /** Admin: show writer avatar on feed cards (default true). */
+    public static String SHOW_WRITER_PHOTO_ON_CARDS = "show_writer_photo_on_cards";
     public static String TITLE_BODY_GAP_DP = "title_body_gap_dp";
     public static String CONTENT_BLOCK_OFFSET_DP = "content_block_offset_dp";
     public static String FOOTER_STYLE = "footer_style";
@@ -274,6 +283,12 @@ public class Constants {
      * Splash/session: {@code rewards_in_main_feed_slot}.
      */
     public static String REWARDS_IN_MAIN_FEED_SLOT = "rewards_in_main_feed_slot";
+    /**
+     * When hide-district is ON, show Flash News chip in the main-feed right slot
+     * when Rewards is not taking it (prefer Flash after join). Default true.
+     * Splash/session: {@code flash_news_in_main_feed_slot}.
+     */
+    public static String FLASH_NEWS_IN_MAIN_FEED_SLOT = "flash_news_in_main_feed_slot";
     /**
      * When true (default), reporters cannot see Rewards / rewards wallet UI.
      * Splash: rewards_exclude_reporters.
@@ -520,6 +535,8 @@ public class Constants {
     // Cross-language: opening a Hindi share while LanguageID=Telugu must show the
     // Hindi post once, then continue the Telugu feed — never rewrite LanguageID.
     public static String PENDING_SHARE_POST = "pending_share_post_id";
+    /** One-shot job id from /job/{id} or legacy /job-{base64} share deep links. */
+    public static String PENDING_SHARE_JOB = "pending_share_job_id";
     public static String PROFILE_CACHE = "reporter_profile_cache_json";
     /** Last active key for {@link ReporterProfileCache} (draft+phone/email scoped). */
     public static String PROFILE_CACHE_KEY = "reporter_profile_cache_key";

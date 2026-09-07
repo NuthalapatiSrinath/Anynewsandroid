@@ -53,11 +53,13 @@ import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.NewsTapModeConfig;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
+import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.LiveReadersConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
+import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.TtdConfigHelper;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
 import com.anyNews.anynews.Utils.DailyUpdatesConfigHelper;
@@ -149,6 +151,8 @@ public class StartingActivity extends AppCompatActivity {
     String referlink;
     String referrerUid;
     String articleId1;
+    /** Job id from /job/{id} or legacy /job-{base64} deep links. */
+    String jobId1;
     String scrren;
     // firebase storage
     FirebaseDatabase database = FirebaseDatabase.getInstance();
@@ -216,6 +220,7 @@ public class StartingActivity extends AppCompatActivity {
         // Clear any stale pending share post before parsing this launch's intent;
         // extractData() re-sets it only when this launch is an actual share link.
         SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_JOB, "", Constants.PREF_NAME);
         // Cold start via splash (incl. Recents swipe-away → reopen): do NOT restore
         // mid-feed from HomePage's theme-recreate flip checkpoint. Theme/uiMode
         // recreate never goes through StartingActivity, so that path still works.
@@ -551,6 +556,22 @@ public class StartingActivity extends AppCompatActivity {
             }
             applyDeepLinkParams(uri);
 
+            // Job shares first — /job/{id} must not be mistaken for article paths.
+            String jobId2 = uri.getQueryParameter("jobId");
+            if (jobId2 == null || jobId2.isEmpty()) {
+                jobId2 = uri.getQueryParameter("job_id");
+            }
+            if (jobId2 == null || jobId2.isEmpty()) {
+                jobId2 = jobIdFromPath(uri);
+            }
+            if (jobId2 != null && !jobId2.isEmpty()) {
+                jobId1 = jobId2;
+                SharedPrefsData.putString(getApplicationContext(),
+                        Constants.PENDING_SHARE_JOB, jobId2, Constants.PREF_NAME);
+                showLog("CHECK POINT JobId @@@:" + jobId2);
+                return;
+            }
+
             String articleId2 = uri.getQueryParameter("articleId");
             if (articleId2 == null || articleId2.isEmpty()) {
                 articleId2 = uri.getQueryParameter("post_id");
@@ -579,6 +600,80 @@ public class StartingActivity extends AppCompatActivity {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Parse job id from /job/{id}, anynews://job/{id}, or legacy /job-{base64}
+     * (e.g. https://anynews.co.in/job-MQ== → job 1).
+     */
+    private String jobIdFromPath(Uri uri) {
+        if (uri == null) {
+            return null;
+        }
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        if (scheme != null && "anynews".equalsIgnoreCase(scheme)
+                && host != null && "job".equalsIgnoreCase(host)) {
+            String path = uri.getPath();
+            if (path != null) {
+                String trimmed = path.startsWith("/") ? path.substring(1) : path;
+                int slash = trimmed.indexOf('/');
+                String idPart = slash >= 0 ? trimmed.substring(0, slash) : trimmed;
+                String resolved = decodeJobIdToken(idPart);
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+        }
+        String path = uri.getPath();
+        if (path == null || path.isEmpty() || "/".equals(path)) {
+            return null;
+        }
+        String[] segments = path.split("/");
+        for (int i = 0; i < segments.length; i++) {
+            String seg = segments[i];
+            if (seg == null || seg.isEmpty()) {
+                continue;
+            }
+            // /job/{id} — same shape as /p/{id} for articles
+            if ("job".equalsIgnoreCase(seg) && i + 1 < segments.length) {
+                String next = segments[i + 1];
+                String resolved = decodeJobIdToken(next);
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+            // Legacy single-segment /job-{base64}
+            if (seg.length() > 4 && seg.regionMatches(true, 0, "job-", 0, 4)) {
+                String resolved = decodeJobIdToken(seg.substring(4));
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Digits as-is, or base64-decoded digits (legacy job-MQ==). */
+    private String decodeJobIdToken(String token) {
+        if (token == null || token.isEmpty()) {
+            return null;
+        }
+        String t = token.trim();
+        if (t.matches("\\d+")) {
+            return t;
+        }
+        try {
+            byte[] raw = android.util.Base64.decode(t, android.util.Base64.DEFAULT);
+            if (raw != null && raw.length > 0) {
+                String decoded = new String(raw, java.nio.charset.StandardCharsets.UTF_8).trim();
+                if (decoded.matches("\\d+")) {
+                    return decoded;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     /** Parse post id from /p/{id}, /post/{id}, anynews://post/{id}, /{id} (anws.in), or /p/{id} on share host.
@@ -806,6 +901,19 @@ public class StartingActivity extends AppCompatActivity {
             extractData(intent.getData());
             maybeResolveLegacyPageLink(intent.getData());
             maybeResolveShareShortCode(intent.getData());
+            // Warm start: open Jobs hub immediately for job share App Links.
+            if (jobId1 != null && !jobId1.isEmpty()) {
+                try {
+                    int id = Integer.parseInt(jobId1.replaceAll("[^0-9]", ""));
+                    if (id > 0) {
+                        Intent jobs = new Intent(this, JobsPageActivity.class);
+                        jobs.putExtra(JobsPageActivity.EXTRA_FOCUS_JOB_ID, id);
+                        jobs.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(jobs);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 
@@ -1377,6 +1485,12 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
+                        ReporterPostGateHelper.saveFromSplash(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getRequireFullProfileToPost(),
+                                startActivityReqModel.getData().getShowWriterPhotoOnCards()
+                        );
+
                         // Admin-controlled gap (dp) between the half-post title and body.
                         SharedPrefsData.putInt(
                                 getApplicationContext(),
@@ -1735,7 +1849,11 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getHideDistrictOnMainFeed(),
                                 startActivityReqModel.getData().getRewardsMaster(),
                                 startActivityReqModel.getData().getRewardsInMainFeedSlot(),
-                                startActivityReqModel.getData().getRewardsExcludeReporters());
+                                startActivityReqModel.getData().getRewardsExcludeReporters(),
+                                startActivityReqModel.getData().getFlashNewsInMainFeedSlot());
+                        FlashNewsChipHelper.saveLabelFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getFlashNewsChipLabel());
                         com.anyNews.anynews.rewards.RewardsConfigHelper.saveChipCopyFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsGuestChip(),
@@ -2196,6 +2314,7 @@ public class StartingActivity extends AppCompatActivity {
         intent.putExtra("TITLE", TITLE);
         intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
         intent.putExtra("SHARE_REDIRECT_ID", articleId1);
+        intent.putExtra("JOB_REDIRECT_ID", jobId1);
         intent.putExtra("DATAFROM2G", DATAFROM2G);
         if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
             startActivity(intent);
@@ -2304,6 +2423,7 @@ public class StartingActivity extends AppCompatActivity {
                                 intent.putExtra("TITLE", TITLE);
                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
                                 intent.putExtra("SHARE_REDIRECT_ID",articleId1);
+                                intent.putExtra("JOB_REDIRECT_ID", jobId1);
                                 intent.putExtra("DATAFROM2G",DATAFROM2G);
                                 if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                     startActivity(intent);
@@ -2388,6 +2508,7 @@ public class StartingActivity extends AppCompatActivity {
                                                 intent.putExtra("TITLE", TITLE);
                                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
                                                 intent.putExtra("SHARE_REDIRECT_ID",articleId1);
+                                                intent.putExtra("JOB_REDIRECT_ID", jobId1);
                                                 intent.putExtra("DATAFROM2G",DATAFROM2G);
                                                 if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                                     startActivity(intent);

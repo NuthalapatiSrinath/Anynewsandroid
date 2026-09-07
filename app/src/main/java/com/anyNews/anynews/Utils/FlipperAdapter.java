@@ -2166,16 +2166,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         boolean showRewardsSlot =
                 DistrictPinVisibilityConfig.shouldShowRewardsInDistrictSlot(
                         context, categery_id, post);
+        boolean showFlashSlot =
+                DistrictPinVisibilityConfig.shouldShowFlashInDistrictSlot(
+                        context, categery_id, post);
         String label = "";
-        boolean rewardsMode = false;
+        boolean promoChipMode = false;
         if (showDistrict) {
             label = resolveLocationLabel(post);
         } else if (showRewardsSlot) {
-            rewardsMode = true;
+            promoChipMode = true;
             label = resolveRewardsSlotLabel();
+        } else if (showFlashSlot) {
+            promoChipMode = true;
+            label = FlashNewsChipHelper.chipLabel(context);
         }
         boolean hasLabel = isUsableLocationLabel(label);
-        if ((!showDistrict && !rewardsMode) || !hasLabel) {
+        if ((!showDistrict && !promoChipMode) || !hasLabel) {
             if (labelView != null) {
                 labelView.setText("");
                 labelView.setVisibility(View.GONE);
@@ -2206,7 +2212,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         }
             if (pinView != null) {
-            if (rewardsMode) {
+            if (promoChipMode) {
                 // Pulse host replaces district logo circle.
                 pinView.setVisibility(View.GONE);
             } else {
@@ -2221,7 +2227,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (pill != null) {
             pill.setVisibility(View.VISIBLE);
             pill.setAlpha(1f);
-            if (rewardsMode) {
+            if (promoChipMode) {
                 try {
                     pill.clearAnimation();
                 } catch (Exception ignored) {
@@ -2270,8 +2276,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * District pill → Local picker; rewards chip → Rewards hub (never Local).
-     * Must be called <b>after</b> any legacy location listeners so Rewards wins.
+     * District pill → Local picker; Rewards chip → hub; Flash chip → Flash News
+     * (same experience as Daily Updates). Must run after legacy location listeners.
      */
     private void bindDistrictOrRewardsClick(View pill, @Nullable ModelClass.Datum post) {
         if (pill == null) return;
@@ -2280,6 +2286,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (DistrictPinVisibilityConfig.shouldShowRewardsInDistrictSlot(
                     context, categery_id, boundPost)) {
                 openRewardsHubFromChip();
+            } else if (DistrictPinVisibilityConfig.shouldShowFlashInDistrictSlot(
+                    context, categery_id, boundPost)) {
+                if (callbacks != null) {
+                    callbacks.openFlashNewsFromFeedChip();
+                }
             } else if (callbacks != null) {
                 callbacks.callLocationRequest(0);
             }
@@ -2973,6 +2984,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         public void onPageRequested(int page);
         public void onRequestedPermission(int page);
         public void callLocationRequest(int from);
+        /**
+         * Main-feed Flash News chip: open the same Redis Flash_News flip as
+         * Daily Updates Flash.
+         */
+        void openFlashNewsFromFeedChip();
         /**
          * Video News tab + settings autoplay: current video finished at {@code position}.
          * HomePage should smooth-flip to next (no wrap) after a short delay.

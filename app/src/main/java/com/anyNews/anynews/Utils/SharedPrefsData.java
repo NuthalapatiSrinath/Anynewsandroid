@@ -188,6 +188,28 @@ public class SharedPrefsData {
         }
     }
 
+    /**
+     * Same as {@link #putInt} but {@code commit()} so the next {@link #getInt} in this
+     * process never races (e.g. LanguageID before feed request / Home open).
+     */
+    public static void putIntImmediate(Context context, String key, int value, String pref) {
+        if (context == null || key == null) {
+            return;
+        }
+        try {
+            SharedPreferences.Editor editor;
+            if (pref == null || pref.isEmpty()) {
+                editor = PreferenceManager.getDefaultSharedPreferences(context).edit();
+            } else {
+                editor = context.getSharedPreferences(pref, Context.MODE_PRIVATE).edit();
+            }
+            editor.putInt(key, value);
+            editor.commit();
+        } catch (Exception e) {
+            putInt(context, key, value, pref);
+        }
+    }
+
     public static int getInt(Context context, String key, String pref) {
         if (context == null || key == null) {
             return 0;

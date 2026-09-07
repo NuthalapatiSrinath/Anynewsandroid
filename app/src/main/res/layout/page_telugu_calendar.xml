@@ -16,10 +16,20 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="12dp"
+        android:paddingStart="8dp"
         android:paddingTop="10dp"
         android:paddingEnd="12dp"
         android:paddingBottom="2dp">
+
+        <ImageView
+            android:id="@+id/telugu_calendar_panchang_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/cancel"
+            android:padding="8dp"
+            android:src="@drawable/ic_rashi_header_back"
+            android:visibility="gone" />
 
         <ImageView
             android:id="@+id/telugu_calendar_prev"

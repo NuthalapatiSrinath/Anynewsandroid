@@ -177,6 +177,14 @@ public class EncreptionRequest {
     @Expose
     private Boolean enable_full_post;
 
+    @SerializedName("require_full_profile_to_post")
+    @Expose
+    private Boolean require_full_profile_to_post;
+
+    @SerializedName("show_writer_photo_on_cards")
+    @Expose
+    private Boolean show_writer_photo_on_cards;
+
     @SerializedName("title_body_gap_dp")
     @Expose
     private Integer title_body_gap_dp;
@@ -275,6 +283,22 @@ public class EncreptionRequest {
 
     public void setEnable_full_post(Boolean enable_full_post) {
         this.enable_full_post = enable_full_post;
+    }
+
+    public Boolean getRequire_full_profile_to_post() {
+        return require_full_profile_to_post;
+    }
+
+    public void setRequire_full_profile_to_post(Boolean require_full_profile_to_post) {
+        this.require_full_profile_to_post = require_full_profile_to_post;
+    }
+
+    public Boolean getShow_writer_photo_on_cards() {
+        return show_writer_photo_on_cards;
+    }
+
+    public void setShow_writer_photo_on_cards(Boolean show_writer_photo_on_cards) {
+        this.show_writer_photo_on_cards = show_writer_photo_on_cards;
     }
 
     public Integer getTitle_body_gap_dp() {

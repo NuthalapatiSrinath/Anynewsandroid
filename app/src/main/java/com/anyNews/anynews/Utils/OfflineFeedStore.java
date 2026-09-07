@@ -221,6 +221,23 @@ public final class OfflineFeedStore {
     }
 
     /**
+     * Drop the offline main pack (language switch). Special file cleared as well.
+     * Does not touch Daily Updates / gold / petrol / jobs caches.
+     */
+    public static void clearMain(@Nullable Context context) {
+        if (context == null) return;
+        try {
+            File f = fileFor(context, false);
+            if (f.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        } catch (Exception ignored) {
+        }
+        clearSpecialQuietly(context);
+    }
+
+    /**
      * Overwrite/merge offline snapshot from the current in-memory feed list.
      * Main only — special is a no-op (online-only; may delete legacy special file).
      * Feed list is treated as freshest-first (page-0 / cumulative display list).

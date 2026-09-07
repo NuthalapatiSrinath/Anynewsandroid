@@ -169,6 +169,30 @@ public class StartActivityReqModel implements Serializable {
             this.enableFullPost = enableFullPost;
         }
 
+        @SerializedName("require_full_profile_to_post")
+        @Expose
+        private Boolean requireFullProfileToPost = Boolean.FALSE;
+
+        public boolean getRequireFullProfileToPost() {
+            return requireFullProfileToPost != null && requireFullProfileToPost;
+        }
+
+        public void setRequireFullProfileToPost(Boolean requireFullProfileToPost) {
+            this.requireFullProfileToPost = requireFullProfileToPost;
+        }
+
+        @SerializedName("show_writer_photo_on_cards")
+        @Expose
+        private Boolean showWriterPhotoOnCards = Boolean.TRUE;
+
+        public boolean getShowWriterPhotoOnCards() {
+            return showWriterPhotoOnCards == null || showWriterPhotoOnCards;
+        }
+
+        public void setShowWriterPhotoOnCards(Boolean showWriterPhotoOnCards) {
+            this.showWriterPhotoOnCards = showWriterPhotoOnCards;
+        }
+
         @SerializedName("title_body_gap_dp")
         @Expose
         private Integer titleBodyGapDp = 0;
@@ -381,6 +405,19 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("rewards_in_main_feed_slot")
         @Expose
         private Boolean rewardsInMainFeedSlot;
+
+        /**
+         * Show Flash News chip in main-feed right slot when district would be hidden
+         * and Rewards is not taking the slot. Null on old servers.
+         */
+        @SerializedName("flash_news_in_main_feed_slot")
+        @Expose
+        private Boolean flashNewsInMainFeedSlot;
+
+        /** Admin Flash News chip label for this splash language. */
+        @SerializedName("flash_news_chip_label")
+        @Expose
+        private String flashNewsChipLabel;
 
         @SerializedName("rewards_guest_chip")
         @Expose
@@ -810,6 +847,14 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getRewardsInMainFeedSlot() {
             return rewardsInMainFeedSlot;
+        }
+
+        public Boolean getFlashNewsInMainFeedSlot() {
+            return flashNewsInMainFeedSlot;
+        }
+
+        public String getFlashNewsChipLabel() {
+            return flashNewsChipLabel;
         }
 
         public String getRewardsGuestChip() {

@@ -65,6 +65,8 @@ import retrofit2.Response;
  */
 public class JobsPageActivity extends AppCompatActivity {
 
+    public static final String EXTRA_FOCUS_JOB_ID = "EXTRA_FOCUS_JOB_ID";
+
     private static final Pattern PHONE_PATTERN =
             Pattern.compile("(?:\\+?\\d[\\d\\s\\-]{8,}\\d)");
 
@@ -74,6 +76,8 @@ public class JobsPageActivity extends AppCompatActivity {
     private String searchQuery = "";
     private final List<JSONObject> allItems = new ArrayList<>();
     private final List<JSONObject> categories = new ArrayList<>();
+    /** Pin this job to the top when opened from a share deep link. */
+    private int focusJobId = 0;
 
     private static final int[] PLACEHOLDER_LOGOS = {
             R.drawable.jobs_company_01,
@@ -96,6 +100,7 @@ public class JobsPageActivity extends AppCompatActivity {
         setContentView(R.layout.activity_jobs_page);
         // Hub flag from splash — still show UI so local debug / offline works;
         // empty list when disabled or no posts.
+        resolveFocusJobId();
         applySystemBars();
         listContainer = findViewById(R.id.jobs_list);
         emptyView = findViewById(R.id.jobs_empty);
@@ -110,6 +115,116 @@ public class JobsPageActivity extends AppCompatActivity {
         }
         loadFromCache();
         refreshFromNetwork();
+    }
+
+    /** Prefer intent extra, then sticky pref, then intent data URI (/job/{id}). */
+    private void resolveFocusJobId() {
+        try {
+            focusJobId = getIntent() != null
+                    ? getIntent().getIntExtra(EXTRA_FOCUS_JOB_ID, 0) : 0;
+        } catch (Exception ignored) {
+            focusJobId = 0;
+        }
+        if (focusJobId <= 0) {
+            try {
+                String pending = SharedPrefsData.getString(
+                        getApplicationContext(), Constants.PENDING_SHARE_JOB, Constants.PREF_NAME);
+                if (pending != null && !pending.trim().isEmpty() && !pending.equals("0")) {
+                    focusJobId = Integer.parseInt(pending.trim().replaceAll("[^0-9]", ""));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (focusJobId <= 0 && getIntent() != null && getIntent().getData() != null) {
+            focusJobId = parseJobIdFromUri(getIntent().getData());
+        }
+        // Consume one-shot sticky so Reload / next open does not re-pin.
+        SharedPrefsData.putString(
+                getApplicationContext(), Constants.PENDING_SHARE_JOB, "", Constants.PREF_NAME);
+    }
+
+    private int parseJobIdFromUri(@Nullable Uri uri) {
+        if (uri == null) return 0;
+        try {
+            String q = uri.getQueryParameter("jobId");
+            if (TextUtils.isEmpty(q)) q = uri.getQueryParameter("job_id");
+            if (!TextUtils.isEmpty(q) && q.matches("\\d+")) {
+                return Integer.parseInt(q);
+            }
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (scheme != null && "anynews".equalsIgnoreCase(scheme)
+                    && host != null && "job".equalsIgnoreCase(host)) {
+                String path = uri.getPath();
+                if (path != null) {
+                    String trimmed = path.startsWith("/") ? path.substring(1) : path;
+                    int slash = trimmed.indexOf('/');
+                    String idPart = slash >= 0 ? trimmed.substring(0, slash) : trimmed;
+                    int id = decodeJobIdToken(idPart);
+                    if (id > 0) return id;
+                }
+            }
+            String path = uri.getPath();
+            if (path == null || path.isEmpty()) return 0;
+            String[] segments = path.split("/");
+            for (int i = 0; i < segments.length; i++) {
+                String seg = segments[i];
+                if (seg == null || seg.isEmpty()) continue;
+                if ("job".equalsIgnoreCase(seg) && i + 1 < segments.length) {
+                    int id = decodeJobIdToken(segments[i + 1]);
+                    if (id > 0) return id;
+                }
+                if (seg.length() > 4 && seg.regionMatches(true, 0, "job-", 0, 4)) {
+                    int id = decodeJobIdToken(seg.substring(4));
+                    if (id > 0) return id;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
+    }
+
+    private int decodeJobIdToken(@Nullable String token) {
+        if (token == null || token.isEmpty()) return 0;
+        String t = token.trim();
+        if (t.matches("\\d+")) {
+            try {
+                return Integer.parseInt(t);
+            } catch (Exception e) {
+                return 0;
+            }
+        }
+        try {
+            byte[] raw = Base64.decode(t, Base64.DEFAULT);
+            if (raw != null && raw.length > 0) {
+                String decoded = new String(raw, StandardCharsets.UTF_8).trim();
+                if (decoded.matches("\\d+")) {
+                    return Integer.parseInt(decoded);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
+    }
+
+    /** Move the shared job to index 0 so the list opens on that exact card. */
+    private void pinFocusJob() {
+        if (focusJobId <= 0 || allItems.isEmpty()) return;
+        for (int i = 0; i < allItems.size(); i++) {
+            if (allItems.get(i).optInt("job_id", 0) == focusJobId) {
+                if (i > 0) {
+                    JSONObject job = allItems.remove(i);
+                    allItems.add(0, job);
+                }
+                selectedCategory = "all";
+                searchQuery = "";
+                EditText search = findViewById(R.id.jobs_search);
+                if (search != null && !TextUtils.isEmpty(search.getText())) {
+                    search.setText("");
+                }
+                return;
+            }
+        }
     }
 
     private void applySystemBars() {
@@ -218,6 +333,7 @@ public class JobsPageActivity extends AppCompatActivity {
                 }
             }
         }
+        pinFocusJob();
         rebuildCategories();
         renderList();
     }
@@ -290,6 +406,10 @@ public class JobsPageActivity extends AppCompatActivity {
     }
 
     private boolean matchesFilter(@NonNull JSONObject job) {
+        // Always show the deep-linked shared job (cross-language, any category).
+        if (focusJobId > 0 && job.optInt("job_id", 0) == focusJobId) {
+            return true;
+        }
         try {
             int appLang = SharedPrefsData.getInt(
                     getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
@@ -467,12 +587,12 @@ public class JobsPageActivity extends AppCompatActivity {
             location = JobsConfigHelper.localized(this, job, "company_te", "company_en");
         }
         String url = job.optString("share_url", "");
-        if (TextUtils.isEmpty(url)) {
-            int jobId = job.optInt("job_id", 0);
-            String encoded = Base64.encodeToString(
-                    String.valueOf(jobId).getBytes(StandardCharsets.UTF_8),
-                    Base64.NO_WRAP);
-            url = "https://anynews.co.in/job-" + encoded;
+        int jobId = job.optInt("job_id", 0);
+        // Always emit article-style /job/{id}. Rewrite legacy /job-{base64} from cache.
+        if (jobId > 0 && (TextUtils.isEmpty(url)
+                || url.contains("/job-")
+                || !url.contains("/job/"))) {
+            url = "https://anynews.co.in/job/" + jobId;
         }
         String text = JobsLabels.shareMessage(this, title, location, url);
         try {

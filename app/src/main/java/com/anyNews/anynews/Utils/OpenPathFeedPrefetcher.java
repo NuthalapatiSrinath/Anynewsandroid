@@ -39,6 +39,11 @@ public final class OpenPathFeedPrefetcher {
     private OpenPathFeedPrefetcher() {
     }
 
+    /** Allow a new early page-0 after language change (same process). */
+    public static void resetForLanguageChange() {
+        launched.set(false);
+    }
+
     /**
      * Best-effort early main page-0. Skips when offline, no identity, sticky
      * push/share, or feed is already inside the network min-interval window.
@@ -89,9 +94,10 @@ public final class OpenPathFeedPrefetcher {
             }
             APIService api = RestApiClient.getClient().create(APIService.class);
             Call<EncreptionRequest> call = api.List_All_Articles("v3", body);
-            // Match HomePage plain page-0 dedupe key (cat 0, skip 0, last 0, no sticky).
-            final String dedupeKey = "articles_v3_0_0_0_0_0_false_false";
-            Logone.v(TAG, "early main page-0 enqueue");
+            // Match HomePage plain page-0 dedupe key (includes language_id).
+            final int langId = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+            final String dedupeKey = "articles_v3_" + langId + "_0_0_0_0_0_false_false";
+            Logone.v(TAG, "early main page-0 enqueue lang=" + langId);
             NetworkCallDeduper.enqueueUnique(dedupeKey, call, new Callback<EncreptionRequest>() {
                 @Override
                 public void onResponse(
@@ -103,6 +109,13 @@ public final class OpenPathFeedPrefetcher {
                                 && !response.body().getData().isEmpty()) {
                             OpenPathCache.saveFeed(
                                     app, 0, response.body(), OpenPathCache.FEED_MODE_MAIN);
+                            try {
+                                LanguageFeedInvalidator.markFeedLanguageApplied(
+                                        app,
+                                        SharedPrefsData.getInt(
+                                                app, Constants.LanguageID, Constants.PREF_NAME));
+                            } catch (Exception ignored) {
+                            }
                             Logone.v(TAG, "early main page-0 saved to OpenPath");
                         }
                     } catch (Exception e) {

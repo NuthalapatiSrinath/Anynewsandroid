@@ -5,7 +5,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context=".Activities.HomePage">
 
-    <!-- Order L→R: News | Daily Updates | Special | Profile.
+    <!-- Order L→R: News | Special | Daily Updates | Profile.
          Panchangam menu item kept (id navigation_stricker) but product-hidden via
          ProfileHubConfigHelper.isFooterShowCalendar — open from Daily Updates only. -->
     <item
@@ -14,16 +14,17 @@
         android:icon="@drawable/refresh_icon"
         android:title="@string/news_back" />
 
-    <!-- Slot 2: Daily Updates. Id stays navigation_status for menu / admin-flag stability. -->
-    <item
-        android:id="@+id/navigation_status"
-        android:icon="@drawable/ic_footer_daily_updates"
-        android:title="@string/daily_updates" />
-
+    <!-- Slot 2: Special. Id stays navigation_catagiries for menu / admin-flag stability. -->
     <item
         android:id="@+id/navigation_catagiries"
         android:icon="@drawable/ic_footer_special"
         android:title="@string/Events" />
+
+    <!-- Slot 3: Daily Updates. Id stays navigation_status for menu / admin-flag stability. -->
+    <item
+        android:id="@+id/navigation_status"
+        android:icon="@drawable/ic_footer_daily_updates"
+        android:title="@string/daily_updates" />
 
     <!-- Hidden product slot: Panchangam (Telugu calendar). Id stays navigation_stricker. -->
     <item

@@ -131,6 +131,11 @@
             android:windowSoftInputMode="adjustResize"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".rewards.RewardsHistoryActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".Activities.AdvertiseOnAnyNewsActivity"
             android:exported="false"
             android:theme="@style/AppTheme"
@@ -226,6 +231,15 @@
                     android:scheme="https"
                     android:host="api.anynews.co.in"
                     android:pathPrefix="/p/" />
+                <data
+                    android:scheme="https"
+                    android:host="api.anynews.co.in"
+                    android:pathPrefix="/job/" />
+                <!-- Legacy job shares: /job-MQ== -->
+                <data
+                    android:scheme="https"
+                    android:host="api.anynews.co.in"
+                    android:pathPrefix="/job-" />
             </intent-filter>
             <!-- Brand apex App Links -->
             <intent-filter android:autoVerify="true">
@@ -236,6 +250,14 @@
                     android:scheme="https"
                     android:host="anynews.co.in"
                     android:pathPrefix="/p/" />
+                <data
+                    android:scheme="https"
+                    android:host="anynews.co.in"
+                    android:pathPrefix="/job/" />
+                <data
+                    android:scheme="https"
+                    android:host="anynews.co.in"
+                    android:pathPrefix="/job-" />
             </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -245,6 +267,14 @@
                     android:scheme="https"
                     android:host="www.anynews.co.in"
                     android:pathPrefix="/p/" />
+                <data
+                    android:scheme="https"
+                    android:host="www.anynews.co.in"
+                    android:pathPrefix="/job/" />
+                <data
+                    android:scheme="https"
+                    android:host="www.anynews.co.in"
+                    android:pathPrefix="/job-" />
             </intent-filter>
             <!-- Brand short domain (when SSL / assetlinks are valid) -->
             <intent-filter android:autoVerify="true">
@@ -283,6 +313,16 @@
                 <data
                     android:scheme="anynews"
                     android:host="post"
+                    android:pathPrefix="/" />
+            </intent-filter>
+            <!-- Custom scheme: job share landing (anynews://job/{id}) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="anynews"
+                    android:host="job"
                     android:pathPrefix="/" />
             </intent-filter>
             <intent-filter>

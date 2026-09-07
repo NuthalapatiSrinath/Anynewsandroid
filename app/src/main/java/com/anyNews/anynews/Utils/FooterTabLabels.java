@@ -11,7 +11,7 @@ import com.anyNews.anynews.R;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 /**
- * Shared News | Daily Updates | Special | Profile footer titles
+ * Shared News | Special | Daily Updates | Profile footer titles
  * (Panchangam menu id kept but product-hidden; open from Daily Updates).
  * Flash News remains reachable from the Daily Updates page (Material BNV max 5 tabs).
  *
@@ -38,21 +38,20 @@ public final class FooterTabLabels {
         try {
             MenuItem home = menu.findItem(R.id.navigation_home);
             if (home != null) {
-                String reload = d != null ? d.getReload() : null;
-                String homePack = d != null ? d.getHome() : null;
-                home.setTitle(NewsFooterLabel.resolveDisplay(context, reload, homePack));
+                // Always the localized "News" word — never pack Reload / दोबारा लोड करें.
+                home.setTitle(NewsFooterLabel.forCurrentLanguage(context));
             }
-            // Slot 2 = Daily Updates. Id stays navigation_status for menu stability.
+            // Slot 3 = Daily Updates (after Special). Id stays navigation_status.
             MenuItem daily = menu.findItem(R.id.navigation_status);
             if (daily != null) {
                 daily.setTitle(dailyUpdates(context));
             }
             MenuItem special = menu.findItem(R.id.navigation_catagiries);
             if (special != null) {
-                String events = d != null ? d.getEvents() : null;
-                special.setTitle(orPack(events, specialFallback(context)));
+                // Prefer localized Special; pack "Events" / आयोजन is legacy wording.
+                special.setTitle(specialLabel(context, d != null ? d.getEvents() : null));
             }
-            // Slot 4 = Panchangam (was Calendar). Id stays navigation_stricker.
+            // Hidden product slot: Panchangam. Id stays navigation_stricker.
             MenuItem panchangamTab = menu.findItem(R.id.navigation_stricker);
             if (panchangamTab != null) {
                 panchangamTab.setTitle(panchangam(context));
@@ -76,23 +75,30 @@ public final class FooterTabLabels {
 
     /**
      * Footer Daily Updates tab by in-app {@link Constants#LanguageID}
-     * (1 ML · 2 HI · 3 TE · 4 TA · 5 KN · 6 OR).
+     * (1 ML · 2 HI · 3 TE · 4 TA · 5 KN · 6 OR). Proper native wording — not
+     * English transliteration (डेली / డైలీ).
      */
     public static String dailyUpdates(@Nullable Context context) {
         switch (languageId(context)) {
             case 1: // Malayalam
-                return "ഡെയിലി";
+                return "ദൈനംദിന അപ്‌ഡേറ്റ്";
             case 2: // Hindi
-                return "डेली अपडेट";
-            case 3: // Telugu — mock spirit (రోజువారీ / డైలీ అప్‌డేట్స్)
-                return "డైలీ అప్‌డేట్స్";
+                return "दैनिक अपडेट";
+            case 3: // Telugu
+                return "రోజువారీ అప్‌డేట్స్";
             case 4: // Tamil
-                return "டெய்லி";
+                return "தினசரி புதுப்பிப்பு";
             case 5: // Kannada
-                return "ಡೈಲಿ ಅಪ್‌ಡೇಟ್";
+                return "ದೈನಂದಿನ ಅಪ್‌ಡೇಟ್";
             case 6: // Odia
-                return "ଡେଇଲି ଅପଡେଟ୍";
+                return "ଦୈନିକ ଅପଡେଟ୍";
             default:
+                if (context != null) {
+                    try {
+                        return context.getString(R.string.daily_updates);
+                    } catch (Exception ignored) {
+                    }
+                }
                 return "Daily Updates";
         }
     }
@@ -133,13 +139,49 @@ public final class FooterTabLabels {
     }
 
     private static String specialFallback(@Nullable Context context) {
-        if (context != null) {
-            try {
-                return context.getString(R.string.special_badge);
-            } catch (Exception ignored) {
+        switch (languageId(context)) {
+            case 1: return "സ്പെഷ്യൽ";
+            case 2: return "स्पेशल";
+            case 3: return "స్పెషల్";
+            case 4: return "ஸ்பெஷல்";
+            case 5: return "ಸ್ಪೆಷಲ್";
+            case 6: return "ସ୍ପେସିଆଲ୍";
+            default:
+                if (context != null) {
+                    try {
+                        return context.getString(R.string.special_badge);
+                    } catch (Exception ignored) {
+                    }
+                }
+                return "Special";
+        }
+    }
+
+    /** Pack Events / आयोजन / etc. → localized Special. */
+    private static String specialLabel(@Nullable Context context, @Nullable String packEvents) {
+        if (packEvents != null) {
+            String t = packEvents.trim();
+            if (!t.isEmpty() && !"null".equalsIgnoreCase(t) && !isEventsWording(t)) {
+                return t;
             }
         }
-        return "Special";
+        return specialFallback(context);
+    }
+
+    private static boolean isEventsWording(@Nullable String raw) {
+        if (raw == null) return false;
+        String t = raw.trim();
+        if (t.isEmpty()) return false;
+        String lower = t.toLowerCase(java.util.Locale.ROOT);
+        if ("events".equals(lower) || "event".equals(lower) || "categories".equals(lower)
+                || "category".equals(lower)) {
+            return true;
+        }
+        // Hindi आयोजन / इवेंट्स
+        if (t.contains("आयोजन") || t.equals("इवेंट्स") || t.equals("इवेंट")) {
+            return true;
+        }
+        return false;
     }
 
     private static String profileFallback(@Nullable Context context) {

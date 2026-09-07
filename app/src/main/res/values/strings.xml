@@ -375,6 +375,9 @@
     <string name="reporter_photo_reminder_message">Your name shows in feeds without a photo. Upload one anytime from Profile — optional, but helps readers recognize you.</string>
     <string name="reporter_photo_reminder_add">Upload photo</string>
     <string name="reporter_photo_reminder_later">Maybe later</string>
+    <string name="reporter_profile_gate_title">Complete your profile</string>
+    <string name="reporter_profile_gate_message">Please complete your profile fully (name, email, mobile, and photo) before posting.</string>
+    <string name="reporter_profile_gate_complete">Complete profile</string>
 
     <!-- Settings screen (mock-aligned Telugu defaults; translator overrides when available) -->
     <string name="settings_title">సెట్టింగ్స్</string>

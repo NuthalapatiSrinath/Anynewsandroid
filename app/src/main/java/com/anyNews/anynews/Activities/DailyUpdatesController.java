@@ -38,6 +38,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DailyUpdatesArtHelper;
 import com.anyNews.anynews.Utils.DailyUpdatesConfigHelper;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
+import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.FooterTabLabels;
 import com.anyNews.anynews.Utils.JobsConfigHelper;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
@@ -1640,15 +1641,7 @@ public final class DailyUpdatesController {
 
     @NonNull
     private String flashNewsLabel() {
-        switch (languageId()) {
-            case 1: return "ഫ്ലാഷ് ന്യൂസ്";
-            case 2: return "फ्लैश न्यूज़";
-            case 3: return "ఫ్లాష్ న్యూస్";
-            case 4: return "ஃபிளாஷ் நியூஸ்";
-            case 5: return "ಫ್ಲಾಶ್ ನ್ಯೂಸ್";
-            case 6: return "ଫ୍ଲାଶ୍ ନ୍ୟୁଜ୍";
-            default: return "Flash News";
-        }
+        return FlashNewsChipHelper.chipLabel(host);
     }
 
     @NonNull

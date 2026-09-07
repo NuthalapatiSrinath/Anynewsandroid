@@ -90,6 +90,7 @@ import com.anyNews.anynews.Utils.AdPreloader;
 import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.ReporterPhotoReminderHelper;
+import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CropHelper;
@@ -2230,18 +2231,8 @@ public class newProfileDetails extends AppCompatActivity {
         if (tvNewsNav == null) {
             return;
         }
-        String packHome = null;
-        String packReload = null;
-        try {
-            if (languageModelResponse != null && languageModelResponse.getData() != null) {
-                packHome = languageModelResponse.getData().getHome();
-                packReload = languageModelResponse.getData().getReload();
-            }
-        } catch (Exception ignored) {
-        }
         String label = com.anyNews.anynews.Utils.NewsFooterLabel.stripNavDecoration(
-                com.anyNews.anynews.Utils.NewsFooterLabel.resolveDisplay(
-                        this, packHome, packReload));
+                com.anyNews.anynews.Utils.NewsFooterLabel.forCurrentLanguage(this));
         tvNewsNav.setText(label);
     }
 
@@ -3564,6 +3555,9 @@ public class newProfileDetails extends AppCompatActivity {
         }
         if (!isReporter) {
             Toast.makeText(this, R.string.profile_reporter_desk_pending, Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        if (ReporterPostGateHelper.blockComposeIfIncomplete(this)) {
             return false;
         }
         return true;

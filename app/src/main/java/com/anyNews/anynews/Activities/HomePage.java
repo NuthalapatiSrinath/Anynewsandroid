@@ -166,7 +166,9 @@ import com.anyNews.anynews.Utils.MovementMethodTV;
 import com.anyNews.anynews.Utils.MyUtils;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ReporterPhotoReminderHelper;
+import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.OpenPathCache;
+import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
@@ -500,6 +502,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * content host; News/Special/Video hide this when selected.
      */
     private boolean calendarModeActive = false;
+    /**
+     * True when Panchangam / Rashi was opened from a Daily Updates tile.
+     * Toolbar / system back must return to Daily Updates (not flip pages or exit app).
+     */
+    private boolean calendarFromDailyUpdates = false;
     @Nullable private FrameLayout homeCalendarHost;
     @Nullable private TeluguCalendarController calendarController;
     /**
@@ -1080,6 +1087,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         // Shimmer until warm OpenPath (≤5 min same identity) or live network response.
         // Never treat OfflineFeedStore / multi-hour disk as an online first paint.
+        // Language switch: drop previous-language warm disk before instant-paint check.
+        try {
+            LanguageFeedInvalidator.ensureFeedMatchesSelectedLanguage(this);
+        } catch (Exception ignored) {
+        }
         boolean openSpecialSoon = false;
         try {
             if (getIntent() != null && getIntent().hasExtra("from")) {
@@ -1160,6 +1172,30 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (NumberFormatException e) {
                 SHARE_ID = 0;
             }
+        }
+        // Job share deep-link: open Jobs hub on the exact job (mirrors article SHARE sticky).
+        try {
+            String jobRedirect = "" + getIntent().getStringExtra("JOB_REDIRECT_ID");
+            if (jobRedirect == null || jobRedirect.equals("null") || jobRedirect.trim().isEmpty()) {
+                jobRedirect = SharedPrefsData.getString(
+                        getApplicationContext(), Constants.PENDING_SHARE_JOB, Constants.PREF_NAME);
+            }
+            if (jobRedirect != null && !jobRedirect.equals("null") && !jobRedirect.trim().isEmpty()
+                    && !jobRedirect.equals("0")) {
+                final int focusJobId = Integer.parseInt(jobRedirect.trim().replaceAll("[^0-9]", ""));
+                if (focusJobId > 0) {
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        try {
+                            Intent jobs = new Intent(HomePage.this, JobsPageActivity.class);
+                            jobs.putExtra(JobsPageActivity.EXTRA_FOCUS_JOB_ID, focusJobId);
+                            startActivity(jobs);
+                        } catch (Exception e) {
+                            showLog("job deep-link open failed: " + e.getMessage());
+                        }
+                    });
+                }
+            }
+        } catch (Exception ignored) {
         }
         // Older splash still set TITLE=shareId. Prefer share_post_id (do not double-count Open).
         if (SHARE_ID > 0) {
@@ -1325,6 +1361,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             @Override
             public void onClick(View view) {
                 // video post
+                if (ReporterPostGateHelper.blockComposeIfIncomplete(HomePage.this)) {
+                    closeCenterPlusMenu(true);
+                    return;
+                }
                 closeCenterPlusMenu(false);
                 Intent intent = new Intent(HomePage.this, PostVideo.class);
                 intent.putExtra("POST_VIDEO", "1");
@@ -1338,6 +1378,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         fab2.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                if (ReporterPostGateHelper.blockComposeIfIncomplete(HomePage.this)) {
+                    closeCenterPlusMenu(true);
+                    return;
+                }
                 closeCenterPlusMenu(false);
                 Intent intent = new Intent(HomePage.this, FullPost.class);
                 if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
@@ -1349,6 +1393,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         fab4.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                if (ReporterPostGateHelper.blockComposeIfIncomplete(HomePage.this)) {
+                    closeCenterPlusMenu(true);
+                    return;
+                }
                 closeCenterPlusMenu(false);
                 Intent intent = new Intent(HomePage.this, PostArticles.class);
                 intent.putExtra("POST_VIDEO", "0");
@@ -3926,6 +3974,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     @Override
+    public void openFlashNewsFromFeedChip() {
+        performFlashNewsOpen();
+    }
+
     public void callLocationRequest(int from) {
         initialCall=false;
 
@@ -6253,6 +6305,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Hide embedded calendar; does not destroy controller (reuse on next open). */
     private void hideHomeCalendarMode() {
         calendarModeActive = false;
+        calendarFromDailyUpdates = false;
+        try {
+            if (calendarController != null) {
+                calendarController.setOpenedFromDailyUpdates(false);
+            }
+        } catch (Exception ignored) {
+        }
         try {
             setHomeCalendarTtdChromeVisible(false, false);
         } catch (Exception ignored) {
@@ -6263,6 +6322,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Leave embedded Panchangam / Rashi and restore Daily Updates (toolbar back /
+     * system back when opened from a DU tile).
+     */
+    public void exitCalendarToDailyUpdates() {
+        showLog("exitCalendarToDailyUpdates");
+        hideHomeCalendarMode();
+        try {
+            if (bottomNavigationView != null
+                    && bottomNavigationView.getSelectedItemId() != R.id.navigation_status
+                    && ProfileHubConfigHelper.isFooterShowVideos(this)) {
+                suppressBottomNavCallbacks = true;
+                try {
+                    bottomNavigationView.setSelectedItemId(R.id.navigation_status);
+                } finally {
+                    suppressBottomNavCallbacks = false;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        performDailyUpdatesOpen();
     }
 
     private boolean isDailyUpdatesMode() {
@@ -6306,7 +6388,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             if (!isDeviceOnline()) {
                                 return;
                             }
-                            performCalendarOpen(false);
+                            performCalendarOpen(false, true);
                         }
 
                         @Override
@@ -6314,7 +6396,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             if (!isDeviceOnline()) {
                                 return;
                             }
-                            performCalendarOpen(true);
+                            performCalendarOpen(true, true);
                         }
                     });
         } catch (Exception e) {
@@ -6477,10 +6559,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * @param openRaasi true → Raasi Phalalu page; false → Panchangam calendar page
      */
     private void performCalendarOpen(boolean openRaasi) {
-        showLog("performCalendarOpen raasi=" + openRaasi);
+        performCalendarOpen(openRaasi, false);
+    }
+
+    /**
+     * @param fromDailyUpdates when true, toolbar / system back returns to Daily Updates
+     *                         and each page shows a header back control (no page flip).
+     */
+    private void performCalendarOpen(boolean openRaasi, boolean fromDailyUpdates) {
+        showLog("performCalendarOpen raasi=" + openRaasi + " fromDu=" + fromDailyUpdates);
         if (!isDeviceOnline()) {
             return;
         }
+        calendarFromDailyUpdates = fromDailyUpdates;
         bumpHomeModeChromeAutoHideOnInteraction();
         closeCenterPlusMenu(true);
         prepareCalendarFromTop();
@@ -6521,6 +6612,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     ensureCalendarController();
                     setHomeCalendarTtdChromeVisible(false, false);
                     if (calendarController != null) {
+                        calendarController.setOpenedFromDailyUpdates(fromDailyUpdates);
                         if (openRaasi) {
                             calendarController.selectRaasiPage(false);
                         } else {
@@ -6533,6 +6625,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 ensureCalendarController();
                 setHomeCalendarTtdChromeVisible(false, false);
                 if (calendarController != null) {
+                    calendarController.setOpenedFromDailyUpdates(fromDailyUpdates);
                     if (openRaasi) {
                         calendarController.selectRaasiPage(false);
                     } else {
@@ -6549,6 +6642,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             if (calendarController != null) {
                 try {
+                    calendarController.setOpenedFromDailyUpdates(fromDailyUpdates);
                     if (openRaasi) {
                         calendarController.selectRaasiPage(false);
                     } else {
@@ -11832,6 +11926,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showLog("OpenPath: paint feed from warm disk cat=" + category_id);
                 convertListOfArticles(cached, reqPos, true);
                 paintedFromDisk = list != null && !list.isEmpty();
+                if (paintedFromDisk) {
+                    try {
+                        LanguageFeedInvalidator.markFeedLanguageApplied(
+                                HomePage.this,
+                                SharedPrefsData.getInt(
+                                        HomePage.this, Constants.LanguageID, Constants.PREF_NAME));
+                    } catch (Exception ignored) {
+                    }
+                }
                 paintedSkip = skip;
                 paintedActualSkip = actual_skip;
                 paintedLastPostId = last_post_id;
@@ -11970,6 +12073,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             categoryAtEnqueue,
                             response.body(),
                             OpenPathCache.FEED_MODE_MAIN);
+                    try {
+                        LanguageFeedInvalidator.markFeedLanguageApplied(
+                                HomePage.this,
+                                SharedPrefsData.getInt(
+                                        HomePage.this, Constants.LanguageID, Constants.PREF_NAME));
+                    } catch (Exception ignored) {
+                    }
                 } else if (response != null && response.body() != null && isFirstPage && videoFeed) {
                     // Flash / push_posts page-0 — separate disk so reopen is instant.
                     OpenPathCache.saveFeed(
@@ -12475,6 +12585,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getEnable_video_post(),
                             encreptionRequest.getEnable_article_post(),
                             encreptionRequest.getEnable_full_post()
+                    );
+                    ReporterPostGateHelper.saveFromSplash(
+                            HomePage.this,
+                            encreptionRequest.getRequire_full_profile_to_post(),
+                            encreptionRequest.getShow_writer_photo_on_cards()
                     );
                     // Admin-controlled title↔body gap (dp). Cache and, if changed,
                     // re-apply to the currently visible card so it updates live.
@@ -13185,9 +13300,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 exitLocalFeedToMainNews();
                 return;
             }
-            if (isCalendarMode() && calendarController != null
-                    && calendarController.handleBackPress()) {
-                return;
+            if (isCalendarMode()) {
+                if (calendarController != null && calendarController.handleBackPress()) {
+                    return;
+                }
+                if (calendarFromDailyUpdates) {
+                    exitCalendarToDailyUpdates();
+                    return;
+                }
             }
             if (mBackPressed + 2000 > System.currentTimeMillis()) {
                 Intent setIntent = new Intent(Intent.ACTION_MAIN);

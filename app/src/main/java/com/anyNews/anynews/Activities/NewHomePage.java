@@ -122,6 +122,10 @@ public class NewHomePage extends AppCompatActivity implements FlipperAdapter.Cal
     }
 
     @Override
+    public void openFlashNewsFromFeedChip() {
+    }
+
+    @Override
     public void onVideoAutoplayEndedRequestNext(int position) {
     }
 

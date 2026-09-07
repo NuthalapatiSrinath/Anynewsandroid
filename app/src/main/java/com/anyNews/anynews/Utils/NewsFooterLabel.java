@@ -97,15 +97,18 @@ public final class NewsFooterLabel {
         // Latin
         String lower = t.toLowerCase(java.util.Locale.ROOT);
         if ("reload".equals(lower) || "re-load".equals(lower) || "re load".equals(lower)
-                || "home".equals(lower) || "homes".equals(lower)) {
+                || "home".equals(lower) || "homes".equals(lower)
+                || lower.contains("reload again") || lower.contains("load again")) {
             return true;
         }
         // Telugu రీలోడ్ / హోమ్
         if (t.contains("రీలోడ్") || t.contains("రిలోడ్") || t.equals("హోమ్") || t.equals("హొం")) {
             return true;
         }
-        // Hindi रीलोड / होम
-        if (t.contains("रीलोड") || t.contains("री लोड") || t.equals("होम") || t.equals("होमपेज")) {
+        // Hindi रीलोड / होम / दोबारा लोड करें (common Static_Data pack wording)
+        if (t.contains("रीलोड") || t.contains("री लोड") || t.contains("दोबारा लोड")
+                || t.contains("दोबार लोड") || t.contains("लोड करें")
+                || t.equals("होम") || t.equals("होमपेज")) {
             return true;
         }
         // Tamil ரீலோட்

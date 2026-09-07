@@ -136,6 +136,17 @@ public final class AvatarImageHelper {
         if (imageView == null) {
             return;
         }
+        try {
+            Context ctx = imageView.getContext();
+            if (ctx != null && !ReporterPostGateHelper.isShowWriterPhotoOnCards(ctx)) {
+                imageView.setVisibility(android.view.View.GONE);
+                return;
+            }
+            if (imageView.getVisibility() == android.view.View.GONE) {
+                imageView.setVisibility(android.view.View.VISIBLE);
+            }
+        } catch (Exception ignored) {
+        }
         if (imageLoader == null || isMissing(url)) {
             setDefault(imageView);
             return;

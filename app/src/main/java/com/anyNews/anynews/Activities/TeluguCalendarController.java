@@ -173,6 +173,12 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     @Nullable private TextView rashiShubham;
     @Nullable private ImageView raasiBack;
     @Nullable private ImageView raasiHeaderShare;
+    @Nullable private ImageView panchangBack;
+    /**
+     * When true (Daily Updates tile entry), each page shows toolbar back and
+     * system/toolbar back closes to Daily Updates — no Rashi↔Panchangam flip.
+     */
+    private boolean openedFromDailyUpdates;
     private View raasiFormScrim;
     private View raasiFormSheetColumn;
     private NestedScrollView raasiFormScroll;
@@ -390,6 +396,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             applySystemBarInsets();
             setSegmentChromeVisible(true, false);
         }
+        syncDedicatedBackChrome();
     }
 
     @Override
@@ -398,8 +405,9 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         updateFlipIndicators(position);
         refreshBlinkShareContentDescription(position);
         syncSegmentThumb(raasiSegmentSelected);
-        // Blue blink FAB only on Panchangam; Raasi keeps gold header share.
+        // Blue blink FAB only on Panchangam; Raasi keeps orange header share (fuel style).
         setBlinkShareVisible(position == 0 && !isBlinkShareCoveredBySheet());
+        syncDedicatedBackChrome();
     }
 
     /** True when the Raasi Phalalu flip page is showing. */
@@ -413,6 +421,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         raasiSegmentSelected = false;
         syncSegmentThumb(false);
         setBlinkShareVisible(!isBlinkShareCoveredBySheet());
+        syncDedicatedBackChrome();
         if (flipPager == null) return;
         if (flipPager.getCurrentPage() == 0) return;
         if (smooth) flipPager.smoothFlipTo(0);
@@ -424,7 +433,47 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         raasiSegmentSelected = true;
         syncSegmentThumb(true);
         setBlinkShareVisible(false);
+        syncDedicatedBackChrome();
         goToRaasiPage(smooth);
+    }
+
+    /**
+     * Daily Updates tile entry: show header back on the active page and skip
+     * Rashi→Panchangam flip on back (parent returns to Daily Updates).
+     */
+    public void setOpenedFromDailyUpdates(boolean fromDailyUpdates) {
+        openedFromDailyUpdates = fromDailyUpdates;
+        syncDedicatedBackChrome();
+    }
+
+    private void syncDedicatedBackChrome() {
+        boolean show = openedFromDailyUpdates;
+        if (raasiBack != null) {
+            if (show) {
+                raasiBack.setVisibility(View.VISIBLE);
+                raasiBack.setOnClickListener(v -> requestCloseToDailyUpdates());
+            } else {
+                raasiBack.setVisibility(View.GONE);
+                raasiBack.setOnClickListener(null);
+            }
+        }
+        if (panchangBack != null) {
+            if (show) {
+                panchangBack.setVisibility(View.VISIBLE);
+                panchangBack.setOnClickListener(v -> requestCloseToDailyUpdates());
+            } else {
+                panchangBack.setVisibility(View.GONE);
+                panchangBack.setOnClickListener(null);
+            }
+        }
+    }
+
+    private void requestCloseToDailyUpdates() {
+        if (host instanceof HomePage) {
+            ((HomePage) host).exitCalendarToDailyUpdates();
+        } else {
+            host.finish();
+        }
     }
 
     /**
@@ -479,6 +528,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             swipeArrow.setOnClickListener(null);
         }
         hideLegacyCardShare(dayShare);
+        syncDedicatedBackChrome();
         if (pager != null) {
             pager.setAdapter(detailAdapter);
             pager.setPageMargin(dp(8));
@@ -508,7 +558,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
      * {@code FlipperAdapter} {@code full_image_share_bg}: {@code R.drawable.ic_share_full},
      * no tint, no chip background. Blink uses {@code R.anim.blink_share}.
      * Tap runs day share on the Panchangam flip page only — Raasi Phalalu keeps
-     * the gold header share ({@code telugu_calendar_raasi_header_share}) and never
+     * the orange header share ({@code telugu_calendar_raasi_header_share}) and never
      * shows this blue FAB overlay.
      */
     private void wireBlinkShareOverlay() {
@@ -539,7 +589,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         });
         refreshBlinkShareContentDescription(
                 flipPager != null ? flipPager.getCurrentPage() : 0);
-        // Show on Panchangam only; Raasi uses header gold share.
+        // Show on Panchangam only; Raasi uses header orange share.
         setBlinkShareVisible(!isRaasiPageVisible());
     }
 
@@ -566,7 +616,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
 
     private void setBlinkShareVisible(boolean visible) {
         if (blinkShare == null) return;
-        // Raasi Phalalu: gold header share only — never overlay the blue blink FAB.
+        // Raasi Phalalu: orange header share only — never overlay the blue blink FAB.
         if (visible && isRaasiPageVisible()) {
             visible = false;
         }
@@ -839,11 +889,20 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             });
         }
         if (raasiBack != null) {
-            // Calendar flip path: swipe/back to page 0 — hide header back control.
-            raasiBack.setVisibility(View.GONE);
-            raasiBack.setOnClickListener(null);
+            // Dedicated DU entry shows toolbar back → Daily Updates; flip path hides it.
+            syncDedicatedBackChrome();
         }
         if (raasiHeaderShare != null) {
+            // Match Petrol & Diesel: orange Material share in header.
+            raasiHeaderShare.setVisibility(View.VISIBLE);
+            raasiHeaderShare.setImageResource(R.drawable.ic_baseline_share_24);
+            raasiHeaderShare.clearColorFilter();
+            androidx.core.widget.ImageViewCompat.setImageTintList(
+                    raasiHeaderShare,
+                    android.content.res.ColorStateList.valueOf(0xFFFF6A1A));
+            raasiHeaderShare.setPadding(dp(9), dp(9), dp(9), dp(9));
+            raasiHeaderShare.setContentDescription(
+                    host.getString(R.string.telugu_calendar_share_raasi));
             raasiHeaderShare.setOnClickListener(v -> {
                 revealSegmentChromeIfHidden();
                 shareSelectedRaasi();
@@ -1541,6 +1600,14 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             top.setLayoutParams(topLp);
             if (sel) {
                 top.setBackgroundResource(R.drawable.bg_rashi_tile_selected_glow);
+                top.setScaleX(1.06f);
+                top.setScaleY(1.06f);
+                top.setElevation(dp(6));
+            } else {
+                top.setBackground(null);
+                top.setScaleX(1f);
+                top.setScaleY(1f);
+                top.setElevation(0f);
             }
 
             ImageView icon = new ImageView(host);
@@ -1575,8 +1642,9 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             name.setGravity(Gravity.CENTER);
             name.setMaxLines(1);
             name.setEllipsize(TextUtils.TruncateAt.END);
-            name.setTextColor(COLOR_GOLD);
+            name.setTextColor(sel ? 0xFFFFE08A : COLOR_GOLD);
             if (sel) name.setTypeface(Typeface.DEFAULT_BOLD);
+            else name.setTypeface(Typeface.DEFAULT);
             tile.addView(name);
 
             tile.setOnClickListener(v -> {
@@ -2364,7 +2432,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     }
     //endregion
 
-    /** @return true if back was consumed by calendar UI (sheet / raasi flip). */
+    /** @return true if back was consumed by calendar UI (sheet only when from DU). */
     public boolean handleBackPress() {
         if (raasiDetailScrim != null && raasiDetailScrim.getVisibility() == View.VISIBLE) {
             hideRaasiDetailSheet();
@@ -2377,6 +2445,10 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (sheetScrim != null && sheetScrim.getVisibility() == View.VISIBLE) {
             hideFestivalsSheet();
             return true;
+        }
+        // Dedicated Daily Updates entry: do not flip Rashi→Panchangam; parent closes to DU.
+        if (openedFromDailyUpdates) {
+            return false;
         }
         if (flipPager != null && flipPager.getCurrentPage() > 0) {
             selectPanchangamPage(true);
@@ -2457,6 +2529,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         loadReveal = page.findViewById(R.id.telugu_calendar_load_reveal);
         monthTitle = page.findViewById(R.id.telugu_calendar_month);
         teluguLine = page.findViewById(R.id.telugu_calendar_telugu_line);
+        panchangBack = page.findViewById(R.id.telugu_calendar_panchang_back);
         grid = page.findViewById(R.id.telugu_calendar_grid);
         pager = page.findViewById(R.id.telugu_calendar_pager);
         detailPageIndicator = page.findViewById(R.id.telugu_calendar_detail_page_indicator);

@@ -57,8 +57,9 @@
                 android:layout_gravity="end|center_vertical"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/telugu_calendar_share_raasi"
-                android:padding="8dp"
-                android:src="@drawable/ic_rashi_header_share" />
+                android:padding="9dp"
+                android:src="@drawable/ic_baseline_share_24"
+                android:tint="#FFFF6A1A" />
         </FrameLayout>
 
         <ImageView
