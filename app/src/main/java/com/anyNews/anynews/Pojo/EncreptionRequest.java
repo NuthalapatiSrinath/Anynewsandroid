@@ -155,7 +155,7 @@ public class EncreptionRequest {
 
     @SerializedName("allow_screen_capture")
     @Expose
-    private boolean allow_screen_capture = false;
+    private Boolean allow_screen_capture;
 
     @SerializedName("action_icon_size_dp")
     @Expose
@@ -237,11 +237,21 @@ public class EncreptionRequest {
     @Expose
     private Integer live_readers_min_count;
 
-    public boolean isAllow_screen_capture() {
+    public Boolean getAllow_screen_capture() {
         return allow_screen_capture;
     }
 
-    public void setAllow_screen_capture(boolean allow_screen_capture) {
+    /** True only when the server explicitly sent allow_screen_capture=true. */
+    public boolean isAllow_screen_capture() {
+        return Boolean.TRUE.equals(allow_screen_capture);
+    }
+
+    /** Null when omitted — do not overwrite splash/admin prefs with a false default. */
+    public boolean hasAllow_screen_capture() {
+        return allow_screen_capture != null;
+    }
+
+    public void setAllow_screen_capture(Boolean allow_screen_capture) {
         this.allow_screen_capture = allow_screen_capture;
     }
 

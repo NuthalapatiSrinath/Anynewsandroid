@@ -5479,9 +5479,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         replyParentCommentId = datum.getId();
         String userName = datum.getUserName() != null ? datum.getUserName() : "user";
-        if (allsharedpreference.getEmailId() != null
-                && datum.getEmail() != null
-                && allsharedpreference.getEmailId().equalsIgnoreCase(datum.getEmail())) {
+        String myEmail = allsharedpreference != null ? allsharedpreference.getEmailId() : null;
+        String theirEmail = datum.getEmail();
+        boolean isMe = myEmail != null && myEmail.contains("@")
+                && theirEmail != null && theirEmail.contains("@")
+                && myEmail.trim().equalsIgnoreCase(theirEmail.trim());
+        if (!isMe && datum.getDraftId() != null) {
+            int myDraft = SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
+            if (myDraft > 0 && datum.getDraftId() > 0 && datum.getDraftId() == myDraft) {
+                isMe = true;
+            }
+        }
+        if (isMe) {
             userName = "Me";
         }
         replyParentUserName = userName;
@@ -12622,11 +12631,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
                     } catch (Exception ignored) {
                     }
-                    ScreenCaptureHelper.saveAllowed(HomePage.this, encreptionRequest.isAllow_screen_capture());
-                    cachedCaptureAllowed = encreptionRequest.isAllow_screen_capture();
-                    // Re-apply so a toggle change takes effect on this screen without restart.
-                    ScreenCaptureHelper.applySecureFlag(HomePage.this);
-                    appliedSecureFlag = !cachedCaptureAllowed;
+                    // Only update when the envelope explicitly includes the field.
+                    // Flash/error fallbacks that omit it must not wipe splash=true → FLAG_SECURE.
+                    if (encreptionRequest.hasAllow_screen_capture()) {
+                        ScreenCaptureHelper.saveAllowed(
+                                HomePage.this, encreptionRequest.isAllow_screen_capture());
+                        cachedCaptureAllowed = encreptionRequest.isAllow_screen_capture();
+                        ScreenCaptureHelper.applySecureFlag(HomePage.this);
+                        appliedSecureFlag = !cachedCaptureAllowed;
+                    } else {
+                        cachedCaptureAllowed = ScreenCaptureHelper.isCaptureAllowed(HomePage.this);
+                    }
                     // Cricket: seed mini/footer from feed active_match (no cricket HTTP).
                     // Polls start only when mini master is ON and feed has an active
                     // mini-player match. Footer alone never starts interval polls.
@@ -14401,6 +14416,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             // Quiet GPS refresh for admin "last device location" (throttled; no permission prompt).
             SessionAnalyticsTracker.get().maybeRefreshDeviceLocation(this);
+        } catch (Exception ignored) {
+        }
+        try {
+            // Screenshot overlay / OEM capture UI can leave FLAG_SECURE or icon
+            // sizes wrong — re-sync from prefs on every resume.
+            cachedCaptureAllowed = ScreenCaptureHelper.isCaptureAllowed(this);
+            ScreenCaptureHelper.applySecureFlag(this);
+            appliedSecureFlag = !cachedCaptureAllowed;
+            if (mFlipView != null && adapter != null) {
+                FlipperAdapter.applyHalfActionIconSizes(this, mFlipView);
+            }
+            if (commentMailAdapter != null && comment_page != null && comment_page.isShown()) {
+                commentMailAdapter.notifyDataSetChanged();
+            }
         } catch (Exception ignored) {
         }
         try {

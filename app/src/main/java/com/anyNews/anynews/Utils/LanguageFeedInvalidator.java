@@ -23,6 +23,17 @@ public final class LanguageFeedInvalidator {
      * allow splash prefetch to run again for the new language.
      */
     public static void onLanguageChanged(@Nullable Context context, int newLanguageId) {
+        onLanguageChanged(context, newLanguageId, true);
+    }
+
+    /**
+     * Same as {@link #onLanguageChanged(Context, int)} but optionally keeps
+     * state/district prefs. Use {@code clearGeography=false} after reporter OTP
+     * login when account geo was just applied from Writers — wiping district
+     * would leave Hindi chrome with a Telugu Hyderabad label half-applied.
+     */
+    public static void onLanguageChanged(
+            @Nullable Context context, int newLanguageId, boolean clearGeography) {
         if (context == null || newLanguageId <= 0) {
             return;
         }
@@ -34,6 +45,11 @@ public final class LanguageFeedInvalidator {
         }
         try {
             SharedPrefsData.putInt(app, Constants.LAST_FEED_LANGUAGE_ID, 0, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        try {
+            // Force get_static_data / translator pack reload for the new language.
+            SharedPrefsData.putLong(app, Constants.OPEN_PATH_STATIC_AT, 0L, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
         try {
@@ -49,14 +65,16 @@ public final class LanguageFeedInvalidator {
             OpenPathFeedPrefetcher.resetForLanguageChange();
         } catch (Exception ignored) {
         }
-        try {
-            // Stale geo labels from the previous language must not soft-fill Home chrome.
-            SharedPrefsData.putInt(app, Constants.StateID, 0, Constants.PREF_NAME);
-            SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, 0, Constants.PREF_NAME);
-            SharedPrefsData.putString(app, Constants.Selected_Distric_Name, "", Constants.PREF_NAME);
-            SharedPrefsData.putString(app, Constants.Selected_Distric_Name1, "", Constants.PREF_NAME);
-            SharedPrefsData.putInt(app, Constants.Selected_Distric_Name_LangId, 0, Constants.PREF_NAME);
-        } catch (Exception ignored) {
+        if (clearGeography) {
+            try {
+                // Stale geo labels from the previous language must not soft-fill Home chrome.
+                SharedPrefsData.putInt(app, Constants.StateID, 0, Constants.PREF_NAME);
+                SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, 0, Constants.PREF_NAME);
+                SharedPrefsData.putString(app, Constants.Selected_Distric_Name, "", Constants.PREF_NAME);
+                SharedPrefsData.putString(app, Constants.Selected_Distric_Name1, "", Constants.PREF_NAME);
+                SharedPrefsData.putInt(app, Constants.Selected_Distric_Name_LangId, 0, Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
         }
     }
 

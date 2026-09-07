@@ -98,6 +98,7 @@ import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.ContactUsChooser;
+import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
@@ -2238,24 +2239,32 @@ public class newProfileDetails extends AppCompatActivity {
 
     /** Native+English display for current language id (fallback when LanName not stored). */
     private String resolveCurrentLanguageDisplay() {
+        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        // Prefer LanguageID over stale Constants.Lang (login used to leave "हिन्दी"
+        // while LanguageID flipped to Telugu — mixed Hindi/Telugu Profile chrome).
+        if (id > 0) {
+            return languageDisplayNameForId(id);
+        }
         String saved = SharedPrefsData.getString(this, Constants.Lang, Constants.PREF_NAME);
         if (saved != null && !saved.trim().isEmpty() && !"null".equalsIgnoreCase(saved.trim())) {
             return saved.trim();
         }
-        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
-        switch (id) {
-            case 1: return "മലയാളം Malayalam";
-            case 2: return "हिन्दी Hindi";
-            case 3: return "తెలుగు Telugu";
-            case 4: return "தமிழ் Tamil";
-            case 5: return "ಕನ್ನಡ Kannada";
-            case 6: return "ଓଡ଼ିଆ Odia";
-            default:
-                if (languageModelResponse != null && languageModelResponse.getData() != null
-                        && languageModelResponse.getData().getLanguage() != null) {
-                    return languageModelResponse.getData().getLanguage();
-                }
-                return "Language";
+        if (languageModelResponse != null && languageModelResponse.getData() != null
+                && languageModelResponse.getData().getLanguage() != null) {
+            return languageModelResponse.getData().getLanguage();
+        }
+        return "Language";
+    }
+
+    private static String languageDisplayNameForId(int languageId) {
+        switch (languageId) {
+            case 1: return "മലയാളം";
+            case 2: return "हिन्दी";
+            case 3: return "తెలుగు";
+            case 4: return "தமிழ்";
+            case 5: return "ಕನ್ನಡ";
+            case 6: return "ଓଡ଼ିଆ";
+            default: return "Language";
         }
     }
 
@@ -2579,8 +2588,20 @@ public class newProfileDetails extends AppCompatActivity {
             int distId = d.getDistId() != null ? d.getDistId() : 0;
             String loc = d.getLocation() != null ? d.getLocation().trim() : "";
             if (langId > 0) {
+                int prevLang = SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
                 SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID,
                         langId, Constants.PREF_NAME);
+                // Keep language row label in sync with LanguageID (avoid stale "हिन्दी").
+                SharedPrefsData.putString(getApplicationContext(), Constants.Lang,
+                        languageDisplayNameForId(langId), Constants.PREF_NAME);
+                if (langId != prevLang) {
+                    try {
+                        LanguageFeedInvalidator.onLanguageChanged(
+                                getApplicationContext(), langId, false);
+                    } catch (Exception ignored) {
+                    }
+                }
             }
             if (stateId > 0) {
                 SharedPrefsData.putInt(getApplicationContext(), Constants.StateID,

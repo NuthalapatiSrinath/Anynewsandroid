@@ -248,14 +248,9 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         holder.comment_details.setText(datum.getComment());
 
         String displayName;
-        boolean isMe = allsharedpreference.getEmailId() != null && datum.getEmail() != null
-                && allsharedpreference.getEmailId().equalsIgnoreCase(datum.getEmail());
-        if (!isMe && datum.getDraftId() != null) {
-            int myDraft = SharedPrefsData.getInt(mContext, Constants.DraftID, Constants.PREF_NAME);
-            if (myDraft > 0 && datum.getDraftId() == myDraft) {
-                isMe = true;
-            }
-        }
+        // Empty emails used to match (Allsharedpreference defaults to "") so every
+        // comment looked like "Me". Require a real address or matching draft_id.
+        boolean isMe = isOwnComment(datum);
         if (isMe) {
             displayName = "Me";
             holder.imageViewReport.setVisibility(View.GONE);
@@ -292,11 +287,20 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         boolean liked = datum.getLikedByMe() != null && datum.getLikedByMe();
         int likes = datum.getLikes() != null ? datum.getLikes() : 0;
         holder.like_count.setText(String.valueOf(likes));
+        // Reset heart size after screenshot/resume density glitches — layout XML is 18dp.
+        float density = mContext.getResources().getDisplayMetrics().density;
+        int heartPx = Math.round(18f * density);
+        ViewGroup.LayoutParams heartLp = holder.imageViewLike.getLayoutParams();
+        if (heartLp != null && (heartLp.width != heartPx || heartLp.height != heartPx)) {
+            heartLp.width = heartPx;
+            heartLp.height = heartPx;
+            holder.imageViewLike.setLayoutParams(heartLp);
+        }
         holder.imageViewLike.setImageResource(
                 liked ? R.drawable.ic_comment_heart_filled : R.drawable.ic_comment_heart_outline);
 
         int indent = isReply
-                ? (int) (20 * mContext.getResources().getDisplayMetrics().density)
+                ? (int) (20 * density)
                 : 0;
         holder.itemRoot.setPadding(indent, holder.itemRoot.getPaddingTop(),
                 holder.itemRoot.getPaddingRight(), holder.itemRoot.getPaddingBottom());
@@ -386,6 +390,29 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
             holder.circular_image.setVisibility(View.GONE);
             holder.avatar_letter.setVisibility(View.VISIBLE);
         }
+    }
+
+    /**
+     * Own comment = matching non-empty email, or matching positive draft_id.
+     * Empty email must never match (prefs default to "").
+     */
+    private boolean isOwnComment(ListOfCommentsResponse.Datum datum) {
+        if (datum == null) return false;
+        String myEmail = allsharedpreference != null ? allsharedpreference.getEmailId() : null;
+        String theirEmail = datum.getEmail();
+        if (!TextUtils.isEmpty(myEmail) && myEmail.contains("@")
+                && !TextUtils.isEmpty(theirEmail) && theirEmail.contains("@")
+                && myEmail.trim().equalsIgnoreCase(theirEmail.trim())) {
+            return true;
+        }
+        if (datum.getDraftId() != null) {
+            int myDraft = SharedPrefsData.getInt(mContext, Constants.DraftID, Constants.PREF_NAME);
+            long theirDraft = datum.getDraftId();
+            if (myDraft > 0 && theirDraft > 0 && theirDraft == myDraft) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int avatarColorFor(String key) {

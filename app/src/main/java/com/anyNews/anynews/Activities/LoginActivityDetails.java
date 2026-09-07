@@ -51,6 +51,7 @@ import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.GenerateOtpRequest;
 import com.anyNews.anynews.Pojo.GenerateOtpResponse;
 import com.anyNews.anynews.Pojo.LanguageModelResponse;
+import com.anyNews.anynews.Pojo.LanguageSelectionRequest;
 import com.anyNews.anynews.Pojo.UserProfileRequest;
 import com.anyNews.anynews.Pojo.ValidateOtpRequest;
 import com.anyNews.anynews.Pojo.ValidateOtpResponse;
@@ -63,6 +64,7 @@ import com.anyNews.anynews.Utils.AppSignatureHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
+import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.SmsBroadcastReceiver;
 import com.google.android.gms.auth.api.phone.SmsRetriever;
@@ -405,17 +407,29 @@ public class LoginActivityDetails extends AppCompatActivity {
      * On OTP success, overwrite SharedPreferences language/state/district from the
      * logged-in account (server Writers/Users). Logout intentionally keeps the prior
      * device geography — without this, Profile still shows the previous user's district.
+     *
+     * <p>Also syncs {@link Constants#Lang} display name and invalidates the prior
+     * language's translator/feed packs (keeping the geo we just wrote). Otherwise
+     * Profile can show stale "हिन्दी" while Telugu strings paint from LanguageID,
+     * or Hindi chrome with a Telugu Hyderabad label.
      */
     private void applyAccountGeographyFromLogin(ValidateOtpResponse.Data loginData) {
         if (loginData == null) return;
         Context app = getApplicationContext();
+        int previousLangId = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
         int langId = loginData.getLanguageId() != null ? loginData.getLanguageId() : 0;
         int stateId = loginData.getStateId() != null ? loginData.getStateId() : 0;
         int distId = loginData.getDistId() != null ? loginData.getDistId() : 0;
         String location = loginData.getLocation() != null ? loginData.getLocation().trim() : "";
         if (langId > 0) {
-            SharedPrefsData.putInt(app, Constants.LanguageID, langId, Constants.PREF_NAME);
+            // Keep geography: Writers state/district are applied below.
+            LanguageFeedInvalidator.onLanguageChanged(app, langId, false);
             SharedPrefsData.putInt(app, Constants.reporter_language_id, langId, Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.Lang, languageDisplayName(langId), Constants.PREF_NAME);
+            SharedPrefsData.putBool(app, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
+            if (langId != previousLangId) {
+                refreshTranslatorPackForLanguage(langId);
+            }
         }
         if (stateId > 0) {
             SharedPrefsData.putInt(app, Constants.StateID, stateId, Constants.PREF_NAME);
@@ -429,6 +443,64 @@ public class LoginActivityDetails extends AppCompatActivity {
             } else if (distId > 0) {
                 SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
             }
+        }
+    }
+
+    /** Native language label for Profile "भाषा चुनें" / language row (matches LanguageID). */
+    private static String languageDisplayName(int languageId) {
+        switch (languageId) {
+            case 1: return "മലയാളം";
+            case 2: return "हिन्दी";
+            case 3: return "తెలుగు";
+            case 4: return "தமிழ்";
+            case 5: return "ಕನ್ನಡ";
+            case 6: return "ଓଡ଼ିଆ";
+            default: return "Language";
+        }
+    }
+
+    /**
+     * Pull get_static_data for the account language so footer/profile packs match
+     * LanguageID after OTP (avoids Hindi chrome + Telugu half-pack leftovers).
+     */
+    private void refreshTranslatorPackForLanguage(int languageId) {
+        if (languageId <= 0) return;
+        try {
+            LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
+            requestModel.setDraftId(SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+            requestModel.setLanguageId(languageId);
+            JsonObject body = new Gson().toJsonTree(requestModel).getAsJsonObject();
+            APIService apiService = RestApiClient.getClient().create(APIService.class);
+            Call<JsonObject> call = apiService.get_static_data("v3", body);
+            call.enqueue(new Callback<JsonObject>() {
+                @Override
+                public void onResponse(Call<JsonObject> call, retrofit2.Response<JsonObject> response) {
+                    try {
+                        if (!response.isSuccessful() || response.body() == null) return;
+                        Gson gson = new Gson();
+                        LanguageModelResponse pack =
+                                gson.fromJson(response.body(), LanguageModelResponse.class);
+                        if (pack != null && Boolean.TRUE.equals(pack.getSuccess())) {
+                            allsharedpreference.setShared_Booleen(Allsharedpreference.Language, true);
+                            allsharedpreference.setShared_String(
+                                    Allsharedpreference.Translator, gson.toJson(pack));
+                            languageModelResponse = pack;
+                            try {
+                                com.anyNews.anynews.Utils.OpenPathCache.markStaticSuccess(
+                                        getApplicationContext());
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+
+                @Override
+                public void onFailure(Call<JsonObject> call, Throwable t) {
+                    // Home can still refresh via ensureFeedMatchesSelectedLanguage.
+                }
+            });
+        } catch (Exception ignored) {
         }
     }
 
