@@ -124,6 +124,8 @@ public class RewardsHistoryActivity extends AppCompatActivity {
     private void render(JsonObject body) {
         list.removeAllViews();
         List<Row> rows = new ArrayList<>();
+        // Account-scoped day totals first (so large factors aren't hidden by last-N).
+        renderByTaskToday(body);
         collectCoins(body, rows);
         collectMoney(body, "conversions", true, rows);
         collectMoney(body, "withdrawals", false, rows);
@@ -153,7 +155,7 @@ public class RewardsHistoryActivity extends AppCompatActivity {
             }
         }
         if (hint != null) {
-            if (n > 0) {
+            if (n > 0 || list.getChildCount() > 0) {
                 hint.setVisibility(View.VISIBLE);
                 hint.setText(RewardsLabels.historyShowingLastN(this, historyLimit));
             } else {
@@ -168,6 +170,43 @@ public class RewardsHistoryActivity extends AppCompatActivity {
             empty.setPadding(14, 24, 14, 24);
             list.addView(empty);
         }
+    }
+
+    /** Today’s ledger-by-factor (server aggregate) — account user_id, not device. */
+    private void renderByTaskToday(JsonObject body) {
+        if (!body.has("by_task_today") || !body.get("by_task_today").isJsonArray()) return;
+        JsonArray arr = body.getAsJsonArray("by_task_today");
+        if (arr.size() == 0) return;
+        TextView head = new TextView(this);
+        head.setText(RewardsLabels.todayByTask(this));
+        head.setTextColor(Color.parseColor("#FF78716C"));
+        head.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        head.setPadding(14, 8, 14, 4);
+        list.addView(head);
+        for (int i = 0; i < arr.size(); i++) {
+            JsonObject row = arr.get(i).getAsJsonObject();
+            int coins = optInt(row, "coins");
+            int events = optInt(row, "events");
+            if (coins <= 0) continue;
+            String factor = optStr(row, "factor", "");
+            TextView line = new TextView(this);
+            line.setText(
+                    "+"
+                            + coins
+                            + "  ·  "
+                            + RewardsLabels.factorLabel(this, factor)
+                            + (events > 0 ? " (" + events + ")" : ""));
+            line.setTextColor(Color.parseColor("#FF57534E"));
+            line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            line.setPadding(14, 6, 14, 6);
+            list.addView(line);
+        }
+        View div = new View(this);
+        div.setBackgroundColor(Color.parseColor("#FFE7E5E4"));
+        LinearLayout.LayoutParams lp =
+                new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 2);
+        lp.setMargins(14, 8, 14, 8);
+        list.addView(div, lp);
     }
 
     private static final class Row {
@@ -189,9 +228,17 @@ public class RewardsHistoryActivity extends AppCompatActivity {
             if (coins == 0) continue;
             String sign = coins > 0 ? "+" : "";
             String when = formatWhen(row);
+            String factor = optStr(row, "factor", "");
+            String factorBit =
+                    TextUtils.isEmpty(factor)
+                            ? ""
+                            : "  ·  " + RewardsLabels.factorLabel(this, factor);
             out.add(
                     new Row(
-                            sign + coins + (TextUtils.isEmpty(when) ? "" : "  ·  " + when),
+                            sign
+                                    + coins
+                                    + factorBit
+                                    + (TextUtils.isEmpty(when) ? "" : "  ·  " + when),
                             parseWhenMs(row)));
         }
     }

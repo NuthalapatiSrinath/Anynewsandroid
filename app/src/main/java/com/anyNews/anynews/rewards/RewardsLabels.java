@@ -176,6 +176,66 @@ public final class RewardsLabels {
         }
     }
 
+    public static String todayByTask(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "ഇന്നത്തെ ടാസ്ക് ടോട്ടലുകൾ";
+            case 2: return "आज के टास्क कुल";
+            case 3: return "ఈరోజు టాస్క్ మొత్తాలు";
+            case 4: return "இன்றைய பணி மொத்தம்";
+            case 5: return "ಇಂದಿನ ಕಾರ್ಯ ಒಟ್ಟು";
+            case 6: return "ଆଜିର ଟାସ୍କ ମୋଟ";
+            default: return "Today by task";
+        }
+    }
+
+    /** Short label for history factor keys (account ledger / credits). */
+    public static String factorLabel(@Nullable Context c, @Nullable String factor) {
+        String f = factor == null ? "" : factor.trim();
+        if (f.isEmpty()) return "";
+        switch (f) {
+            case "unique_open":
+                switch (languageId(c)) {
+                    case 3: return "ఆర్టికల్ ఓపెన్";
+                    case 2: return "आर्टिकल ओपन";
+                    case 4: return "கட்டுரை திறப்பு";
+                    default: return "Article open";
+                }
+            case "quality_read":
+                switch (languageId(c)) {
+                    case 3: return "క్వాలిటీ రీడ్";
+                    case 2: return "क्वालिटी रीड";
+                    default: return "Quality read";
+                }
+            case "scroll_depth":
+                switch (languageId(c)) {
+                    case 3: return "స్క్రోల్";
+                    default: return "Scroll";
+                }
+            case "active_day":
+                return "Active day";
+            case "ads_seen":
+                return "Ads seen";
+            case "daily_checkin":
+            case "checkin":
+                switch (languageId(c)) {
+                    case 3: return "చెక్-ఇన్";
+                    default: return "Check-in";
+                }
+            case "watch_ads":
+                return "Watch ads";
+            case "play_rating":
+                return "Play rating";
+            case "comment":
+                return "Comment";
+            case "share":
+                return "Share";
+            case "follow":
+                return "Follow";
+            default:
+                return f;
+        }
+    }
+
     public static String outOfTop10(@Nullable Context c) {
         switch (languageId(c)) {
             case 1: return "കൂടുതൽ വായിക്കൂ — ലീഡർബോർഡിൽ ഉയരൂ";
@@ -214,9 +274,11 @@ public final class RewardsLabels {
 
     public static String watchAdsWait(@Nullable Context c, int totalSec) {
         int sec = Math.max(0, totalSec);
-        int m = sec / 60;
+        int h = sec / 3600;
+        int m = (sec % 3600) / 60;
         int s = sec % 60;
-        String clock = String.format(java.util.Locale.US, "%d:%02d", m, s);
+        // Live H:MM:SS (e.g. 0:04:59 / 4:59:58) — ticks every second from hub.
+        String clock = String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, s);
         switch (languageId(c)) {
             case 1: return "പരസ്യങ്ങൾ — " + clock + " കാത്തിരിക്കുക";
             case 2: return "विज्ञापन — " + clock + " प्रतीक्षा";
