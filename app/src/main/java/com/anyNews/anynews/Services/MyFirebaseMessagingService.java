@@ -46,6 +46,7 @@ import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.StartingAppRequest;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.ForceLogoutHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.google.firebase.database.DatabaseReference;
@@ -118,6 +119,10 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             JSONObject object = new JSONObject(params);
 
             String type = object.optString("type", "");
+            if ("force_logout".equals(type)) {
+                handleForceLogout(object);
+                return;
+            }
             if ("reporter_status_changed".equals(type)) {
                 handleReporterStatusChanged(object);
                 return;
@@ -750,6 +755,27 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             notificationManager.notify(notifyId, builder.build());
         } catch (Exception e) {
             Log.v("NotificationData", String.valueOf(e.getMessage()));
+        }
+    }
+
+    private void handleForceLogout(JSONObject object) {
+        try {
+            // Server already cleared mobile on this draft. Clear local auth only —
+            // keep LanguageID / geo / language pack / translator prefs.
+            boolean loggedIn = SharedPrefsData.getBool(
+                    getApplicationContext(), Constants.is_login, Constants.PREF_NAME);
+            if (!loggedIn
+                    && SharedPrefsData.getBool(
+                            getApplicationContext(),
+                            Constants.FORCE_LOGGED_OUT,
+                            Constants.PREF_NAME)) {
+                showLog("force_logout ignored (already guest)");
+                return;
+            }
+            showLog("force_logout reason=" + object.optString("reason", ""));
+            ForceLogoutHelper.clearAuthSession(getApplicationContext(), true, true);
+        } catch (Exception e) {
+            Logone.e("ForceLogout", "handleForceLogout failed", e);
         }
     }
 

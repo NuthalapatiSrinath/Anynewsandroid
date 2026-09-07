@@ -92,6 +92,7 @@ import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.ReporterPhotoReminderHelper;
 import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
+import com.anyNews.anynews.Utils.ForceLogoutHelper;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
@@ -861,54 +862,7 @@ public class newProfileDetails extends AppCompatActivity {
      * Keeps device language, geography, settings, and FCM device token.
      */
     private void performLogout() {
-        try {
-            SessionAnalyticsTracker.get().onAppTerminate(getApplicationContext());
-        } catch (Exception ignored) {
-        }
-
-        Context app = getApplicationContext();
-
-        // Auth / identity — force guest; splash must not resurrect via server is_login.
-        SharedPrefsData.putBoolImmediate(app, Constants.is_login, false, Constants.PREF_NAME);
-        SharedPrefsData.putBoolImmediate(app, Constants.FORCE_LOGGED_OUT, true, Constants.PREF_NAME);
-        SharedPrefsData.putBoolImmediate(app, Constants.is_reporter, false, Constants.PREF_NAME);
-        SharedPrefsData.putInt(app, Constants.REPORTER_DESK_UI_STATE,
-                Constants.REPORTER_DESK_HIDDEN, Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.PROFILE_ACHIEVED_PCT, "", Constants.PREF_NAME);
-        SharedPrefsData.putBool(app, Constants.IS_USER_ALREADY_LOGIN, false, Constants.PREF_NAME);
-        SharedPrefsData.putBool(app, Constants.IS_ALREADY_LOGIN, false, Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.Selected_Phone_Number, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.PhoneNumber, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.USER_NAME, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.PROFILE_PIC_URL, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.Email, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.AVAILABLEPOINTS, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.REDEEMPOINTS, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.USER_SESSION_ID, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.SessionID, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.REFERAL_LINK, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.REFERAL_LINK2, "", Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.CUSST_ID, "", Constants.PREF_NAME);
-        SharedPrefsData.putLong(app, Constants.USER_ID, 0L, Constants.PREF_NAME);
-        SharedPrefsData.putBool(app, Constants.PAN_CARD_STATUS, false, Constants.PREF_NAME);
-        SharedPrefsData.putInt(app, Constants.UserID, 0, Constants.PREF_NAME);
-        SharedPrefsData.putInt(app, Constants.reporter_language_id, 0, Constants.PREF_NAME);
-        // New anonymous draft after logout (splash will re-bind DraftID).
-        SharedPrefsData.putInt(app, Constants.DraftID, 0, Constants.PREF_NAME);
-
-        ReporterProfileCache.clear(app);
-        try {
-            FollowListCache.clear(app);
-        } catch (Exception ignored) {
-        }
-
-        if (prefShare == null) {
-            prefShare = new Allsharedpreference(newProfileDetails.this);
-        }
-        prefShare.setEmailID("");
-        prefShare.setShared_String(Allsharedpreference.EMAIL_ID, "");
-        prefShare.setShared_Booleen(Allsharedpreference.IS_USER_ALREADY_LOGIN, false);
-        prefShare.setShared_Booleen(Allsharedpreference.IS_ALREADY_LOGIN, false);
+        ForceLogoutHelper.clearAuthSession(this, false, false);
 
         // In-memory UI so FAB / header never flash logged-in after clear.
         showingReporterUi = false;
