@@ -4671,6 +4671,9 @@ public class newProfileDetails extends AppCompatActivity {
             softRefreshRewardsFlags();
             bindProfileLoginPill();
             bindReporterDesk();
+            // Re-read create-menu prefs (splash / feed poll) so OFF types stay hidden
+            // after HomePage applied a live Configuration update.
+            bindReporterCreateFab();
             bindLocationRowText();
             bindStatusVideosNewBadge();
         bindBecomeReporterNewBadge();

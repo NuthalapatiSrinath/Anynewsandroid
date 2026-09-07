@@ -13591,6 +13591,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Admin-controlled reporter create-menu post-type toggles. Caches the polled
      * values in prefs (default true) and, if the create menu is currently open,
      * refreshes its button visibility live without an activity restart.
+     * Null means the envelope omitted the field (error / old stub) — do not wipe
+     * splash prefs (same pattern as {@link EncreptionRequest#hasAllow_screen_capture()}).
      */
     private void applyReporterPostTypeConfig(Boolean video, Boolean article, Boolean full) {
         try {
