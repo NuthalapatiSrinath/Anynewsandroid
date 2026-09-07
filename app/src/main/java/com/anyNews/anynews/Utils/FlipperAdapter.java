@@ -9647,10 +9647,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Nullable ImageView target, @Nullable ModelClass.Datum item) {
         if (target == null) return;
         boolean contain = item != null && item.usesContainFeedImage();
-        target.setScaleType(
-                contain ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.FIT_XY);
+        ImageView.ScaleType next =
+                contain ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.FIT_XY;
+        // Clear UIL tag so a recycled view with the same URL rebinds after scale change.
+        if (target.getScaleType() != next) {
+            target.setTag(null);
+        }
+        target.setScaleType(next);
         if (contain) {
             target.setBackgroundColor(Color.BLACK);
+        } else {
+            target.setBackgroundColor(Color.TRANSPARENT);
         }
     }
 
