@@ -58,7 +58,12 @@ public final class FooterTabLabels {
             }
             MenuItem profile = menu.findItem(R.id.navigation_profile);
             if (profile != null) {
-                String p = d != null ? d.getProfile() : null;
+                // Never paint Hindi "प्रोफ़ाइल" (etc.) when LanguageID is Telugu —
+                // prefer LanguageID fallback whenever the translator pack mismatches.
+                String p = null;
+                if (TranslatorPackHelper.packMatchesLanguage(context) && d != null) {
+                    p = d.getProfile();
+                }
                 profile.setTitle(orPack(p, profileFallback(context)));
             }
         } catch (Exception ignored) {
@@ -159,7 +164,7 @@ public final class FooterTabLabels {
 
     /** Pack Events / आयोजन / etc. → localized Special. */
     private static String specialLabel(@Nullable Context context, @Nullable String packEvents) {
-        if (packEvents != null) {
+        if (TranslatorPackHelper.packMatchesLanguage(context) && packEvents != null) {
             String t = packEvents.trim();
             if (!t.isEmpty() && !"null".equalsIgnoreCase(t) && !isEventsWording(t)) {
                 return t;

@@ -50,6 +50,9 @@ public final class LanguageFeedInvalidator {
         try {
             // Force get_static_data / translator pack reload for the new language.
             SharedPrefsData.putLong(app, Constants.OPEN_PATH_STATIC_AT, 0L, Constants.PREF_NAME);
+            // Drop pack-language stamp so Profile/Home refuse stale Hindi (etc.) chrome
+            // until get_static_data / Update_User_Language writes the new pack.
+            SharedPrefsData.putInt(app, Constants.TRANSLATOR_LANGUAGE_ID, 0, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
         try {

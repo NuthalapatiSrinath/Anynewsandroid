@@ -210,6 +210,11 @@ public class Constants {
     public static String ENABLE_FULL_POST = "enable_full_post";
     /** Admin: require 100% profile (name/email/mobile/photo) before compose / Create_User_Post. */
     public static String REQUIRE_FULL_PROFILE_TO_POST = "require_full_profile_to_post";
+    /**
+     * LanguageID that {@link Allsharedpreference#Translator} was last saved for.
+     * Used to detect Hindi pack leftovers after switching to Telugu (etc.).
+     */
+    public static String TRANSLATOR_LANGUAGE_ID = "translator_language_id";
     /** Admin: show writer avatar on feed cards (default true). */
     public static String SHOW_WRITER_PHOTO_ON_CARDS = "show_writer_photo_on_cards";
     public static String TITLE_BODY_GAP_DP = "title_body_gap_dp";

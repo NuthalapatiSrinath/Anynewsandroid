@@ -70,6 +70,7 @@ import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.Logone;
+import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
 import com.bumptech.glide.Glide;
@@ -142,6 +143,9 @@ public class PostVideo extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (ReporterPostGateHelper.finishComposeIfIncomplete(this)) {
+            return;
+        }
         setContentView(R.layout.activity_post_video);
 
         locationPermissionLauncher = registerForActivityResult(

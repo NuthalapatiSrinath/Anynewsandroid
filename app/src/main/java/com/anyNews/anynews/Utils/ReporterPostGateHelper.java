@@ -52,6 +52,8 @@ public final class ReporterPostGateHelper {
         if (context == null) return;
         Context app = context.getApplicationContext();
         try {
+            // Only write when the envelope explicitly included the field — never
+            // treat a missing key as false (that wiped splash=true via Flash stubs).
             if (requireFullProfile != null) {
                 SharedPrefsData.putBool(
                         app,
@@ -70,11 +72,35 @@ public final class ReporterPostGateHelper {
         }
     }
 
-    /** True when gate is ON and local/prefs completeness is below 100. */
+    /**
+     * Completion % for the gate — same identity fields as the Profile bar.
+     * Uses max(prefs tally, last painted {@link Constants#PROFILE_ACHIEVED_PCT})
+     * so a stale empty prefs row cannot open compose while UI shows &lt; 100%.
+     */
+    public static int resolveGateCompletionPct(@Nullable Context context) {
+        int fromPrefs = ProfileAchievementHelper.computePctFromPrefs(context);
+        int fromStored = 0;
+        if (context != null) {
+            try {
+                String raw =
+                        SharedPrefsData.getString(
+                                context.getApplicationContext(),
+                                Constants.PROFILE_ACHIEVED_PCT,
+                                Constants.PREF_NAME);
+                Integer parsed = ProfileAchievementHelper.parsePct(raw);
+                if (parsed != null) {
+                    fromStored = parsed;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return Math.max(fromPrefs, fromStored);
+    }
+
+    /** True when gate is ON and completeness is below 100. */
     public static boolean isBlockedByIncompleteProfile(@Nullable Context context) {
         if (!isRequireFullProfileToPost(context)) return false;
-        int pct = ProfileAchievementHelper.computePctFromPrefs(context);
-        return pct < 100;
+        return resolveGateCompletionPct(context) < 100;
     }
 
     /**
@@ -108,6 +134,22 @@ public final class ReporterPostGateHelper {
                         .show();
             } catch (Exception ignored) {
             }
+        }
+        return true;
+    }
+
+    /**
+     * Compose activities: finish immediately when gate blocks (deep link / back-stack bypass).
+     *
+     * @return true if the activity should stop {@code onCreate} (caller must {@code return})
+     */
+    public static boolean finishComposeIfIncomplete(@Nullable Activity activity) {
+        if (activity == null || activity.isFinishing()) return false;
+        if (!isBlockedByIncompleteProfile(activity)) return false;
+        blockComposeIfIncomplete(activity);
+        try {
+            activity.finish();
+        } catch (Exception ignored) {
         }
         return true;
     }

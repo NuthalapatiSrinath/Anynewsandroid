@@ -77,6 +77,7 @@ import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.NetworkCallDeduper;
 import com.anyNews.anynews.Utils.OpenPathCache;
+import com.anyNews.anynews.Utils.TranslatorPackHelper;
 import com.anyNews.anynews.Utils.OpenPathFeedPrefetcher;
 import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -1487,8 +1488,12 @@ public class StartingActivity extends AppCompatActivity {
 
                         ReporterPostGateHelper.saveFromSplash(
                                 getApplicationContext(),
-                                startActivityReqModel.getData().getRequireFullProfileToPost(),
-                                startActivityReqModel.getData().getShowWriterPhotoOnCards()
+                                startActivityReqModel.getData().hasRequireFullProfileToPost()
+                                        ? startActivityReqModel.getData().getRequireFullProfileToPost()
+                                        : null,
+                                startActivityReqModel.getData().hasShowWriterPhotoOnCards()
+                                        ? startActivityReqModel.getData().getShowWriterPhotoOnCards()
+                                        : null
                         );
 
                         // Admin-controlled gap (dp) between the half-post title and body.
@@ -2070,6 +2075,10 @@ public class StartingActivity extends AppCompatActivity {
                         prefManager.setShared_Booleen(Allsharedpreference.Language, true);
 
                         String json = gson.toJson(languageSelectionResponse); // myObject - instance of MyObject
+                        int langId = SharedPrefsData.getInt(
+                                getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+                        TranslatorPackHelper.savePack(
+                                getApplicationContext(), langId, languageSelectionResponse);
                         prefManager.setShared_String(Allsharedpreference.Translator, json);
                         OpenPathCache.markStaticSuccess(getApplicationContext());
 
@@ -2463,6 +2472,10 @@ public class StartingActivity extends AppCompatActivity {
                                         prefManager.setShared_Booleen(Allsharedpreference.Language, true);
 
                                         String json = gson.toJson(languageSelectionResponse); // myObject - instance of MyObject
+                                        int langId = SharedPrefsData.getInt(
+                                                getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+                                        TranslatorPackHelper.savePack(
+                                                getApplicationContext(), langId, languageSelectionResponse);
                                         prefManager.setShared_String(Allsharedpreference.Translator, json);
 
 

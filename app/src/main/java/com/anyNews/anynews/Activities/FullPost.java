@@ -66,6 +66,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.Logone;
+import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
 import com.anyNews.anynews.models.SearchModel;
@@ -152,6 +153,9 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (ReporterPostGateHelper.finishComposeIfIncomplete(this)) {
+            return;
+        }
         setContentView(R.layout.activity_full_image2);
 
         locationPermissionLauncher = registerForActivityResult(

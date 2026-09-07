@@ -299,6 +299,11 @@ public class EncreptionRequest {
         return require_full_profile_to_post;
     }
 
+    /** True only when the poll/splash envelope explicitly included the field. */
+    public boolean hasRequire_full_profile_to_post() {
+        return require_full_profile_to_post != null;
+    }
+
     public void setRequire_full_profile_to_post(Boolean require_full_profile_to_post) {
         this.require_full_profile_to_post = require_full_profile_to_post;
     }

@@ -67,6 +67,7 @@ import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.SmsBroadcastReceiver;
+import com.anyNews.anynews.Utils.TranslatorPackHelper;
 import com.google.android.gms.auth.api.phone.SmsRetriever;
 import com.google.android.gms.auth.api.phone.SmsRetrieverClient;
 import com.google.android.gms.common.AccountPicker;
@@ -481,15 +482,9 @@ public class LoginActivityDetails extends AppCompatActivity {
                         LanguageModelResponse pack =
                                 gson.fromJson(response.body(), LanguageModelResponse.class);
                         if (pack != null && Boolean.TRUE.equals(pack.getSuccess())) {
-                            allsharedpreference.setShared_Booleen(Allsharedpreference.Language, true);
-                            allsharedpreference.setShared_String(
-                                    Allsharedpreference.Translator, gson.toJson(pack));
+                            TranslatorPackHelper.savePack(
+                                    getApplicationContext(), languageId, pack);
                             languageModelResponse = pack;
-                            try {
-                                com.anyNews.anynews.Utils.OpenPathCache.markStaticSuccess(
-                                        getApplicationContext());
-                            } catch (Exception ignored) {
-                            }
                         }
                     } catch (Exception ignored) {
                     }

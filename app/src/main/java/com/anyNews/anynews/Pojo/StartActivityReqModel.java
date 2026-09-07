@@ -169,12 +169,22 @@ public class StartActivityReqModel implements Serializable {
             this.enableFullPost = enableFullPost;
         }
 
+        /**
+         * Nullable on purpose — default FALSE used to wipe a splash/poll-delivered
+         * {@code true} when a partial envelope omitted the key (same class of bug as
+         * allow_screen_capture). Only persist when non-null.
+         */
         @SerializedName("require_full_profile_to_post")
         @Expose
-        private Boolean requireFullProfileToPost = Boolean.FALSE;
+        private Boolean requireFullProfileToPost;
 
-        public boolean getRequireFullProfileToPost() {
-            return requireFullProfileToPost != null && requireFullProfileToPost;
+        /** Null when splash omitted the field — do not overwrite prefs. */
+        public Boolean getRequireFullProfileToPost() {
+            return requireFullProfileToPost;
+        }
+
+        public boolean hasRequireFullProfileToPost() {
+            return requireFullProfileToPost != null;
         }
 
         public void setRequireFullProfileToPost(Boolean requireFullProfileToPost) {
@@ -183,10 +193,15 @@ public class StartActivityReqModel implements Serializable {
 
         @SerializedName("show_writer_photo_on_cards")
         @Expose
-        private Boolean showWriterPhotoOnCards = Boolean.TRUE;
+        private Boolean showWriterPhotoOnCards;
 
-        public boolean getShowWriterPhotoOnCards() {
-            return showWriterPhotoOnCards == null || showWriterPhotoOnCards;
+        /** Null when splash omitted the field — do not overwrite prefs. */
+        public Boolean getShowWriterPhotoOnCards() {
+            return showWriterPhotoOnCards;
+        }
+
+        public boolean hasShowWriterPhotoOnCards() {
+            return showWriterPhotoOnCards != null;
         }
 
         public void setShowWriterPhotoOnCards(Boolean showWriterPhotoOnCards) {

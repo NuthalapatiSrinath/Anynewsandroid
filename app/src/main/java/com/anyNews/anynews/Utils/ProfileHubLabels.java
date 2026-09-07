@@ -95,6 +95,140 @@ public final class ProfileHubLabels {
         }
     }
 
+    /** "Edit profile" CTA on the completion bar. */
+    public static String editProfile(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "പ്രൊഫൈൽ എഡിറ്റ് ചെയ്യുക";
+            case 2: return "प्रोफ़ाइल संपादित करें";
+            case 3: return "ప్రొఫైల్ ఎడిట్ చేయండి";
+            case 4: return "சுயவிவரத்தைத் திருத்து";
+            case 5: return "ಪ್ರೊಫೈಲ್ ಸಂಪಾದಿಸಿ";
+            case 6: return "ପ୍ରୋଫାଇଲ୍ ସମ୍ପାଦନ କରନ୍ତୁ";
+            default: return str(context, R.string.profile_edit_profile, "Edit profile");
+        }
+    }
+
+    /** Orange " (Edit)" / change suffix on the location tile. */
+    public static String editSuffix(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return " (മാറ്റുക)";
+            case 2: return " (बदलें)";
+            case 3: return " (ఎడిట్)";
+            case 4: return " (மாற்று)";
+            case 5: return " (ಬದಲಿಸಿ)";
+            case 6: return " (ପରିବର୍ତ୍ତନ)";
+            default: return str(context, R.string.profile_edit_suffix, " (Edit)");
+        }
+    }
+
+    public static String feedback(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഫീഡ്‌ബാക്ക്";
+            case 2: return "फीडबैक";
+            case 3: return "ఫీడ్‌బ్యాక్";
+            case 4: return "கருத்து";
+            case 5: return "ಪ್ರತಿಕ್ರಿಯೆ";
+            case 6: return "ମତାମତ";
+            default: return str(context, R.string.profile_feedback, "Feedback");
+        }
+    }
+
+    public static String following(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഫോളോയിംഗ്";
+            case 2: return "फॉलोइंग";
+            case 3: return "ఫాలోయింగ్";
+            case 4: return "பின்தொடர்தல்";
+            case 5: return "ಫಾಲೋಯಿಂಗ್";
+            case 6: return "ଫଲୋଇଂ";
+            default: return "Following";
+        }
+    }
+
+    public static String followers(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഫോളോവേഴ്സ്";
+            case 2: return "फॉलोअर्स";
+            case 3: return "ఫాలోవర్లు";
+            case 4: return "பின்தொடர்பவர்கள்";
+            case 5: return "ಅನುಯಾಯಿಗಳು";
+            case 6: return "ଅନୁଗାମୀ";
+            default: return str(context, R.string.profile_followers_label, "Followers");
+        }
+    }
+
+    public static String articles(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ലേഖനങ്ങൾ";
+            case 2: return "लेख";
+            case 3: return "ఆర్టికల్స్";
+            case 4: return "கட்டுரைகள்";
+            case 5: return "ಲೇಖನಗಳು";
+            case 6: return "ପ୍ରବନ୍ଧ";
+            default: return "Articles";
+        }
+    }
+
+    public static String selectLanguage(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഭാഷ തിരഞ്ഞെടുക്കുക";
+            case 2: return "भाषा चुनें";
+            case 3: return "భాష ఎంచుకోండి";
+            case 4: return "மொழியைத் தேர்ந்தெடு";
+            case 5: return "ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ";
+            case 6: return "ଭାଷା ବାଛନ୍ତୁ";
+            default: return str(context, R.string.profile_change_language_menu, "Change language");
+        }
+    }
+
+    public static String fabArticle(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ലേഖനം";
+            case 2: return "लेख";
+            case 3: return "ఆర్టికల్";
+            case 4: return "கட்டுரை";
+            case 5: return "ಲೇಖನ";
+            case 6: return "ପ୍ରବନ୍ଧ";
+            default: return str(context, R.string.profile_reporter_post_article, "Article");
+        }
+    }
+
+    public static String fabVideoPost(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "വീഡിയോ പോസ്റ്റ്";
+            case 2: return "वीडियो पोस्ट";
+            case 3: return "వీడియో పోస్ట్";
+            case 4: return "வீடியோ இடுகை";
+            case 5: return "ವೀಡಿಯೊ ಪೋಸ್ಟ್";
+            case 6: return "ଭିଡିଓ ପୋସ୍ଟ";
+            default: return str(context, R.string.profile_reporter_post_video, "Video post");
+        }
+    }
+
+    public static String fabFullPost(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഫുൾ പോസ്റ്റ്";
+            case 2: return "फुल पोस्ट";
+            case 3: return "ఫుల్ పోస్ట్";
+            case 4: return "முழு இடுகை";
+            case 5: return "ಪೂರ್ಣ ಪೋಸ್ಟ್";
+            case 6: return "ପୂର୍ଣ୍ଣ ପୋସ୍ଟ";
+            default: return str(context, R.string.profile_reporter_post_full, "Full post");
+        }
+    }
+
+    public static String settings(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ക്രമീകരണങ്ങൾ";
+            case 2: return "सेटिंग्स";
+            case 3: return "సెట్టింగ్స్";
+            case 4: return "அமைப்புகள்";
+            case 5: return "ಸೆಟ್ಟಿಂಗ್‌ಗಳು";
+            case 6: return "ସେଟିଂସ୍";
+            default: return str(context, R.string.profile_settings, "Settings");
+        }
+    }
+
     /**
      * Profile completion bar label (name/email/mobile/photo %), not earnings.
      * Format: {@code 75% profile completed} / language-id equivalents.

@@ -68,6 +68,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.Logone;
+import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
 import com.canhub.cropper.CropImageContract;
@@ -181,6 +182,13 @@ public class PostArticles extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Become-a-Reporter sample posts are allowed before 100% profile.
+        boolean applicantSample =
+                getIntent() != null
+                        && getIntent().getBooleanExtra(EXTRA_APPLICANT_SAMPLE, false);
+        if (!applicantSample && ReporterPostGateHelper.finishComposeIfIncomplete(this)) {
+            return;
+        }
         setContentView(R.layout.activity_post_artical_image);
 
         locationPermissionLauncher = registerForActivityResult(

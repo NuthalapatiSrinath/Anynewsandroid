@@ -168,6 +168,7 @@ import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ReporterPhotoReminderHelper;
 import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.OpenPathCache;
+import com.anyNews.anynews.Utils.TranslatorPackHelper;
 import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
@@ -12629,11 +12630,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getEnable_article_post(),
                             encreptionRequest.getEnable_full_post()
                     );
-                    ReporterPostGateHelper.saveFromSplash(
-                            HomePage.this,
-                            encreptionRequest.getRequire_full_profile_to_post(),
-                            encreptionRequest.getShow_writer_photo_on_cards()
-                    );
+                    // Only update when the envelope explicitly includes the field.
+                    // Flash/error fallbacks that omit it must not wipe splash=true.
+                    if (encreptionRequest.hasRequire_full_profile_to_post()
+                            || encreptionRequest.getShow_writer_photo_on_cards() != null) {
+                        ReporterPostGateHelper.saveFromSplash(
+                                HomePage.this,
+                                encreptionRequest.hasRequire_full_profile_to_post()
+                                        ? encreptionRequest.getRequire_full_profile_to_post()
+                                        : null,
+                                encreptionRequest.getShow_writer_photo_on_cards()
+                        );
+                    }
                     // Admin-controlled title↔body gap (dp). Cache and, if changed,
                     // re-apply to the currently visible card so it updates live.
                     applyTitleBodyGapConfig(encreptionRequest.getTitle_body_gap_dp());
@@ -16755,6 +16763,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (languageSelectionResponse.getSuccess()) {
                         allsharedpreference.setShared_Booleen(Allsharedpreference.Language, true);
                         String json = gson.toJson(languageSelectionResponse); // myObject - instance of MyObject
+                        int langId = SharedPrefsData.getInt(
+                                getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+                        TranslatorPackHelper.savePack(
+                                getApplicationContext(), langId, languageSelectionResponse);
                         allsharedpreference.setShared_String(Allsharedpreference.Translator, json);
                     }
 

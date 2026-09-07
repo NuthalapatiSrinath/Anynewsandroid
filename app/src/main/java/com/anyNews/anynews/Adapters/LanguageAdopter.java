@@ -35,6 +35,7 @@ import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
+import com.anyNews.anynews.Utils.TranslatorPackHelper;
 import com.anyNews.anynews.models.LanguageModel;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.google.gson.Gson;
@@ -213,6 +214,8 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
 
                         String json = gson.toJson(languageSelectionResponse); // myObject - instance of MyObject
 
+                        TranslatorPackHelper.savePack(context, language_id, languageSelectionResponse);
+                        // Keep legacy write for any readers that only watch SessionPreferences.
                         prefManager.setShared_String(Allsharedpreference.Translator, json);
                         SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN,
                                 languageSelectionResponse.getNextScreen(), Constants.PREF_NAME);
