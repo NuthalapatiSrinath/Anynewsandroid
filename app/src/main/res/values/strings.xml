@@ -281,6 +281,14 @@
     <string name="advertise_recording">Recording… tap again to send</string>
     <string name="advertise_record_failed">Could not record</string>
     <string name="advertise_mic_denied">Microphone permission needed for voice</string>
+    <string name="birthday_special">Birthday Special</string>
+    <string name="birthday_offer_default">Share a clear photo, name, and location. Our team will create your Local Birthday Special and reply here.</string>
+    <string name="birthday_hint_location">Village / town / location</string>
+    <string name="birthday_pick_photo">Tap to add birthday photo</string>
+    <string name="birthday_need_photo">Add a birthday photo</string>
+    <string name="birthday_need_location">Enter village or town</string>
+    <string name="birthday_start_chat">Submit &amp; chat</string>
+    <string name="advertise_tap_play">Tap to play</string>
     <string name="contact_chooser_title">Contact us</string>
     <string name="contact_chooser_whatsapp">WhatsApp</string>
     <string name="contact_chooser_mail">Gmail / Mail</string>

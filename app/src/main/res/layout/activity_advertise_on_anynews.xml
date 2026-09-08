@@ -29,6 +29,7 @@
             app:tint="#FFFFFF" />
 
         <TextView
+            android:id="@+id/advertise_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -56,7 +57,7 @@
         android:layout_height="1dp"
         android:background="#FFE8DCCF" />
 
-    <!-- Lead form -->
+    <!-- Lead / birthday form -->
     <ScrollView
         android:id="@+id/advertise_form_scroll"
         android:layout_width="match_parent"
@@ -70,6 +71,34 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:padding="16dp">
+
+            <!-- Birthday photo picker (hidden for advertise) -->
+            <FrameLayout
+                android:id="@+id/birthday_photo_wrap"
+                android:layout_width="match_parent"
+                android:layout_height="180dp"
+                android:layout_marginBottom="12dp"
+                android:background="#FFE8DCCF"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/birthday_photo_preview"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@string/birthday_pick_photo"
+                    android:scaleType="centerCrop" />
+
+                <TextView
+                    android:id="@+id/birthday_photo_hint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:padding="12dp"
+                    android:text="@string/birthday_pick_photo"
+                    android:textColor="#FF6B00"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
 
             <EditText
                 android:id="@+id/advertise_name"
@@ -106,6 +135,19 @@
                 android:padding="12dp"
                 android:textSize="15sp" />
 
+            <EditText
+                android:id="@+id/birthday_location"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="10dp"
+                android:background="@android:drawable/edit_text"
+                android:hint="@string/birthday_hint_location"
+                android:inputType="textPostalAddress"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/advertise_start_btn"
                 android:layout_width="match_parent"
@@ -120,7 +162,7 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- Chat (text only) -->
+    <!-- Chat (text + inline image/video) -->
     <LinearLayout
         android:id="@+id/advertise_chat"
         android:layout_width="match_parent"
@@ -144,6 +186,15 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:padding="8dp">
+
+            <ImageButton
+                android:id="@+id/advertise_attach"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/advertise_attach"
+                android:src="@drawable/ic_hub_share"
+                app:tint="#FF6B00" />
 
             <EditText
                 android:id="@+id/advertise_input"

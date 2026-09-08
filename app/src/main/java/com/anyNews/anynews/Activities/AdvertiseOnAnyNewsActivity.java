@@ -1,9 +1,11 @@
 package com.anyNews.anynews.Activities;
 
+import android.app.Dialog;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
@@ -11,14 +13,21 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.WindowManager;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.VideoView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -31,12 +40,16 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
+import com.anyNews.anynews.Utils.AdvertiseChatLabels;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.bumptech.glide.Glide;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -46,18 +59,31 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
 
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
- * Profile → Advertise on AnyNews: offer banner, lead form, then text-only chat.
- * No continuous polling — refresh on resume only.
+ * Profile → Advertise on AnyNews / Birthday Special:
+ * lead form, then WhatsApp-style chat (text + inline image/video).
+ * Media URLs are stored server-side but never shown as bare text.
  */
 public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
 
-    private static final String PREF_THREAD_ID = "advertise_thread_id";
+    public static final String EXTRA_MODE = "mode";
+    public static final String MODE_ADVERTISE = "advertise";
+    public static final String MODE_BIRTHDAY = "birthday";
 
+    private static final String PREF_THREAD_ID = "advertise_thread_id";
+    private static final String PREF_BIRTHDAY_THREAD_ID = "birthday_thread_id";
+
+    private String mode = MODE_ADVERTISE;
+    private boolean birthdayMode;
+
+    private TextView titleView;
     private TextView offerText;
     private View formScroll;
     private LinearLayout form;
@@ -65,14 +91,38 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
     private EditText nameInput;
     private EditText mobileInput;
     private EditText promoInput;
+    private EditText locationInput;
     private EditText messageInput;
+    private View birthdayPhotoWrap;
+    private ImageView birthdayPhotoPreview;
+    private TextView birthdayPhotoHint;
+    private TextView startBtn;
     private RecyclerView messagesList;
     private MessagesAdapter adapter;
     private long threadId;
     private boolean busy;
     private boolean systemBarInsetsInstalled;
-    /** Guards overlapping full/delta fetches that previously duplicated the list. */
     private boolean messagesLoading;
+    private Uri birthdayPhotoUri;
+    private String pendingPickKind = "image"; // image | video | birthday_photo
+
+    private final ActivityResultLauncher<String> pickMedia =
+            registerForActivityResult(
+                    new ActivityResultContracts.GetContent(),
+                    uri -> {
+                        if (uri == null) return;
+                        if ("birthday_photo".equals(pendingPickKind)) {
+                            birthdayPhotoUri = uri;
+                            if (birthdayPhotoPreview != null) {
+                                Glide.with(this).load(uri).centerCrop().into(birthdayPhotoPreview);
+                            }
+                            if (birthdayPhotoHint != null) {
+                                birthdayPhotoHint.setVisibility(View.GONE);
+                            }
+                        } else {
+                            uploadAndSendMedia(uri, pendingPickKind);
+                        }
+                    });
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -80,6 +130,11 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_advertise_on_anynews);
         applySystemBarInsets();
 
+        String extra = getIntent() != null ? getIntent().getStringExtra(EXTRA_MODE) : null;
+        mode = MODE_BIRTHDAY.equalsIgnoreCase(extra) ? MODE_BIRTHDAY : MODE_ADVERTISE;
+        birthdayMode = MODE_BIRTHDAY.equals(mode);
+
+        titleView = findViewById(R.id.advertise_title);
         offerText = findViewById(R.id.advertise_offer_text);
         formScroll = findViewById(R.id.advertise_form_scroll);
         form = findViewById(R.id.advertise_form);
@@ -87,7 +142,12 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         nameInput = findViewById(R.id.advertise_name);
         mobileInput = findViewById(R.id.advertise_mobile);
         promoInput = findViewById(R.id.advertise_promo);
+        locationInput = findViewById(R.id.birthday_location);
         messageInput = findViewById(R.id.advertise_input);
+        birthdayPhotoWrap = findViewById(R.id.birthday_photo_wrap);
+        birthdayPhotoPreview = findViewById(R.id.birthday_photo_preview);
+        birthdayPhotoHint = findViewById(R.id.birthday_photo_hint);
+        startBtn = findViewById(R.id.advertise_start_btn);
         messagesList = findViewById(R.id.advertise_messages);
 
         if (offerText != null) {
@@ -97,11 +157,23 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         ImageButton back = findViewById(R.id.advertise_back);
         if (back != null) back.setOnClickListener(v -> finish());
 
-        TextView startBtn = findViewById(R.id.advertise_start_btn);
         if (startBtn != null) startBtn.setOnClickListener(v -> startThread());
 
         TextView sendBtn = findViewById(R.id.advertise_send);
         if (sendBtn != null) sendBtn.setOnClickListener(v -> sendText());
+
+        ImageButton attach = findViewById(R.id.advertise_attach);
+        if (attach != null) {
+            attach.setOnClickListener(v -> showAttachChooser());
+        }
+
+        if (birthdayPhotoWrap != null) {
+            birthdayPhotoWrap.setOnClickListener(
+                    v -> {
+                        pendingPickKind = "birthday_photo";
+                        pickMedia.launch("image/*");
+                    });
+        }
 
         adapter = new MessagesAdapter();
         if (messagesList != null) {
@@ -109,13 +181,51 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             messagesList.setAdapter(adapter);
         }
 
+        applyModeChrome();
         prefillIdentity();
-        loadOffer();
 
-        threadId = SharedPrefsData.getLong(this, PREF_THREAD_ID, Constants.PREF_NAME);
+        if (!birthdayMode) {
+            loadOffer();
+        }
+
+        threadId =
+                SharedPrefsData.getLong(
+                        this,
+                        birthdayMode ? PREF_BIRTHDAY_THREAD_ID : PREF_THREAD_ID,
+                        Constants.PREF_NAME);
         if (threadId > 0) {
             showChat();
             loadMessages(false);
+        }
+    }
+
+    private void applyModeChrome() {
+        if (titleView != null) {
+            titleView.setText(
+                    birthdayMode
+                            ? AdvertiseChatLabels.birthdayTitle(this)
+                            : AdvertiseChatLabels.advertiseTitle(this));
+        }
+        if (birthdayMode) {
+            if (offerText != null) {
+                offerText.setText(AdvertiseChatLabels.birthdayOffer(this));
+                offerText.setTextColor(Color.parseColor("#FF6B00"));
+            }
+            if (promoInput != null) promoInput.setVisibility(View.GONE);
+            if (locationInput != null) {
+                locationInput.setVisibility(View.VISIBLE);
+                locationInput.setHint(AdvertiseChatLabels.hintLocation(this));
+            }
+            if (birthdayPhotoWrap != null) birthdayPhotoWrap.setVisibility(View.VISIBLE);
+            if (birthdayPhotoHint != null) {
+                birthdayPhotoHint.setText(AdvertiseChatLabels.pickPhoto(this));
+                birthdayPhotoHint.setVisibility(View.VISIBLE);
+            }
+            if (startBtn != null) startBtn.setText(AdvertiseChatLabels.startBirthday(this));
+        } else {
+            if (promoInput != null) promoInput.setVisibility(View.VISIBLE);
+            if (locationInput != null) locationInput.setVisibility(View.GONE);
+            if (birthdayPhotoWrap != null) birthdayPhotoWrap.setVisibility(View.GONE);
         }
     }
 
@@ -124,15 +234,10 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         super.onResume();
         applySystemBarInsets();
         if (threadId > 0) {
-            // Prefer delta when we already have messages; otherwise full replace.
             loadMessages(adapter != null && adapter.lastId() > 0);
         }
     }
 
-    /**
-     * targetSdk edge-to-edge draws under the status bar — pad orange header so back/title
-     * sit below the clock while orange fills the status-bar region.
-     */
     private void applySystemBarInsets() {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
@@ -219,8 +324,7 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                                 try {
                                     JsonObject root = response.body();
                                     if (root == null || !root.has("data")) return;
-                                    JsonObject d = root.getAsJsonObject("data");
-                                    applyOffer(d);
+                                    applyOffer(root.getAsJsonObject("data"));
                                 } catch (Exception ignored) {
                                 }
                             }
@@ -231,7 +335,7 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
     }
 
     private void applyOffer(JsonObject d) {
-        if (offerText == null || d == null) return;
+        if (offerText == null || d == null || birthdayMode) return;
         String text =
                 d.has("offer_text") && !d.get("offer_text").isJsonNull()
                         ? d.get("offer_text").getAsString()
@@ -266,7 +370,6 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         if (busy) return;
         String name = nameInput != null ? nameInput.getText().toString().trim() : "";
         String mobile = mobileInput != null ? mobileInput.getText().toString().trim() : "";
-        String promo = promoInput != null ? promoInput.getText().toString().trim() : "";
         if (name.length() < 2) {
             Toast.makeText(this, R.string.advertise_need_name, Toast.LENGTH_SHORT).show();
             return;
@@ -275,15 +378,113 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             Toast.makeText(this, R.string.advertise_need_mobile, Toast.LENGTH_SHORT).show();
             return;
         }
+        if (birthdayMode) {
+            String location =
+                    locationInput != null ? locationInput.getText().toString().trim() : "";
+            if (location.length() < 2) {
+                Toast.makeText(this, AdvertiseChatLabels.needLocation(this), Toast.LENGTH_SHORT)
+                        .show();
+                return;
+            }
+            if (birthdayPhotoUri == null) {
+                Toast.makeText(this, AdvertiseChatLabels.needPhoto(this), Toast.LENGTH_SHORT)
+                        .show();
+                return;
+            }
+            busy = true;
+            Toast.makeText(this, R.string.advertise_uploading, Toast.LENGTH_SHORT).show();
+            uploadBirthdayThenStart(name, mobile, location, birthdayPhotoUri);
+            return;
+        }
+
+        String promo = promoInput != null ? promoInput.getText().toString().trim() : "";
         if (promo.length() < 3) {
             Toast.makeText(this, R.string.advertise_need_promo, Toast.LENGTH_SHORT).show();
             return;
         }
         busy = true;
+        postStartThread(name, mobile, promo, null, null);
+    }
+
+    private void uploadBirthdayThenStart(
+            String name, String mobile, String location, Uri photoUri) {
+        try {
+            InputStream is = getContentResolver().openInputStream(photoUri);
+            if (is == null) {
+                busy = false;
+                Toast.makeText(this, R.string.advertise_upload_failed, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+            is.close();
+            RequestBody req =
+                    RequestBody.create(MediaType.parse("image/jpeg"), bos.toByteArray());
+            MultipartBody.Part part =
+                    MultipartBody.Part.createFormData(
+                            "file", "bday_" + System.currentTimeMillis() + ".jpg", req);
+            APIService api = RestApiClient.getClient().create(APIService.class);
+            api.uploadFile(part)
+                    .enqueue(
+                            new Callback<JsonObject>() {
+                                @Override
+                                public void onResponse(
+                                        Call<JsonObject> call, Response<JsonObject> response) {
+                                    try {
+                                        String url = extractUploadUrl(response.body());
+                                        if (TextUtils.isEmpty(url)) {
+                                            busy = false;
+                                            Toast.makeText(
+                                                            AdvertiseOnAnyNewsActivity.this,
+                                                            R.string.advertise_upload_failed,
+                                                            Toast.LENGTH_SHORT)
+                                                    .show();
+                                            return;
+                                        }
+                                        postStartThread(name, mobile, null, location, url);
+                                    } catch (Exception e) {
+                                        busy = false;
+                                        Toast.makeText(
+                                                        AdvertiseOnAnyNewsActivity.this,
+                                                        R.string.advertise_upload_failed,
+                                                        Toast.LENGTH_SHORT)
+                                                .show();
+                                    }
+                                }
+
+                                @Override
+                                public void onFailure(Call<JsonObject> call, Throwable t) {
+                                    busy = false;
+                                    Toast.makeText(
+                                                    AdvertiseOnAnyNewsActivity.this,
+                                                    R.string.advertise_upload_failed,
+                                                    Toast.LENGTH_SHORT)
+                                            .show();
+                                }
+                            });
+        } catch (Exception e) {
+            busy = false;
+            Toast.makeText(this, R.string.advertise_upload_failed, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void postStartThread(
+            String name, String mobile, String promo, String location, String photoUrl) {
         JsonObject body = new JsonObject();
         body.addProperty("name", name);
         body.addProperty("mobile", mobile);
-        body.addProperty("promotion_description", promo);
+        body.addProperty("kind", birthdayMode ? MODE_BIRTHDAY : MODE_ADVERTISE);
+        if (birthdayMode) {
+            body.addProperty("location", location != null ? location : "");
+            body.addProperty("photo_url", photoUrl != null ? photoUrl : "");
+            body.addProperty(
+                    "promotion_description",
+                    "Birthday Special — " + (location != null ? location : ""));
+        } else {
+            body.addProperty("promotion_description", promo != null ? promo : "");
+        }
         try {
             int draft =
                     SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
@@ -302,7 +503,8 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                                 busy = false;
                                 try {
                                     JsonObject root = response.body();
-                                    if (root == null || !root.has("success")
+                                    if (root == null
+                                            || !root.has("success")
                                             || !root.get("success").getAsBoolean()) {
                                         String msg =
                                                 root != null && root.has("msg")
@@ -320,7 +522,9 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                                     threadId = thread.get("thread_id").getAsLong();
                                     SharedPrefsData.putLong(
                                             AdvertiseOnAnyNewsActivity.this,
-                                            PREF_THREAD_ID,
+                                            birthdayMode
+                                                    ? PREF_BIRTHDAY_THREAD_ID
+                                                    : PREF_THREAD_ID,
                                             threadId,
                                             Constants.PREF_NAME);
                                     showChat();
@@ -400,17 +604,123 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         if (busy || threadId <= 0) return;
         String text = messageInput != null ? messageInput.getText().toString().trim() : "";
         if (TextUtils.isEmpty(text)) return;
-        sendMessage(text);
+        sendMessage("text", text, "");
         if (messageInput != null) messageInput.setText("");
     }
 
-    private void sendMessage(String text) {
+    private void showAttachChooser() {
+        if (busy || threadId <= 0) return;
+        String[] items =
+                new String[] {
+                    AdvertiseChatLabels.pickImage(this), AdvertiseChatLabels.pickVideo(this)
+                };
+        new AlertDialog.Builder(this)
+                .setItems(
+                        items,
+                        (d, which) -> {
+                            if (which == 0) {
+                                pendingPickKind = "image";
+                                pickMedia.launch("image/*");
+                            } else {
+                                pendingPickKind = "video";
+                                pickMedia.launch("video/*");
+                            }
+                        })
+                .show();
+    }
+
+    private void uploadAndSendMedia(Uri uri, String kind) {
+        if (busy || threadId <= 0) return;
+        busy = true;
+        Toast.makeText(this, R.string.advertise_uploading, Toast.LENGTH_SHORT).show();
+        try {
+            String mime = getContentResolver().getType(uri);
+            if (mime == null) {
+                mime = "video".equals(kind) ? "video/mp4" : "image/jpeg";
+            }
+            String type = mime.startsWith("video") || "video".equals(kind) ? "video" : "image";
+            String name =
+                    "adv_"
+                            + System.currentTimeMillis()
+                            + (type.equals("video") ? ".mp4" : ".jpg");
+            InputStream is = getContentResolver().openInputStream(uri);
+            if (is == null) {
+                busy = false;
+                return;
+            }
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+            is.close();
+            RequestBody req = RequestBody.create(MediaType.parse(mime), bos.toByteArray());
+            MultipartBody.Part part = MultipartBody.Part.createFormData("file", name, req);
+            APIService api = RestApiClient.getClient().create(APIService.class);
+            api.uploadFile(part)
+                    .enqueue(
+                            new Callback<JsonObject>() {
+                                @Override
+                                public void onResponse(
+                                        Call<JsonObject> call, Response<JsonObject> response) {
+                                    busy = false;
+                                    try {
+                                        String url = extractUploadUrl(response.body());
+                                        if (TextUtils.isEmpty(url)) {
+                                            Toast.makeText(
+                                                            AdvertiseOnAnyNewsActivity.this,
+                                                            R.string.advertise_upload_failed,
+                                                            Toast.LENGTH_SHORT)
+                                                    .show();
+                                            return;
+                                        }
+                                        sendMessage(type, "", url);
+                                    } catch (Exception e) {
+                                        Toast.makeText(
+                                                        AdvertiseOnAnyNewsActivity.this,
+                                                        R.string.advertise_upload_failed,
+                                                        Toast.LENGTH_SHORT)
+                                                .show();
+                                    }
+                                }
+
+                                @Override
+                                public void onFailure(Call<JsonObject> call, Throwable t) {
+                                    busy = false;
+                                    Toast.makeText(
+                                                    AdvertiseOnAnyNewsActivity.this,
+                                                    R.string.advertise_upload_failed,
+                                                    Toast.LENGTH_SHORT)
+                                            .show();
+                                }
+                            });
+        } catch (Exception e) {
+            busy = false;
+            Toast.makeText(this, R.string.advertise_upload_failed, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Nullable
+    private static String extractUploadUrl(@Nullable JsonObject root) {
+        if (root == null) return null;
+        try {
+            if (root.has("extras") && root.getAsJsonObject("extras").has("url")) {
+                return root.getAsJsonObject("extras").get("url").getAsString();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private void sendMessage(String type, String text, String mediaUrl) {
         if (busy || threadId <= 0) return;
         busy = true;
         JsonObject body = new JsonObject();
         body.addProperty("thread_id", threadId);
-        body.addProperty("type", "text");
+        body.addProperty("type", type != null ? type : "text");
         body.addProperty("text", text != null ? text : "");
+        if (!TextUtils.isEmpty(mediaUrl)) {
+            body.addProperty("media_url", mediaUrl);
+        }
         try {
             int draft =
                     SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
@@ -473,6 +783,72 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                 () -> messagesList.scrollToPosition(adapter.getItemCount() - 1));
     }
 
+    private void openMediaFullscreen(ChatMsg m) {
+        if (m == null || TextUtils.isEmpty(m.mediaUrl)) return;
+        Dialog dialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+        root.setLayoutParams(
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+
+        if ("video".equals(m.type)) {
+            VideoView vv = new VideoView(this);
+            FrameLayout.LayoutParams lp =
+                    new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            Gravity.CENTER);
+            root.addView(vv, lp);
+            vv.setVideoURI(Uri.parse(m.mediaUrl));
+            vv.setOnPreparedListener(
+                    mp -> {
+                        mp.setLooping(true);
+                        vv.start();
+                    });
+            dialog.setOnDismissListener(d -> {
+                try {
+                    vv.stopPlayback();
+                } catch (Exception ignored) {
+                }
+            });
+        } else {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            root.addView(
+                    iv,
+                    new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT));
+            Glide.with(this).load(m.mediaUrl).into(iv);
+        }
+
+        ImageButton close = new ImageButton(this);
+        close.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+        close.setBackgroundColor(Color.TRANSPARENT);
+        close.setColorFilter(Color.WHITE);
+        FrameLayout.LayoutParams closeLp =
+                new FrameLayout.LayoutParams(
+                        (int) dp(44), (int) dp(44), Gravity.TOP | Gravity.START);
+        closeLp.setMargins((int) dp(12), (int) dp(12), 0, 0);
+        root.addView(close, closeLp);
+        close.setOnClickListener(v -> dialog.dismiss());
+        root.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.setContentView(root);
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setLayout(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        }
+        dialog.show();
+    }
+
+    private float dp(float v) {
+        return v * getResources().getDisplayMetrics().density;
+    }
+
     private List<ChatMsg> parseMessages(JsonArray arr) {
         List<ChatMsg> out = new ArrayList<>();
         if (arr == null) return out;
@@ -492,6 +868,10 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         m.sender = o.has("sender") ? o.get("sender").getAsString() : "user";
         m.type = o.has("type") ? o.get("type").getAsString() : "text";
         m.text = o.has("text") && !o.get("text").isJsonNull() ? o.get("text").getAsString() : "";
+        m.mediaUrl =
+                o.has("media_url") && !o.get("media_url").isJsonNull()
+                        ? o.get("media_url").getAsString()
+                        : "";
         m.createdAtMs = parseCreatedAtMs(o);
         return m;
     }
@@ -532,6 +912,7 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         String sender;
         String type;
         String text;
+        String mediaUrl;
         long createdAtMs;
     }
 
@@ -579,10 +960,6 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             return items.get(items.size() - 1).id;
         }
 
-        private float dp(float v) {
-            return v * getResources().getDisplayMetrics().density;
-        }
-
         private GradientDrawable bubbleBg(boolean mine) {
             GradientDrawable gd = new GradientDrawable();
             gd.setShape(GradientDrawable.RECTANGLE);
@@ -606,16 +983,53 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                     new RecyclerView.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.WRAP_CONTENT);
-            int gap = (int) dp(8);
-            rowLp.bottomMargin = gap;
+            rowLp.bottomMargin = (int) dp(8);
             row.setLayoutParams(rowLp);
 
-            TextView bubble = new TextView(parent.getContext());
-            int padH = (int) dp(12);
-            int padV = (int) dp(8);
+            LinearLayout bubble = new LinearLayout(parent.getContext());
+            bubble.setOrientation(LinearLayout.VERTICAL);
+            int padH = (int) dp(8);
+            int padV = (int) dp(6);
             bubble.setPadding(padH, padV, padH, padV);
-            bubble.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
-            bubble.setMaxWidth((int) (parent.getResources().getDisplayMetrics().widthPixels * 0.78f));
+            bubble.setMaxWidth(
+                    (int) (parent.getResources().getDisplayMetrics().widthPixels * 0.78f));
+
+            FrameLayout mediaFrame = new FrameLayout(parent.getContext());
+            ImageView media = new ImageView(parent.getContext());
+            media.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            media.setAdjustViewBounds(true);
+            FrameLayout.LayoutParams mediaLp =
+                    new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(180));
+            mediaFrame.addView(media, mediaLp);
+
+            TextView playOverlay = new TextView(parent.getContext());
+            playOverlay.setText(AdvertiseChatLabels.tapToPlay(AdvertiseOnAnyNewsActivity.this));
+            playOverlay.setTextColor(Color.WHITE);
+            playOverlay.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+            playOverlay.setTypeface(null, Typeface.BOLD);
+            playOverlay.setGravity(Gravity.CENTER);
+            playOverlay.setBackgroundColor(Color.parseColor("#66000000"));
+            mediaFrame.addView(
+                    playOverlay,
+                    new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT));
+
+            TextView text = new TextView(parent.getContext());
+            text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f);
+            int tPad = (int) dp(4);
+            text.setPadding(tPad, tPad, tPad, 0);
+
+            bubble.addView(
+                    mediaFrame,
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            bubble.addView(
+                    text,
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT));
 
             TextView time = new TextView(parent.getContext());
             time.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
@@ -633,7 +1047,7 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
                             ViewGroup.LayoutParams.WRAP_CONTENT,
                             ViewGroup.LayoutParams.WRAP_CONTENT));
             row.addView(time);
-            return new VH(row, bubble, time);
+            return new VH(row, bubble, mediaFrame, media, playOverlay, text, time);
         }
 
         @Override
@@ -642,12 +1056,37 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             boolean mine = !"admin".equals(m.sender);
             holder.row.setGravity(mine ? Gravity.END : Gravity.START);
             holder.bubble.setBackground(bubbleBg(mine));
-            holder.bubble.setTextColor(mine ? Color.WHITE : Color.parseColor("#FF1C1917"));
-            String body = m.text;
-            if (TextUtils.isEmpty(body) && !"text".equals(m.type)) {
-                body = "[" + m.type + "]";
+            holder.text.setTextColor(mine ? Color.WHITE : Color.parseColor("#FF1C1917"));
+
+            boolean hasMedia =
+                    !TextUtils.isEmpty(m.mediaUrl)
+                            && ("image".equals(m.type) || "video".equals(m.type));
+            if (hasMedia) {
+                holder.mediaFrame.setVisibility(View.VISIBLE);
+                Glide.with(holder.media.getContext())
+                        .load(m.mediaUrl)
+                        .centerCrop()
+                        .into(holder.media);
+                holder.playOverlay.setVisibility(
+                        "video".equals(m.type) ? View.VISIBLE : View.GONE);
+                holder.mediaFrame.setOnClickListener(v -> openMediaFullscreen(m));
+            } else {
+                holder.mediaFrame.setVisibility(View.GONE);
+                holder.mediaFrame.setOnClickListener(null);
+                Glide.with(holder.media.getContext()).clear(holder.media);
             }
-            holder.bubble.setText(body != null ? body : "");
+
+            if (!TextUtils.isEmpty(m.text)) {
+                holder.text.setVisibility(View.VISIBLE);
+                holder.text.setText(m.text);
+            } else if (!hasMedia) {
+                holder.text.setVisibility(View.VISIBLE);
+                holder.text.setText("");
+            } else {
+                // Media-only bubble — never show "[image] url"
+                holder.text.setVisibility(View.GONE);
+            }
+
             holder.time.setText(timeFmt.format(new Date(m.createdAtMs)));
             LinearLayout.LayoutParams timeLp =
                     (LinearLayout.LayoutParams) holder.time.getLayoutParams();
@@ -662,13 +1101,28 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
 
         class VH extends RecyclerView.ViewHolder {
             final LinearLayout row;
-            final TextView bubble;
+            final LinearLayout bubble;
+            final FrameLayout mediaFrame;
+            final ImageView media;
+            final TextView playOverlay;
+            final TextView text;
             final TextView time;
 
-            VH(LinearLayout itemView, TextView bubble, TextView time) {
+            VH(
+                    LinearLayout itemView,
+                    LinearLayout bubble,
+                    FrameLayout mediaFrame,
+                    ImageView media,
+                    TextView playOverlay,
+                    TextView text,
+                    TextView time) {
                 super(itemView);
                 this.row = itemView;
                 this.bubble = bubble;
+                this.mediaFrame = mediaFrame;
+                this.media = media;
+                this.playOverlay = playOverlay;
+                this.text = text;
                 this.time = time;
             }
         }

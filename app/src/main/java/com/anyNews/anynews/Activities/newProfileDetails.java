@@ -2224,6 +2224,8 @@ public class newProfileDetails extends AppCompatActivity {
 
         setHubLabel(R.id.profile_status_videos_label, ProfileHubLabels.statusVideos(this));
         setHubLabel(R.id.profile_become_a_reporter_label, ProfileHubLabels.becomeAReporter(this));
+        setHubLabel(R.id.profile_advertise_label, ProfileHubLabels.advertiseOnAnyNews(this));
+        setHubLabel(R.id.profile_birthday_label, ProfileHubLabels.birthdaySpecial(this));
 
         TextView locationCaption = findViewById(R.id.profile_location_label);
         if (locationCaption != null) {
@@ -4191,7 +4193,7 @@ public class newProfileDetails extends AppCompatActivity {
         TextView advertiseBadge = findViewById(R.id.profile_advertise_new_badge);
         if (advertiseLabel != null) {
             advertiseLabel.setTextSize(menuSp);
-            advertiseLabel.setText(R.string.advertise_on_anynews);
+            advertiseLabel.setText(ProfileHubLabels.advertiseOnAnyNews(this));
         }
         if (advertiseBadge != null) {
             advertiseBadge.setVisibility(View.VISIBLE);
@@ -4204,6 +4206,32 @@ public class newProfileDetails extends AppCompatActivity {
                                     new Intent(
                                             newProfileDetails.this,
                                             AdvertiseOnAnyNewsActivity.class)));
+        }
+
+        // Birthday Special — photo / name / location → chat
+        View layoutBirthday = findViewById(R.id.layout_birthday_special);
+        TextView birthdayLabel = findViewById(R.id.profile_birthday_label);
+        TextView birthdayBadge = findViewById(R.id.profile_birthday_new_badge);
+        if (birthdayLabel != null) {
+            birthdayLabel.setTextSize(menuSp);
+            birthdayLabel.setText(ProfileHubLabels.birthdaySpecial(this));
+        }
+        if (birthdayBadge != null) {
+            birthdayBadge.setVisibility(View.VISIBLE);
+        }
+        if (layoutBirthday != null) {
+            layoutBirthday.setVisibility(View.VISIBLE);
+            layoutBirthday.setOnClickListener(
+                    v -> {
+                        Intent i =
+                                new Intent(
+                                        newProfileDetails.this,
+                                        AdvertiseOnAnyNewsActivity.class);
+                        i.putExtra(
+                                AdvertiseOnAnyNewsActivity.EXTRA_MODE,
+                                AdvertiseOnAnyNewsActivity.MODE_BIRTHDAY);
+                        startActivity(i);
+                    });
         }
 
         // Bookmarks visibility

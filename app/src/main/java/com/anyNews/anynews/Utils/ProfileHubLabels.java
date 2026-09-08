@@ -81,6 +81,30 @@ public final class ProfileHubLabels {
         }
     }
 
+    public static String birthdaySpecial(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ജന്മദിന സ്പെഷ്യൽ";
+            case 2: return "जन्मदिन स्पेशल";
+            case 3: return "పుట్టినరోజు స్పెషల్";
+            case 4: return "பிறந்தநாள் சிறப்பு";
+            case 5: return "ಜನ್ಮದಿನ ಸ್ಪೆಷಲ್";
+            case 6: return "ଜନ୍ମଦିନ ସ୍ପେସିଆଲ୍";
+            default: return str(context, R.string.birthday_special, "Birthday Special");
+        }
+    }
+
+    public static String advertiseOnAnyNews(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "AnyNews-ൽ പരസ്യം ചെയ്യുക";
+            case 2: return "AnyNews पर विज्ञापन";
+            case 3: return "AnyNewsలో ప్రకటన";
+            case 4: return "AnyNews-இல் விளம்பரம்";
+            case 5: return "AnyNewsನಲ್ಲಿ ಜಾಹೀರಾತು";
+            case 6: return "AnyNewsରେ ବିଜ୍ଞାପନ";
+            default: return str(context, R.string.advertise_on_anynews, "Advertise on AnyNews");
+        }
+    }
+
     /** Small caption above the district name on the location row. */
     public static String selectedLocation(@Nullable Context context) {
         switch (languageId(context)) {
