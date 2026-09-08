@@ -221,22 +221,6 @@ public class EncreptionRequest {
     @Expose
     private Integer pn_title_size_sp;
 
-    @SerializedName("live_readers_enabled")
-    @Expose
-    private Boolean live_readers_enabled;
-
-    @SerializedName("live_readers_window_minutes")
-    @Expose
-    private Integer live_readers_window_minutes;
-
-    @SerializedName("live_readers_show_seconds")
-    @Expose
-    private Integer live_readers_show_seconds;
-
-    @SerializedName("live_readers_min_count")
-    @Expose
-    private Integer live_readers_min_count;
-
     /** In-feed ad after every N real articles (Performance; default 4, range 2–10). */
     @SerializedName("feed_ad_every_n")
     @Expose
@@ -474,45 +458,4 @@ public class EncreptionRequest {
     public void setActive_match(ActiveMatch active_match) {
         this.active_match = active_match;
     }
-
-    public Boolean getLive_readers_enabled() {
-        return live_readers_enabled;
-    }
-
-    public Integer getLive_readers_window_minutes() {
-        return live_readers_window_minutes;
-    }
-
-    public Integer getLive_readers_show_seconds() {
-        return live_readers_show_seconds;
-    }
-
-    public Integer getLive_readers_min_count() {
-        return live_readers_min_count;
-    }
-
-    public Integer getFeed_ad_every_n() {
-        return feed_ad_every_n;
-    }
-
-    public Integer getAd_prefetch_lookahead() {
-        return ad_prefetch_lookahead;
-    }
-
-    public Integer getMax_native_ad_loads_in_flight() {
-        return max_native_ad_loads_in_flight;
-    }
-
-    public Integer getAd_impr_flush_every_n() {
-        return ad_impr_flush_every_n;
-    }
-
-    public String getFeed_ad_format() {
-        return feed_ad_format;
-    }
-
-    public String getAd_code() {
-        return ad_code;
-    }
-
 }

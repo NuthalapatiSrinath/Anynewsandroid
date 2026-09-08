@@ -174,7 +174,6 @@ import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
-import com.anyNews.anynews.Utils.LiveReadersConfig;
 import com.anyNews.anynews.Utils.FlipAdWorkGate;
 import com.anyNews.anynews.Utils.NativeAdCacheCoordinator;
 import com.anyNews.anynews.Utils.OfflinePackPrefetcher;
@@ -5671,59 +5670,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         return positionx;
-    }
-
-    /**
-     * True when the first half article in the feed has no {@code live_readers} field
-     * (stale OpenPath cache from before the feature / attach). Null ≠ legitimate 0.
-     */
-    private static boolean firstHalfPostMissingLiveReaders(
-            @Nullable java.util.List<ModelClass.Datum> items) {
-        if (items == null || items.isEmpty()) return true;
-        for (int i = 0; i < items.size(); i++) {
-            ModelClass.Datum d = items.get(i);
-            if (d == null || d.getPostType() == null) continue;
-            String t = d.getPostType().trim().toLowerCase(java.util.Locale.US);
-            if (!"normal_image".equals(t) && !"normal_video".equals(t)) continue;
-            return d.getLiveReaders() == null;
-        }
-        return false;
-    }
-
-    /**
-     * Show live readers once on the first half card after paint / config land.
-     * No-op when already shown this process, or when the visible page is not that card.
-     */
-    private void maybeRefreshLiveReadersBadge() {
-        try {
-            if (LiveReadersConfig.hasShownThisSession()) return;
-            if (adapter == null || mFlipView == null || list == null || list.isEmpty()) return;
-            if (bookmarksModeSelected
-                    || isSpecialFeedMode()
-                    || isCalendarMode()
-                    || isDailyUpdatesMode()) {
-                return;
-            }
-            final int cur = getVisiblePostIndex();
-            if (cur < 0 || cur >= list.size()) return;
-            // First half article only — never articles below / other visible pages.
-            int firstHalf = -1;
-            for (int i = 0; i < list.size(); i++) {
-                ModelClass.Datum d = list.get(i);
-                if (d == null || d.getPostType() == null) continue;
-                String t = d.getPostType().trim().toLowerCase(java.util.Locale.US);
-                if ("normal_image".equals(t) || "normal_video".equals(t)) {
-                    firstHalf = i;
-                    break;
-                }
-            }
-            if (firstHalf < 0 || cur != firstHalf) return;
-            // FlipView recycles prev/current/next — do not use getChildAt(feedIndex).
-            final View child = mFlipView.getCurrentPageView();
-            if (child == null) return;
-            adapter.refreshLiveReadersBadgeOnVisiblePage(child, cur);
-        } catch (Exception ignored) {
-        }
     }
 
     /** Visible flip index for FlipperAdapter on-post magazine Share restore. */
@@ -12071,21 +12017,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             needNetwork = true;
         }
 
-        // Feature enabled but warm disk was saved before counts were attached → force
-        // a network page-0 so first half post gets live_readers on this open.
-        if (!needNetwork
-                && LiveReadersConfig.isEnabled(this)
-                && firstHalfPostMissingLiveReaders(list)) {
-            showLog("OpenPath: live readers ON but first half missing live_readers — forcing network");
-            needNetwork = true;
-        }
-
         if (!needNetwork) {
             showLog("OpenPath: skip feed network (fresh within "
                     + OpenPathCache.FEED_NETWORK_MIN_INTERVAL_MS + "ms)"
                     + " cursors skip=" + skip + " actual_skip=" + actual_skip
                     + " last_post_id=" + last_post_id);
-            maybeRefreshLiveReadersBadge();
             return;
         }
 
@@ -12707,7 +12643,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getPn_thumb_size_dp(),
                             encreptionRequest.getPn_title_size_sp()
                     );
-                    LiveReadersConfig.saveFromServer(
                             HomePage.this,
                             encreptionRequest.getLive_readers_enabled(),
                             encreptionRequest.getLive_readers_window_minutes(),
@@ -12738,9 +12673,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         final android.view.View decor =
                                 getWindow() != null ? getWindow().getDecorView() : null;
                         if (decor != null) {
-                            decor.post(() -> maybeRefreshLiveReadersBadge());
                         } else {
-                            maybeRefreshLiveReadersBadge();
                         }
                     } catch (Exception ignored) {
                     }
@@ -12908,7 +12841,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 if (adapter != null) {
                                     adapter.notifyDataSetChanged();
                                 }
-                                maybeRefreshLiveReadersBadge();
                             } catch (Exception ignored) {
                             }
                             // Do not rebuild adapter / do not jump flip — capture offline store.
@@ -14632,9 +14564,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             final android.view.View decor =
                     getWindow() != null ? getWindow().getDecorView() : null;
             if (decor != null) {
-                decor.post(() -> maybeRefreshLiveReadersBadge());
             } else {
-                maybeRefreshLiveReadersBadge();
             }
         } catch (Exception ignored) {
         }

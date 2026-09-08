@@ -54,7 +54,6 @@ import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.NewsTapModeConfig;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
-import com.anyNews.anynews.Utils.LiveReadersConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
@@ -1872,12 +1871,6 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getRewardsChipColor(),
                                 startActivityReqModel.getData().getRewardsChipSizeSp(),
                                 startActivityReqModel.getData().getRewardsChipWeight());
-                        LiveReadersConfig.saveFromServer(
-                                getApplicationContext(),
-                                startActivityReqModel.getData().getLiveReadersEnabled(),
-                                startActivityReqModel.getData().getLiveReadersWindowMinutes(),
-                                startActivityReqModel.getData().getLiveReadersShowSeconds(),
-                                startActivityReqModel.getData().getLiveReadersMinCount());
                         // Read / చదివినవి recency window (default 24h; 1–168).
                         ReadHistoryConfig.saveHoursFromServer(
                                 getApplicationContext(),

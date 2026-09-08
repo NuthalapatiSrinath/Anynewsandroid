@@ -114,17 +114,7 @@
                                 android:text="anws.co/78787878"
                                 android:textColor="@color/on_brand_text"
                                 android:textSize="8dp" />
-
-                            <include
-                                layout="@layout/include_live_readers_badge"
-                                android:layout_width="wrap_content"
-                                android:layout_height="22dp"
-                                android:layout_alignParentEnd="true"
-                                android:layout_alignParentBottom="true"
-                                android:layout_marginEnd="8dp"
-                                android:layout_marginBottom="8dp" />
-
-                        </RelativeLayout>
+</RelativeLayout>
 
 
                     </androidx.constraintlayout.widget.ConstraintLayout>

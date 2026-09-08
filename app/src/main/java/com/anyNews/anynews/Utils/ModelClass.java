@@ -94,14 +94,6 @@ public class ModelClass implements Serializable {
         @SerializedName("comments")
         @Expose
         private Integer comments;
-        /** Unique recent readers in admin window (half posts). Null/0 = hide badge. */
-        @SerializedName("live_readers")
-        @Expose
-        private Integer liveReaders;
-        /** Server-formatted label e.g. "1.3 Lakh readers now". Optional. */
-        @SerializedName("live_readers_label")
-        @Expose
-        private String liveReadersLabel;
         @SerializedName("downloads")
         @Expose
         private Integer downloads;
@@ -592,22 +584,6 @@ public class ModelClass implements Serializable {
 
         public void setComments(Integer comments) {
             this.comments = comments;
-        }
-
-        public Integer getLiveReaders() {
-            return liveReaders;
-        }
-
-        public void setLiveReaders(Integer liveReaders) {
-            this.liveReaders = liveReaders;
-        }
-
-        public String getLiveReadersLabel() {
-            return liveReadersLabel;
-        }
-
-        public void setLiveReadersLabel(String liveReadersLabel) {
-            this.liveReadersLabel = liveReadersLabel;
         }
 
         public Integer getDownloads() {

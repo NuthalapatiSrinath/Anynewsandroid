@@ -301,14 +301,6 @@ public class Constants {
      */
     public static String REWARDS_EXCLUDE_REPORTERS = "rewards_exclude_reporters";
     /**
-     * Way2-style live readers badge on half articles (splash/session/articles).
-     * Default OFF.
-     */
-    public static String LIVE_READERS_ENABLED = "live_readers_enabled";
-    public static String LIVE_READERS_WINDOW_MINUTES = "live_readers_window_minutes";
-    public static String LIVE_READERS_SHOW_SECONDS = "live_readers_show_seconds";
-    public static String LIVE_READERS_MIN_COUNT = "live_readers_min_count";
-    /**
      * Hours of last-read articles shown under Read / చదివినవి (splash/runtime).
      * Default 24; clamped 1–168. Older reads stay out of Read but News still strips them.
      */

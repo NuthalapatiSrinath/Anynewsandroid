@@ -890,28 +890,6 @@ public final class SessionAnalyticsTracker {
                     } catch (Exception ignored) {
                     }
                     try {
-                        Boolean lrEn = null;
-                        Integer lrWin = null;
-                        Integer lrShow = null;
-                        Integer lrMin = null;
-                        if (resBody.has("live_readers_enabled")
-                                && !resBody.get("live_readers_enabled").isJsonNull()) {
-                            lrEn = resBody.get("live_readers_enabled").getAsBoolean();
-                        }
-                        if (resBody.has("live_readers_window_minutes")
-                                && !resBody.get("live_readers_window_minutes").isJsonNull()) {
-                            lrWin = resBody.get("live_readers_window_minutes").getAsInt();
-                        }
-                        if (resBody.has("live_readers_show_seconds")
-                                && !resBody.get("live_readers_show_seconds").isJsonNull()) {
-                            lrShow = resBody.get("live_readers_show_seconds").getAsInt();
-                        }
-                        if (resBody.has("live_readers_min_count")
-                                && !resBody.get("live_readers_min_count").isJsonNull()) {
-                            lrMin = resBody.get("live_readers_min_count").getAsInt();
-                        }
-                        if (lrEn != null || lrWin != null || lrShow != null || lrMin != null) {
-                            LiveReadersConfig.saveFromServer(context, lrEn, lrWin, lrShow, lrMin);
                         }
                     } catch (Exception ignored) {
                     }

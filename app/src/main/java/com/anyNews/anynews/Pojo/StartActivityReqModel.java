@@ -470,23 +470,6 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String playStorePackage;
 
-        /** Way2-style live readers badge (half articles). Null on old servers. */
-        @SerializedName("live_readers_enabled")
-        @Expose
-        private Boolean liveReadersEnabled;
-
-        @SerializedName("live_readers_window_minutes")
-        @Expose
-        private Integer liveReadersWindowMinutes;
-
-        @SerializedName("live_readers_show_seconds")
-        @Expose
-        private Integer liveReadersShowSeconds;
-
-        @SerializedName("live_readers_min_count")
-        @Expose
-        private Integer liveReadersMinCount;
-
         /**
          * Read / చదివినవి recency window in hours (admin; default 24, range 1–168).
          * Null on old servers → Android keeps cached / default 24.
@@ -906,22 +889,6 @@ public class StartActivityReqModel implements Serializable {
 
         public String getPlayStorePackage() {
             return playStorePackage;
-        }
-
-        public Boolean getLiveReadersEnabled() {
-            return liveReadersEnabled;
-        }
-
-        public Integer getLiveReadersWindowMinutes() {
-            return liveReadersWindowMinutes;
-        }
-
-        public Integer getLiveReadersShowSeconds() {
-            return liveReadersShowSeconds;
-        }
-
-        public Integer getLiveReadersMinCount() {
-            return liveReadersMinCount;
         }
 
         public Integer getReadHistoryHours() {
