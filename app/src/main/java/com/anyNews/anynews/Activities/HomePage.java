@@ -473,6 +473,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     MailAdapter commentMailAdapter;
     Long replyParentCommentId = null;
     Long pendingExpandParentId = null;
+    /** Prevents double-submit while Add_Comment is in flight. */
+    private boolean commentSubmitInFlight = false;
     public  boolean adImpress=false;
     public  String adError="";
 
@@ -1438,7 +1440,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         LocalBroadcastManager.getInstance(getContext()).registerReceiver(REPORTER_STATUS,
                 new IntentFilter(Constants.REPORTER_STATUS_CHANGED));
-
         IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         receiver = new NetworkChangeReceiver();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -4522,7 +4523,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             updateCenterFab();
         }
     };
-
     public BroadcastReceiver SURVEY_STATUS = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -5205,6 +5205,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 comment_page.setVisibility(View.GONE);
                 leave_comment_white.setText("");
                 clearReplyContext();
+                refreshVisibleCommentCountChrome();
                 InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                 if (imm != null) {
                     imm.hideSoftInputFromWindow(leave_comment_white.getWindowToken(), 0);
@@ -5331,6 +5332,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void submitCommentFromCompose() {
+        if (commentSubmitInFlight) {
+            return;
+        }
         if (leave_comment_white.getText().toString().trim().length() <= 0) {
             Toast.makeText(HomePage.this, "Comment is empty", Toast.LENGTH_LONG).show();
             return;
@@ -5526,7 +5530,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         }
         if (isMe) {
-            userName = "Me";
+            String local = SharedPrefsData.getString(this, Constants.USER_NAME, Constants.PREF_NAME);
+            if (!TextUtils.isEmpty(local) && !"guest".equalsIgnoreCase(local.trim())) {
+                userName = local.trim();
+            }
         }
         replyParentUserName = userName;
         replyParentSnippet = datum.getComment() != null ? datum.getComment() : "";
@@ -5582,6 +5589,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                     hideProgress();
                     if (validateUserOtp.getSuccess()) {
+                        if (adapter != null && validateUserOtp.getCount() != null) {
+                            adapter.syncCommentCountFromServer(post_id, sub_post_id, validateUserOtp.getCount());
+                        }
                         if (validateUserOtp.getData().size() == 0) {
                             comment_recycler_view.setVisibility(View.INVISIBLE);
                             linear_no_comment_page.setVisibility(View.VISIBLE);
@@ -10750,15 +10760,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private JsonObject getCommentRequestData() {
-
-        long post_id = list.get(positionx).getPostId();
-        long sub_post_id = list.get(positionx).getSubPostId();
+        int idx = getVisiblePostIndex();
+        if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
+            idx = positionx;
+        }
+        long post_id = list.get(idx).getPostId();
+        long sub_post_id = list.get(idx).getSubPostId();
         ListOfCommentsRequest requestModel = new ListOfCommentsRequest();
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
         requestModel.setPostId(post_id);
         requestModel.setSubPostId(sub_post_id);
         requestModel.setUserid(allsharedpreference.getEmailId());
         requestModel.setComment("" + leave_comment_white.getText().toString());
+        requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
         if (replyParentCommentId != null && replyParentCommentId > 0) {
             requestModel.setParentCommentId(replyParentCommentId);
         }
@@ -10772,27 +10786,72 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
     }
 
-    private void WriteComments() {
+    private void setCommentSendChromeBusy(boolean busy) {
+        commentSubmitInFlight = busy;
+        if (comment_progress != null) {
+            comment_progress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        }
+        if (send_btn_layout != null) {
+            send_btn_layout.setEnabled(!busy);
+            if (!busy) {
+                CharSequence text = leave_comment_white != null ? leave_comment_white.getText() : null;
+                send_btn_layout.setVisibility(
+                        text != null && text.toString().trim().length() > 0 ? View.VISIBLE : View.GONE);
+            } else {
+                send_btn_layout.setVisibility(View.GONE);
+            }
+        }
+    }
 
+    /** Re-apply remembered comment count after closing the comments sheet. */
+    private void refreshVisibleCommentCountChrome() {
+        try {
+            if (adapter == null || list == null) return;
+            int idx = getVisiblePostIndex();
+            if (idx < 0 || idx >= list.size() || list.get(idx) == null) return;
+            ModelClass.Datum item = list.get(idx);
+            if (item.getPostId() == null) return;
+            Integer comments = item.getComments();
+            if (comments == null) comments = 0;
+            adapter.syncCommentCountFromServer(item.getPostId(), item.getSubPostId(), comments);
+        } catch (Exception e) {
+            Logone.w(e, "refreshVisibleCommentCountChrome");
+        }
+    }
+
+    private void WriteComments() {
+        if (commentSubmitInFlight) {
+            return;
+        }
         linear_no_comment_page.setVisibility(View.GONE);
+        int idx = getVisiblePostIndex();
+        if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
+            idx = positionx;
+        }
+        if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
+            Toast.makeText(this, "Unable to send comment", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final long post_id = list.get(idx).getPostId() != null ? list.get(idx).getPostId() : 0L;
+        final long sub_post_id = list.get(idx).getSubPostId() != null ? list.get(idx).getSubPostId() : 0L;
+        final Long parentIdSnapshot = replyParentCommentId;
+
         if (!isDeviceOnline()) {
             try {
-                long post_id = list.get(positionx).getPostId();
-                long sub_post_id = list.get(positionx).getSubPostId();
-                String text = leave_comment_white.getText() != null
+                String textBody = leave_comment_white.getText() != null
                         ? leave_comment_white.getText().toString()
                         : "";
                 OfflineActionQueue.enqueueComment(
                         getApplicationContext(),
                         post_id,
                         sub_post_id,
-                        text,
-                        replyParentCommentId,
+                        textBody,
+                        parentIdSnapshot,
                         allsharedpreference.getEmailId());
                 leave_comment_white.setText("");
                 clearReplyContext();
                 if (adapter != null) {
-                    adapter.incrementCommentCount(positionx);
+                    adapter.incrementCommentCountForPost(post_id, sub_post_id);
                 }
                 Toast.makeText(this, R.string.offline_action_queued, Toast.LENGTH_SHORT).show();
             } catch (Exception e) {
@@ -10800,8 +10859,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             return;
         }
+
         JsonObject otp = getCommentRequestData();
-        showProgress();
+        setCommentSendChromeBusy(true);
 
         APIService apiService = RestApiClient.getClient().create(APIService.class);
 
@@ -10809,73 +10869,52 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             otp_generation.enqueue(new Callback<EncreptionRequest>() {
 
-                //@RequiresApi(api = Build.VERSION_CODES.O)
                 @Override
                 public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-                    hideProgress();
+                    setCommentSendChromeBusy(false);
 
                     EncreptionRequest encreptionRequest = response.body();
                     if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                        Toast.makeText(HomePage.this, "Comment failed — try again", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    String encrpt_data = null;
-                    /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        encrpt_data = decrypt(encreptionRequest.getData());
-                    }*/
-                    encrpt_data = decrypt(encreptionRequest.getData());
+                    String encrpt_data = decrypt(encreptionRequest.getData());
 
                     Gson gsonObj = new Gson();
                     CommentResponuse validateUserOtp = gsonObj.fromJson(encrpt_data, CommentResponuse.class);
 
-
-                    if (validateUserOtp.getSuccess()) {
-
-                        if (replyParentCommentId != null && replyParentCommentId > 0) {
-                            pendingExpandParentId = replyParentCommentId;
+                    if (validateUserOtp != null && Boolean.TRUE.equals(validateUserOtp.getSuccess())) {
+                        if (parentIdSnapshot != null && parentIdSnapshot > 0) {
+                            pendingExpandParentId = parentIdSnapshot;
                         }
                         leave_comment_white.setText("");
                         clearReplyContext();
                         refreshCommentComposeHint();
                         if (adapter != null) {
-                            adapter.incrementCommentCount(positionx);
-                        } else {
-                            ModelClass.Datum item = list.get(positionx);
-                            int comments = item.getComments() != null ? item.getComments() : 0;
-                            item.setComments(comments + 1);
+                            adapter.incrementCommentCountForPost(post_id, sub_post_id);
                         }
                         if (validateUserOtp.getComments() != null && adapter != null) {
                             adapter.syncCommentCountFromServer(
-                                    list.get(positionx).getPostId(),
-                                    list.get(positionx).getSubPostId(),
+                                    post_id,
+                                    sub_post_id,
                                     validateUserOtp.getComments());
                         }
-
-                        comment_recycler_view.setVisibility(View.GONE);
-                        if (comment_totoal_count != null) {
-                            comment_totoal_count.setVisibility(View.GONE);
-                        }
-
-                        long post_id = list.get(positionx).getPostId();
-                        long sub_post_id = list.get(positionx).getSubPostId();
-
+                        // Keep existing list visible while refreshing — avoid blank flash.
                         OpenComment(post_id, sub_post_id);
-
-
                     } else {
-
-
+                        Toast.makeText(HomePage.this, "Comment failed — try again", Toast.LENGTH_SHORT).show();
                     }
-
                 }
 
                 @Override
                 public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-                    hideProgress();
-
-
+                    setCommentSendChromeBusy(false);
+                    Toast.makeText(HomePage.this, "Comment failed — try again", Toast.LENGTH_SHORT).show();
                 }
             });
         } catch (Exception e) {
+            setCommentSendChromeBusy(false);
+            Toast.makeText(this, "Comment failed — try again", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -10886,6 +10925,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         requestModel.setPostId(post_id);
         requestModel.setSubPostId(sub_post_id);
         requestModel.setUserid(allsharedpreference.getEmailId());
+        requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
 
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
@@ -10929,6 +10969,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     Gson gsonObj = new Gson();
                     ListOfCommentsResponse validateUserOtp = gsonObj.fromJson(encrpt_data, ListOfCommentsResponse.class);
                     if (validateUserOtp.getSuccess()) {
+                        if (adapter != null && validateUserOtp.getCount() != null) {
+                            adapter.syncCommentCountFromServer(post_id, sub_post_id, validateUserOtp.getCount());
+                        }
                         if (validateUserOtp.getData().size() == 0) {
                             comment_recycler_view.setVisibility(View.INVISIBLE);
                             linear_no_comment_page.setVisibility(View.VISIBLE);
@@ -14373,7 +14416,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             lbm.unregisterReceiver(SURVEY_STATUS);
             lbm.unregisterReceiver(SURVEY_POLL);
             lbm.unregisterReceiver(REPORTER_STATUS);
-            lbm.unregisterReceiver(CURRENT_LOCATION);
+lbm.unregisterReceiver(CURRENT_LOCATION);
             if (serverAvailabilityReceiver != null) {
                 lbm.unregisterReceiver(serverAvailabilityReceiver);
                 serverAvailabilityReceiver = null;

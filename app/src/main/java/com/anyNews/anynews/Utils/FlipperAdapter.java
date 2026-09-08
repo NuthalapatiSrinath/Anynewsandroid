@@ -309,6 +309,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      */
     private final android.util.LongSparseArray<java.lang.ref.WeakReference<TextView>> likeCountViewsByPostId =
             new android.util.LongSparseArray<>();
+    /** Same FlipView rebind gap as likes — remember comment count TextViews by postId. */
+    private final android.util.LongSparseArray<java.lang.ref.WeakReference<TextView>> commentCountViewsByPostId =
+            new android.util.LongSparseArray<>();
 
     private final SparseArray<java.lang.ref.WeakReference<FrameLayout>> adShellPlaceholders =
             new SparseArray<>();
@@ -1357,12 +1360,36 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return ref != null ? ref.get() : null;
     }
 
+    private void rememberCommentCountView(Long postId, TextView countView) {
+        if (postId == null || countView == null) return;
+        commentCountViewsByPostId.put(postId, new java.lang.ref.WeakReference<>(countView));
+    }
+
+    private TextView findRememberedCommentCountView(Long postId) {
+        if (postId == null) return null;
+        java.lang.ref.WeakReference<TextView> ref = commentCountViewsByPostId.get(postId);
+        return ref != null ? ref.get() : null;
+    }
+
+    private void applyCommentCountToRememberedView(Long postId, Integer comments) {
+        if (postId == null || comments == null) return;
+        TextView countView = findRememberedCommentCountView(postId);
+        if (countView == null) return;
+        if (countView.getId() == R.id.half_comment_count) {
+            bindHalfActionCount(countView, comments);
+        } else {
+            bindActionCount(countView, comments);
+        }
+    }
+
     private void bindHalfPostEngagementCounts(View convertView, int position) {
         TextView likeCount = convertView.findViewById(R.id.half_like_count);
+        TextView commentCount = convertView.findViewById(R.id.half_comment_count);
         bindHalfActionCount(likeCount, list.get(position).getLikes());
-        bindHalfActionCount(convertView.findViewById(R.id.half_comment_count), list.get(position).getComments());
+        bindHalfActionCount(commentCount, list.get(position).getComments());
         bindHalfActionCount(convertView.findViewById(R.id.half_share_count), list.get(position).getShares());
         rememberLikeCountView(list.get(position).getPostId(), likeCount);
+        rememberCommentCountView(list.get(position).getPostId(), commentCount);
         tintHalfActionIcons(convertView);
         applyActionIconRowOffset(convertView);
         applyHalfActionIconSizes(context, convertView);
@@ -2739,6 +2766,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         bindFullPostLikeCount(holder.full_img_share, list.get(position).getShares(), getShareLabel());
         bindFullPostLikeCount(holder.full_img_whtsapp, list.get(position).getWhatsappShares(), null);
         rememberLikeCountView(list.get(position).getPostId(), holder.full_img_like);
+        rememberCommentCountView(list.get(position).getPostId(), holder.full_img_comment);
     }
 
     private void bindFullVideoEngagementCounts(TextView likeView, TextView commentView, TextView shareView, int position) {
@@ -2752,6 +2780,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         bindFullPostLikeCount(shareView, list.get(position).getShares(), getShareLabel());
         bindFullPostLikeCount(whatsappView, list.get(position).getWhatsappShares(), null);
         rememberLikeCountView(list.get(position).getPostId(), likeView);
+        rememberCommentCountView(list.get(position).getPostId(), commentView);
     }
 
     /**
@@ -2937,6 +2966,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     bindLikeCountForView(countView, serverLikes);
                 }
             }
+            if (serverComments != null) {
+                applyCommentCountToRememberedView(postId, serverComments);
+            }
             break;
         }
         if (matched) {
@@ -2960,7 +2992,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         ModelClass.Datum item = list.get(position);
         int comments = item.getComments() != null ? item.getComments() : 0;
         item.setComments(comments + 1);
+        applyCommentCountToRememberedView(item.getPostId(), item.getComments());
         notifyDataSetChanged();
+    }
+
+    /** Bump comment count by post ids (preferred when Flip index may be stale). */
+    public void incrementCommentCountForPost(Long postId, Long subPostId) {
+        if (postId == null || list == null) return;
+        for (int i = 0; i < list.size(); i++) {
+            ModelClass.Datum item = list.get(i);
+            if (item.getPostId() == null || !item.getPostId().equals(postId)) continue;
+            if (subPostId != null && item.getSubPostId() != null
+                    && subPostId != 0L && item.getSubPostId() != 0L
+                    && !subPostId.equals(item.getSubPostId())) {
+                continue;
+            }
+            int comments = item.getComments() != null ? item.getComments() : 0;
+            item.setComments(comments + 1);
+            applyCommentCountToRememberedView(postId, item.getComments());
+            notifyDataSetChanged();
+            return;
+        }
     }
 
     public void syncCommentCountFromServer(Long postId, Long subPostId, Integer serverComments) {
@@ -9329,10 +9381,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // Counts + circle/glyph sizing. Skip half-post row offset — survey row is under
         // options and must stay put (offset was designed for half-image content strip).
         TextView likeCountTv = convertView.findViewById(R.id.half_like_count);
+        TextView commentCountTv = convertView.findViewById(R.id.half_comment_count);
         bindHalfActionCount(likeCountTv, list.get(position).getLikes());
-        bindHalfActionCount(convertView.findViewById(R.id.half_comment_count), list.get(position).getComments());
+        bindHalfActionCount(commentCountTv, list.get(position).getComments());
         bindHalfActionCount(convertView.findViewById(R.id.half_share_count), list.get(position).getShares());
         rememberLikeCountView(list.get(position).getPostId(), likeCountTv);
+        rememberCommentCountView(list.get(position).getPostId(), commentCountTv);
         tintHalfActionIcons(convertView);
         applyHalfActionIconSizes(context, convertView);
 

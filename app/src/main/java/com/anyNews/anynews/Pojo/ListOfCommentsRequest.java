@@ -47,6 +47,10 @@ public class ListOfCommentsRequest implements Serializable {
     @Expose
     private String email;
 
+    @SerializedName("language_id")
+    @Expose
+    private Integer languageId;
+
     public Integer getDraftId() {
         return draftId;
     }
@@ -79,7 +83,13 @@ public class ListOfCommentsRequest implements Serializable {
         this.comment = comment;
     }
 
+    public Integer getLanguageId() {
+        return languageId;
+    }
 
+    public void setLanguageId(Integer languageId) {
+        this.languageId = languageId;
+    }
 
     @SerializedName("first_comment_id")
     @Expose

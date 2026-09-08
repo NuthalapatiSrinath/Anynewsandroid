@@ -261,35 +261,38 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <ImageButton
-                    android:id="@+id/send_btn_layout"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:background="@android:color/transparent"
-                    android:contentDescription="Send"
-                    android:padding="6dp"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_send"
-                    android:tint="@color/brand_orange"
-                    android:visibility="gone" />
-
-                <ProgressBar
-                    android:id="@+id/send_progress"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
-                    android:layout_marginEnd="6dp"
-                    android:visibility="gone" />
-
                 <TextView
                     android:id="@+id/comment_lang_btn"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
                     android:background="@drawable/bg_comment_accent_circle"
                     android:gravity="center"
-                    android:text="అ\nAa"
+                    android:text="అ
+Aa"
                     android:textColor="#FFFFFF"
                     android:textSize="9sp"
                     android:textStyle="bold" />
+
+                <ProgressBar
+                    android:id="@+id/send_progress"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:visibility="gone" />
+
+                <ImageButton
+                    android:id="@+id/send_btn_layout"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="2dp"
+                    android:background="@drawable/bg_comment_accent_circle"
+                    android:contentDescription="Send"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_send"
+                    android:tint="#FFFFFF"
+                    android:visibility="gone" />
             </LinearLayout>
         </RelativeLayout>
 

@@ -247,28 +247,14 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
         holder.comment_time.setText(formatShortAgo(datum.getCommentTime()));
         holder.comment_details.setText(datum.getComment());
 
-        String displayName;
         // Empty emails used to match (Allsharedpreference defaults to "") so every
         // comment looked like "Me". Require a real address or matching draft_id.
         boolean isMe = isOwnComment(datum);
-        if (isMe) {
-            displayName = "Me";
-            holder.imageViewReport.setVisibility(View.GONE);
-        } else {
-            displayName = datum.getUserName() != null ? datum.getUserName() : "User";
-            holder.imageViewReport.setVisibility(View.VISIBLE);
-        }
+        String displayName = resolveDisplayName(datum, isMe);
         holder.person_name.setText(displayName);
+        holder.imageViewReport.setVisibility(isMe ? View.GONE : View.VISIBLE);
 
-        String district = datum.getDistrict();
-        // Own comments: prefer the language-matched district the app already selected
-        // (avoids stale other-language labels if the API still keyed districts by bare id).
-        if (isMe) {
-            String localDistrict = DistrictLabelHelper.resolveDisplayLabel(mContext);
-            if (DistrictLabelHelper.isUsable(localDistrict)) {
-                district = localDistrict.trim() + " (D)";
-            }
-        }
+        String district = resolveDistrictLabel(datum, isMe);
         if (TextUtils.isEmpty(district)) {
             holder.location_row.setVisibility(View.GONE);
         } else {
@@ -278,11 +264,10 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
 
         bindAvatar(holder, displayName, datum, isMe);
 
-        int badge = datum.getUserCommentCount() != null ? datum.getUserCommentCount() : 0;
-        if (badge <= 0) {
-            badge = 1;
+        // user_comment_count badge — hide by default for a clean UI.
+        if (holder.avatar_badge != null) {
+            holder.avatar_badge.setVisibility(View.GONE);
         }
-        holder.avatar_badge.setText(badge > 99 ? "99+" : String.valueOf(badge));
 
         boolean liked = datum.getLikedByMe() != null && datum.getLikedByMe();
         int likes = datum.getLikes() != null ? datum.getLikes() : 0;
@@ -413,6 +398,57 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
             }
         }
         return false;
+    }
+
+    /** Prefer profile name over the old hardcoded "Me" label. */
+    private String resolveDisplayName(ListOfCommentsResponse.Datum datum, boolean isMe) {
+        if (isMe) {
+            String local = SharedPrefsData.getString(
+                    mContext, Constants.USER_NAME, Constants.PREF_NAME);
+            if (!TextUtils.isEmpty(local) && !"guest".equalsIgnoreCase(local.trim())) {
+                return local.trim();
+            }
+        }
+        if (datum != null && !TextUtils.isEmpty(datum.getUserName())
+                && !"guest".equalsIgnoreCase(datum.getUserName().trim())) {
+            return datum.getUserName().trim();
+        }
+        if (isMe) {
+            String email = allsharedpreference != null ? allsharedpreference.getEmailId() : null;
+            if (!TextUtils.isEmpty(email) && email.contains("@")) {
+                return email.substring(0, email.indexOf('@')).trim();
+            }
+        }
+        return "User";
+    }
+
+    /**
+     * Own comments: app-selected district in the current language.
+     * Hide labels whose script conflicts with LanguageID (e.g. Hindi while Telugu).
+     */
+    private String resolveDistrictLabel(ListOfCommentsResponse.Datum datum, boolean isMe) {
+        int lang = SharedPrefsData.getInt(mContext, Constants.LanguageID, Constants.PREF_NAME);
+        String district = null;
+        if (isMe) {
+            String localDistrict = DistrictLabelHelper.resolveDisplayLabel(mContext);
+            if (DistrictLabelHelper.isUsable(localDistrict)
+                    && DistrictLabelHelper.labelCompatibleWithLanguage(localDistrict, lang)) {
+                district = localDistrict.trim() + " (D)";
+            }
+        }
+        if (TextUtils.isEmpty(district) && datum != null) {
+            String apiDistrict = datum.getDistrict();
+            if (DistrictLabelHelper.isUsable(apiDistrict)) {
+                String bare = apiDistrict.trim();
+                if (bare.endsWith("(D)")) {
+                    bare = bare.substring(0, bare.length() - 3).trim();
+                }
+                if (DistrictLabelHelper.labelCompatibleWithLanguage(bare, lang)) {
+                    district = apiDistrict.trim();
+                }
+            }
+        }
+        return district;
     }
 
     private static int avatarColorFor(String key) {
