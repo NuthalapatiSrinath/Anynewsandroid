@@ -44,9 +44,11 @@ import retrofit2.Response;
  *
  * <ul>
  *   <li>Flip settle only enqueues — no per-flip network.</li>
- *   <li>Foreground flush timer every {@link #FLUSH_INTERVAL_MS} (~60s lag OK).</li>
- *   <li>Early flush when buffer reaches {@link #FLUSH_AT_COUNT}.</li>
- *   <li>Immediate flush on background / screen-off / trim / process death paths.</li>
+ *   <li>Foreground flush timer every admin {@code views_batch_flush_interval_seconds}
+ *       (default 60s) — only while Home is resumed.</li>
+ *   <li>Early flush when buffer reaches admin {@code views_batch_flush_at_count}
+ *       (default 12).</li>
+ *   <li>Immediate flush on leave-Home / background / screen-off / trim / kill.</li>
  *   <li>Article onFlip GCM/API is disabled on new builds; this is the sole
  *       post-views path. Old Play still uses onFlip → consume.</li>
  *   <li>Session close can attach a rollup via {@link #snapshotActivitySummary()} —
@@ -59,9 +61,6 @@ import retrofit2.Response;
 public final class ViewsBatchTracker {
 
     private static final String PREF_PENDING = "app_views_batch_pending_json";
-    private static final long FLUSH_INTERVAL_MS = 60_000L;
-    /** Flush sooner so admin impressions are not stuck until the 60s timer. */
-    private static final int FLUSH_AT_COUNT = 12;
     private static final long CRITICAL_FLUSH_WAIT_MS = 2_500L;
     private static final int MAX_BUFFER = 250;
 
@@ -81,6 +80,8 @@ public final class ViewsBatchTracker {
     @Nullable private Runnable flushRunnable;
     @Nullable private Runnable persistRunnable;
     private boolean foreground = false;
+    /** Periodic timer only while Home is the resumed activity. */
+    private boolean homeActive = false;
     private boolean flushInFlight = false;
 
     private ViewsBatchTracker() {}
@@ -89,16 +90,32 @@ public final class ViewsBatchTracker {
         return INSTANCE;
     }
 
+    /**
+     * Home onResume → true (start timer). Home onPause → false (stop timer + flush).
+     * Background / ProcessLifecycle still flush independently.
+     */
+    public void setHomeFlushActive(boolean active) {
+        homeActive = active;
+        if (active && foreground) {
+            startFlushTimer();
+        } else {
+            stopFlushTimer();
+        }
+    }
+
     public void init(Application application) {
         if (!initialized.compareAndSet(false, true)) return;
         appContext = application.getApplicationContext();
+        AnalyticsBatchConfig.warmFromPrefs(appContext);
         restoreFromPrefs(appContext);
 
         ProcessLifecycleOwner.get().getLifecycle().addObserver(new LifecycleObserver() {
             @OnLifecycleEvent(Lifecycle.Event.ON_START)
             public void onAppForeground() {
                 foreground = true;
-                startFlushTimer();
+                if (homeActive) {
+                    startFlushTimer();
+                }
                 // Deliver anything restored after a kill.
                 flush(appContext, false);
             }
@@ -319,12 +336,13 @@ public final class ViewsBatchTracker {
     private void addEvent(Context context, JSONObject event) {
         Context appCtx = context.getApplicationContext();
         boolean flushSoon = false;
+        int flushAt = AnalyticsBatchConfig.getViewsFlushAtCount(appCtx);
         synchronized (lock) {
             pending.add(event);
             while (pending.size() > MAX_BUFFER) {
                 pending.remove(0);
             }
-            if (foreground && pending.size() >= FLUSH_AT_COUNT) {
+            if (foreground && homeActive && pending.size() >= flushAt) {
                 flushSoon = true;
             }
         }
@@ -349,17 +367,20 @@ public final class ViewsBatchTracker {
 
     private void startFlushTimer() {
         stopFlushTimer();
+        if (!foreground || !homeActive) return;
+        final long intervalMs = AnalyticsBatchConfig.getViewsFlushIntervalMs(appContext);
         flushRunnable = new Runnable() {
             @Override
             public void run() {
-                if (!foreground) return;
+                if (!foreground || !homeActive) return;
                 flush(appContext, false);
-                if (foreground) {
-                    mainHandler.postDelayed(this, FLUSH_INTERVAL_MS);
+                if (foreground && homeActive) {
+                    long next = AnalyticsBatchConfig.getViewsFlushIntervalMs(appContext);
+                    mainHandler.postDelayed(this, next);
                 }
             }
         };
-        mainHandler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS);
+        mainHandler.postDelayed(flushRunnable, intervalMs);
     }
 
     private void stopFlushTimer() {

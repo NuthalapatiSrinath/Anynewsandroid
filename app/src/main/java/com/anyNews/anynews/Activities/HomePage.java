@@ -188,6 +188,7 @@ import com.anyNews.anynews.Utils.BookmarkStore;
 import com.anyNews.anynews.Utils.NetworkCallDeduper;
 import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
+import com.anyNews.anynews.Utils.MediaAccessReporter;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.DeviceLocationHelper;
 import com.bumptech.glide.Glide;
@@ -13043,10 +13044,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             // News / Local / Special: load more when near end (Video sets above).
                             int n = list.size();
                             requestPostition = Math.max(1, Math.min(n - 1, Math.max(1, n - 3)));
-                            // Prefetch page N+1 as soon as page 0 lands so flips never dead-end
-                            // waiting on a slow API (same idea as Video feed above).
+                            // Prefetch thrift: only eager-hold next page for small decks
+                            // (≤8). Larger decks wait for near-end flip to avoid an
+                            // unused page-N+1 POST on every page-0 land.
                             final boolean maybeMore = validateUserOtp.getData().size() >= 4;
-                            if (maybeMore && !isApiRequested && dummyResponse == null
+                            if (maybeMore
+                                    && n <= 8
+                                    && !isApiRequested
+                                    && dummyResponse == null
                                     && isDeviceOnline()) {
                                 final int prefetchAt = requestPostition;
                                 final boolean specialAtParse = specialNow;
@@ -14430,6 +14435,13 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         super.onResume();
         homeActivityResumed = true;
         try {
+            ViewsBatchTracker.get().setHomeFlushActive(true);
+            MediaAccessReporter.get().setHomeFlushActive(true);
+            com.anyNews.anynews.rewards.RewardsEngagementBatcher.get()
+                    .setHomeFlushActive(true);
+        } catch (Exception ignored) {
+        }
+        try {
             if (isCalendarMode()) {
                 setHomeCalendarTtdChromeVisible(false, false);
                 if (calendarController != null) {
@@ -14830,6 +14842,13 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         homeActivityResumed = false;
         stopReadBadgePoll();
         try {
+            ViewsBatchTracker.get().setHomeFlushActive(false);
+            MediaAccessReporter.get().setHomeFlushActive(false);
+            com.anyNews.anynews.rewards.RewardsEngagementBatcher.get()
+                    .setHomeFlushActive(false);
+        } catch (Exception ignored) {
+        }
+        try {
             OfflinePackPrefetcher.get().onHostPaused();
         } catch (Exception ignored) {
         }
@@ -14838,9 +14857,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         } catch (Exception ignored) {
         }
         // Leave Home → deliver queued impressions so admin views are not stuck
-        // on the 60s timer (ProcessLifecycle ON_STOP still covers true background).
+        // on the timer (ProcessLifecycle ON_STOP still covers true background).
         try {
             ViewsBatchTracker.get().flush(getApplicationContext(), false);
+            MediaAccessReporter.get().flush(getApplicationContext(), false);
         } catch (Exception ignored) {
         }
         // new flip — collapse reporter create-menu so pause never leaves a stuck X.

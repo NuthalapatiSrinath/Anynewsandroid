@@ -31,6 +31,7 @@ public final class ReporterProfilePrefetcher {
     public static void prefetchIfPossible(Context context) {
         if (context == null || inFlight) return;
         final Context app = context.getApplicationContext();
+        if (ReporterProfileCache.isFresh(app)) return;
         boolean loggedIn = SharedPrefsData.getBool(app, Constants.is_login, Constants.PREF_NAME);
         boolean reporter = SharedPrefsData.getBool(app, Constants.is_reporter, Constants.PREF_NAME);
         if (!loggedIn && !reporter) {

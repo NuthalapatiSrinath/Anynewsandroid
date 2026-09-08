@@ -984,6 +984,56 @@ public final class SessionAnalyticsTracker {
                                 feedAdFormat,
                                 feedAdUnit);
                     }
+                    Integer viewsFlushSec = null;
+                    Integer viewsFlushAt = null;
+                    Integer mediaFlushSec = null;
+                    Integer rewardsFlushSec = null;
+                    if (resBody.has("views_batch_flush_interval_seconds")
+                            && !resBody.get("views_batch_flush_interval_seconds").isJsonNull()) {
+                        try {
+                            viewsFlushSec =
+                                    resBody.get("views_batch_flush_interval_seconds").getAsInt();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("views_batch_flush_at_count")
+                            && !resBody.get("views_batch_flush_at_count").isJsonNull()) {
+                        try {
+                            viewsFlushAt = resBody.get("views_batch_flush_at_count").getAsInt();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("media_access_flush_interval_seconds")
+                            && !resBody.get("media_access_flush_interval_seconds").isJsonNull()) {
+                        try {
+                            mediaFlushSec =
+                                    resBody.get("media_access_flush_interval_seconds").getAsInt();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (resBody.has("rewards_engagement_flush_interval_seconds")
+                            && !resBody
+                                    .get("rewards_engagement_flush_interval_seconds")
+                                    .isJsonNull()) {
+                        try {
+                            rewardsFlushSec =
+                                    resBody
+                                            .get("rewards_engagement_flush_interval_seconds")
+                                            .getAsInt();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (viewsFlushSec != null
+                            || viewsFlushAt != null
+                            || mediaFlushSec != null
+                            || rewardsFlushSec != null) {
+                        AnalyticsBatchConfig.saveFromServer(
+                                context,
+                                viewsFlushSec,
+                                viewsFlushAt,
+                                mediaFlushSec,
+                                rewardsFlushSec);
+                    }
                     if (resBody.has("session_live_enabled")
                             || resBody.has("session_heartbeat_interval_seconds")
                             || resBody.has("session_live_window_seconds")) {

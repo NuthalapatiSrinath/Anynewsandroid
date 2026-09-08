@@ -116,6 +116,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationItemView;
 import com.google.android.material.bottomnavigation.BottomNavigationMenuView;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.anyNews.anynews.Utils.ReporterProfileCache;
+import com.anyNews.anynews.Utils.CategoriesDiskCache;
 import com.anyNews.anynews.Utils.ReporterProfilePrefetcher;
 import com.anyNews.anynews.Utils.ProfileAchievementHelper;
 import com.anyNews.anynews.Utils.FollowListCache;
@@ -2653,6 +2654,10 @@ public class newProfileDetails extends AppCompatActivity {
                                 getApplicationContext(), langId, false);
                     } catch (Exception ignored) {
                     }
+                    try {
+                        CategoriesDiskCache.invalidate(getApplicationContext());
+                    } catch (Exception ignored) {
+                    }
                 }
             }
             if (stateId > 0) {
@@ -3852,6 +3857,10 @@ public class newProfileDetails extends AppCompatActivity {
         if (!SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME)) {
             return;
         }
+        // Soft-refresh TTL 2–5 min (3 min): skip network when cache is fresh.
+        if (ReporterProfileCache.isFresh(this)) {
+            return;
+        }
 
         JsonObject otp = set_writer_profile_data();
         APIService apiService = RestApiClient.getClient().create(APIService.class);
@@ -4337,9 +4346,16 @@ public class newProfileDetails extends AppCompatActivity {
     /**
      * Soft-refresh rewards_master + exclude_reporters from rewards_hub so
      * Profile reflects admin toggle without requiring a full splash restart.
+     * TTL 5–15 min (10 min) — not every Profile resume.
      */
     private void softRefreshRewardsFlags() {
         try {
+            long last =
+                    SharedPrefsData.getLong(
+                            this, Constants.REWARDS_HUB_FLAGS_FETCHED_AT, Constants.PREF_NAME);
+            if (last > 0L && System.currentTimeMillis() - last < 10L * 60L * 1000L) {
+                return;
+            }
             APIService api = RestApiClient.getClient().create(APIService.class);
             JsonObject body = new JsonObject();
             try {
@@ -4360,6 +4376,14 @@ public class newProfileDetails extends AppCompatActivity {
                                     try {
                                         JsonObject root = response.body();
                                         if (root == null) return;
+                                        try {
+                                            SharedPrefsData.putLong(
+                                                    newProfileDetails.this,
+                                                    Constants.REWARDS_HUB_FLAGS_FETCHED_AT,
+                                                    System.currentTimeMillis(),
+                                                    Constants.PREF_NAME);
+                                        } catch (Exception ignored) {
+                                        }
                                         Boolean master = null;
                                         Boolean exclude = null;
                                         if (root.has("enabled") && !root.get("enabled").isJsonNull()) {
@@ -4531,9 +4555,27 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     private void loadProfileCategories(RecyclerView catList, View categoriesBlock) {
+        final int langId =
+                SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        try {
+            String cached = CategoriesDiskCache.loadIfMatches(this, langId);
+            if (!TextUtils.isEmpty(cached)) {
+                SearchModel model = new Gson().fromJson(cached, SearchModel.class);
+                if (model != null && model.getSuccess() && model.getData() != null
+                        && !model.getData().isEmpty()) {
+                    ArrayList<SearchModel.Datum> cats = new ArrayList<>(model.getData());
+                    catList.setAdapter(new ProfileCategoryAdapter(cats));
+                    categoriesBlock.setVisibility(View.VISIBLE);
+                    return;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
         CategoriesRequest requestModel = new CategoriesRequest();
         requestModel.setDraftId(SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
-        requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
+        requestModel.setLanguageId(langId);
         requestModel.setScreenType(0);
         String jsonString = new Gson().toJson(requestModel);
         String encrpt_data = encrypt(jsonString);
@@ -4551,6 +4593,7 @@ public class newProfileDetails extends AppCompatActivity {
                         return;
                     }
                     String plain = decrypt(response.body().getData());
+                    CategoriesDiskCache.save(newProfileDetails.this, langId, plain);
                     SearchModel model = new Gson().fromJson(plain, SearchModel.class);
                     if (model != null && model.getSuccess() && model.getData() != null
                             && !model.getData().isEmpty()) {

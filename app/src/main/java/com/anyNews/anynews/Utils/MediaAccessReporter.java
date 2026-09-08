@@ -46,11 +46,13 @@ import retrofit2.Response;
  * records host + path prefix counters, batch-flushes to {@code /app/v3/report_media_access},
  * and dedupes the same URL for a short TTL so scroll rebinds do not thrash.
  *
+ * <p>Flush interval from admin {@code media_access_flush_interval_seconds} (default 60).
+ * Periodic timer only while Home is resumed; background / leave-Home still flush.
+ *
  * <p>Approximate only — not OCI billing access logs.
  */
 public final class MediaAccessReporter {
 
-    private static final long FLUSH_INTERVAL_MS = 45_000L;
     private static final long DEDUP_TTL_MS = 90_000L;
     private static final int MAX_DEDUP = 400;
     private static final int MAX_AGG_KEYS = 80;
@@ -76,6 +78,7 @@ public final class MediaAccessReporter {
     @Nullable private Context appContext;
     @Nullable private Runnable flushRunnable;
     private boolean foreground = false;
+    private boolean homeActive = false;
     private boolean flushInFlight = false;
 
     private MediaAccessReporter() {}
@@ -84,9 +87,19 @@ public final class MediaAccessReporter {
         return INSTANCE;
     }
 
+    public void setHomeFlushActive(boolean active) {
+        homeActive = active;
+        if (active && foreground) {
+            startFlushTimer();
+        } else {
+            stopFlushTimer();
+        }
+    }
+
     public void init(Application application) {
         if (!initialized.compareAndSet(false, true)) return;
         appContext = application.getApplicationContext();
+        AnalyticsBatchConfig.warmFromPrefs(appContext);
 
         ProcessLifecycleOwner.get()
                 .getLifecycle()
@@ -95,7 +108,9 @@ public final class MediaAccessReporter {
                             @OnLifecycleEvent(Lifecycle.Event.ON_START)
                             public void onAppForeground() {
                                 foreground = true;
-                                startFlushTimer();
+                                if (homeActive) {
+                                    startFlushTimer();
+                                }
                                 flush(appContext, false);
                             }
 
@@ -173,7 +188,7 @@ public final class MediaAccessReporter {
                 pending.put(p.aggKey, a);
             }
             a.count += 1;
-            if (foreground && pending.size() >= FLUSH_AT_KEYS) {
+            if (foreground && homeActive && pending.size() >= FLUSH_AT_KEYS) {
                 flushSoon = true;
             }
         }
@@ -283,18 +298,21 @@ public final class MediaAccessReporter {
 
     private void startFlushTimer() {
         stopFlushTimer();
+        if (!foreground || !homeActive) return;
+        final long intervalMs = AnalyticsBatchConfig.getMediaFlushIntervalMs(appContext);
         flushRunnable =
                 new Runnable() {
                     @Override
                     public void run() {
-                        if (!foreground) return;
+                        if (!foreground || !homeActive) return;
                         flush(appContext, false);
-                        if (foreground) {
-                            mainHandler.postDelayed(this, FLUSH_INTERVAL_MS);
+                        if (foreground && homeActive) {
+                            long next = AnalyticsBatchConfig.getMediaFlushIntervalMs(appContext);
+                            mainHandler.postDelayed(this, next);
                         }
                     }
                 };
-        mainHandler.postDelayed(flushRunnable, FLUSH_INTERVAL_MS);
+        mainHandler.postDelayed(flushRunnable, intervalMs);
     }
 
     private void stopFlushTimer() {

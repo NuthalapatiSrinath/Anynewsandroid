@@ -65,6 +65,10 @@ public final class LanguageFeedInvalidator {
         } catch (Exception ignored) {
         }
         try {
+            CategoriesDiskCache.invalidate(app);
+        } catch (Exception ignored) {
+        }
+        try {
             OpenPathFeedPrefetcher.resetForLanguageChange();
         } catch (Exception ignored) {
         }

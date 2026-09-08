@@ -328,6 +328,31 @@ public class Constants {
      * Admin: Configuration → Performance Tuning → Ad impression flush every N.
      */
     public static String AD_IMPR_FLUSH_EVERY_N = "ad_impr_flush_every_n";
+    /**
+     * ViewsBatchTracker flush interval seconds (splash/session; default 60, 15–300).
+     */
+    public static String VIEWS_BATCH_FLUSH_INTERVAL_SECONDS =
+            "views_batch_flush_interval_seconds";
+    /** ViewsBatchTracker early flush at N events (default 12, 3–100). */
+    public static String VIEWS_BATCH_FLUSH_AT_COUNT = "views_batch_flush_at_count";
+    /**
+     * MediaAccessReporter flush interval seconds (splash/session; default 60, 15–300).
+     */
+    public static String MEDIA_ACCESS_FLUSH_INTERVAL_SECONDS =
+            "media_access_flush_interval_seconds";
+    /**
+     * RewardsEngagementBatcher flush interval seconds (splash/session; default 45).
+     * Only used when rewards master ON + joined.
+     */
+    public static String REWARDS_ENGAGEMENT_FLUSH_INTERVAL_SECONDS =
+            "rewards_engagement_flush_interval_seconds";
+    /** Epoch ms of last successful get_user_profile soft-refresh (profile TTL). */
+    public static String PROFILE_CACHE_FETCHED_AT = "profile_cache_fetched_at_ms";
+    /** Epoch ms of last rewards_hub soft-refresh from Profile (hub TTL). */
+    public static String REWARDS_HUB_FLAGS_FETCHED_AT = "rewards_hub_flags_fetched_at_ms";
+    /** Disk cache of List_All_Categories decrypted JSON (keyed by language). */
+    public static String CATEGORIES_DISK_CACHE_JSON = "categories_disk_cache_json";
+    public static String CATEGORIES_DISK_CACHE_LANG = "categories_disk_cache_lang";
     /** "true"/"false" admin toggle for the bottom-footer cricket tab (default false). */
     public static String CRICKET_FOOTER_TAB_ENABLED = "cricket_footer_tab_enabled";
 

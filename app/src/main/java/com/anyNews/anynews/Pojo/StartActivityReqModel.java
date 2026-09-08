@@ -523,6 +523,29 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Integer adImprFlushEveryN;
 
+        /** ViewsBatchTracker flush interval seconds (admin; default 60). */
+        @SerializedName("views_batch_flush_interval_seconds")
+        @Expose
+        private Integer viewsBatchFlushIntervalSeconds;
+
+        /** ViewsBatchTracker early flush at N events (admin; default 12). */
+        @SerializedName("views_batch_flush_at_count")
+        @Expose
+        private Integer viewsBatchFlushAtCount;
+
+        /** MediaAccessReporter flush interval seconds (admin; default 60). */
+        @SerializedName("media_access_flush_interval_seconds")
+        @Expose
+        private Integer mediaAccessFlushIntervalSeconds;
+
+        /**
+         * RewardsEngagementBatcher flush interval seconds (admin; default 45).
+         * Only applies when rewards ON + joined.
+         */
+        @SerializedName("rewards_engagement_flush_interval_seconds")
+        @Expose
+        private Integer rewardsEngagementFlushIntervalSeconds;
+
         /**
          * Between-news format: native | interstitial (admin; default native).
          * Null on old servers → Android keeps cached / native.
@@ -938,6 +961,22 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / default 3. */
         public Integer getAdImprFlushEveryN() {
             return adImprFlushEveryN;
+        }
+
+        public Integer getViewsBatchFlushIntervalSeconds() {
+            return viewsBatchFlushIntervalSeconds;
+        }
+
+        public Integer getViewsBatchFlushAtCount() {
+            return viewsBatchFlushAtCount;
+        }
+
+        public Integer getMediaAccessFlushIntervalSeconds() {
+            return mediaAccessFlushIntervalSeconds;
+        }
+
+        public Integer getRewardsEngagementFlushIntervalSeconds() {
+            return rewardsEngagementFlushIntervalSeconds;
         }
 
         /** Null → old server; caller keeps cached / native. */

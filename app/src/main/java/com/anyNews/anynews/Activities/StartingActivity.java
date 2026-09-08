@@ -57,6 +57,8 @@ import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
+import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
+import com.anyNews.anynews.Utils.CategoriesDiskCache;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.ReporterPostGateHelper;
@@ -1412,6 +1414,11 @@ public class StartingActivity extends AppCompatActivity {
                                     + " (server returned 0)");
                         }
                         SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID, splashLangId, Constants.PREF_NAME);
+                        try {
+                            CategoriesDiskCache.invalidateIfLanguageChanged(
+                                    getApplicationContext(), splashLangId);
+                        } catch (Exception ignored) {
+                        }
                         SessionAnalyticsTracker.get().onIdentityReady(getApplicationContext());
                         SharedPrefsData.putInt(getApplicationContext(), Constants.Show_Animation, startActivityReqModel.getData().getShowAnimation(), Constants.PREF_NAME);
                         SharedPrefsData.putInt(getApplicationContext(), Constants.StaticDataApi, startActivityReqModel.getData().getStaticDataApi(), Constants.PREF_NAME);
@@ -1933,6 +1940,14 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getFeedAdFormat(),
                                 startActivityReqModel.getData().getAdCode());
                         FeedAdConfig.warmFromPrefs(getApplicationContext());
+                        AnalyticsBatchConfig.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getViewsBatchFlushIntervalSeconds(),
+                                startActivityReqModel.getData().getViewsBatchFlushAtCount(),
+                                startActivityReqModel.getData().getMediaAccessFlushIntervalSeconds(),
+                                startActivityReqModel.getData()
+                                        .getRewardsEngagementFlushIntervalSeconds());
+                        AnalyticsBatchConfig.warmFromPrefs(getApplicationContext());
                         Boolean newMini = startActivityReqModel.getData()
                                 .getCricketMiniPlayerEnabled();
                         Boolean newFooter = startActivityReqModel.getData()

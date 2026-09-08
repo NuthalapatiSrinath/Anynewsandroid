@@ -112,6 +112,27 @@ public class SearchActivity extends AppCompatActivity {
     public void getDataFromServer(){
 
         arrayList=new ArrayList<SearchModel.Datum>();
+        final int langId =
+                SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        try {
+            String cached =
+                    com.anyNews.anynews.Utils.CategoriesDiskCache.loadIfMatches(this, langId);
+            if (cached != null && !cached.isEmpty()) {
+                SearchModel fromDisk = new Gson().fromJson(cached, SearchModel.class);
+                if (fromDisk != null
+                        && fromDisk.getSuccess()
+                        && fromDisk.getData() != null) {
+                    arrayList.addAll(fromDisk.getData());
+                    adapter = new FlexboxAdapter(SearchActivity.this, arrayList);
+                    recyclerView.setAdapter(adapter);
+                    adapter.notifyDataSetChanged();
+                    return;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
         JsonObject otp = sendRequest();
 
         showLog("API REQ   "+otp.toString());
@@ -131,6 +152,11 @@ public class SearchActivity extends AppCompatActivity {
                     String encrpt_data =  decrypt(encreptionRequest.getData());
 
                     showLog("ENCRYPT"+encrpt_data);
+                    try {
+                        com.anyNews.anynews.Utils.CategoriesDiskCache.save(
+                                SearchActivity.this, langId, encrpt_data);
+                    } catch (Exception ignored) {
+                    }
 
                     Gson gsonObj = new Gson();
                     SearchModel validateUserOtp  = gsonObj.fromJson(encrpt_data, SearchModel.class);
