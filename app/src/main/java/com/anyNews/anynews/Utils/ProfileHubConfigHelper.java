@@ -172,6 +172,22 @@ public final class ProfileHubConfigHelper {
     }
 
     /**
+     * Birthday Special Profile hub row from splash ({@code enable_birthday_special}).
+     * When false the row is hidden entirely.
+     */
+    public static void saveBirthdaySpecialEnabled(
+            @Nullable Context context, @Nullable Boolean enabled) {
+        if (context == null || enabled == null) return;
+        saveBool(context.getApplicationContext(),
+                Constants.ENABLE_BIRTHDAY_SPECIAL, enabled);
+    }
+
+    /** Default true — show Birthday Special on Profile hub. */
+    public static boolean isBirthdaySpecialEnabled(@Nullable Context context) {
+        return readBool(context, Constants.ENABLE_BIRTHDAY_SPECIAL, true);
+    }
+
+    /**
      * Persist per-language not-hiring messages from splash JSON object/map.
      * Null leaves cache; empty object still overwrites with "{}" so admin clears work.
      */

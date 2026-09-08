@@ -94,6 +94,12 @@ public final class ReporterProfilePrefetcher {
             NewUserProfileResponse resp = GSON.fromJson(plain, NewUserProfileResponse.class);
             if (resp == null || resp.getData() == null) return;
             NewUserProfileResponse.Data d = resp.getData();
+            // Never re-seed identity prefs while Profile is Guest (stale draft name e.g. "Srinath").
+            boolean loggedIn = SharedPrefsData.getBool(app, Constants.is_login, Constants.PREF_NAME);
+            if (!loggedIn) {
+                SharedPrefsData.putString(app, Constants.USER_NAME, "", Constants.PREF_NAME);
+                return;
+            }
             if (d.getIsReporter() != null) {
                 SharedPrefsData.putBoolImmediate(app, Constants.is_reporter,
                         Boolean.TRUE.equals(d.getIsReporter()), Constants.PREF_NAME);

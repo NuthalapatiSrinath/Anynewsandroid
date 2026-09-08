@@ -693,6 +693,7 @@ public class newProfileDetails extends AppCompatActivity {
         }
         bindStatusVideosNewBadge();
         bindBecomeReporterNewBadge();
+        bindBirthdaySpecialNewBadge();
         bindLocationRowText();
 
         if (neo_settings != null) {
@@ -1369,6 +1370,11 @@ public class newProfileDetails extends AppCompatActivity {
         showingReporterUi = false;
         currentUserEmail = "";
         ImageId = null;
+        // Belt-and-suspenders: Profile Guest must not leave USER_NAME for comment compose.
+        try {
+            SharedPrefsData.putString(this, Constants.USER_NAME, "", Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
         if (username_text != null) {
             username_text.setText(ProfileHubLabels.guest(this));
         }
@@ -2182,6 +2188,7 @@ public class newProfileDetails extends AppCompatActivity {
         bindLocationRowText();
         bindStatusVideosNewBadge();
         bindBecomeReporterNewBadge();
+        bindBirthdaySpecialNewBadge();
         bindReporterShortcutLabels();
         applyProfileFooterTabLabels();
     }
@@ -2492,6 +2499,68 @@ public class newProfileDetails extends AppCompatActivity {
         SharedPrefsData.putBool(
                 this, Constants.BECOME_REPORTER_BADGE_SEEN, true, Constants.PREF_NAME);
         TextView badge = findViewById(R.id.profile_become_a_reporter_new_badge);
+        if (badge != null) {
+            Object tag = badge.getTag();
+            if (tag instanceof ObjectAnimator) {
+                ((ObjectAnimator) tag).cancel();
+            }
+            badge.clearAnimation();
+            badge.setAlpha(1f);
+            badge.setVisibility(View.GONE);
+        }
+    }
+
+    /** Orange "New" badge on Birthday Special — hide after user opens it once. */
+    private void bindBirthdaySpecialNewBadge() {
+        TextView badge = findViewById(R.id.profile_birthday_new_badge);
+        View row = findViewById(R.id.layout_birthday_special);
+        if (badge == null) return;
+
+        boolean rowVisible = row != null
+                && row.getVisibility() == View.VISIBLE
+                && ProfileHubConfigHelper.isBirthdaySpecialEnabled(this);
+        boolean seen = SharedPrefsData.getBool(
+                this, Constants.BIRTHDAY_SPECIAL_BADGE_SEEN, Constants.PREF_NAME);
+
+        if (!rowVisible || seen) {
+            Object tag = badge.getTag();
+            if (tag instanceof ObjectAnimator) {
+                ((ObjectAnimator) tag).cancel();
+            }
+            badge.clearAnimation();
+            badge.setAlpha(1f);
+            badge.setVisibility(View.GONE);
+            return;
+        }
+
+        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+        String label;
+        switch (id) {
+            case 1: label = "പുതിയ"; break;
+            case 2: label = "नया"; break;
+            case 3: label = "కొత్త"; break;
+            case 4: label = "புதிய"; break;
+            case 5: label = "ಹೊಸ"; break;
+            case 6: label = "ନୂଆ"; break;
+            default: label = getString(R.string.profile_following_new); break;
+        }
+        badge.setText(label);
+        badge.setVisibility(View.VISIBLE);
+        badge.setAlpha(1f);
+        ObjectAnimator anim = ObjectAnimator.ofFloat(badge, View.ALPHA, 1f, 0.4f);
+        anim.setDuration(1000);
+        anim.setRepeatCount(ValueAnimator.INFINITE);
+        anim.setRepeatMode(ValueAnimator.REVERSE);
+        anim.setInterpolator(new AccelerateDecelerateInterpolator());
+        badge.clearAnimation();
+        anim.start();
+        badge.setTag(anim);
+    }
+
+    private void markBirthdaySpecialBadgeSeen() {
+        SharedPrefsData.putBool(
+                this, Constants.BIRTHDAY_SPECIAL_BADGE_SEEN, true, Constants.PREF_NAME);
+        TextView badge = findViewById(R.id.profile_birthday_new_badge);
         if (badge != null) {
             Object tag = badge.getTag();
             if (tag instanceof ObjectAnimator) {
@@ -3069,6 +3138,7 @@ public class newProfileDetails extends AppCompatActivity {
         bindReporterCreateFab();
         bindStatusVideosNewBadge();
         bindBecomeReporterNewBadge();
+        bindBirthdaySpecialNewBadge();
     }
 
     /** Same reporter login screen that used to open from home center +. */
@@ -4255,21 +4325,19 @@ public class newProfileDetails extends AppCompatActivity {
                                             AdvertiseOnAnyNewsActivity.class)));
         }
 
-        // Birthday Special — photo / name / location → chat
+        // Birthday Special — photo / name / location → chat (admin master toggle)
         View layoutBirthday = findViewById(R.id.layout_birthday_special);
         TextView birthdayLabel = findViewById(R.id.profile_birthday_label);
-        TextView birthdayBadge = findViewById(R.id.profile_birthday_new_badge);
         if (birthdayLabel != null) {
             birthdayLabel.setTextSize(menuSp);
             birthdayLabel.setText(ProfileHubLabels.birthdaySpecial(this));
         }
-        if (birthdayBadge != null) {
-            birthdayBadge.setVisibility(View.VISIBLE);
-        }
         if (layoutBirthday != null) {
-            layoutBirthday.setVisibility(View.VISIBLE);
+            boolean birthdayOn = ProfileHubConfigHelper.isBirthdaySpecialEnabled(this);
+            layoutBirthday.setVisibility(birthdayOn ? View.VISIBLE : View.GONE);
             layoutBirthday.setOnClickListener(
                     v -> {
+                        markBirthdaySpecialBadgeSeen();
                         Intent i =
                                 new Intent(
                                         newProfileDetails.this,
@@ -4327,6 +4395,7 @@ public class newProfileDetails extends AppCompatActivity {
         }
         bindStatusVideosNewBadge();
         bindBecomeReporterNewBadge();
+        bindBirthdaySpecialNewBadge();
         bindLocationRowText();
         applyGuestProfileCardDefaults();
         applyProfileHubTranslatedLabels();
@@ -4808,7 +4877,8 @@ public class newProfileDetails extends AppCompatActivity {
             bindReporterCreateFab();
             bindLocationRowText();
             bindStatusVideosNewBadge();
-        bindBecomeReporterNewBadge();
+            bindBecomeReporterNewBadge();
+            bindBirthdaySpecialNewBadge();
             if (local_distic_name != null) {
                 String dist = com.anyNews.anynews.Utils.DistrictLabelHelper.resolveDisplayLabel(this);
                 if (dist != null && !dist.isEmpty()) {

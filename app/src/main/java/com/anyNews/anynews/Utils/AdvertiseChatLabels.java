@@ -25,12 +25,12 @@ public final class AdvertiseChatLabels {
     public static String advertiseTitle(@Nullable Context c) {
         switch (languageId(c)) {
             case 1: return "AnyNews-ൽ പരസ്യം ചെയ്യുക";
-            case 2: return "AnyNews पर विज्ञापन";
-            case 3: return "AnyNewsలో ప్రకటన";
-            case 4: return "AnyNews-இல் விளம்பரம்";
-            case 5: return "AnyNewsನಲ್ಲಿ ಜಾಹೀರಾತು";
-            case 6: return "AnyNewsରେ ବିଜ୍ଞାପନ";
-            default: return str(c, R.string.advertise_on_anynews, "Advertise on AnyNews");
+            case 2: return "AnyNews में विज्ञापन करें";
+            case 3: return "ఎనీన్యూస్‌లో Advertise చేయండి";
+            case 4: return "AnyNews-இல் விளம்பரம் செய்யுங்கள்";
+            case 5: return "AnyNewsನಲ್ಲಿ ಜಾಹೀರಾತು ಮಾಡಿ";
+            case 6: return "AnyNewsରେ ବିଜ୍ଞାପନ କରନ୍ତୁ";
+            default: return str(c, R.string.advertise_on_anynews, "Advertise in Anynews");
         }
     }
 

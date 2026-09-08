@@ -20,6 +20,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
+import com.anyNews.anynews.Utils.ProfileHubLabels;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 
 import java.util.ArrayList;
@@ -408,22 +409,25 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
 
     /** Prefer profile name over the old hardcoded "Me" label. */
     private String resolveDisplayName(ListOfCommentsResponse.Datum datum, boolean isMe) {
+        boolean loggedIn = SharedPrefsData.getBool(mContext, Constants.is_login, Constants.PREF_NAME);
+        if (isMe && !loggedIn) {
+            return ProfileHubLabels.guest(mContext);
+        }
         if (isMe) {
             String local = SharedPrefsData.getString(
                     mContext, Constants.USER_NAME, Constants.PREF_NAME);
             if (!TextUtils.isEmpty(local) && !"guest".equalsIgnoreCase(local.trim())) {
                 return local.trim();
             }
-        }
-        if (datum != null && !TextUtils.isEmpty(datum.getUserName())
-                && !"guest".equalsIgnoreCase(datum.getUserName().trim())) {
-            return datum.getUserName().trim();
-        }
-        if (isMe) {
             String email = allsharedpreference != null ? allsharedpreference.getEmailId() : null;
             if (!TextUtils.isEmpty(email) && email.contains("@")) {
                 return email.substring(0, email.indexOf('@')).trim();
             }
+            return ProfileHubLabels.guest(mContext);
+        }
+        if (datum != null && !TextUtils.isEmpty(datum.getUserName())
+                && !"guest".equalsIgnoreCase(datum.getUserName().trim())) {
+            return datum.getUserName().trim();
         }
         return "User";
     }

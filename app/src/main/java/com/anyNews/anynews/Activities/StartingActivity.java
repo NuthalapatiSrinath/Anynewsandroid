@@ -1486,10 +1486,17 @@ public class StartingActivity extends AppCompatActivity {
                         SharedPrefsData.putString(getApplicationContext(), Constants.MOVE_NEXT_SCREEN, splashNext, Constants.PREF_NAME);
                         markOnboardingCompleteIfNeeded(splashNext);
 
-                        SharedPrefsData.putBool(getApplicationContext(), Constants.is_login,
+                        boolean splashLoggedIn =
                                 !SharedPrefsData.getBool(getApplicationContext(), Constants.FORCE_LOGGED_OUT, Constants.PREF_NAME)
-                                        && Boolean.TRUE.equals(startActivityReqModel.getData().getIsLogin()),
+                                        && Boolean.TRUE.equals(startActivityReqModel.getData().getIsLogin());
+                        SharedPrefsData.putBool(getApplicationContext(), Constants.is_login,
+                                splashLoggedIn,
                                 Constants.PREF_NAME);
+                        // Guest / forced logout: drop leftover display name so comments never say "Srinath".
+                        if (!splashLoggedIn) {
+                            SharedPrefsData.putString(getApplicationContext(), Constants.USER_NAME, "", Constants.PREF_NAME);
+                            SharedPrefsData.putString(getApplicationContext(), Constants.PROFILE_PIC_URL, "", Constants.PREF_NAME);
+                        }
 
                         SharedPrefsData.putBool(getApplicationContext(), Constants.Event_Status, startActivityReqModel.getData().getEventStatus(), Constants.PREF_NAME);
 
@@ -1554,6 +1561,17 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getEnableFullPost(),
                                 Constants.PREF_NAME
                         );
+
+                        // Admin global FlipView video autoplay master (null = keep cache).
+                        if (startActivityReqModel.getData().hasVideoAutoplayEnabled()) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.VIDEO_AUTOPLAY_ENABLED,
+                                    Boolean.TRUE.equals(
+                                            startActivityReqModel.getData().getVideoAutoplayEnabled()),
+                                    Constants.PREF_NAME
+                            );
+                        }
 
                         ReporterPostGateHelper.saveFromSplash(
                                 getApplicationContext(),
@@ -1738,6 +1756,9 @@ public class StartingActivity extends AppCompatActivity {
                         ProfileHubConfigHelper.saveBecomeAReporterEnabled(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getEnableBecomeAReporter());
+                        ProfileHubConfigHelper.saveBirthdaySpecialEnabled(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getEnableBirthdaySpecial());
                         ProfileHubConfigHelper.saveNotHiringMessages(
                                 getApplicationContext(),
                                 startActivityReqModel.getData()
@@ -1924,7 +1945,8 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getRewardsMaster(),
                                 startActivityReqModel.getData().getRewardsInMainFeedSlot(),
                                 startActivityReqModel.getData().getRewardsExcludeReporters(),
-                                startActivityReqModel.getData().getFlashNewsInMainFeedSlot());
+                                startActivityReqModel.getData().getFlashNewsInMainFeedSlot(),
+                                startActivityReqModel.getData().getKeepRewardsAfterJoin());
                         FlashNewsChipHelper.saveLabelFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getFlashNewsChipLabel());

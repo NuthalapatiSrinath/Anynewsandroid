@@ -27,18 +27,20 @@ import java.nio.charset.StandardCharsets;
  * MUST NOT alter Reload / Special / push-share sticky semantics: those paths
  * always hit the feed network and never paint page-0 disk as “done”.
  * <p>
- * Main vs Special vs Video page-0 snapshots are stored under separate feedMode
- * keys so a main payload can never paint Special (and vice versa).
+ * Main vs Special vs Video vs Local page-0 snapshots are stored under separate
+ * feedMode keys so a main payload can never paint Local (and vice versa).
  */
 public final class OpenPathCache {
 
     private static final String TAG = "OpenPathCache";
     private static final Gson GSON = new Gson();
 
-    /** Feed mode for page-0 disk snapshots — never collide main/special/video. */
+    /** Feed mode for page-0 disk snapshots — never collide main/special/video/local. */
     public static final String FEED_MODE_MAIN = "main";
     public static final String FEED_MODE_SPECIAL = "special";
     public static final String FEED_MODE_VIDEO = "video";
+    /** District Local tab ({@code category_id=-1}) — separate file from Main. */
+    public static final String FEED_MODE_LOCAL = "local";
 
     /** Splash / identity refresh (draft, fonts, update flags). */
     public static final long SPLASH_TTL_MS = 15 * 60 * 1000L;
@@ -62,6 +64,7 @@ public final class OpenPathCache {
     private static final String FEED_FILE_MAIN = "open_path_feed_page0_main.json";
     private static final String FEED_FILE_SPECIAL = "open_path_feed_page0_special.json";
     private static final String FEED_FILE_VIDEO = "open_path_feed_page0_video.json";
+    private static final String FEED_FILE_LOCAL = "open_path_feed_page0_local.json";
     /** Legacy unscoped file (pre mode split) — treated as main only. */
     private static final String FEED_FILE_LEGACY = "open_path_feed_page0.json";
 
@@ -74,6 +77,7 @@ public final class OpenPathCache {
     private static String feedFileName(String feedMode) {
         if (FEED_MODE_SPECIAL.equals(feedMode)) return FEED_FILE_SPECIAL;
         if (FEED_MODE_VIDEO.equals(feedMode)) return FEED_FILE_VIDEO;
+        if (FEED_MODE_LOCAL.equals(feedMode)) return FEED_FILE_LOCAL;
         return FEED_FILE_MAIN;
     }
 
@@ -206,7 +210,8 @@ public final class OpenPathCache {
         public int categoryId;
         public int draftId;
         public String district;
-        /** {@link #FEED_MODE_MAIN}, {@link #FEED_MODE_SPECIAL}, or {@link #FEED_MODE_VIDEO}. */
+        /** {@link #FEED_MODE_MAIN}, {@link #FEED_MODE_SPECIAL}, {@link #FEED_MODE_VIDEO},
+         * or {@link #FEED_MODE_LOCAL}. */
         public String feedMode;
         public EncreptionRequest payload;
     }
@@ -293,7 +298,7 @@ public final class OpenPathCache {
             EncreptionRequest hit = readFeedFile(
                     prefer, context, categoryId, mode, maxAgeMs);
             if (hit != null) return hit;
-            // Legacy main-only file (no feedMode field) — never reuse for special/video.
+            // Legacy main-only file (no feedMode field) — never reuse for special/video/local.
             if (FEED_MODE_MAIN.equals(mode)) {
                 File legacy = new File(
                         context.getApplicationContext().getCacheDir(), FEED_FILE_LEGACY);
@@ -328,7 +333,7 @@ public final class OpenPathCache {
             }
             String snapMode = snap.feedMode;
             if (TextUtils.isEmpty(snapMode)) {
-                // Legacy unscoped snapshot → treat as main only (never special/video).
+                // Legacy unscoped snapshot → treat as main only (never special/video/local).
                 if (!FEED_MODE_MAIN.equals(expectedMode)) {
                     return null;
                 }
@@ -398,6 +403,7 @@ public final class OpenPathCache {
         deleteQuiet(context, FEED_FILE_MAIN);
         deleteQuiet(context, FEED_FILE_SPECIAL);
         deleteQuiet(context, FEED_FILE_VIDEO);
+        deleteQuiet(context, FEED_FILE_LOCAL);
         deleteQuiet(context, FEED_FILE_LEGACY);
     }
 

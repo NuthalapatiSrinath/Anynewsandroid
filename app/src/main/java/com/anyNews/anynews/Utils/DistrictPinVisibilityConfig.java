@@ -9,8 +9,8 @@ import androidx.annotation.Nullable;
  * District pin / Rewards / Flash News chip visibility on half-article cards.
  * Values arrive via splash / session:
  * {@code hide_district_on_main_feed}, {@code rewards_master},
- * {@code rewards_in_main_feed_slot}, {@code flash_news_in_main_feed_slot},
- * {@code flash_news_chip_label}.
+ * {@code rewards_in_main_feed_slot}, {@code keep_rewards_after_join},
+ * {@code flash_news_in_main_feed_slot}, {@code flash_news_chip_label}.
  *
  * <p>Visibility matrix:
  * <ul>
@@ -18,9 +18,10 @@ import androidx.annotation.Nullable;
  *   <li>Main + district/local post ({@code dist_id > 0} or post category 11) — always
  *       show that district (even when hide-district is ON).</li>
  *   <li>Main + non-district — hide when hide-district ON; otherwise show as before.</li>
- *   <li>Rewards chip — hide ON, not district, master ON, slot ON, user not joined.</li>
+ *   <li>Rewards chip — hide ON, not district, master ON, slot ON; until join, or after
+ *       join when keep_rewards_after_join ON.</li>
  *   <li>Flash News chip — hide ON, not district, flash slot ON, Rewards not taking slot
- *       (prefer Flash after join).</li>
+ *       (prefer Flash after join unless keep_rewards_after_join).</li>
  * </ul>
  */
 public final class DistrictPinVisibilityConfig {
@@ -31,6 +32,8 @@ public final class DistrictPinVisibilityConfig {
     public static final boolean DEFAULT_REWARDS_MASTER = false;
     /** Show rewards promo in main-feed district slot when district would be hidden. */
     public static final boolean DEFAULT_REWARDS_IN_MAIN_FEED_SLOT = false;
+    /** Keep Rewards chip after join (instead of Flash / empty). Default OFF. */
+    public static final boolean DEFAULT_KEEP_REWARDS_AFTER_JOIN = false;
     /** Show Flash News chip in the same slot when Rewards is not taking it. */
     public static final boolean DEFAULT_FLASH_IN_MAIN_FEED_SLOT = true;
     /** Default ON: reporters excluded from rewards / rewards wallet. */
@@ -48,7 +51,7 @@ public final class DistrictPinVisibilityConfig {
             @Nullable Boolean rewardsMaster,
             @Nullable Boolean rewardsInMainFeedSlot) {
         saveFromServer(
-                context, hideOnMainFeed, rewardsMaster, rewardsInMainFeedSlot, null, null);
+                context, hideOnMainFeed, rewardsMaster, rewardsInMainFeedSlot, null, null, null);
     }
 
     public static void saveFromServer(
@@ -63,6 +66,7 @@ public final class DistrictPinVisibilityConfig {
                 rewardsMaster,
                 rewardsInMainFeedSlot,
                 excludeReporters,
+                null,
                 null);
     }
 
@@ -73,6 +77,24 @@ public final class DistrictPinVisibilityConfig {
             @Nullable Boolean rewardsInMainFeedSlot,
             @Nullable Boolean excludeReporters,
             @Nullable Boolean flashInMainFeedSlot) {
+        saveFromServer(
+                context,
+                hideOnMainFeed,
+                rewardsMaster,
+                rewardsInMainFeedSlot,
+                excludeReporters,
+                flashInMainFeedSlot,
+                null);
+    }
+
+    public static void saveFromServer(
+            @Nullable Context context,
+            @Nullable Boolean hideOnMainFeed,
+            @Nullable Boolean rewardsMaster,
+            @Nullable Boolean rewardsInMainFeedSlot,
+            @Nullable Boolean excludeReporters,
+            @Nullable Boolean flashInMainFeedSlot,
+            @Nullable Boolean keepRewardsAfterJoin) {
         if (context == null) return;
         Context app = context.getApplicationContext();
         if (hideOnMainFeed != null) {
@@ -94,6 +116,13 @@ public final class DistrictPinVisibilityConfig {
                     app,
                     Constants.REWARDS_IN_MAIN_FEED_SLOT,
                     rewardsInMainFeedSlot ? "true" : "false",
+                    Constants.PREF_NAME);
+        }
+        if (keepRewardsAfterJoin != null) {
+            SharedPrefsData.putString(
+                    app,
+                    Constants.KEEP_REWARDS_AFTER_JOIN,
+                    keepRewardsAfterJoin ? "true" : "false",
                     Constants.PREF_NAME);
         }
         if (flashInMainFeedSlot != null) {
@@ -153,12 +182,21 @@ public final class DistrictPinVisibilityConfig {
 
     /**
      * When true (and rewards master ON), main feed may show a rewards promo in the
-     * district slot for non-district posts while hide-district is ON — only if the
-     * user has not joined Rewards yet.
+     * district slot for non-district posts while hide-district is ON — until join,
+     * or after join when {@link #keepRewardsAfterJoinEnabled} is ON.
      */
     public static boolean rewardsInMainFeedSlotEnabled(@Nullable Context context) {
         return readBool(
                 context, Constants.REWARDS_IN_MAIN_FEED_SLOT, DEFAULT_REWARDS_IN_MAIN_FEED_SLOT);
+    }
+
+    /**
+     * Admin toggle: after join, keep Rewards chip in the main-feed slot instead of
+     * Flash / empty. Default OFF.
+     */
+    public static boolean keepRewardsAfterJoinEnabled(@Nullable Context context) {
+        return readBool(
+                context, Constants.KEEP_REWARDS_AFTER_JOIN, DEFAULT_KEEP_REWARDS_AFTER_JOIN);
     }
 
     /** Admin toggle: Flash News chip in the main-feed right slot. */
@@ -236,7 +274,8 @@ public final class DistrictPinVisibilityConfig {
 
     /**
      * Show Rewards promo in the district slot (main feed only).
-     * Never on Local; never when the post keeps its district; never after join.
+     * Never on Local; never when the post keeps its district.
+     * After join: only when {@link #keepRewardsAfterJoinEnabled}.
      */
     public static boolean shouldShowRewardsInDistrictSlot(
             @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
@@ -246,14 +285,16 @@ public final class DistrictPinVisibilityConfig {
         if (!rewardsMasterEnabled(context)) return false;
         if (!rewardsVisibleForUser(context)) return false;
         if (!rewardsInMainFeedSlotEnabled(context)) return false;
-        // Joined users use Profile — do not keep showing Rewards in the News slot.
-        if (rewardsJoined(context)) return false;
+        if (rewardsJoined(context)) {
+            return keepRewardsAfterJoinEnabled(context);
+        }
         return true;
     }
 
     /**
      * Show Flash News chip in the same right slot (main feed only).
-     * Prefer Flash when Rewards is not taking the slot (including after join).
+     * Prefer Flash when Rewards is not taking the slot (including after join,
+     * unless keep_rewards_after_join keeps Rewards).
      */
     public static boolean shouldShowFlashInDistrictSlot(
             @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
@@ -261,7 +302,7 @@ public final class DistrictPinVisibilityConfig {
         if (isDistrictOrLocalPost(post)) return false;
         if (!hideOnMainFeed(context)) return false;
         if (!flashInMainFeedSlotEnabled(context)) return false;
-        // Rewards promo wins while the user has not joined yet.
+        // Rewards promo wins while eligible (pre-join, or post-join with keep ON).
         if (shouldShowRewardsInDistrictSlot(context, feedCategoryId, post)) return false;
         return true;
     }

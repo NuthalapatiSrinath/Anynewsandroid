@@ -3,12 +3,14 @@ package com.anyNews.anynews.Utils;
 import android.os.SystemClock;
 
 /**
- * Process-wide gate so AdMob load/bind/pool/impression flush never pressure the
- * FlipView gesture path. HomePage notes each flip; loaders and reporters defer
- * until the scroller has been idle for {@link #SETTLE_GRACE_MS}.
+ * Process-wide gate so AdMob <b>bind/paint</b>/pool flush never pressure the
+ * FlipView gesture path. HomePage notes each flip; MediaView rebinds and
+ * impression flush defer until the scroller has been idle for
+ * {@link #SETTLE_GRACE_MS}.
  *
- * <p>Deferral is not cancellation: a deferred preload remains VALID across flips
- * unless the owning feed generation is replaced or the Activity is destroyed.
+ * <p>AdLoader / network prefetch may run during flip (capped concurrency) so the
+ * next feed seat is ready on land — see {@code warmNextAdSeatDuringFlip} /
+ * {@link AdPreloader}. Deferral of paint is not cancellation of an in-flight load.
  */
 public final class FlipAdWorkGate {
 
@@ -45,7 +47,8 @@ public final class FlipAdWorkGate {
 
     /**
      * True while FlipView is mid-gesture/scroller OR within settle grace after the
-     * last flip. Heavy AdMob / pool / flush work must wait.
+     * last flip. MediaView bind / full FlipView ad rebind / impression flush must wait.
+     * AdLoader prefetch may still run (capped).
      */
     public static boolean shouldDeferAdWork() {
         if (flipAnimating) {

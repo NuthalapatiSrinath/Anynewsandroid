@@ -78,6 +78,11 @@ public class Constants {
 
     /** User prefs on Settings screen (SharedPreferences {@link #PREF_NAME}). */
     public static String VIDEO_AUTOPLAY = "settings_video_autoplay";
+    /**
+     * Admin global FlipView video autoplay master ({@code video_autoplay_enabled}).
+     * Splash + feed poll. Default ON when unset. OFF → never autoplay (tap to play).
+     */
+    public static String VIDEO_AUTOPLAY_ENABLED = "video_autoplay_enabled";
     public static String NIGHT_MODE = "settings_night_mode";
     public static String LOCAL_STORIES = "settings_local_stories";
     public static String PARENTAL_CONTROL = "settings_parental_control";
@@ -296,9 +301,15 @@ public class Constants {
      */
     public static String REWARDS_IN_MAIN_FEED_SLOT = "rewards_in_main_feed_slot";
     /**
+     * When Rewards chip is ON, keep showing it after the user joins Rewards
+     * (instead of Flash or empty). Default false.
+     * Splash/session: {@code keep_rewards_after_join}.
+     */
+    public static String KEEP_REWARDS_AFTER_JOIN = "keep_rewards_after_join";
+    /**
      * When hide-district is ON, show Flash News chip in the main-feed right slot
-     * when Rewards is not taking it (prefer Flash after join). Default true.
-     * Splash/session: {@code flash_news_in_main_feed_slot}.
+     * when Rewards is not taking it (prefer Flash after join unless keep-rewards).
+     * Default true. Splash/session: {@code flash_news_in_main_feed_slot}.
      */
     public static String FLASH_NEWS_IN_MAIN_FEED_SLOT = "flash_news_in_main_feed_slot";
     /**
@@ -363,6 +374,8 @@ public class Constants {
     public static String ENABLE_STATUS_VIDEOS = "enable_status_videos";
     /** Profile hub Become a Reporter row (splash hiring toggle). Default true. */
     public static String ENABLE_BECOME_A_REPORTER = "enable_become_a_reporter";
+    /** Profile hub Birthday Special row (splash master). Default true; OFF hides row. */
+    public static String ENABLE_BIRTHDAY_SPECIAL = "enable_birthday_special";
     /** JSON map of language_id → not-hiring message (splash). */
     public static String BECOME_A_REPORTER_NOT_HIRING_MESSAGES =
             "become_a_reporter_not_hiring_messages";
@@ -372,6 +385,8 @@ public class Constants {
     public static String STATUS_VIDEOS_BADGE_SEEN = "status_videos_badge_seen";
     /** Profile hub: Become a Reporter orange NEW badge (hide after first open). */
     public static String BECOME_REPORTER_BADGE_SEEN = "become_reporter_badge_seen";
+    /** Profile hub: Birthday Special orange NEW badge (hide after first open). */
+    public static String BIRTHDAY_SPECIAL_BADGE_SEEN = "birthday_special_badge_seen";
     public static String PROFILE_SHOW_BOOKMARKS = "profile_show_bookmarks";
     public static String PROFILE_SHOW_REFERRAL = "profile_show_referral";
     public static String REFERRAL_PROGRAM_ENABLED = "referral_program_enabled";

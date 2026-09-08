@@ -422,6 +422,13 @@ public class StartActivityReqModel implements Serializable {
         private Boolean rewardsInMainFeedSlot;
 
         /**
+         * Keep Rewards chip after join (instead of Flash / empty). Null on old servers.
+         */
+        @SerializedName("keep_rewards_after_join")
+        @Expose
+        private Boolean keepRewardsAfterJoin;
+
+        /**
          * Show Flash News chip in main-feed right slot when district would be hidden
          * and Rewards is not taking the slot. Null on old servers.
          */
@@ -578,6 +585,10 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean enableBecomeAReporter;
 
+        @SerializedName("enable_birthday_special")
+        @Expose
+        private Boolean enableBirthdaySpecial;
+
         @SerializedName("become_a_reporter_not_hiring_messages")
         @Expose
         private Object becomeAReporterNotHiringMessages;
@@ -653,6 +664,14 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("settings_show_local_stories")
         @Expose
         private Boolean settingsShowLocalStories;
+
+        /**
+         * Admin global FlipView video autoplay master.
+         * Null = old server / keep cache. Default ON when unset on client.
+         */
+        @SerializedName("video_autoplay_enabled")
+        @Expose
+        private Boolean videoAutoplayEnabled;
 
         /** Contact Us mailto from admin Root_Settings. Null = keep cache / compile default. */
         @SerializedName("contact_email")
@@ -885,6 +904,10 @@ public class StartActivityReqModel implements Serializable {
             return rewardsInMainFeedSlot;
         }
 
+        public Boolean getKeepRewardsAfterJoin() {
+            return keepRewardsAfterJoin;
+        }
+
         public Boolean getFlashNewsInMainFeedSlot() {
             return flashNewsInMainFeedSlot;
         }
@@ -1005,6 +1028,10 @@ public class StartActivityReqModel implements Serializable {
             return enableBecomeAReporter;
         }
 
+        public Boolean getEnableBirthdaySpecial() {
+            return enableBirthdaySpecial;
+        }
+
         public Object getBecomeAReporterNotHiringMessages() {
             return becomeAReporterNotHiringMessages;
         }
@@ -1075,6 +1102,18 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getSettingsShowLocalStories() {
             return settingsShowLocalStories;
+        }
+
+        /**
+         * Admin master: FlipView autoplay for half/full video feeds.
+         * Null when omitted (old server) — do not wipe prefs.
+         */
+        public Boolean getVideoAutoplayEnabled() {
+            return videoAutoplayEnabled;
+        }
+
+        public boolean hasVideoAutoplayEnabled() {
+            return videoAutoplayEnabled != null;
         }
 
         public String getContactEmail() {

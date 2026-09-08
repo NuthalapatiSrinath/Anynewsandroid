@@ -842,6 +842,7 @@ public final class SessionAnalyticsTracker {
                         Boolean hideDistrict = null;
                         Boolean rewardsMaster = null;
                         Boolean rewardsSlot = null;
+                        Boolean keepRewardsAfterJoin = null;
                         Boolean flashSlot = null;
                         Boolean excludeReporters = null;
                         if (resBody.has("hide_district_on_main_feed")
@@ -858,6 +859,11 @@ public final class SessionAnalyticsTracker {
                             rewardsSlot =
                                     resBody.get("rewards_in_main_feed_slot").getAsBoolean();
                         }
+                        if (resBody.has("keep_rewards_after_join")
+                                && !resBody.get("keep_rewards_after_join").isJsonNull()) {
+                            keepRewardsAfterJoin =
+                                    resBody.get("keep_rewards_after_join").getAsBoolean();
+                        }
                         if (resBody.has("flash_news_in_main_feed_slot")
                                 && !resBody.get("flash_news_in_main_feed_slot").isJsonNull()) {
                             flashSlot =
@@ -871,6 +877,7 @@ public final class SessionAnalyticsTracker {
                         if (hideDistrict != null
                                 || rewardsMaster != null
                                 || rewardsSlot != null
+                                || keepRewardsAfterJoin != null
                                 || flashSlot != null
                                 || excludeReporters != null) {
                             DistrictPinVisibilityConfig.saveFromServer(
@@ -879,7 +886,8 @@ public final class SessionAnalyticsTracker {
                                     rewardsMaster,
                                     rewardsSlot,
                                     excludeReporters,
-                                    flashSlot);
+                                    flashSlot,
+                                    keepRewardsAfterJoin);
                         }
                         if (resBody.has("flash_news_chip_label")
                                 && !resBody.get("flash_news_chip_label").isJsonNull()) {

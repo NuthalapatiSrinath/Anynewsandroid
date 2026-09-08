@@ -2877,7 +2877,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
          */
         void openFlashNewsFromFeedChip();
         /**
-         * Video News tab + settings autoplay: current video finished at {@code position}.
+         * Feed video autoplay: current video finished at {@code position}.
          * HomePage should smooth-flip to next (no wrap) after a short delay.
          */
         void onVideoAutoplayEndedRequestNext(int position);
@@ -3291,9 +3291,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             final ModelClass.Datum adSlot = list.get(position);
                             final boolean deferHeavy = shouldDeferAdWork()
                                     || isHomeFlipAnimating();
-                            if (!deferHeavy) {
-                                adShellHandler.post(() -> requestNativeAdLoadForSlot(adSlot));
-                            }
+                            // Always kick AdLoader (even mid-flip / buffer bind). Paint/
+                            // MediaView still wait for settle — load-on-land caused ~1s blank.
+                            adShellHandler.post(() -> requestNativeAdLoadForSlot(adSlot));
 
                             if (ad != null && !deferHeavy) {
                                 View myView;
@@ -3343,9 +3343,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             } else {
                                 showLog("fb ad shell pending/defer → default placeholder pos="
                                         + position + " defer=" + deferFbHeavy);
-                                if (!deferFbHeavy) {
-                                    adShellHandler.post(() -> requestNativeAdLoadForSlot(fbSlot));
-                                }
+                                // Load mid-flip; paint waits for settle (same as Google).
+                                adShellHandler.post(() -> requestNativeAdLoadForSlot(fbSlot));
                                 mountFbAdPendingDefaultShell(nativeAdLayout, position);
                             }
                         }
@@ -4141,10 +4140,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void requestNativeAdLoadForSlot(@Nullable ModelClass.Datum slot) {
         if (slot == null || !(context instanceof HomePage)) return;
         try {
-            if (shouldDeferAdWork()) {
-                // Settle path will prefetch; do not start AdMob from getView mid-fling.
-                return;
-            }
+            // AdLoader only (HomePage caps in-flight mid-flip). Do not wait for settle —
+            // that deferred the paid request until land (~1s placeholder). Paint stays gated.
             String code = slot.getAd_code();
             if (code == null || code.trim().isEmpty()) {
                 code = slot.getNext_req_ad_code();
@@ -9839,20 +9836,43 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
-    /** Settings → Video Autoplay (default ON when unset). */
-    public static boolean isVideoAutoplayEnabled(Context ctx) {
+    /** Settings → Video Autoplay user pref (default ON when unset). */
+    public static boolean isVideoAutoplayUserPrefEnabled(Context ctx) {
         return SharedPrefsData.getBool(ctx, Constants.VIDEO_AUTOPLAY, Constants.PREF_NAME, true);
     }
 
-    /** Footer Video News tab is selected. */
+    /**
+     * Admin master {@code video_autoplay_enabled} (splash + feed poll).
+     * Default ON when unset so older servers keep prior behavior.
+     */
+    public static boolean isAdminVideoAutoplayEnabled(Context ctx) {
+        if (ctx == null) {
+            return true;
+        }
+        return SharedPrefsData.getBool(
+                ctx, Constants.VIDEO_AUTOPLAY_ENABLED, Constants.PREF_NAME, true);
+    }
+
+    /**
+     * Effective autoplay: admin master AND user Settings pref.
+     * Prefer {@link #shouldAutoplayFeedVideo()} for FlipView start/chain.
+     */
+    public static boolean isVideoAutoplayEnabled(Context ctx) {
+        return isAdminVideoAutoplayEnabled(ctx) && isVideoAutoplayUserPrefEnabled(ctx);
+    }
+
+    /** Footer Video / Flash (Breaking) tab is selected. */
     public boolean isVideoFooterTabSelected() {
         return context != null
                 && SharedPrefsData.getBool(context, Constants.isVideoPostsSelected, Constants.PREF_NAME);
     }
 
+    /**
+     * Autoplay half/full video on FlipView settle in any feed (Main / Local / Special / Flash / Video)
+     * when admin master + user pref are ON and the user has not paused on this page.
+     */
     public boolean shouldAutoplayFeedVideo() {
-        return isVideoFooterTabSelected()
-                && isVideoAutoplayEnabled(context)
+        return isVideoAutoplayEnabled(context)
                 && !userPausedVideoAutoplay;
     }
 
@@ -9868,7 +9888,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Notify HomePage to chain to the next flip page when a video ends under autoplay rules.
      */
     private void notifyVideoEndedForAutoplay(int position) {
-        if (context == null || !isVideoFooterTabSelected() || !isVideoAutoplayEnabled(context)) {
+        if (context == null || !isVideoAutoplayEnabled(context)) {
             return;
         }
         if (userPausedVideoAutoplay) {
@@ -9894,7 +9914,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * After flip settles on Video tab with autoplay ON: start (or resume) the visible card.
+     * After flip settles with autoplay ON: start (or resume) the visible card.
      * Does not force-restart if the user paused on this page.
      */
     public void maybeAutoplayVisibleVideo(View convertView, int position) {

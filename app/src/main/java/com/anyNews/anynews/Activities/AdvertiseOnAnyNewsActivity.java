@@ -991,8 +991,11 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             int padH = (int) dp(8);
             int padV = (int) dp(6);
             bubble.setPadding(padH, padV, padH, padV);
-            bubble.setMaxWidth(
-                    (int) (parent.getResources().getDisplayMetrics().widthPixels * 0.78f));
+            // LinearLayout has no setMaxWidth; cap bubble width via LayoutParams.
+            LinearLayout.LayoutParams bubbleLp = new LinearLayout.LayoutParams(
+                    (int) (parent.getResources().getDisplayMetrics().widthPixels * 0.78f),
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            bubble.setLayoutParams(bubbleLp);
 
             FrameLayout mediaFrame = new FrameLayout(parent.getContext());
             ImageView media = new ImageView(parent.getContext());

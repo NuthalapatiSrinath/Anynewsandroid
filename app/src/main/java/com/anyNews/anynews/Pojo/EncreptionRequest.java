@@ -157,6 +157,10 @@ public class EncreptionRequest {
     @Expose
     private Boolean allow_screen_capture;
 
+    @SerializedName("video_autoplay_enabled")
+    @Expose
+    private Boolean video_autoplay_enabled;
+
     @SerializedName("action_icon_size_dp")
     @Expose
     private Integer action_icon_size_dp;
@@ -318,6 +322,19 @@ public class EncreptionRequest {
 
     public void setAllow_screen_capture(Boolean allow_screen_capture) {
         this.allow_screen_capture = allow_screen_capture;
+    }
+
+    public Boolean getVideo_autoplay_enabled() {
+        return video_autoplay_enabled;
+    }
+
+    /** Null when omitted — do not overwrite splash/admin prefs with a false default. */
+    public boolean hasVideo_autoplay_enabled() {
+        return video_autoplay_enabled != null;
+    }
+
+    public void setVideo_autoplay_enabled(Boolean video_autoplay_enabled) {
+        this.video_autoplay_enabled = video_autoplay_enabled;
     }
 
     public Integer getAction_icon_size_dp() {
