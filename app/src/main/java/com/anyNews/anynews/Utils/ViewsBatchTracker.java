@@ -41,6 +41,7 @@ import retrofit2.Response;
  * <ul>
  *   <li>Flip settle only enqueues — no per-flip network.</li>
  *   <li>Foreground flush timer every {@link #FLUSH_INTERVAL_MS} (product durability).</li>
+ *   <li>Early flush when buffer reaches {@link #FLUSH_AT_COUNT} (admin freshness).</li>
  *   <li>Immediate flush on background / screen-off / trim / process death paths.</li>
  *   <li>Session close can attach a rollup via {@link #snapshotActivitySummary()} —
  *       mid-session heartbeats are not used for view analytics.</li>
@@ -53,6 +54,8 @@ public final class ViewsBatchTracker {
 
     private static final String PREF_PENDING = "app_views_batch_pending_json";
     private static final long FLUSH_INTERVAL_MS = 60_000L;
+    /** Flush sooner so admin impressions are not stuck until the 60s timer. */
+    private static final int FLUSH_AT_COUNT = 12;
     private static final long CRITICAL_FLUSH_WAIT_MS = 2_500L;
     private static final int MAX_BUFFER = 250;
 
@@ -315,7 +318,7 @@ public final class ViewsBatchTracker {
             while (pending.size() > MAX_BUFFER) {
                 pending.remove(0);
             }
-            if (foreground && pending.size() >= 40) {
+            if (foreground && pending.size() >= FLUSH_AT_COUNT) {
                 flushSoon = true;
             }
         }

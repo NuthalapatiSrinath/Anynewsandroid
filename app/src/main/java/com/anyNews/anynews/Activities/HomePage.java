@@ -12000,10 +12000,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         }
 
-        // Reload / special / sticky always network. Throttle only plain warm reopen.
-        // Warm paint still soft-refreshes outside FEED_NETWORK_MIN_INTERVAL_MS.
+        // Reload / special / sticky always network. After warm disk paint, ALWAYS
+        // soft-refresh page-0 so admin delete/unpublish/edit cannot linger for the
+        // full FEED_NETWORK_MIN_INTERVAL window (ghost deleted cards on reopen).
+        // Throttle only applies when we did not paint from disk (shimmer → network).
         boolean needNetwork = !isFirstPage
                 || forceUserRefresh
+                || paintedFromDisk
                 || OpenPathCache.shouldNetworkRefreshFeed(this, forceUserRefresh)
                 || OpenPathCache.loadFeed(this, category_id) == null
                 || OpenPathCache.isForceFeedNetworkPending();
@@ -12386,7 +12389,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Append new articles while skipping any post already present in the list.
      * Prevents the same post showing twice when pagination returns overlapping data.
-     * Ads / share_app / ratings (postId == null) are always kept since they are positional.
+     * Real articles dedupe by post_id only (sticky + chrono companion often differ on
+     * sub_post_id and used to paint twins). Ads / share_app / ratings keep positional keys.
      */
     private String articleDedupKey(ModelClass.Datum d) {
         if (d == null || d.getPostId() == null) {
@@ -12400,7 +12404,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 || postType.equalsIgnoreCase("share_app"))) {
             return d.getPostId() + "_" + d.getSubPostId() + "_" + postType + "_" + d.getAd_req_position();
         }
-        return d.getPostId() + "_" + d.getSubPostId();
+        // News / sticky / greeting / video: one card per post_id.
+        return String.valueOf(d.getPostId());
     }
 
     private void addUniqueArticles(java.util.List<ModelClass.Datum> newData) {
@@ -14822,6 +14827,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         try {
             PostDwellTracker.get().onPaused(this);
+        } catch (Exception ignored) {
+        }
+        // Leave Home → deliver queued impressions so admin views are not stuck
+        // on the 60s timer (ProcessLifecycle ON_STOP still covers true background).
+        try {
+            ViewsBatchTracker.get().flush(getApplicationContext(), false);
         } catch (Exception ignored) {
         }
         // new flip — collapse reporter create-menu so pause never leaves a stuck X.

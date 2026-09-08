@@ -53,8 +53,9 @@ public final class OpenPathCache {
     public static final long FEED_DISK_TTL_MS = 5 * 60 * 1000L;
     /**
      * Skip network feed refresh if last successful page-0 fetch was this recent
-     * and there is no push/share sticky / special / reload. Aligns with warm paint.
-     * Reload / special / sticky always force network (never throttled).
+     * and there is no push/share sticky / special / reload / warm-disk paint.
+     * Aligns with warm paint TTL. Home always reconciles after painting warm disk
+     * so delete/unpublish cannot linger for this full window.
      */
     public static final long FEED_NETWORK_MIN_INTERVAL_MS = 3 * 60 * 1000L;
 
