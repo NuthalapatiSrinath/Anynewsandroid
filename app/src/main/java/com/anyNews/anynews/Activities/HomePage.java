@@ -8064,9 +8064,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 onlineNewsAdTemplate = adTpl;
                             }
                         }
-                        ReadArticleStore.rebalanceFeedSlots(list, adTpl != null
-                                ? adTpl
-                                : onlineNewsAdTemplate);
+                        ReadArticleStore.rebalanceFeedSlots(
+                                HomePage.this,
+                                list,
+                                adTpl != null ? adTpl : onlineNewsAdTemplate);
                     } catch (Exception ignored) {
                     }
                     // Finite Read deck — end card after last postcard (no blank flip).
@@ -11456,7 +11457,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             if (onlineNewsAdTemplate == null) return;
             boolean changed =
-                    ReadArticleStore.rebalanceFeedSlots(items, onlineNewsAdTemplate);
+                    ReadArticleStore.rebalanceFeedSlots(
+                            HomePage.this, items, onlineNewsAdTemplate);
             boolean ratingsChanged =
                     ReadArticleStore.ensureRatingsSlot(HomePage.this, items);
             if (changed || ratingsChanged) {
@@ -12662,6 +12664,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getLive_readers_window_minutes(),
                             encreptionRequest.getLive_readers_show_seconds(),
                             encreptionRequest.getLive_readers_min_count());
+                    // Performance → Ad every N / prefetch / concurrency / flush / format.
+                    // Must land BEFORE unread-strip rebalance so client cadence matches
+                    // server seats (otherwise default every-4 overwrites every-2).
+                    if (encreptionRequest.getFeed_ad_every_n() != null
+                            || encreptionRequest.getAd_prefetch_lookahead() != null
+                            || encreptionRequest.getMax_native_ad_loads_in_flight() != null
+                            || encreptionRequest.getAd_impr_flush_every_n() != null
+                            || encreptionRequest.getFeed_ad_format() != null
+                            || (encreptionRequest.getAd_code() != null
+                                    && !encreptionRequest.getAd_code().trim().isEmpty())) {
+                        FeedAdConfig.saveFromServer(
+                                getApplicationContext(),
+                                encreptionRequest.getFeed_ad_every_n(),
+                                encreptionRequest.getAd_prefetch_lookahead(),
+                                encreptionRequest.getMax_native_ad_loads_in_flight(),
+                                encreptionRequest.getAd_impr_flush_every_n(),
+                                encreptionRequest.getFeed_ad_format(),
+                                encreptionRequest.getAd_code());
+                        FeedAdConfig.warmFromPrefs(getApplicationContext());
+                    }
                     // Config may land after FlipView already painted — re-show if count present.
                     try {
                         final android.view.View decor =
@@ -15424,7 +15446,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 // nothing cached yet — callers with EncreptionRequest use remember + ads_data path
             }
             boolean changed =
-                    ReadArticleStore.rebalanceFeedSlots(items, onlineNewsAdTemplate);
+                    ReadArticleStore.rebalanceFeedSlots(
+                            HomePage.this, items, onlineNewsAdTemplate);
             boolean ratingsChanged =
                     ReadArticleStore.ensureRatingsSlot(HomePage.this, items);
             if (changed || ratingsChanged) {

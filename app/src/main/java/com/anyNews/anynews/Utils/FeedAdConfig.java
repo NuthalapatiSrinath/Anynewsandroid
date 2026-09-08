@@ -30,17 +30,15 @@ public final class FeedAdConfig {
     public static final int MIN_EVERY_N = 2;
     public static final int MAX_EVERY_N = 10;
 
-    /** Keep near the next seat only — deep lookahead storms the main thread. */
-    public static final int DEFAULT_PREFETCH_LOOKAHEAD = 3;
-    public static final int MIN_PREFETCH_LOOKAHEAD = 2;
-    /** Hard cap: old prefs of 6+ clamp down so flip stays light. */
-    public static final int MAX_PREFETCH_LOOKAHEAD = 4;
+    /** Match admin Performance range (3–12). Default 6. */
+    public static final int DEFAULT_PREFETCH_LOOKAHEAD = 6;
+    public static final int MIN_PREFETCH_LOOKAHEAD = 3;
+    public static final int MAX_PREFETCH_LOOKAHEAD = 12;
 
-    /** Two concurrent natives is enough for every-4 cadence without flip hitch. */
-    public static final int DEFAULT_MAX_IN_FLIGHT = 2;
+    /** Match admin Performance range (1–5). Default 3. */
+    public static final int DEFAULT_MAX_IN_FLIGHT = 3;
     public static final int MIN_MAX_IN_FLIGHT = 1;
-    /** Cap concurrent natives during rapid flips even if admin set higher. */
-    public static final int MAX_MAX_IN_FLIGHT = 2;
+    public static final int MAX_MAX_IN_FLIGHT = 5;
 
     /** Batched {@code report_ad_impressions} after every N painted real ads. */
     public static final int DEFAULT_FLUSH_EVERY_N = 3;

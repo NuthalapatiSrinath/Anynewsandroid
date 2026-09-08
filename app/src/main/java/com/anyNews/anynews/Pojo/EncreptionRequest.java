@@ -237,6 +237,31 @@ public class EncreptionRequest {
     @Expose
     private Integer live_readers_min_count;
 
+    /** In-feed ad after every N real articles (Performance; default 4, range 2–10). */
+    @SerializedName("feed_ad_every_n")
+    @Expose
+    private Integer feed_ad_every_n;
+
+    @SerializedName("ad_prefetch_lookahead")
+    @Expose
+    private Integer ad_prefetch_lookahead;
+
+    @SerializedName("max_native_ad_loads_in_flight")
+    @Expose
+    private Integer max_native_ad_loads_in_flight;
+
+    @SerializedName("ad_impr_flush_every_n")
+    @Expose
+    private Integer ad_impr_flush_every_n;
+
+    @SerializedName("feed_ad_format")
+    @Expose
+    private String feed_ad_format;
+
+    @SerializedName("ad_code")
+    @Expose
+    private String ad_code;
+
     public Boolean getAllow_screen_capture() {
         return allow_screen_capture;
     }
@@ -464,6 +489,30 @@ public class EncreptionRequest {
 
     public Integer getLive_readers_min_count() {
         return live_readers_min_count;
+    }
+
+    public Integer getFeed_ad_every_n() {
+        return feed_ad_every_n;
+    }
+
+    public Integer getAd_prefetch_lookahead() {
+        return ad_prefetch_lookahead;
+    }
+
+    public Integer getMax_native_ad_loads_in_flight() {
+        return max_native_ad_loads_in_flight;
+    }
+
+    public Integer getAd_impr_flush_every_n() {
+        return ad_impr_flush_every_n;
+    }
+
+    public String getFeed_ad_format() {
+        return feed_ad_format;
+    }
+
+    public String getAd_code() {
+        return ad_code;
     }
 
 }

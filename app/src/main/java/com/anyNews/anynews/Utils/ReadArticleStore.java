@@ -716,7 +716,22 @@ public final class ReadArticleStore {
     public static boolean rebalanceFeedSlots(
             @Nullable List<ModelClass.Datum> items,
             @Nullable ModelClass.Datum adTemplate) {
-        boolean adChanged = rebalanceAdSlots(items, adTemplate);
+        return rebalanceFeedSlots(null, items, adTemplate);
+    }
+
+    /**
+     * Same as {@link #rebalanceFeedSlots(List, ModelClass.Datum)} but reads
+     * admin cadence from prefs when {@code context} is non-null (avoids stale
+     * process cache after a live poll updates {@link FeedAdConfig}).
+     */
+    public static boolean rebalanceFeedSlots(
+            @Nullable Context context,
+            @Nullable List<ModelClass.Datum> items,
+            @Nullable ModelClass.Datum adTemplate) {
+        if (context != null) {
+            FeedAdConfig.warmFromPrefs(context);
+        }
+        boolean adChanged = rebalanceAdSlots(context, items, adTemplate);
         boolean shareChanged = throttleShareSlots(items);
         return adChanged || shareChanged;
     }
@@ -988,6 +1003,13 @@ public final class ReadArticleStore {
     public static boolean rebalanceAdSlots(
             @Nullable List<ModelClass.Datum> items,
             @Nullable ModelClass.Datum adTemplate) {
+        return rebalanceAdSlots(null, items, adTemplate);
+    }
+
+    public static boolean rebalanceAdSlots(
+            @Nullable Context context,
+            @Nullable List<ModelClass.Datum> items,
+            @Nullable ModelClass.Datum adTemplate) {
         if (items == null || items.isEmpty()) return false;
 
         ArrayList<ModelClass.Datum> adPool = new ArrayList<>();
@@ -1019,7 +1041,9 @@ public final class ReadArticleStore {
         }
 
         int realCount = countRealArticles(content);
-        final int adEveryN = getAdEveryNReal();
+        final int adEveryN = context != null
+                ? getAdEveryNReal(context)
+                : getAdEveryNReal();
         // Need at least one full block of reals to place an ad (every-N pattern).
         if (realCount < adEveryN) {
             // Still drop stacked leading/trailing ads if strip left only clumped ads.
