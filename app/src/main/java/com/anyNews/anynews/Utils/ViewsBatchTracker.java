@@ -35,14 +35,20 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
- * Buffers post view impressions + dwell segments in memory (with light prefs
- * backup) and POSTs them as one batch to {@code /app/v3/views/batch}.
+ * Way2-style per-device view reporting for admin Users / Impressions.
+ *
+ * Buffers this device's post view impressions + dwell segments in memory
+ * (with light prefs backup) and POSTs them as one batch to
+ * {@code /app/v3/views/batch}. Each phone sends only its own events for the
+ * window — never a global “all users” upload.
  *
  * <ul>
  *   <li>Flip settle only enqueues — no per-flip network.</li>
- *   <li>Foreground flush timer every {@link #FLUSH_INTERVAL_MS} (product durability).</li>
- *   <li>Early flush when buffer reaches {@link #FLUSH_AT_COUNT} (admin freshness).</li>
+ *   <li>Foreground flush timer every {@link #FLUSH_INTERVAL_MS} (~60s lag OK).</li>
+ *   <li>Early flush when buffer reaches {@link #FLUSH_AT_COUNT}.</li>
  *   <li>Immediate flush on background / screen-off / trim / process death paths.</li>
+ *   <li>Article onFlip GCM/API is disabled on new builds; this is the sole
+ *       post-views path. Old Play still uses onFlip → consume.</li>
  *   <li>Session close can attach a rollup via {@link #snapshotActivitySummary()} —
  *       mid-session heartbeats are not used for view analytics.</li>
  * </ul>

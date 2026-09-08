@@ -9248,8 +9248,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (datum != null && datum.getPostType() != null) {
                 trackingEvents.FireBase("post_type", datum.getPostType() + "_pos_" + pos);
             }
+            // Analytics + (ads only) legacy GCM/API. Article opens → ViewsBatchTracker only.
             BundleDataToGcmPush(pos);
             // View open + dwell: local queue only (ViewsBatchTracker flushes ~60s / background).
+            // Solo admin Users/Impressions path for new builds — no onFlip→post-views.
             if (!type.equalsIgnoreCase("ad")
                     && !type.equalsIgnoreCase("share_app")
                     && !type.equalsIgnoreCase("ratings")
@@ -16423,23 +16425,55 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         layoutCommentProgressbar.setVisibility(View.GONE);
     }
 
+    /**
+     * Flip-side analytics. Firebase Analytics always runs.
+     * <p>
+     * Article opens: do <b>not</b> queue FlipItems / GCM onFlip — those used to become
+     * {@code post-views} via consume.* and double-counted with
+     * {@link ViewsBatchTracker} → {@code POST /app/v3/views/batch}. New builds use
+     * batch only (Way2-style per-device queue, ~60s flush). Old Play Store APKs still
+     * send GCM; server consume keeps that legacy path.
+     * <p>
+     * Ad flips: still GCM + FlipData so consume can write ad logs.
+     */
     private void BundleDataToGcmPush(int pos) {
         showLog("BundleDataToGcmPush");
         try {
-            FlipItems flipItems=new FlipItems();
-            HashMap<String,String> data = new HashMap<>();
+            if (list == null || pos < 0 || pos >= list.size() || list.get(pos) == null) {
+                return;
+            }
+            final String postType = list.get(pos).getPostType();
+            final boolean isAd = postType != null && postType.equalsIgnoreCase("ad");
 
-            data.put("POST_TYPE",list.get(pos).getPostType());
-            data.put("POSTID", ""+list.get(pos).getPostId());
-            data.put("POST_POS", ""+pos);
-            data.put("VERSION_CODE", ""+BuildConfig.VERSION_CODE);
-            data.put("VERSION_NAME", ""+BuildConfig.VERSION_NAME);
+            // Product Firebase Analytics — keep for all flip types.
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "POST_TYPE_" + postType);
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "POSTID_" + list.get(pos).getPostId());
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "POST_POS_" + pos);
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "VERSION_CODE_" + BuildConfig.VERSION_CODE);
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "VERSION_NAME_" + BuildConfig.VERSION_NAME.replace(".", "_"));
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "EVENT_NAME_onFlip");
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "PLATFORM_ANDROID");
+
+            if (!isAd) {
+                // Article / content card: ViewsBatchTracker owns admin Users/Impressions.
+                showLog("BundleDataToGcmPush: skip GCM/API onFlip (views batch is source of truth)");
+                return;
+            }
+
+            FlipItems flipItems = new FlipItems();
+            HashMap<String, String> data = new HashMap<>();
+
+            data.put("POST_TYPE", postType);
+            data.put("POSTID", "" + list.get(pos).getPostId());
+            data.put("POST_POS", "" + pos);
+            data.put("VERSION_CODE", "" + BuildConfig.VERSION_CODE);
+            data.put("VERSION_NAME", "" + BuildConfig.VERSION_NAME);
             data.put("EVENT_NAME", "onFlip");
             data.put("PLATFORM", "ANDROID");
-            flipItems.setPOST_TYPE(list.get(pos).getPostType());
-            flipItems.setPOSTID(""+list.get(pos).getPostId());
-            flipItems.setPOST_POS(""+pos);
-            flipItems.setVERSION_CODE(""+BuildConfig.VERSION_CODE);
+            flipItems.setPOST_TYPE(postType);
+            flipItems.setPOSTID("" + list.get(pos).getPostId());
+            flipItems.setPOST_POS("" + pos);
+            flipItems.setVERSION_CODE("" + BuildConfig.VERSION_CODE);
             flipItems.setVERSION_NAME(BuildConfig.VERSION_NAME);
             flipItems.setPLATFORM("ANDROID");
             flipItems.setEVENT_NAME("onFlip");
@@ -16447,60 +16481,47 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     ? draft_id_firebase
                     : SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME));
 
-            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"POST_TYPE_"+list.get(pos).getPostType());
-            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"POSTID_"+list.get(pos).getPostId());
-            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"POST_POS_"+pos);
-            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"VERSION_CODE_"+BuildConfig.VERSION_CODE);
-            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"VERSION_NAME_"+BuildConfig.VERSION_NAME.replace(".","_"));
-            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"EVENT_NAME_onFlip");
-            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"PLATFORM_ANDROID");
-            data.put("DRAFTID", ""+(draft_id_firebase > 0
+            data.put("DRAFTID", "" + (draft_id_firebase > 0
                     ? draft_id_firebase
                     : SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME)));
-            if(list!=null && positionx >= 0 && positionx < list.size()){
-                String pt = list.get(positionx).getPostType();
-                if(pt != null && pt.equalsIgnoreCase("ad")){
-                    try{
-                        if(adapter!=null && adapter.nativeAd != null && adapter.nativeAd.getResponseInfo()!=null && adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo()!=null &&
-                                adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName()!=null){
-                            data.put("AD Type", adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName());
-                            data.put("AD Imps", ""+adImpress);
-                            flipItems.setAD_Type(adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName());
-                            flipItems.setADImps(""+adImpress);
-                            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"AD_Type_"+adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName().replace("","_"));
-                            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"AD_Imps_"+adImpress);
-                            adImpress=false;
-                        }
-                    }catch (Exception e){
-                        e.printStackTrace();
-                        adImpress=false;
-                    }
-
-                    data.put("ADERROR", adError);
-                    trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),"ADERROR_"+adError);
-                    adError="";
+            try {
+                if (adapter != null && adapter.nativeAd != null && adapter.nativeAd.getResponseInfo() != null
+                        && adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo() != null
+                        && adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName() != null) {
+                    data.put("AD Type", adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName());
+                    data.put("AD Imps", "" + adImpress);
+                    flipItems.setAD_Type(adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo().getAdapterClassName());
+                    flipItems.setADImps("" + adImpress);
+                    trackingEvents.trackFirebaseAnalytics(new Random().nextInt(),
+                            "AD_Type_" + adapter.nativeAd.getResponseInfo().getLoadedAdapterResponseInfo()
+                                    .getAdapterClassName().replace("", "_"));
+                    trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "AD_Imps_" + adImpress);
+                    adImpress = false;
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
+                adImpress = false;
             }
 
-            try {
+            data.put("ADERROR", adError);
+            trackingEvents.trackFirebaseAnalytics(new Random().nextInt(), "ADERROR_" + adError);
+            adError = "";
 
+            try {
                 SimpleDateFormat s = new SimpleDateFormat("dd-MM-yyyy-hh-mm-ss aa", Locale.ENGLISH);
                 String format = s.format(new Date());
                 String regex = "(?i)A.M.|a.m.|A.M";
                 String regexPM = "(?i)P.M.|p.m.|P.M";
-                if(format.contains(regexPM)){
-                    format=format.replaceAll(regexPM, "PM");
+                if (format.contains(regexPM)) {
+                    format = format.replaceAll(regexPM, "PM");
                 }
-                if(format.contains(regex)){
-                    format=format.replaceAll(regex, "AM");
+                if (format.contains(regex)) {
+                    format = format.replaceAll(regex, "AM");
                 }
                 data.put("DATE_TIME", format);
                 flipItems.setDATE_TIME(format);
-
             } catch (Exception e) {
-
                 e.printStackTrace();
-
             }
             try {
                 SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ENGLISH);
@@ -16516,8 +16537,8 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
 
             UUID uuid = UUID.randomUUID();
             String uuidAsString = uuid.toString();
-            showLog("UUID:"+uuidAsString);
-            showLog("GCM DAta:::"+data);
+            showLog("UUID:" + uuidAsString);
+            showLog("GCM DAta:::" + data);
             final String finalUuid = uuidAsString;
             final HashMap finalData = data;
             new android.os.AsyncTask<Void, Void, Void>() {
@@ -16536,9 +16557,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }.execute();
         } catch (Exception e) {
             e.printStackTrace();
-
         }
-
     }
     public SpannableStringBuilder makeSpannable(String text, String regex) {
         String colorCode="#FF0000,#02a6d8";
