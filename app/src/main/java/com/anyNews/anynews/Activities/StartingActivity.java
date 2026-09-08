@@ -406,6 +406,19 @@ public class StartingActivity extends AppCompatActivity {
                     }
                 });
 
+                // Absolute fail-open: if splash/API never finishes, leave the logo.
+                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (isFinishing() || isDestroyed() || homeOpenedFromSplash) {
+                            return;
+                        }
+                        showLog("OpenPath: splash watchdog fail-open");
+                        splashNetworkFailCount = Math.max(splashNetworkFailCount, 1);
+                        routeReturningUser();
+                    }
+                }, 25000);
+
 
         try {
             FacebookSdk.setAutoInitEnabled(true);
@@ -1376,7 +1389,9 @@ public class StartingActivity extends AppCompatActivity {
                     EncreptionRequest encreptionRequest = response.body();
                     if (encreptionRequest == null || encreptionRequest.getData() == null) {
                         if (!configOnly) {
+                            splashNetworkFailCount++;
                             Toast.makeText(StartingActivity.this, "Unable to start app. Please try again.", Toast.LENGTH_LONG).show();
+                            routeReturningUser();
                         }
                         return;
                     }
@@ -2067,13 +2082,23 @@ public class StartingActivity extends AppCompatActivity {
                         }
 
                     } else {
-
-                        Toast.makeText(StartingActivity.this, "Something went wrong..please try again after some time  ", Toast.LENGTH_LONG).show();
+                        // Server returned success:false (e.g. device_drafts id E11000).
+                        // Never leave the user stuck on the logo splash — fail-open.
+                        showLog("Splash success=false, fail-open route");
+                        splashNetworkFailCount++;
+                        if (!configOnly) {
+                            Toast.makeText(StartingActivity.this,
+                                    "Something went wrong..please try again after some time  ",
+                                    Toast.LENGTH_LONG).show();
+                            routeReturningUser();
+                        }
                     }
                     } catch (Exception e) {
                         e.printStackTrace();
+                        splashNetworkFailCount++;
                         if (!configOnly) {
                             Toast.makeText(StartingActivity.this, "Unable to start app. Please try again.", Toast.LENGTH_LONG).show();
+                            routeReturningUser();
                         }
                     }
 
