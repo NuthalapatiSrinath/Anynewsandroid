@@ -89,10 +89,15 @@ public class NewUserProfileResponse {
         @Expose
         private Long totalViews;
 
-        /** Soft lag-payment notice (additive). */
+        /** Soft Profile payment banner (admin-controlled). */
         @SerializedName("upcoming_payment_message")
         @Expose
         private String upcomingPaymentMessage;
+
+        /** My Articles From floor (YYYY-MM-DD) from admin. */
+        @SerializedName("reporter_articles_from_date")
+        @Expose
+        private String reporterArticlesFromDate;
 
         public Long getComments() {
             return comments != null ? comments : 0L;
@@ -116,6 +121,14 @@ public class NewUserProfileResponse {
 
         public void setUpcomingPaymentMessage(String upcomingPaymentMessage) {
             this.upcomingPaymentMessage = upcomingPaymentMessage;
+        }
+
+        public String getReporterArticlesFromDate() {
+            return reporterArticlesFromDate;
+        }
+
+        public void setReporterArticlesFromDate(String reporterArticlesFromDate) {
+            this.reporterArticlesFromDate = reporterArticlesFromDate;
         }
 
         public String getEmail() {

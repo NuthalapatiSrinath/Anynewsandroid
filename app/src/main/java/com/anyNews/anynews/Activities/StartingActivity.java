@@ -54,6 +54,7 @@ import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.NewsTapModeConfig;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
+import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
@@ -1863,6 +1864,11 @@ public class StartingActivity extends AppCompatActivity {
                         FlashNewsChipHelper.saveLabelFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getFlashNewsChipLabel());
+                        ReporterPaymentAppConfig.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getReporterArticlesFromDate(),
+                                startActivityReqModel.getData().getReporterPaymentBannerActive(),
+                                startActivityReqModel.getData().getReporterPaymentBannerText());
                         com.anyNews.anynews.rewards.RewardsConfigHelper.saveChipCopyFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsGuestChip(),

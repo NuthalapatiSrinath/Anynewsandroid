@@ -887,6 +887,27 @@ public final class SessionAnalyticsTracker {
                                     context,
                                     resBody.get("flash_news_chip_label").getAsString());
                         }
+                        String fromDate = null;
+                        Boolean bannerActive = null;
+                        String bannerText = null;
+                        if (resBody.has("reporter_articles_from_date")
+                                && !resBody.get("reporter_articles_from_date").isJsonNull()) {
+                            fromDate = resBody.get("reporter_articles_from_date").getAsString();
+                        }
+                        if (resBody.has("reporter_payment_banner_active")
+                                && !resBody.get("reporter_payment_banner_active").isJsonNull()) {
+                            bannerActive =
+                                    resBody.get("reporter_payment_banner_active").getAsBoolean();
+                        }
+                        if (resBody.has("reporter_payment_banner_text")
+                                && !resBody.get("reporter_payment_banner_text").isJsonNull()) {
+                            bannerText =
+                                    resBody.get("reporter_payment_banner_text").getAsString();
+                        }
+                        if (fromDate != null || bannerActive != null || bannerText != null) {
+                            ReporterPaymentAppConfig.saveFromServer(
+                                    context, fromDate, bannerActive, bannerText);
+                        }
                     } catch (Exception ignored) {
                     }
                     try {

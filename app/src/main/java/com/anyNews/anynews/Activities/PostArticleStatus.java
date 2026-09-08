@@ -30,6 +30,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.BookmarkStore;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.PostStatusListCache;
+import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
 import com.anyNews.anynews.Utils.ReporterProfileCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.PostsModel;
@@ -270,6 +271,11 @@ public class PostArticleStatus extends AppCompatActivity {
             return;
         }
         dateFilterRow.setVisibility(View.VISIBLE);
+        String floor = ReporterPaymentAppConfig.articlesFromDate(this);
+        if (!TextUtils.isEmpty(floor) && TextUtils.isEmpty(filterStart)) {
+            filterStart = floor;
+            if (dateFromView != null) dateFromView.setText(floor);
+        }
         if (dateFromView != null) {
             dateFromView.setHint(getString(R.string.posts_date_from));
             dateFromView.setOnClickListener(v -> pickDate(true));
@@ -313,10 +319,11 @@ public class PostArticleStatus extends AppCompatActivity {
     }
 
     private void clearDateFilter() {
-        filterStart = "";
+        String floor = ReporterPaymentAppConfig.articlesFromDate(this);
+        filterStart = !TextUtils.isEmpty(floor) ? floor : "";
         filterTo = "";
-        dateFilterApplied = false;
-        if (dateFromView != null) dateFromView.setText("");
+        dateFilterApplied = !TextUtils.isEmpty(filterStart);
+        if (dateFromView != null) dateFromView.setText(filterStart);
         if (dateToView != null) dateToView.setText("");
         updateDateAppliedLabel();
         resetPaging();
@@ -324,6 +331,13 @@ public class PostArticleStatus extends AppCompatActivity {
     }
 
     private void applyDateFilter() {
+        String floor = ReporterPaymentAppConfig.articlesFromDate(this);
+        if (!TextUtils.isEmpty(floor)) {
+            if (TextUtils.isEmpty(filterStart) || filterStart.compareTo(floor) < 0) {
+                filterStart = floor;
+                if (dateFromView != null) dateFromView.setText(filterStart);
+            }
+        }
         if (!TextUtils.isEmpty(filterStart) && !TextUtils.isEmpty(filterTo)
                 && filterStart.compareTo(filterTo) > 0) {
             Toast.makeText(this, getString(R.string.posts_date_order_error), Toast.LENGTH_SHORT).show();
@@ -361,11 +375,16 @@ public class PostArticleStatus extends AppCompatActivity {
             }
         } catch (Exception ignored) {
         }
+        final String floor = ReporterPaymentAppConfig.articlesFromDate(this);
+        final long floorMs = ReporterPaymentAppConfig.fromDateMillis(floor);
         DatePickerDialog dlg = new DatePickerDialog(
                 this,
                 (view, year, month, dayOfMonth) -> {
                     String iso = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth);
                     if (isFrom) {
+                        if (!TextUtils.isEmpty(floor) && iso.compareTo(floor) < 0) {
+                            iso = floor;
+                        }
                         filterStart = iso;
                         if (dateFromView != null) dateFromView.setText(iso);
                         // From changed — wait for To before treating as applied.
@@ -381,6 +400,9 @@ public class PostArticleStatus extends AppCompatActivity {
                             pickDate(false);
                         }
                     } else {
+                        if (!TextUtils.isEmpty(floor) && iso.compareTo(floor) < 0) {
+                            iso = floor;
+                        }
                         filterTo = iso;
                         if (dateToView != null) dateToView.setText(iso);
                         // After To: auto-apply and show filtered list.
@@ -390,6 +412,12 @@ public class PostArticleStatus extends AppCompatActivity {
                 c.get(Calendar.YEAR),
                 c.get(Calendar.MONTH),
                 c.get(Calendar.DAY_OF_MONTH));
+        if (floorMs > Long.MIN_VALUE) {
+            try {
+                dlg.getDatePicker().setMinDate(floorMs);
+            } catch (Exception ignored) {
+            }
+        }
         dlg.show();
     }
 
@@ -787,8 +815,14 @@ public class PostArticleStatus extends AppCompatActivity {
         requestModel.setGroupByWeek(true);
         // Metric screens need likes/comments/views; status tabs stay lean.
         requestModel.setIncludeEngagement(isMetricMode());
-        if (!TextUtils.isEmpty(filterStart)) {
-            requestModel.setStartTime(filterStart);
+        String start = filterStart;
+        String floor = ReporterPaymentAppConfig.articlesFromDate(this);
+        if (!TextUtils.isEmpty(floor)
+                && (TextUtils.isEmpty(start) || start.compareTo(floor) < 0)) {
+            start = floor;
+        }
+        if (!TextUtils.isEmpty(start)) {
+            requestModel.setStartTime(start);
         }
         if (!TextUtils.isEmpty(filterTo)) {
             requestModel.setEndTime(filterTo);

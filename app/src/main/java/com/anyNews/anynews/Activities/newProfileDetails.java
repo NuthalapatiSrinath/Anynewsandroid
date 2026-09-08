@@ -90,6 +90,7 @@ import com.anyNews.anynews.Utils.AdPreloader;
 import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.ReporterPhotoReminderHelper;
+import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
 import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.ForceLogoutHelper;
@@ -2720,18 +2721,32 @@ public class newProfileDetails extends AppCompatActivity {
         setTextSafe((TextView) findViewById(R.id.tile_followers_count), formatCompactCount(followers));
         setTextSafe((TextView) findViewById(R.id.tile_earnings_count), "\u20B9 " + totalPts);
 
-        // Soft lag-payment notice (admin period batch notify).
+        // Admin-controlled payment banner (not auto Notify / mark-paid).
         TextView upcomingBanner = findViewById(R.id.tv_upcoming_payment_banner);
         if (upcomingBanner != null) {
             String msg = d.getUpcomingPaymentMessage();
             if (msg != null) msg = msg.trim();
-            boolean show = msg != null && !msg.isEmpty() && Boolean.TRUE.equals(d.getIsReporter());
+            if (TextUtils.isEmpty(msg)
+                    && ReporterPaymentAppConfig.bannerActive(this)) {
+                msg = ReporterPaymentAppConfig.bannerText(this);
+            }
+            boolean show = !TextUtils.isEmpty(msg) && Boolean.TRUE.equals(d.getIsReporter());
             if (show) {
                 upcomingBanner.setText(msg);
                 upcomingBanner.setVisibility(View.VISIBLE);
             } else {
                 upcomingBanner.setVisibility(View.GONE);
             }
+        }
+        try {
+            String profileMsg = d.getUpcomingPaymentMessage();
+            boolean active = !TextUtils.isEmpty(profileMsg);
+            ReporterPaymentAppConfig.saveFromServer(
+                    this,
+                    d.getReporterArticlesFromDate(),
+                    active,
+                    active ? profileMsg : "");
+        } catch (Exception ignored) {
         }
 
         String email = d.getEmail() != null ? d.getEmail().trim() : "";

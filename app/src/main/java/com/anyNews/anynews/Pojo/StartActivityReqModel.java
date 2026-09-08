@@ -434,6 +434,21 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String flashNewsChipLabel;
 
+        /** My Articles date filter From floor (YYYY-MM-DD IST). Empty = none. */
+        @SerializedName("reporter_articles_from_date")
+        @Expose
+        private String reporterArticlesFromDate;
+
+        /** Admin payment banner currently visible (On + within time limit). */
+        @SerializedName("reporter_payment_banner_active")
+        @Expose
+        private Boolean reporterPaymentBannerActive;
+
+        /** Admin payment banner text for this splash language. */
+        @SerializedName("reporter_payment_banner_text")
+        @Expose
+        private String reporterPaymentBannerText;
+
         @SerializedName("rewards_guest_chip")
         @Expose
         private String rewardsGuestChip;
@@ -853,6 +868,18 @@ public class StartActivityReqModel implements Serializable {
 
         public String getFlashNewsChipLabel() {
             return flashNewsChipLabel;
+        }
+
+        public String getReporterArticlesFromDate() {
+            return reporterArticlesFromDate;
+        }
+
+        public Boolean getReporterPaymentBannerActive() {
+            return reporterPaymentBannerActive;
+        }
+
+        public String getReporterPaymentBannerText() {
+            return reporterPaymentBannerText;
         }
 
         public String getRewardsGuestChip() {
