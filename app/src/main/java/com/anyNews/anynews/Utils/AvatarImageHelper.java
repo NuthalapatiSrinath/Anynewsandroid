@@ -123,6 +123,8 @@ public final class AvatarImageHelper {
             setDefault(imageView);
             return;
         }
+        // Cancel prior target so recycled comment/feed rows never keep another face.
+        Picasso.get().cancelRequest(imageView);
         // MediaUrl.resolve already beacons OCI hosts via MediaAccessReporter.
         Picasso.get()
                 .load(MediaUrl.resolve(url))

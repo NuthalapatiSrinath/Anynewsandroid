@@ -2659,13 +2659,34 @@ public class newProfileDetails extends AppCompatActivity {
                         stateId, Constants.PREF_NAME);
             }
             if (distId > 0 || DistrictLabelHelper.isUsable(loc)) {
-                int langForSave = langId > 0
-                        ? langId
-                        : SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
-                // Rejects wrong-script labels (e.g. भिवानी under Telugu) and clears.
-                DistrictLabelHelper.saveFromServer(
-                        getApplicationContext(), langForSave, distId,
-                        DistrictLabelHelper.isUsable(loc) ? loc : null);
+                // Cache paint must not overwrite a fresher local district pick
+                // (e.g. user just changed district in Daily Updates).
+                if (fromCache) {
+                    int prefDist = DistrictLabelHelper.getStoredDistId(getApplicationContext());
+                    String prefLabel = DistrictLabelHelper.resolveDisplayLabel(getApplicationContext());
+                    boolean prefsAlreadyFresh = prefDist > 0
+                            && distId > 0
+                            && prefDist != distId;
+                    boolean prefsHaveLabel = DistrictLabelHelper.isUsable(prefLabel);
+                    if (prefsAlreadyFresh && prefsHaveLabel) {
+                        // Keep local selection; network soft-refresh will reconcile.
+                    } else {
+                        int langForSave = langId > 0
+                                ? langId
+                                : SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+                        DistrictLabelHelper.saveFromServer(
+                                getApplicationContext(), langForSave, distId,
+                                DistrictLabelHelper.isUsable(loc) ? loc : null);
+                    }
+                } else {
+                    int langForSave = langId > 0
+                            ? langId
+                            : SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+                    // Rejects wrong-script labels (e.g. भिवानी under Telugu) and clears.
+                    DistrictLabelHelper.saveFromServer(
+                            getApplicationContext(), langForSave, distId,
+                            DistrictLabelHelper.isUsable(loc) ? loc : null);
+                }
             }
             DistrictLabelHelper.ensureSelectedMatchesLanguage(getApplicationContext());
         } catch (Exception ignored) {

@@ -41,6 +41,7 @@ import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.FooterTabLabels;
 import com.anyNews.anynews.Utils.JobsConfigHelper;
+import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
 import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.SelectionListCache;
@@ -1507,6 +1508,11 @@ public final class DailyUpdatesController {
             if (sid > 0) {
                 SharedPrefsData.putInt(host, Constants.StateID, sid, Constants.PREF_NAME);
             }
+        } catch (Exception ignored) {
+        }
+        // Drop warm OpenPath / profile cache so Home + Profile cannot re-paint old district.
+        try {
+            LanguageFeedInvalidator.onDistrictChanged(host);
         } catch (Exception ignored) {
         }
         // Invalidate mana cache for previous district.

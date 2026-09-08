@@ -372,6 +372,12 @@ public class MailAdapter extends RecyclerView.Adapter<MailAdapter.MailViewHolder
             holder.avatar_letter.setVisibility(View.INVISIBLE);
             AvatarImageHelper.loadPicasso(holder.circular_image, picUrl);
         } else {
+            // Cancel in-flight Picasso so recycled views never keep another user's face.
+            try {
+                com.squareup.picasso.Picasso.get().cancelRequest(holder.circular_image);
+            } catch (Exception ignored) {
+            }
+            holder.circular_image.setImageDrawable(null);
             holder.circular_image.setVisibility(View.GONE);
             holder.avatar_letter.setVisibility(View.VISIBLE);
         }

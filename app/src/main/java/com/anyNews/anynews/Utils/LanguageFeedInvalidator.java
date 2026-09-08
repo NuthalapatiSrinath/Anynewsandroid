@@ -132,4 +132,29 @@ public final class LanguageFeedInvalidator {
         } catch (Exception ignored) {
         }
     }
+
+    /**
+     * After a district change: drop warm OpenPath / offline page-0 so the next
+     * Home open cannot paint the previous district's feed, force network, and
+     * clear reporter profile disk so Profile does not re-apply a stale location.
+     */
+    public static void onDistrictChanged(@Nullable Context context) {
+        if (context == null) {
+            return;
+        }
+        final Context app = context.getApplicationContext();
+        try {
+            OpenPathCache.clearFeed(app);
+            OpenPathCache.forceNextFeedNetwork(app);
+        } catch (Exception ignored) {
+        }
+        try {
+            OfflineFeedStore.clearMain(app);
+        } catch (Exception ignored) {
+        }
+        try {
+            ReporterProfileCache.clear(app);
+        } catch (Exception ignored) {
+        }
+    }
 }

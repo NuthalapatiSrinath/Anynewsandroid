@@ -32,6 +32,7 @@ import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
+import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.models.DistricsModel;
@@ -193,6 +194,10 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
                     DistrictLabelHelper.saveSelected(context, id, distric_name);
                     SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
                     SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
+                    try {
+                        LanguageFeedInvalidator.onDistrictChanged(context);
+                    } catch (Exception ignored) {
+                    }
 
                     Intent intent=new Intent(context,HomePage.class);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);
