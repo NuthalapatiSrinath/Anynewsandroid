@@ -910,10 +910,6 @@ public final class SessionAnalyticsTracker {
                         }
                     } catch (Exception ignored) {
                     }
-                    try {
-                        }
-                    } catch (Exception ignored) {
-                    }
                     if (resBody.has("read_history_hours")
                             && !resBody.get("read_history_hours").isJsonNull()) {
                         try {

@@ -246,6 +246,62 @@ public class EncreptionRequest {
     @Expose
     private String ad_code;
 
+    @SerializedName("views_batch_flush_interval_seconds")
+    @Expose
+    private Integer views_batch_flush_interval_seconds;
+
+    @SerializedName("views_batch_flush_at_count")
+    @Expose
+    private Integer views_batch_flush_at_count;
+
+    @SerializedName("media_access_flush_interval_seconds")
+    @Expose
+    private Integer media_access_flush_interval_seconds;
+
+    @SerializedName("rewards_engagement_flush_interval_seconds")
+    @Expose
+    private Integer rewards_engagement_flush_interval_seconds;
+
+    public Integer getFeed_ad_every_n() {
+        return feed_ad_every_n;
+    }
+
+    public Integer getAd_prefetch_lookahead() {
+        return ad_prefetch_lookahead;
+    }
+
+    public Integer getMax_native_ad_loads_in_flight() {
+        return max_native_ad_loads_in_flight;
+    }
+
+    public Integer getAd_impr_flush_every_n() {
+        return ad_impr_flush_every_n;
+    }
+
+    public String getFeed_ad_format() {
+        return feed_ad_format;
+    }
+
+    public String getAd_code() {
+        return ad_code;
+    }
+
+    public Integer getViews_batch_flush_interval_seconds() {
+        return views_batch_flush_interval_seconds;
+    }
+
+    public Integer getViews_batch_flush_at_count() {
+        return views_batch_flush_at_count;
+    }
+
+    public Integer getMedia_access_flush_interval_seconds() {
+        return media_access_flush_interval_seconds;
+    }
+
+    public Integer getRewards_engagement_flush_interval_seconds() {
+        return rewards_engagement_flush_interval_seconds;
+    }
+
     public Boolean getAllow_screen_capture() {
         return allow_screen_capture;
     }

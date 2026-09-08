@@ -174,6 +174,7 @@ import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
+import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
 import com.anyNews.anynews.Utils.FlipAdWorkGate;
 import com.anyNews.anynews.Utils.NativeAdCacheCoordinator;
 import com.anyNews.anynews.Utils.OfflinePackPrefetcher;
@@ -12657,11 +12658,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getPn_thumb_size_dp(),
                             encreptionRequest.getPn_title_size_sp()
                     );
-                            HomePage.this,
-                            encreptionRequest.getLive_readers_enabled(),
-                            encreptionRequest.getLive_readers_window_minutes(),
-                            encreptionRequest.getLive_readers_show_seconds(),
-                            encreptionRequest.getLive_readers_min_count());
                     // Performance → Ad every N / prefetch / concurrency / flush / format.
                     // Must land BEFORE unread-strip rebalance so client cadence matches
                     // server seats (otherwise default every-4 overwrites every-2).
@@ -12682,14 +12678,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 encreptionRequest.getAd_code());
                         FeedAdConfig.warmFromPrefs(getApplicationContext());
                     }
-                    // Config may land after FlipView already painted — re-show if count present.
-                    try {
-                        final android.view.View decor =
-                                getWindow() != null ? getWindow().getDecorView() : null;
-                        if (decor != null) {
-                        } else {
-                        }
-                    } catch (Exception ignored) {
+                    if (encreptionRequest.getViews_batch_flush_interval_seconds() != null
+                            || encreptionRequest.getViews_batch_flush_at_count() != null
+                            || encreptionRequest.getMedia_access_flush_interval_seconds() != null
+                            || encreptionRequest.getRewards_engagement_flush_interval_seconds()
+                                    != null) {
+                        AnalyticsBatchConfig.saveFromServer(
+                                getApplicationContext(),
+                                encreptionRequest.getViews_batch_flush_interval_seconds(),
+                                encreptionRequest.getViews_batch_flush_at_count(),
+                                encreptionRequest.getMedia_access_flush_interval_seconds(),
+                                encreptionRequest.getRewards_engagement_flush_interval_seconds());
                     }
                     // Only update when the envelope explicitly includes the field.
                     // Flash/error fallbacks that omit it must not wipe splash=true → FLAG_SECURE.
