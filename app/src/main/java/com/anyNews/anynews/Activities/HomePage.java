@@ -12387,9 +12387,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return SHARE_ID > 0;
     }
     /**
-     * Append new articles while skipping any post already present in the list.
-     * Prevents the same post showing twice when pagination returns overlapping data.
-     * Real articles dedupe by post_id only (sticky + chrono companion often differ on
+     * Merge feed rows by post_id: replace in-place when the same post returns
+     * (admin edit / soft-reconcile), append only true newcomers.
+     * Real articles key by post_id only (sticky + chrono companions differ on
      * sub_post_id and used to paint twins). Ads / share_app / ratings keep positional keys.
      */
     private String articleDedupKey(ModelClass.Datum d) {
@@ -12410,11 +12410,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private void addUniqueArticles(java.util.List<ModelClass.Datum> newData) {
         if (newData == null) return;
-        java.util.HashSet<String> existing = new java.util.HashSet<>();
-        for (ModelClass.Datum d : list) {
-            String key = articleDedupKey(d);
-            if (key != null) {
-                existing.add(key);
+        // Index of first occurrence so soft-reconcile / soft-merge can replace
+        // the payload for an existing post_id without appending a twin card.
+        java.util.HashMap<String, Integer> existingIndex = new java.util.HashMap<>();
+        for (int i = 0; i < list.size(); i++) {
+            String key = articleDedupKey(list.get(i));
+            if (key != null && !existingIndex.containsKey(key)) {
+                existingIndex.put(key, i);
             }
         }
         for (ModelClass.Datum d : newData) {
@@ -12424,13 +12426,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 continue;
             }
             String key = articleDedupKey(d);
-            if (key == null || !existing.contains(key)) {
+            if (key == null) {
                 list.add(d);
-                if (key != null) {
-                    existing.add(key);
-                }
+                continue;
+            }
+            Integer idx = existingIndex.get(key);
+            if (idx == null) {
+                existingIndex.put(key, list.size());
+                list.add(d);
             } else {
-                showLog("DEDUP skipped duplicate post key=" + key);
+                list.set(idx, d);
+                showLog("DEDUP replaced post key=" + key + " at=" + idx);
             }
         }
     }
