@@ -70,12 +70,23 @@ public final class LanguageFeedInvalidator {
         }
         if (clearGeography) {
             try {
-                // Stale geo labels from the previous language must not soft-fill Home chrome.
-                SharedPrefsData.putInt(app, Constants.StateID, 0, Constants.PREF_NAME);
-                SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, 0, Constants.PREF_NAME);
-                SharedPrefsData.putString(app, Constants.Selected_Distric_Name, "", Constants.PREF_NAME);
-                SharedPrefsData.putString(app, Constants.Selected_Distric_Name1, "", Constants.PREF_NAME);
-                SharedPrefsData.putInt(app, Constants.Selected_Distric_Name_LangId, 0, Constants.PREF_NAME);
+                // Keep prior language's district so switching back can restore it.
+                DistrictLabelHelper.snapshotActiveToLanguageSlot(app);
+            } catch (Exception ignored) {
+            }
+            try {
+                DistrictLabelHelper.clearActiveSelection(app);
+            } catch (Exception ignored) {
+            }
+            try {
+                // Restore last valid district for the new language when we have one.
+                DistrictLabelHelper.ensureSelectedMatchesLanguage(app);
+            } catch (Exception ignored) {
+            }
+        } else {
+            // Login path kept geography — still drop cross-language labels.
+            try {
+                DistrictLabelHelper.ensureSelectedMatchesLanguage(app);
             } catch (Exception ignored) {
             }
         }

@@ -1329,6 +1329,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
 
+        // Drop cross-language district (Hindi label under Telugu UI, etc.) before paint.
+        try {
+            DistrictLabelHelper.ensureSelectedMatchesLanguage(HomePage.this);
+        } catch (Exception ignored) {
+        }
+
         DistrictLabelHelper.applyTo(HomePage.this, local_distic_name, selelcted_local_distic_name);
 
         if (local_distic_name.getText().toString().equals("null")) {

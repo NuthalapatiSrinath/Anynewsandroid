@@ -1382,11 +1382,6 @@ public class StartingActivity extends AppCompatActivity {
                             }
                         } catch (Exception ignored) {
                         }
-                        DistrictLabelHelper.saveFromServer(
-                                getApplicationContext(),
-                                splashLangId,
-                                splashDistId,
-                                startActivityReqModel.getData().getDistName());
                         try {
                             Integer splashStateId = startActivityReqModel.getData().getStateId();
                             if (splashStateId != null && splashStateId > 0) {
@@ -1406,6 +1401,16 @@ public class StartingActivity extends AppCompatActivity {
                                             Constants.PREF_NAME);
                                 }
                             }
+                        } catch (Exception ignored) {
+                        }
+                        DistrictLabelHelper.saveFromServer(
+                                getApplicationContext(),
+                                splashLangId,
+                                splashDistId,
+                                startActivityReqModel.getData().getDistName());
+                        try {
+                            DistrictLabelHelper.ensureSelectedMatchesLanguage(
+                                    getApplicationContext());
                         } catch (Exception ignored) {
                         }
                         String splashNext = startActivityReqModel.getData().getNextScreen();

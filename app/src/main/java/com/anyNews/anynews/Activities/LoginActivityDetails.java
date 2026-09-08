@@ -442,9 +442,12 @@ public class LoginActivityDetails extends AppCompatActivity {
             if (DistrictLabelHelper.isUsable(location)) {
                 DistrictLabelHelper.saveFromServer(app, langForSave, distId, location);
             } else if (distId > 0) {
-                SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
+                // Id-only: still go through language-scoped save (rejects foreign ids when cache warm).
+                DistrictLabelHelper.saveFromServer(app, langForSave, distId, null);
             }
         }
+        // Final guard: never keep Hindi Bhiwani (etc.) under a Telugu LanguageID.
+        DistrictLabelHelper.ensureSelectedMatchesLanguage(app);
     }
 
     /** Native language label for Profile "भाषा चुनें" / language row (matches LanguageID). */

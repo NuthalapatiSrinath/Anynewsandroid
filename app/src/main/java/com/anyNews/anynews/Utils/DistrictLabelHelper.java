@@ -1,7 +1,6 @@
 package com.anyNews.anynews.Utils;
 
 import android.content.Context;
-import android.text.TextUtils;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -14,13 +13,28 @@ import java.util.List;
 /**
  * Single source of truth for the district / location pill label.
  *
- * <p>District display names must follow the selected in-app {@link Constants#LanguageID},
- * not a frozen ctor string or an offline snapshot from another language. Store district id
- * (stable) and always re-resolve the label for the current language when binding or resuming.
+ * <p>District display names must follow the selected in-app {@link Constants#LanguageID}.
+ * Numeric district ids collide across languages — never display or keep a district that
+ * belongs to another language (e.g. Hindi भिवानी under Telugu UI).
+ *
+ * <p>Active selection uses global prefs; each language also has a snapshot so switching
+ * languages can restore the last valid district for that language.
  */
 public final class DistrictLabelHelper {
 
     private DistrictLabelHelper() {}
+
+    private static String keyDistId(int languageId) {
+        return Constants.Selected_Distric_Id + "_lang_" + languageId;
+    }
+
+    private static String keyDistName(int languageId) {
+        return Constants.Selected_Distric_Name1 + "_lang_" + languageId;
+    }
+
+    private static String keyStateId(int languageId) {
+        return Constants.StateID + "_lang_" + languageId;
+    }
 
     /** Persist district id + display name tagged with the current language id. */
     public static void saveSelected(
@@ -30,16 +44,49 @@ public final class DistrictLabelHelper {
         }
         Context app = context.getApplicationContext();
         int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+        int stateId = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
+        saveSelectedForLanguage(app, lang, stateId, distId, name);
+    }
+
+    /**
+     * Persist geography for {@code languageId}. Rejects clear cross-script names
+     * so a Hindi Devanagari label cannot be stored under Telugu.
+     */
+    public static void saveSelectedForLanguage(
+            @Nullable Context context,
+            int languageId,
+            int stateId,
+            int distId,
+            @Nullable String name) {
+        if (context == null || languageId <= 0) {
+            return;
+        }
+        if (isUsable(name) && isClearScriptConflict(name, languageId)) {
+            // Never stamp a foreign-script label as belonging to this language.
+            clearActiveSelection(context);
+            return;
+        }
+        Context app = context.getApplicationContext();
         if (distId > 0) {
             SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, keyDistId(languageId), distId, Constants.PREF_NAME);
+        }
+        if (stateId > 0) {
+            SharedPrefsData.putInt(app, Constants.StateID, stateId, Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, keyStateId(languageId), stateId, Constants.PREF_NAME);
         }
         if (!isUsable(name)) {
+            if (distId > 0) {
+                SharedPrefsData.putInt(
+                        app, Constants.Selected_Distric_Name_LangId, languageId, Constants.PREF_NAME);
+            }
             return;
         }
         String n = name.trim();
         SharedPrefsData.putString(app, Constants.Selected_Distric_Name, n, Constants.PREF_NAME);
         SharedPrefsData.putString(app, Constants.Selected_Distric_Name1, n, Constants.PREF_NAME);
-        SharedPrefsData.putInt(app, Constants.Selected_Distric_Name_LangId, lang, Constants.PREF_NAME);
+        SharedPrefsData.putInt(app, Constants.Selected_Distric_Name_LangId, languageId, Constants.PREF_NAME);
+        SharedPrefsData.putString(app, keyDistName(languageId), n, Constants.PREF_NAME);
     }
 
     /** Update display name only (keeps stored id); tags with current language. */
@@ -53,28 +100,57 @@ public final class DistrictLabelHelper {
     }
 
     /**
-     * Splash / server write: store name for the language id the server just applied
-     * (may differ mid-session only when splash updates LanguageID).
+     * Splash / server write: store name for the language id the server just applied.
+     * Rejects cross-language / wrong-script labels; clears active selection instead.
      */
     public static void saveFromServer(
             @Nullable Context context,
             int languageId,
             int distId,
             @Nullable String name) {
-        if (context == null || !isUsable(name)) {
+        if (context == null) {
             return;
         }
         Context app = context.getApplicationContext();
-        if (distId > 0) {
-            SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
-        }
-        String n = name.trim();
-        SharedPrefsData.putString(app, Constants.Selected_Distric_Name, n, Constants.PREF_NAME);
-        SharedPrefsData.putString(app, Constants.Selected_Distric_Name1, n, Constants.PREF_NAME);
         int tagLang = languageId > 0
                 ? languageId
                 : SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
-        SharedPrefsData.putInt(app, Constants.Selected_Distric_Name_LangId, tagLang, Constants.PREF_NAME);
+        if (tagLang <= 0) {
+            return;
+        }
+        if (isUsable(name) && isClearScriptConflict(name, tagLang)) {
+            // Server returned e.g. Hindi भिवानी while language is Telugu — do not apply.
+            // Only clear active prefs when they are also wrong for this language.
+            int nameLang = SharedPrefsData.getInt(
+                    app, Constants.Selected_Distric_Name_LangId, Constants.PREF_NAME);
+            String d1 = SharedPrefsData.getString(
+                    app, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
+            String d0 = SharedPrefsData.getString(
+                    app, Constants.Selected_Distric_Name, Constants.PREF_NAME);
+            String active = isUsable(d1) ? d1 : d0;
+            boolean activeBad = (nameLang > 0 && nameLang != tagLang)
+                    || (isUsable(active) && isClearScriptConflict(active, tagLang));
+            if (activeBad || !isUsable(active)) {
+                clearActiveSelection(app);
+            }
+            return;
+        }
+        if (!isUsable(name) && distId <= 0) {
+            return;
+        }
+        int stateId = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
+        if (distId > 0 && !isUsable(name)) {
+            // Id-only write: still require it to exist under this language when cache is warm.
+            if (!districtBelongsToLanguage(app, tagLang, distId, stateId)) {
+                // Cache miss is common on cold start — keep id but do not invent a label.
+                SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
+                SharedPrefsData.putInt(app, keyDistId(tagLang), distId, Constants.PREF_NAME);
+                SharedPrefsData.putInt(
+                        app, Constants.Selected_Distric_Name_LangId, tagLang, Constants.PREF_NAME);
+                return;
+            }
+        }
+        saveSelectedForLanguage(app, tagLang, stateId, distId, name);
     }
 
     public static int getStoredDistId(@Nullable Context context) {
@@ -85,13 +161,138 @@ public final class DistrictLabelHelper {
                 context.getApplicationContext(), Constants.Selected_Distric_Id, Constants.PREF_NAME);
     }
 
+    /** Snapshot current active geography into the per-language slot (before language switch). */
+    public static void snapshotActiveToLanguageSlot(@Nullable Context context) {
+        if (context == null) {
+            return;
+        }
+        Context app = context.getApplicationContext();
+        // Prefer the language the label was tagged with — LanguageID may already
+        // have been switched by the caller before onLanguageChanged runs.
+        int nameLang = SharedPrefsData.getInt(
+                app, Constants.Selected_Distric_Name_LangId, Constants.PREF_NAME);
+        int uiLang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+        int lang = nameLang > 0 ? nameLang : uiLang;
+        if (lang <= 0) {
+            return;
+        }
+        int distId = getStoredDistId(app);
+        int stateId = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
+        String name = SharedPrefsData.getString(
+                app, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
+        if (!isUsable(name)) {
+            name = SharedPrefsData.getString(
+                    app, Constants.Selected_Distric_Name, Constants.PREF_NAME);
+        }
+        if (distId <= 0 && !isUsable(name)) {
+            return;
+        }
+        if (isUsable(name) && isClearScriptConflict(name, lang)) {
+            return;
+        }
+        if (distId > 0) {
+            SharedPrefsData.putInt(app, keyDistId(lang), distId, Constants.PREF_NAME);
+        }
+        if (stateId > 0) {
+            SharedPrefsData.putInt(app, keyStateId(lang), stateId, Constants.PREF_NAME);
+        }
+        if (isUsable(name)) {
+            SharedPrefsData.putString(app, keyDistName(lang), name.trim(), Constants.PREF_NAME);
+        }
+    }
+
+    /** Clear active (global) district/state selection without wiping per-language slots. */
+    public static void clearActiveSelection(@Nullable Context context) {
+        if (context == null) {
+            return;
+        }
+        Context app = context.getApplicationContext();
+        try {
+            SharedPrefsData.putInt(app, Constants.StateID, 0, Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, 0, Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.Selected_Distric_Name, "", Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.Selected_Distric_Name1, "", Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.Selected_Distric_Name_LangId, 0, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * After language change / login / profile: drop cross-language district, or restore
+     * the last valid district stored for the current language.
+     *
+     * @return true when active selection was cleared or replaced
+     */
+    public static boolean ensureSelectedMatchesLanguage(@Nullable Context context) {
+        if (context == null) {
+            return false;
+        }
+        Context app = context.getApplicationContext();
+        int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+        if (lang <= 0) {
+            return false;
+        }
+        int distId = getStoredDistId(app);
+        int stateId = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
+        int nameLang = SharedPrefsData.getInt(
+                app, Constants.Selected_Distric_Name_LangId, Constants.PREF_NAME);
+        String d1 = SharedPrefsData.getString(app, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
+        String d0 = SharedPrefsData.getString(app, Constants.Selected_Distric_Name, Constants.PREF_NAME);
+        String activeName = isUsable(d1) ? d1 : d0;
+
+        boolean scriptBad = isUsable(activeName) && isClearScriptConflict(activeName, lang);
+        boolean tagBad = nameLang > 0 && nameLang != lang;
+        boolean idBad = false;
+        if (distId > 0) {
+            // Only treat as bad when cache positively proves the id is not in this language.
+            Boolean belongs = districtBelongsToLanguageStrict(app, lang, distId, stateId);
+            if (Boolean.FALSE.equals(belongs)) {
+                idBad = true;
+            }
+        }
+
+        if (!scriptBad && !tagBad && !idBad) {
+            // Soft-upgrade Latin → native when possible; keep selection.
+            if (distId > 0 && needsNativeScriptUpgrade(activeName, lang)) {
+                String fromCache = lookupLocalizedNameFromCache(app, lang);
+                if (isUsable(fromCache)) {
+                    saveSelectedForLanguage(app, lang, stateId, distId, fromCache);
+                    return true;
+                }
+            }
+            // Keep per-language snapshot fresh.
+            if (distId > 0 || isUsable(activeName)) {
+                snapshotActiveToLanguageSlot(app);
+            }
+            return false;
+        }
+
+        // Invalid for current language — try restore from per-language slot.
+        int savedDist = SharedPrefsData.getInt(app, keyDistId(lang), Constants.PREF_NAME);
+        int savedState = SharedPrefsData.getInt(app, keyStateId(lang), Constants.PREF_NAME);
+        String savedName = SharedPrefsData.getString(app, keyDistName(lang), Constants.PREF_NAME);
+        if (savedDist > 0
+                && isUsable(savedName)
+                && !isClearScriptConflict(savedName, lang)) {
+            clearActiveSelection(app);
+            saveSelectedForLanguage(app, lang, savedState, savedDist, savedName);
+            return true;
+        }
+        if (isUsable(savedName)
+                && !isClearScriptConflict(savedName, lang)
+                && !needsNativeScriptUpgrade(savedName, lang)) {
+            clearActiveSelection(app);
+            saveSelectedForLanguage(app, lang, savedState, savedDist, savedName);
+            return true;
+        }
+
+        clearActiveSelection(app);
+        return true;
+    }
+
     /**
      * Resolve the district pill / header label for the <b>current</b> app language.
-     * Always re-reads prefs (never relies on FlipperAdapter ctor freeze alone).
-     *
-     * <p>When LanguageID expects an Indic script and prefs only have a Latin name
-     * (e.g. English "Anakapalli" under TE), re-resolves from the language-keyed
-     * district list cache so Mana Zilla / location pills show native script.
+     * Never returns a clear Indic-script conflict (e.g. Devanagari under Telugu).
      */
     @NonNull
     public static String resolveDisplayLabel(@Nullable Context context) {
@@ -106,16 +307,26 @@ public final class DistrictLabelHelper {
         String d1 = SharedPrefsData.getString(app, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
         String d0 = SharedPrefsData.getString(app, Constants.Selected_Distric_Name, Constants.PREF_NAME);
 
+        // Auto-heal once when prefs clearly conflict with LanguageID.
+        if ((isUsable(d1) && isClearScriptConflict(d1, lang))
+                || (isUsable(d0) && isClearScriptConflict(d0, lang))
+                || (nameLang > 0 && nameLang != lang && (isUsable(d1) || isUsable(d0)))) {
+            ensureSelectedMatchesLanguage(app);
+            d1 = SharedPrefsData.getString(app, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
+            d0 = SharedPrefsData.getString(app, Constants.Selected_Distric_Name, Constants.PREF_NAME);
+            nameLang = SharedPrefsData.getInt(
+                    app, Constants.Selected_Distric_Name_LangId, Constants.PREF_NAME);
+        }
+
         String match = firstCompatible(lang, nameLang, d1, d0);
-        if (isUsable(match) && !needsNativeScriptUpgrade(match, lang)) {
+        if (isUsable(match) && !needsNativeScriptUpgrade(match, lang)
+                && !isClearScriptConflict(match, lang)) {
             return match.trim();
         }
 
         // Prefs are Latin-only under an Indic language — look up localized name by id.
         String fromCache = lookupLocalizedNameFromCache(app, lang);
-        if (isUsable(fromCache)) {
-            // Soft-upgrade: keep any prior Latin name in Selected_Distric_Name so
-            // English server location_label can still match the selected district.
+        if (isUsable(fromCache) && !isClearScriptConflict(fromCache, lang)) {
             String priorLatin = null;
             if (isLatinOrDigitsOnlySafe(match)) {
                 priorLatin = match.trim();
@@ -125,6 +336,7 @@ public final class DistrictLabelHelper {
                 priorLatin = d0.trim();
             }
             int distId = getStoredDistId(app);
+            int stateId = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
             if (distId > 0) {
                 SharedPrefsData.putInt(app, Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
             }
@@ -136,24 +348,27 @@ public final class DistrictLabelHelper {
                     app, Constants.Selected_Distric_Name1, fromCache.trim(), Constants.PREF_NAME);
             SharedPrefsData.putInt(
                     app, Constants.Selected_Distric_Name_LangId, lang, Constants.PREF_NAME);
+            SharedPrefsData.putString(app, keyDistName(lang), fromCache.trim(), Constants.PREF_NAME);
+            if (distId > 0) {
+                SharedPrefsData.putInt(app, keyDistId(lang), distId, Constants.PREF_NAME);
+            }
+            if (stateId > 0) {
+                SharedPrefsData.putInt(app, keyStateId(lang), stateId, Constants.PREF_NAME);
+            }
             return fromCache.trim();
         }
 
         // Offline snapshot: only when it was captured for this language.
         String offline = OfflineFeedStore.loadDistrictLabelForLanguage(app, lang);
         if (isUsable(offline) && labelCompatibleWithLanguage(offline, lang)
-                && !needsNativeScriptUpgrade(offline, lang)) {
-            // Soft-fill empty prefs so pin has text; tag for current language.
+                && !needsNativeScriptUpgrade(offline, lang)
+                && !isClearScriptConflict(offline, lang)) {
             if (!isUsable(d1) && !isUsable(d0)) {
                 saveFromServer(app, lang, getStoredDistId(app), offline);
             }
             return offline.trim();
         }
 
-        // Prefer not to mix languages. When the only cached label is Telugu script
-        // while Language_Id is Hindi (or similar), return empty — splash/district
-        // reselect supplies the correct name. Never keep a foreign-script pill on
-        // the main feed chrome.
         if (isUsable(offline) && !isClearScriptConflict(offline, lang)
                 && !needsNativeScriptUpgrade(offline, lang)) {
             return offline.trim();
@@ -166,15 +381,20 @@ public final class DistrictLabelHelper {
                 && !needsNativeScriptUpgrade(d0, lang)) {
             return d0.trim();
         }
-        // Last resort: Latin name still better than blank (until cache warms).
-        if (isUsable(match)) {
+        // Latin-only fallback (never foreign Indic script).
+        if (isUsable(match) && !isClearScriptConflict(match, lang)) {
             return match.trim();
         }
-        if (isUsable(d1)) {
+        if (isUsable(d1) && isLatinOrDigitsOnlySafe(d1)) {
             return d1.trim();
         }
-        if (isUsable(d0)) {
+        if (isUsable(d0) && isLatinOrDigitsOnlySafe(d0)) {
             return d0.trim();
+        }
+        // Prefer per-language saved name over blank.
+        String saved = SharedPrefsData.getString(app, keyDistName(lang), Constants.PREF_NAME);
+        if (isUsable(saved) && !isClearScriptConflict(saved, lang)) {
+            return saved.trim();
         }
         return "";
     }
@@ -293,8 +513,52 @@ public final class DistrictLabelHelper {
         return lookupLocalizedNameForDistrict(context, languageId, distId, stateId);
     }
 
+    /**
+     * @return true if cache lists the district under language; false if cache is warm
+     *     and does not contain it; true on cache-miss (unknown) to avoid false clears.
+     */
+    private static boolean districtBelongsToLanguage(
+            @Nullable Context context, int languageId, int distId, int stateId) {
+        Boolean strict = districtBelongsToLanguageStrict(context, languageId, distId, stateId);
+        return strict == null || strict;
+    }
+
+    /**
+     * @return {@link Boolean#TRUE} if found, {@link Boolean#FALSE} if warm cache proves
+     *     absence, {@code null} if caches are empty / unknown.
+     */
+    @Nullable
+    private static Boolean districtBelongsToLanguageStrict(
+            @Nullable Context context, int languageId, int distId, int stateId) {
+        if (context == null || languageId <= 0 || distId <= 0) {
+            return null;
+        }
+        Context app = context.getApplicationContext();
+        int found = SelectionListCache.findStateIdForDistrict(app, languageId, distId);
+        if (found > 0) {
+            return Boolean.TRUE;
+        }
+        // Warm states list but no district → definitely not in this language.
+        try {
+            List<?> states = SelectionListCache.loadStates(app, languageId);
+            if (states != null && !states.isEmpty()) {
+                if (stateId > 0) {
+                    List<DistricsModel.Datum> list =
+                            SelectionListCache.loadDistricts(app, languageId, stateId);
+                    if (list != null && !list.isEmpty()) {
+                        return Boolean.FALSE;
+                    }
+                }
+                // States warm but district lists not all loaded — unknown.
+                return null;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     /** True when label is clearly another Indic script than the selected language. */
-    private static boolean isClearScriptConflict(@Nullable String label, int languageId) {
+    public static boolean isClearScriptConflict(@Nullable String label, int languageId) {
         int expected = expectedScriptForLanguage(languageId);
         if (expected == 0 || !isUsable(label)) {
             return false;
@@ -312,6 +576,7 @@ public final class DistrictLabelHelper {
         if (context == null) {
             return "";
         }
+        ensureSelectedMatchesLanguage(context);
         String resolved = resolveDisplayLabel(context);
         return isUsable(resolved) ? resolved.trim() : "";
     }

@@ -160,8 +160,9 @@ public class Constants {
     public static String Selected_Distric_Name="Selected_Distric_Name";
     public static String Selected_Distric_Name1="Selected_Distric_Name1";
     /**
-     * Server district id for the selected geography. Display names are language-dependent;
-     * keep id stable and re-resolve labels for the current {@link #LanguageID}.
+     * Server district id for the selected geography. Numeric ids collide across languages —
+     * always pair with {@link #LanguageID} / {@link #Selected_Distric_Name_LangId}.
+     * Per-language snapshots use {@code Selected_Distric_Id_lang_{languageId}}.
      */
     public static String Selected_Distric_Id = "Selected_Distric_Id";
     /**

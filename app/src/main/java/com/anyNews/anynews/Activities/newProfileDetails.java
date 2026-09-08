@@ -2326,6 +2326,10 @@ public class newProfileDetails extends AppCompatActivity {
     private void bindLocationRowText() {
         TextView locationValue = findViewById(R.id.profile_location_value);
         if (locationValue == null) return;
+        try {
+            DistrictLabelHelper.ensureSelectedMatchesLanguage(this);
+        } catch (Exception ignored) {
+        }
         String dist = DistrictLabelHelper.resolveDisplayLabel(this);
         if (dist == null || dist.isEmpty()) {
             if (local_distic_name != null && local_distic_name.getText() != null) {
@@ -2658,14 +2662,12 @@ public class newProfileDetails extends AppCompatActivity {
                 int langForSave = langId > 0
                         ? langId
                         : SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
-                if (DistrictLabelHelper.isUsable(loc)) {
-                    DistrictLabelHelper.saveFromServer(
-                            getApplicationContext(), langForSave, distId, loc);
-                } else if (distId > 0) {
-                    SharedPrefsData.putInt(getApplicationContext(),
-                            Constants.Selected_Distric_Id, distId, Constants.PREF_NAME);
-                }
+                // Rejects wrong-script labels (e.g. भिवानी under Telugu) and clears.
+                DistrictLabelHelper.saveFromServer(
+                        getApplicationContext(), langForSave, distId,
+                        DistrictLabelHelper.isUsable(loc) ? loc : null);
             }
+            DistrictLabelHelper.ensureSelectedMatchesLanguage(getApplicationContext());
         } catch (Exception ignored) {
         }
         // Prefer real name over draft "Guest" (login prefs often already have it).
