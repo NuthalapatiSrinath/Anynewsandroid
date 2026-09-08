@@ -1966,8 +1966,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return fromPostGeo.trim();
             }
         }
-        // National / no-geo posts: previous main-feed behavior used the selected district.
-        if (selectedUsable) {
+        // National / no-geo posts on Main: previous behavior used the selected district.
+        // On Local, never stamp Anakapalli (etc.) onto national Main cards — that made
+        // Main bleed look like genuine Local district content.
+        if (selectedUsable && categery_id != -1) {
             my_feed_name = selected;
             return selected;
         }

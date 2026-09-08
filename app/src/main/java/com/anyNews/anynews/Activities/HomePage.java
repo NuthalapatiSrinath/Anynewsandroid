@@ -9635,6 +9635,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 // (those tabs + Profile are hidden) so content matches News.
                 boolean wasSpecial = isSpecialFeedMode();
                 boolean wasVideoFeed = isVideoFeedMode();
+                boolean wasLocal = category_id == -1 || localFeedFromDailyUpdates;
                 if (wasSpecial || wasVideoFeed) {
                     setFeedModeFlags(false, false);
                 }
@@ -9650,6 +9651,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 try {
                     rebindOfflineChromeTapsOnVisiblePages();
                 } catch (Exception ignored) {
+                }
+                // Local tab offline: empty Local is OK — never swap in Main Offline News
+                // while Local/Anakapalli chrome is still selected.
+                if (wasLocal) {
+                    try {
+                        hardClearFlipFeedImmediate();
+                        if (txtNoData != null) {
+                            txtNoData.setVisibility(View.VISIBLE);
+                        }
+                        if (layout_with_data != null) {
+                            layout_with_data.setVisibility(View.VISIBLE);
+                        }
+                        if (mFlipView != null) {
+                            mFlipView.setVisibility(View.GONE);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    rebalanceFooterTabs();
+                    return;
                 }
                 // Main News offline only — never hydrate from special cache here.
                 // Include mid-session in-memory list only when we were already on main.
@@ -12482,6 +12502,46 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return String.valueOf(d.getPostId());
     }
 
+    /**
+     * Local tab defense-in-depth: keep only posts whose {@code dist_id} matches the
+     * user's selected district. Ads / share / ratings seats stay. When prefs have no
+     * dist id, clear article cards (empty Local) rather than painting Main nationals.
+     */
+    private void filterLocalFeedDistrictOnly(
+            @Nullable java.util.List<ModelClass.Datum> data) {
+        if (data == null || data.isEmpty()) {
+            return;
+        }
+        int wantDist = 0;
+        try {
+            wantDist = DistrictLabelHelper.getStoredDistId(HomePage.this);
+        } catch (Exception ignored) {
+        }
+        java.util.Iterator<ModelClass.Datum> it = data.iterator();
+        while (it.hasNext()) {
+            ModelClass.Datum d = it.next();
+            if (d == null) {
+                it.remove();
+                continue;
+            }
+            if (d.getPostId() == null) {
+                // Positional ads / share_app / ratings — keep seats.
+                continue;
+            }
+            String postType = d.getPostType() != null ? d.getPostType() : "";
+            if (postType.equalsIgnoreCase("ad")
+                    || postType.equalsIgnoreCase("web_ads")
+                    || postType.equalsIgnoreCase("ratings")
+                    || postType.equalsIgnoreCase("share_app")) {
+                continue;
+            }
+            int postDist = d.getDist_id() != null ? d.getDist_id() : 0;
+            if (wantDist <= 0 || postDist != wantDist) {
+                it.remove();
+            }
+        }
+    }
+
     private void addUniqueArticles(java.util.List<ModelClass.Datum> newData) {
         if (newData == null) return;
         // Index of first occurrence so soft-reconcile / soft-merge can replace
@@ -12916,6 +12976,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         int listSizeBeforeAppend = list.size();
                         final boolean specialNow = isSpecialFeedMode();
                         final boolean videoNow = isVideoFeedMode();
+                        // Local: drop national/statewide Main cards that may still arrive
+                        // (dirty Redis, wrong mode) — empty Local is OK; Main bleed is not.
+                        if (category_id == -1 || localFeedFromDailyUpdates) {
+                            filterLocalFeedDistrictOnly(validateUserOtp.getData());
+                        }
                         // Soft reconnect merges are main-feed only. Special/Video/Local always
                         // replace so My Feed offline pack never bleeds into those tabs.
                         final boolean softMerge = softMergeOnNextPage0 && !fromCache
