@@ -488,7 +488,8 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
         try {
             int draft =
                     SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
-            if (draft > 0) body.addProperty("draft_id", draft);
+            // Birthday must not attach news DraftID — it rotates and denied media send.
+            if (!birthdayMode && draft > 0) body.addProperty("draft_id", draft);
             String uid = SharedPrefsData.getString(this, Constants.USER_ID, Constants.PREF_NAME);
             if (!TextUtils.isEmpty(uid)) body.addProperty("user_id", uid);
         } catch (Exception ignored) {
@@ -722,9 +723,14 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             body.addProperty("media_url", mediaUrl);
         }
         try {
-            int draft =
-                    SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
-            if (draft > 0) body.addProperty("draft_id", draft);
+            // Prefer user_id ownership. Never send news DraftID for birthday chat.
+            String uid = SharedPrefsData.getString(this, Constants.USER_ID, Constants.PREF_NAME);
+            if (!TextUtils.isEmpty(uid)) body.addProperty("user_id", uid);
+            if (!birthdayMode) {
+                int draft =
+                        SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
+                if (draft > 0) body.addProperty("draft_id", draft);
+            }
         } catch (Exception ignored) {
         }
         APIService api = RestApiClient.getClient().create(APIService.class);
@@ -991,19 +997,22 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             int padH = (int) dp(8);
             int padV = (int) dp(6);
             bubble.setPadding(padH, padV, padH, padV);
-            // LinearLayout has no setMaxWidth; cap bubble width via LayoutParams.
-            LinearLayout.LayoutParams bubbleLp = new LinearLayout.LayoutParams(
-                    (int) (parent.getResources().getDisplayMetrics().widthPixels * 0.78f),
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-            bubble.setLayoutParams(bubbleLp);
+            // Fixed bubble width — WRAP_CONTENT + MATCH_PARENT media collapses to a thin
+            // orange bar (WhatsApp-style image bubbles need a real width).
+            int bubbleW =
+                    Math.max(
+                            (int) dp(200),
+                            (int) (parent.getResources().getDisplayMetrics().widthPixels * 0.72f));
+            LinearLayout.LayoutParams bubbleLp =
+                    new LinearLayout.LayoutParams(bubbleW, ViewGroup.LayoutParams.WRAP_CONTENT);
 
             FrameLayout mediaFrame = new FrameLayout(parent.getContext());
             ImageView media = new ImageView(parent.getContext());
             media.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            media.setAdjustViewBounds(true);
+            media.setAdjustViewBounds(false);
+            int mediaH = (int) dp(200);
             FrameLayout.LayoutParams mediaLp =
-                    new FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT, (int) dp(180));
+                    new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, mediaH);
             mediaFrame.addView(media, mediaLp);
 
             TextView playOverlay = new TextView(parent.getContext());
@@ -1027,11 +1036,11 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             bubble.addView(
                     mediaFrame,
                     new LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                            ViewGroup.LayoutParams.MATCH_PARENT, mediaH));
             bubble.addView(
                     text,
                     new LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.WRAP_CONTENT));
 
             TextView time = new TextView(parent.getContext());
@@ -1044,11 +1053,7 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             timeLp.topMargin = (int) dp(2);
             time.setLayoutParams(timeLp);
 
-            row.addView(
-                    bubble,
-                    new LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT));
+            row.addView(bubble, bubbleLp);
             row.addView(time);
             return new VH(row, bubble, mediaFrame, media, playOverlay, text, time);
         }
@@ -1064,8 +1069,28 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             boolean hasMedia =
                     !TextUtils.isEmpty(m.mediaUrl)
                             && ("image".equals(m.type) || "video".equals(m.type));
+            LinearLayout.LayoutParams bubbleLp =
+                    (LinearLayout.LayoutParams) holder.bubble.getLayoutParams();
+            if (bubbleLp != null) {
+                if (hasMedia) {
+                    int bubbleW =
+                            Math.max(
+                                    (int) dp(200),
+                                    (int)
+                                            (holder.row.getResources()
+                                                            .getDisplayMetrics()
+                                                            .widthPixels
+                                                    * 0.72f));
+                    bubbleLp.width = bubbleW;
+                } else {
+                    bubbleLp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+                }
+                holder.bubble.setLayoutParams(bubbleLp);
+            }
             if (hasMedia) {
                 holder.mediaFrame.setVisibility(View.VISIBLE);
+                // Placeholder so the bubble stays full-width before Glide paints.
+                holder.media.setBackgroundColor(Color.parseColor("#33FFFFFF"));
                 Glide.with(holder.media.getContext())
                         .load(m.mediaUrl)
                         .centerCrop()
@@ -1076,6 +1101,7 @@ public class AdvertiseOnAnyNewsActivity extends AppCompatActivity {
             } else {
                 holder.mediaFrame.setVisibility(View.GONE);
                 holder.mediaFrame.setOnClickListener(null);
+                holder.media.setBackgroundColor(Color.TRANSPARENT);
                 Glide.with(holder.media.getContext()).clear(holder.media);
             }
 

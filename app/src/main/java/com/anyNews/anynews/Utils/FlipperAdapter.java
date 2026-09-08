@@ -408,6 +408,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 cancelAdShellFillTimeout(page);
                 return;
             }
+            // Reliability: always request on land (settle also calls ensure). Mid-flip warm
+            // may already be in flight — ensure is idempotent for true in-flight seats.
+            requestNativeAdLoadForSlot(slot);
             // Legacy deferred bind (if any): attach MediaView only when idle.
             if (pendingNativeAdBinds.get(page) != null) {
                 cancelAdShellFillTimeout(page);
@@ -3293,8 +3296,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             final ModelClass.Datum adSlot = list.get(position);
                             final boolean deferHeavy = shouldDeferAdWork()
                                     || isHomeFlipAnimating();
-                            // Always kick AdLoader (even mid-flip / buffer bind). Paint/
-                            // MediaView still wait for settle — load-on-land caused ~1s blank.
+                            // Best-effort AdLoader kick (mid-flip OK). Paint waits for settle.
+                            // Reliability: HomePage.runSettledAdWork + setCurrentFlipPage
+                            // always re-ensure on land even if this warm was capped/failed.
                             adShellHandler.post(() -> requestNativeAdLoadForSlot(adSlot));
 
                             if (ad != null && !deferHeavy) {
@@ -4142,8 +4146,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void requestNativeAdLoadForSlot(@Nullable ModelClass.Datum slot) {
         if (slot == null || !(context instanceof HomePage)) return;
         try {
-            // AdLoader only (HomePage caps in-flight mid-flip). Do not wait for settle —
-            // that deferred the paid request until land (~1s placeholder). Paint stays gated.
+            // Best-effort warm (may run mid-flip). Cap/backoff never permanently blocks —
+            // HomePage settle path unlocks and retries on land.
             String code = slot.getAd_code();
             if (code == null || code.trim().isEmpty()) {
                 code = slot.getNext_req_ad_code();

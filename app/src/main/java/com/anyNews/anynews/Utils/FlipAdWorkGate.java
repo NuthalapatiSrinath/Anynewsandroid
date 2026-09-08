@@ -3,14 +3,13 @@ package com.anyNews.anynews.Utils;
 import android.os.SystemClock;
 
 /**
- * Process-wide gate so AdMob <b>bind/paint</b>/pool flush never pressure the
- * FlipView gesture path. HomePage notes each flip; MediaView rebinds and
- * impression flush defer until the scroller has been idle for
- * {@link #SETTLE_GRACE_MS}.
+ * Process-wide gate so AdMob bind/paint/pool flush never pressure the FlipView
+ * gesture path. HomePage notes each flip; MediaView rebinds and impression flush
+ * defer until the scroller has been idle for {@link #SETTLE_GRACE_MS}.
  *
- * <p>AdLoader / network prefetch may run during flip (capped concurrency) so the
- * next feed seat is ready on land — see {@code warmNextAdSeatDuringFlip} /
- * {@link AdPreloader}. Deferral of paint is not cancellation of an in-flight load.
+ * <p>Mid-flip AdLoader warm is best-effort only. On-settle load is the reliability
+ * path and must always run even if warm failed, was capped, or is still in flight.
+ * Deferral of paint is not cancellation of an in-flight load.
  */
 public final class FlipAdWorkGate {
 

@@ -163,6 +163,40 @@ public final class NativeAdCacheCoordinator {
         log("CACHE disposed");
     }
 
+    /**
+     * Settle / land path: clear backoff + exhausted-retry counters so on-land load
+     * always gets another chance. Never cancels a true in-flight SDK request.
+     */
+    public synchronized void allowSettleRetry(String adType, String adCode, int requestPosition) {
+        Entry entry = entries.get(key(adType, adCode, requestPosition));
+        if (entry == null) {
+            return;
+        }
+        if (entry.inFlight) {
+            return;
+        }
+        entry.failures = 0;
+        entry.retryAfterUptimeMs = 0L;
+        log("SETTLE RETRY unlocked " + entry.key);
+    }
+
+    /** True when a seat already has an SDK request in flight (do not double-start). */
+    public synchronized boolean isInFlight(String adType, String adCode, int requestPosition) {
+        Entry entry = entries.get(key(adType, adCode, requestPosition));
+        return entry != null && entry.inFlight;
+    }
+
+    /** Remaining backoff ms, or 0 when start may proceed. */
+    public synchronized long millisUntilRetryAllowed(
+            String adType, String adCode, int requestPosition) {
+        Entry entry = entries.get(key(adType, adCode, requestPosition));
+        if (entry == null || entry.retryAfterUptimeMs <= 0L) {
+            return 0L;
+        }
+        long remaining = entry.retryAfterUptimeMs - SystemClock.uptimeMillis();
+        return Math.max(0L, remaining);
+    }
+
     private Entry getOrCreate(String type, String code, int position) {
         String key = key(type, code, position);
         Entry entry = entries.get(key);
