@@ -10277,6 +10277,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showLog("paintOfflineFeed blocked for special (online-only tab)");
                 return false;
             }
+            // Local tab: never paint Offline News / main OpenPath — Main cards with
+            // Anakapalli pin labels looked like Local when district was already set.
+            if (category_id == -1 || localFeedFromDailyUpdates) {
+                showLog("paintOfflineFeed blocked for Local");
+                return false;
+            }
             // Load fully before mutating UI so a failed load never blanks a good list.
             // Unread / not-opened first when ArticleOpenLog has ids; else pack order (newest).
             java.util.List<ModelClass.Datum> offline = OfflineFeedStore.loadForOfflinePaint(this);
@@ -12045,11 +12051,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // soft-refresh page-0 so admin delete/unpublish/edit cannot linger for the
         // full FEED_NETWORK_MIN_INTERVAL window (ghost deleted cards on reopen).
         // Throttle only applies when we did not paint from disk (shimmer → network).
+        // Local must probe FEED_MODE_LOCAL only — never treat main disk as "fresh Local".
+        final String openPathProbeMode = (category_id == -1 || localFeedFromDailyUpdates)
+                ? OpenPathCache.FEED_MODE_LOCAL
+                : OpenPathCache.FEED_MODE_MAIN;
         boolean needNetwork = !isFirstPage
                 || forceUserRefresh
                 || paintedFromDisk
+                || category_id == -1
+                || localFeedFromDailyUpdates
                 || OpenPathCache.shouldNetworkRefreshFeed(this, forceUserRefresh)
-                || OpenPathCache.loadFeed(this, category_id) == null
+                || OpenPathCache.loadFeed(this, category_id, openPathProbeMode) == null
                 || OpenPathCache.isForceFeedNetworkPending();
 
         // Cache-only warm reopen still needs pagination cursors; without them do not soft-skip.
