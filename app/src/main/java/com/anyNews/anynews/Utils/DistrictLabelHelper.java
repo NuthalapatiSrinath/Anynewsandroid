@@ -603,7 +603,17 @@ public final class DistrictLabelHelper {
             return false;
         }
         String t = s.trim();
-        return !t.isEmpty() && !"null".equalsIgnoreCase(t) && !"N/A".equalsIgnoreCase(t);
+        if (t.isEmpty() || "null".equalsIgnoreCase(t) || "N/A".equalsIgnoreCase(t)) {
+            return false;
+        }
+        // Country placeholders are not districts — never keep/display as selection.
+        if ("India".equalsIgnoreCase(t)
+                || "Bharat".equalsIgnoreCase(t)
+                || "Bharath".equalsIgnoreCase(t)
+                || "भारत".equals(t)) {
+            return false;
+        }
+        return true;
     }
 
     /**

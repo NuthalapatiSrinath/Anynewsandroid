@@ -232,7 +232,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
                             Intent intent = new Intent(context, AreaSelection.class);
                             SharedPrefsData.putInt(context, Constants.Back_Button_Move, 1, Constants.PREF_NAME);
-                            DistrictLabelHelper.saveName(context, "India");
+                            // Do not stamp country "India" as the selected district.
 
                             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
                             intent.putExtra("EXTRA_SESSION_ID", "0");

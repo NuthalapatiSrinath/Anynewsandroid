@@ -141,8 +141,23 @@ public class Districs extends AppCompatActivity {
             showContentShellWithoutSpinner();
             return;
         }
+        // Drop cache rows whose script conflicts with LanguageID (Hindi list
+        // previously saved under a Telugu session before server language-scope).
+        java.util.ArrayList<DistricsModel.Datum> filtered = new java.util.ArrayList<>();
+        for (DistricsModel.Datum d : cached) {
+            if (d == null || d.getName() == null) continue;
+            if (com.anyNews.anynews.Utils.DistrictLabelHelper.isClearScriptConflict(
+                    d.getName(), languageId)) {
+                continue;
+            }
+            filtered.add(d);
+        }
+        if (filtered.isEmpty()) {
+            showContentShellWithoutSpinner();
+            return;
+        }
         arrayList.clear();
-        arrayList.addAll(cached);
+        arrayList.addAll(filtered);
         bindDistrictList(false);
         paintedFromCache = true;
     }
@@ -170,8 +185,32 @@ public class Districs extends AppCompatActivity {
         LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
 
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
-        requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
-        requestModel.setStateId(SharedPrefsData.getInt(getApplicationContext(), Constants.StateID, Constants.PREF_NAME));
+        int languageId = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        int stateId = SharedPrefsData.getInt(getApplicationContext(), Constants.StateID, Constants.PREF_NAME);
+        // Stale StateID from another language (e.g. Haryana 41 under Telugu)
+        // must not drive the list — clear when warm states cache proves it is foreign.
+        if (languageId > 0 && stateId > 0) {
+            try {
+                java.util.List<com.anyNews.anynews.models.StatesModel.Datum> states =
+                        SelectionListCache.loadStates(getApplicationContext(), languageId);
+                if (states != null && !states.isEmpty()) {
+                    boolean ok = false;
+                    for (com.anyNews.anynews.models.StatesModel.Datum st : states) {
+                        if (st != null && st.getId() != null && st.getId() == stateId) {
+                            ok = true;
+                            break;
+                        }
+                    }
+                    if (!ok) {
+                        stateId = 0;
+                        SharedPrefsData.putInt(getApplicationContext(), Constants.StateID, 0, Constants.PREF_NAME);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        requestModel.setLanguageId(languageId);
+        requestModel.setStateId(stateId);
         String jsonString = new Gson().toJson(requestModel);
         String encrpt_data = encrypt(jsonString);
         showLog("API REQUEST E" + jsonString);
