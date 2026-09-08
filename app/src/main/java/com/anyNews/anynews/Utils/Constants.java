@@ -21,6 +21,12 @@ public class Constants {
 
     public static String DeviceID = "DeviceID";
 
+    /**
+     * Stable per-install UUID when ANDROID_ID is missing/empty.
+     * Survives process death; cleared on uninstall / clear-data (expected new draft).
+     */
+    public static String INSTALL_UUID = "INSTALL_UUID";
+
     public static String FCM_TOKEN = "FCM_TOKEN";
     public static String USER_SESSION_ID = "user_session_id";
     public static String HOME_SCREEN = "HOME_SCREEN";

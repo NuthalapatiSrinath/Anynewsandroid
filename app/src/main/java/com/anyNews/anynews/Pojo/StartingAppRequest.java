@@ -51,6 +51,17 @@ public class StartingAppRequest implements Serializable {
     @Expose
     private String deviceID;
 
+    @SerializedName("install_uuid")
+    @Expose
+    private String install_uuid;
+
+    public String getInstall_uuid() {
+        return install_uuid;
+    }
+
+    public void setInstall_uuid(String install_uuid) {
+        this.install_uuid = install_uuid;
+    }
 
     public String getLanguage_id() {
         return language_id;

@@ -1062,9 +1062,7 @@ public class StartingActivity extends AppCompatActivity {
         OSName = "ANDROID";
         DeviceType = "1";
         DeviceName = manufacturer + model;
-        DeviceID = Settings.Secure.getString(getApplicationContext().getContentResolver(),
-                Settings.Secure.ANDROID_ID);
-        SharedPrefsData.putString(getApplicationContext(), Constants.DeviceID, DeviceID, Constants.PREF_NAME);
+        DeviceID = resolveStableDeviceId();
         String App_version_id_sending = "" + version_name;
         String version_id = getVersionIdPrefix();
         SharedPrefsData.putString(getApplicationContext(), Constants.Version_ID, version_id, Constants.PREF_NAME);
@@ -1132,6 +1130,50 @@ public class StartingActivity extends AppCompatActivity {
 
     }
 
+    /**
+     * Stable device identity for splash upsert.
+     * Prefer ANDROID_ID (stable across opens of the same signing-key install).
+     * If missing, reuse a prefs-backed INSTALL_UUID — never mint a new UUID per open.
+     */
+    private String resolveStableDeviceId() {
+        String androidId = null;
+        try {
+            androidId = Settings.Secure.getString(
+                    getApplicationContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+        } catch (Exception ignored) {
+        }
+        if (androidId != null && !androidId.isEmpty() && !"null".equalsIgnoreCase(androidId)) {
+            SharedPrefsData.putString(
+                    getApplicationContext(), Constants.DeviceID, androidId, Constants.PREF_NAME);
+            // Keep install UUID around as secondary key for server rebind.
+            ensureInstallUuid();
+            return androidId;
+        }
+        String stored = SharedPrefsData.getString(
+                getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
+        if (stored != null && !stored.isEmpty() && !"null".equalsIgnoreCase(stored)) {
+            return stored;
+        }
+        String installUuid = ensureInstallUuid();
+        String fallback = "install_" + installUuid;
+        SharedPrefsData.putString(
+                getApplicationContext(), Constants.DeviceID, fallback, Constants.PREF_NAME);
+        Logone.w("ANDROID_ID missing; using stable install UUID for DeviceID");
+        return fallback;
+    }
+
+    private String ensureInstallUuid() {
+        String existing = SharedPrefsData.getString(
+                getApplicationContext(), Constants.INSTALL_UUID, Constants.PREF_NAME);
+        if (existing != null && !existing.isEmpty() && !"null".equalsIgnoreCase(existing)) {
+            return existing;
+        }
+        String created = UUID.randomUUID().toString();
+        SharedPrefsData.putString(
+                getApplicationContext(), Constants.INSTALL_UUID, created, Constants.PREF_NAME);
+        return created;
+    }
+
     private String resolveFcmToken(Task<String> task, String fallback) {
         if (task != null && task.isSuccessful() && task.getResult() != null && !task.getResult().isEmpty()) {
             String resolved = task.getResult();
@@ -1156,7 +1198,7 @@ public class StartingActivity extends AppCompatActivity {
         }
         String id = DeviceID != null && !DeviceID.isEmpty()
                 ? DeviceID
-                : UUID.randomUUID().toString();
+                : resolveStableDeviceId();
         String placeholder = (BuildConfig.DEBUG ? "debug-" : "pending-") + id;
         SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, placeholder, Constants.PREF_NAME);
         Logone.w("FCM token missing; using placeholder for splash device registration");
@@ -2210,12 +2252,10 @@ public class StartingActivity extends AppCompatActivity {
                     getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
         }
         if (returningDeviceId == null || returningDeviceId.isEmpty()) {
-            returningDeviceId = Settings.Secure.getString(
-                    getApplicationContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-            SharedPrefsData.putString(
-                    getApplicationContext(), Constants.DeviceID, returningDeviceId, Constants.PREF_NAME);
+            returningDeviceId = resolveStableDeviceId();
         }
         requestModel.setDeviceID(returningDeviceId);
+        requestModel.setInstall_uuid(ensureInstallUuid());
         requestModel.setReferralLink("" + SharedPrefsData.getString(getApplicationContext(), Constants.REFERAL_LINK, Constants.PREF_NAME));  //
         requestModel.setReferralLink2("" + SharedPrefsData.getString(getApplicationContext(), Constants.REFERAL_LINK2, Constants.PREF_NAME));  //
         requestModel.setReferredBy(SharedPrefsData.getLong(getApplicationContext(), Constants.CUSST_ID, Constants.PREF_NAME));  //
@@ -2261,7 +2301,10 @@ public class StartingActivity extends AppCompatActivity {
 
         StartingAppRequest requestModel = new StartingAppRequest();
 
-        requestModel.setDeviceID(DeviceID);
+        requestModel.setDeviceID(DeviceID != null && !DeviceID.isEmpty()
+                ? DeviceID
+                : resolveStableDeviceId());
+        requestModel.setInstall_uuid(ensureInstallUuid());
         requestModel.setLanguage_id(""+ SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
         requestModel.setDeviceType(Integer.valueOf(DeviceType));
         requestModel.setDeviceName(DeviceName);
