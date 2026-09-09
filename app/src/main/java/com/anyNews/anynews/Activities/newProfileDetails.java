@@ -539,8 +539,20 @@ public class newProfileDetails extends AppCompatActivity {
             }
         });
         if (layoutAppShare != null) {
-            layoutAppShare.setOnClickListener(null);
-            layoutAppShare.setVisibility(View.GONE);
+            layoutAppShare.setVisibility(View.VISIBLE);
+            layoutAppShare.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    Intent sendIntent = new Intent();
+                    sendIntent.setAction(Intent.ACTION_SEND);
+                    sendIntent.putExtra(Intent.EXTRA_TEXT,
+                            "Hey check out my app at: https://play.google.com/store/apps/details?id="
+                                    + BuildConfig.APPLICATION_ID);
+                    sendIntent.setType("text/plain");
+                    startActivity(Intent.createChooser(sendIntent, ProfileHubLabels.shareApp(
+                            newProfileDetails.this)));
+                }
+            });
         }
         // Follow / Discover was a duplicate of Following → Explore; hide the extra row.
         if (layoutFollowMore != null) {
@@ -2080,9 +2092,7 @@ public class newProfileDetails extends AppCompatActivity {
                     ProfileHubLabels.following(this)));
         }
         if (textViewShareEarnUser != null) {
-            String share = languageModelResponse != null && languageModelResponse.getData() != null
-                    ? languageModelResponse.getData().getShareToEarn() : null;
-            textViewShareEarnUser.setText(packString(share, getString(R.string.profile_referral)));
+            textViewShareEarnUser.setText(ProfileHubLabels.shareApp(this));
         }
         if (textViewFollowMore != null
                 && languageModelResponse != null
@@ -2266,12 +2276,7 @@ public class newProfileDetails extends AppCompatActivity {
                     d != null ? d.getFollowing() : null, ProfileHubLabels.following(this)));
         }
         if (textViewShareEarnUser != null) {
-            String share = packOk ? firstTranslator(
-                    d != null ? d.getShareToEarn() : null,
-                    d != null ? d.getShare() : null,
-                    getString(R.string.profile_referral))
-                    : getString(R.string.profile_referral);
-            textViewShareEarnUser.setText(share);
+            textViewShareEarnUser.setText(ProfileHubLabels.shareApp(this));
         }
         // Login CTA text is applied in bindProfileLoginPill (guest-only).
     }
@@ -3101,8 +3106,14 @@ public class newProfileDetails extends AppCompatActivity {
         if (contact != null) {
             contact.setVisibility(View.VISIBLE);
         }
+        View layoutBirthdayChrome = findViewById(R.id.layout_birthday_special);
+        if (layoutBirthdayChrome != null) {
+            layoutBirthdayChrome.setVisibility(
+                    ProfileHubConfigHelper.isBirthdaySpecialEnabled(this)
+                            ? View.VISIBLE : View.GONE);
+        }
         if (layoutAppShare != null) {
-            layoutAppShare.setVisibility(View.GONE);
+            layoutAppShare.setVisibility(View.VISIBLE);
         }
         if (hero != null) hero.setVisibility(isReporter ? View.GONE : View.VISIBLE);
         if (guestCard != null) {
@@ -4325,6 +4336,24 @@ public class newProfileDetails extends AppCompatActivity {
                                             AdvertiseOnAnyNewsActivity.class)));
         }
 
+        // Share App — Play Store chooser (restored before Advertise in hub XML)
+        if (layoutAppShare != null) {
+            layoutAppShare.setVisibility(View.VISIBLE);
+            if (textViewShareEarnUser != null) {
+                textViewShareEarnUser.setTextSize(menuSp);
+                textViewShareEarnUser.setText(ProfileHubLabels.shareApp(this));
+            }
+            layoutAppShare.setOnClickListener(v -> {
+                Intent sendIntent = new Intent();
+                sendIntent.setAction(Intent.ACTION_SEND);
+                sendIntent.putExtra(Intent.EXTRA_TEXT,
+                        "Hey check out my app at: https://play.google.com/store/apps/details?id="
+                                + BuildConfig.APPLICATION_ID);
+                sendIntent.setType("text/plain");
+                startActivity(Intent.createChooser(sendIntent, ProfileHubLabels.shareApp(this)));
+            });
+        }
+
         // Birthday Special — photo / name / location → chat (admin master toggle)
         View layoutBirthday = findViewById(R.id.layout_birthday_special);
         TextView birthdayLabel = findViewById(R.id.profile_birthday_label);
@@ -4358,10 +4387,7 @@ public class newProfileDetails extends AppCompatActivity {
             if (bmLabel != null) bmLabel.setTextSize(menuSp);
         }
 
-        // Referral is not part of this app. Ignore any older server flags safely.
-        if (layoutAppShare != null) {
-            layoutAppShare.setVisibility(View.GONE);
-        }
+        // Legacy Share-to-Earn grid tile stays hidden; hub Share App row is the entry.
         if (profile_layout_shareToearn != null) {
             profile_layout_shareToearn.setVisibility(View.GONE);
         }

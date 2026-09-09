@@ -161,6 +161,35 @@ public class EncreptionRequest {
     @Expose
     private Boolean video_autoplay_enabled;
 
+    @SerializedName("enable_birthday_special")
+    @Expose
+    private Boolean enable_birthday_special;
+
+    @SerializedName("weather_enabled")
+    @Expose
+    private Boolean weather_enabled;
+
+    @SerializedName("fuel_enabled")
+    @Expose
+    private Boolean fuel_enabled;
+
+    @SerializedName("gold_enabled")
+    @Expose
+    private Boolean gold_enabled;
+
+    @SerializedName("ttd_enabled")
+    @Expose
+    private Boolean ttd_enabled;
+
+    @SerializedName("jobs_enabled")
+    @Expose
+    private Boolean jobs_enabled;
+
+    /** Daily Updates hub kill switches + language matrices (same shape as splash). */
+    @SerializedName("daily_updates")
+    @Expose
+    private Object daily_updates;
+
     @SerializedName("action_icon_size_dp")
     @Expose
     private Integer action_icon_size_dp;
@@ -335,6 +364,38 @@ public class EncreptionRequest {
 
     public void setVideo_autoplay_enabled(Boolean video_autoplay_enabled) {
         this.video_autoplay_enabled = video_autoplay_enabled;
+    }
+
+    public Boolean getEnable_birthday_special() {
+        return enable_birthday_special;
+    }
+
+    public boolean hasEnable_birthday_special() {
+        return enable_birthday_special != null;
+    }
+
+    public Boolean getWeather_enabled() {
+        return weather_enabled;
+    }
+
+    public Boolean getFuel_enabled() {
+        return fuel_enabled;
+    }
+
+    public Boolean getGold_enabled() {
+        return gold_enabled;
+    }
+
+    public Boolean getTtd_enabled() {
+        return ttd_enabled;
+    }
+
+    public Boolean getJobs_enabled() {
+        return jobs_enabled;
+    }
+
+    public Object getDaily_updates() {
+        return daily_updates;
     }
 
     public Integer getAction_icon_size_dp() {

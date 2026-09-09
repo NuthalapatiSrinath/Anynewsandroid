@@ -99,6 +99,12 @@ public final class TtdConfigHelper {
         }
     }
 
+    /** Feed-poll master kill switch only. Null leaves cache. */
+    public static void saveEnabledFromPoll(@Nullable Context context, @Nullable Boolean enabled) {
+        if (context == null || enabled == null) return;
+        putBool(context.getApplicationContext(), Constants.TTD_ENABLED, enabled);
+    }
+
     public static boolean isEnabled(@Nullable Context context) {
         // Default ON until splash says otherwise (matches server default).
         return readBool(context, Constants.TTD_ENABLED, true)
@@ -338,7 +344,7 @@ public final class TtdConfigHelper {
     }
 
     private static void putBool(Context app, String key, boolean v) {
-        SharedPrefsData.putString(app, key, v ? "true" : "false", Constants.PREF_NAME);
+        SharedPrefsData.putStringImmediate(app, key, v ? "true" : "false", Constants.PREF_NAME);
     }
 
     private static void putUrl(Context app, String key, String raw, String fallback) {

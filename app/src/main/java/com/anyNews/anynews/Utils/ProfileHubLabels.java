@@ -93,6 +93,19 @@ public final class ProfileHubLabels {
         }
     }
 
+    /** Profile hub Share App row (Play Store link). */
+    public static String shareApp(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ആപ്പ് ഷെയർ ചെയ്യുക";
+            case 2: return "ऐप शेयर करें";
+            case 3: return "యాప్ ని షేర్ చేయండి";
+            case 4: return "ஆப்பைப் பகிரவும்";
+            case 5: return "ಆ್ಯಪ್ ಹಂಚಿಕೊಳ್ಳಿ";
+            case 6: return "ଆପ୍ ସେୟାର୍ କରନ୍ତୁ";
+            default: return str(context, R.string.profile_share_app, "Share app");
+        }
+    }
+
     public static String advertiseOnAnyNews(@Nullable Context context) {
         switch (languageId(context)) {
             case 1: return "AnyNews-ൽ പരസ്യം ചെയ്യുക";

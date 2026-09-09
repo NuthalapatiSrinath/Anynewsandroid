@@ -44,7 +44,7 @@ public final class DailyUpdatesConfigHelper {
             Context app = context.getApplicationContext();
             SharedPrefsData.putString(
                     app, Constants.DAILY_UPDATES_CONFIG_JSON, o.toString(), Constants.PREF_NAME);
-            putBool(app, Constants.DU_PANCHANGAM_ENABLED, o.optBoolean("panchangam_enabled", false));
+            putBool(app, Constants.DU_PANCHANGAM_ENABLED, o.optBoolean("panchangam_enabled", true));
             putBool(app, Constants.DU_RASHI_ENABLED, o.optBoolean("rashi_enabled", true));
             putBool(app, Constants.DU_MANA_ZILLA_ENABLED, o.optBoolean("mana_zilla_enabled", true));
             putBool(app, Constants.DU_FLASH_NEWS_ENABLED, o.optBoolean("flash_news_enabled", true));
@@ -270,7 +270,7 @@ public final class DailyUpdatesConfigHelper {
     }
 
     public static boolean isPanchangamEnabled(@Nullable Context context) {
-        return readBool(context, Constants.DU_PANCHANGAM_ENABLED, false)
+        return readBool(context, Constants.DU_PANCHANGAM_ENABLED, true)
                 && isFeatureLanguageAllowed(context, Constants.DU_PANCHANGAM_LANGUAGE_IDS);
     }
 
@@ -718,8 +718,9 @@ public final class DailyUpdatesConfigHelper {
     }
 
     private static void putBool(Context app, String key, boolean v) {
-        // Boolean prefs — matches SharedPrefsData.getBool / legacy dumps.
-        SharedPrefsData.putBool(app, key, v, Constants.PREF_NAME);
+        // Must match readBool() which uses getString ("true"/"false").
+        // putBool() typed stores broke master OFF (ClassCast → empty → default ON).
+        SharedPrefsData.putStringImmediate(app, key, v ? "true" : "false", Constants.PREF_NAME);
     }
 
     private static void putIntClamped(Context app, String key, int v, int min, int max) {

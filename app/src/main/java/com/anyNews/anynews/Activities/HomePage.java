@@ -155,6 +155,9 @@ import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.ProfileHubLabels;
+import com.anyNews.anynews.Utils.DailyUpdatesConfigHelper;
+import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
+import com.anyNews.anynews.Utils.TtdConfigHelper;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -12902,6 +12905,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 Boolean.TRUE.equals(encreptionRequest.getVideo_autoplay_enabled()),
                                 Constants.PREF_NAME);
                     }
+                    // Daily Updates + Birthday hub kill switches (live; never stub on errors).
+                    applyDailyUpdatesHubPollConfig(encreptionRequest);
                     // Cricket: seed mini/footer from feed active_match (no cricket HTTP).
                     // Polls start only when mini master is ON and feed has an active
                     // mini-player match. Footer alone never starts interval polls.
@@ -13738,6 +13743,38 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     no_internet.setVisibility(View.GONE);
                 }
             }, 500);
+        }
+    }
+
+    /**
+     * Live Daily Updates + Birthday kill switches from every successful feed poll.
+     * Null fields leave splash cache (error envelopes omit these keys on purpose).
+     * When Daily Updates is open, reflow cards so master OFF hides immediately.
+     */
+    private void applyDailyUpdatesHubPollConfig(@Nullable EncreptionRequest enc) {
+        if (enc == null) return;
+        try {
+            if (enc.hasEnable_birthday_special()) {
+                ProfileHubConfigHelper.saveBirthdaySpecialEnabled(
+                        this, enc.getEnable_birthday_special());
+            }
+            LocalUpdatesConfigHelper.saveMasterEnabledFromPoll(
+                    this,
+                    enc.getWeather_enabled(),
+                    enc.getFuel_enabled(),
+                    enc.getGold_enabled(),
+                    enc.getJobs_enabled());
+            TtdConfigHelper.saveEnabledFromPoll(this, enc.getTtd_enabled());
+            if (enc.getDaily_updates() != null) {
+                DailyUpdatesConfigHelper.saveFromSplash(this, enc.getDaily_updates());
+            }
+            if (isDailyUpdatesMode() && dailyUpdatesController != null) {
+                try {
+                    dailyUpdatesController.onHostResume();
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
         }
     }
 

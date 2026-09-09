@@ -178,8 +178,11 @@ public final class ProfileHubConfigHelper {
     public static void saveBirthdaySpecialEnabled(
             @Nullable Context context, @Nullable Boolean enabled) {
         if (context == null || enabled == null) return;
-        saveBool(context.getApplicationContext(),
-                Constants.ENABLE_BIRTHDAY_SPECIAL, enabled);
+        SharedPrefsData.putStringImmediate(
+                context.getApplicationContext(),
+                Constants.ENABLE_BIRTHDAY_SPECIAL,
+                enabled ? "true" : "false",
+                Constants.PREF_NAME);
     }
 
     /** Default true — show Birthday Special on Profile hub. */

@@ -55,6 +55,32 @@ public final class LocalUpdatesConfigHelper {
                 Constants.JOBS_CONFIG_SET);
     }
 
+    /**
+     * Feed-poll master kill switches (no full blob). Null leaves cache.
+     * Updates the same prefs keys splash uses so DU cards hide immediately.
+     */
+    public static void saveMasterEnabledFromPoll(
+            @Nullable Context context,
+            @Nullable Boolean weatherEnabled,
+            @Nullable Boolean fuelEnabled,
+            @Nullable Boolean goldEnabled,
+            @Nullable Boolean jobsEnabled) {
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        if (weatherEnabled != null) {
+            putBool(app, Constants.WEATHER_ENABLED, weatherEnabled);
+        }
+        if (fuelEnabled != null) {
+            putBool(app, Constants.FUEL_ENABLED, fuelEnabled);
+        }
+        if (goldEnabled != null) {
+            putBool(app, Constants.GOLD_ENABLED, goldEnabled);
+        }
+        if (jobsEnabled != null) {
+            putBool(app, Constants.JOBS_ENABLED, jobsEnabled);
+        }
+    }
+
     public static boolean isWeatherEnabled(@Nullable Context context) {
         return readBool(context, Constants.WEATHER_ENABLED, true)
                 && DailyUpdatesConfigHelper.isWeatherLanguageAllowed(context);
@@ -357,16 +383,27 @@ public final class LocalUpdatesConfigHelper {
     }
 
     private static void putBool(Context app, String key, boolean v) {
-        SharedPrefsData.putString(app, key, v ? "true" : "false", Constants.PREF_NAME);
+        // commit() so Daily Updates open / feed-poll apply cannot race stale read.
+        SharedPrefsData.putStringImmediate(app, key, v ? "true" : "false", Constants.PREF_NAME);
     }
 
     private static boolean readBool(@Nullable Context context, String key, boolean def) {
         if (context == null) return def;
         try {
-            String v = SharedPrefsData.getString(
-                    context.getApplicationContext(), key, Constants.PREF_NAME);
-            if (TextUtils.isEmpty(v)) return def;
-            return "true".equalsIgnoreCase(v) || "1".equals(v);
+            android.content.SharedPreferences sp =
+                    context.getApplicationContext()
+                            .getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (sp != null && sp.contains(key)) {
+                Object raw = sp.getAll().get(key);
+                if (raw instanceof Boolean) return (Boolean) raw;
+                if (raw instanceof String) {
+                    String s = ((String) raw).trim();
+                    if (s.isEmpty()) return def;
+                    return "true".equalsIgnoreCase(s) || "1".equals(s);
+                }
+                if (raw instanceof Number) return ((Number) raw).intValue() != 0;
+            }
+            return def;
         } catch (Exception ignored) {
             return def;
         }
