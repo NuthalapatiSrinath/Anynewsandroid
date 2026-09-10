@@ -2668,7 +2668,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
                     CalendarRaasiLabels.tithiLabel(host),
                     dateStr,
                     R.drawable.ic_calendar_tithi,
-                    d.safeTithiCard()));
+                    localizeTithiCard(d.safeTithiCard())));
             if (d.nakshatra != null && d.nakshatra.name != null) {
                 List<PanchangModels.TimeItem> nak = new ArrayList<>();
                 nak.add(new PanchangModels.TimeItem(
@@ -2787,5 +2787,18 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             this.iconRes = iconRes;
             this.items = items != null ? items : new ArrayList<>();
         }
+    }
+
+    @NonNull
+    private List<PanchangModels.TimeItem> localizeTithiCard(
+            @Nullable List<PanchangModels.TimeItem> raw) {
+        List<PanchangModels.TimeItem> out = new ArrayList<>();
+        if (raw == null) return out;
+        for (PanchangModels.TimeItem ti : raw) {
+            if (ti == null) continue;
+            String label = ti.label != null ? PanchangLabels.tithi(host, ti.label) : "";
+            out.add(new PanchangModels.TimeItem(label, ti.range != null ? ti.range : ""));
+        }
+        return out;
     }
 }
