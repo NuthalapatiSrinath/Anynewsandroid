@@ -108,7 +108,7 @@ public class WeatherDetailActivity extends AppCompatActivity {
         setText(R.id.weather_updated, LocalUpdatesConfigHelper.optString(w, "last_updated", "—"));
         int temp = LocalUpdatesConfigHelper.optNumberInt(w, "temp_c", 31);
         setText(R.id.weather_temp, temp + "°C");
-        setText(R.id.weather_condition, LocalUpdatesConfigHelper.optString(w, "condition", "పాక్షిక మేఘావృతం"));
+        setText(R.id.weather_condition, LocalUpdatesConfigHelper.weatherCondition(this));
         setText(R.id.weather_feels,
                 "అనుభూతి: " + LocalUpdatesConfigHelper.optNumberInt(w, "feels_like_c", 34) + "°C  "
                         + "గరిష్టం: " + LocalUpdatesConfigHelper.optNumberInt(w, "high_c", 32) + "°C  "

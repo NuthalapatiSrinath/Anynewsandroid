@@ -149,7 +149,25 @@ public final class LocalUpdatesConfigHelper {
 
     @NonNull
     public static String weatherCondition(@Nullable Context context) {
-        return optStr(weatherJson(context), "condition", "");
+        JSONObject w = weatherJson(context);
+        String icon = optStr(w, "condition_icon", "");
+        if (TextUtils.isEmpty(icon)) {
+            icon = optStr(w, "icon", "");
+        }
+        String raw = optStr(w, "condition", "");
+        // Prefer LanguageID pack from icon / Telugu fallback — never leave
+        // splash Telugu condition stuck on Hindi/Malayalam hubs.
+        return DailyUpdatesLabels.weatherCondition(context, icon, raw);
+    }
+
+    @NonNull
+    public static String weatherConditionIcon(@Nullable Context context) {
+        JSONObject w = weatherJson(context);
+        String icon = optStr(w, "condition_icon", "");
+        if (TextUtils.isEmpty(icon)) {
+            icon = optStr(w, "icon", "");
+        }
+        return icon == null ? "" : icon;
     }
 
     /**

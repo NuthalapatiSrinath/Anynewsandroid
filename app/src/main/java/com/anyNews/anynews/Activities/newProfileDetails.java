@@ -4618,7 +4618,7 @@ public class newProfileDetails extends AppCompatActivity {
             rewardsLabel.setTextSize(menuSp);
             try {
                 rewardsLabel.setText(
-                        com.anyNews.anynews.rewards.RewardsConfigHelper.joinedChip(this));
+                        com.anyNews.anynews.rewards.RewardsLabels.joinedChip(this));
             } catch (Exception ignored) {
                 rewardsLabel.setText("Rewards");
             }
@@ -4629,7 +4629,8 @@ public class newProfileDetails extends AppCompatActivity {
                         SharedPrefsData.getString(
                                 this, "rewards_period_coins", Constants.PREF_NAME);
                 if (TextUtils.isEmpty(coins)) coins = "0";
-                rewardsSubtitle.setText(coins + " coins");
+                rewardsSubtitle.setText(
+                        coins + " " + com.anyNews.anynews.rewards.RewardsLabels.coinsWord(this));
                 rewardsSubtitle.setVisibility(View.VISIBLE);
             } catch (Exception ignored) {
                 rewardsSubtitle.setVisibility(View.GONE);

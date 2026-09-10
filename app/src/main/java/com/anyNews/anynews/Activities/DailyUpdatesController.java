@@ -37,6 +37,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DailyUpdatesArtHelper;
 import com.anyNews.anynews.Utils.DailyUpdatesConfigHelper;
+import com.anyNews.anynews.Utils.DailyUpdatesLabels;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.FooterTabLabels;
@@ -326,10 +327,13 @@ public final class DailyUpdatesController {
         setTextIfPresent(R.id.du_ttd_details, seeDetailsLabel());
         setTextIfPresent(R.id.du_jobs_title, jobsCardTitle());
         setTextIfPresent(R.id.du_jobs_details, seeDetailsLabel());
+        setTextIfPresent(R.id.du_jobs_label, DailyUpdatesLabels.newJobs(host));
         setTextIfPresent(R.id.du_panchangam_title, panchangamCardTitle());
         setTextIfPresent(R.id.du_panchangam_details, seeDetailsLabel());
+        setTextIfPresent(R.id.du_panchangam_copy, DailyUpdatesLabels.panchangamCopy(host));
         setTextIfPresent(R.id.du_rashi_title, rashiCardTitle());
         setTextIfPresent(R.id.du_rashi_details, seeDetailsLabel());
+        setTextIfPresent(R.id.du_rashi_copy, DailyUpdatesLabels.rashiCopy(host));
 
         bindManaLabels();
         syncBellVisibility();
@@ -876,20 +880,22 @@ public final class DailyUpdatesController {
         TextView dieselCh = root.findViewById(R.id.du_fuel_diesel_change);
         double p = LocalUpdatesConfigHelper.fuelPetrol(host);
         double d = LocalUpdatesConfigHelper.fuelDiesel(host);
+        String petrolLabel = DailyUpdatesLabels.petrol(host);
+        String dieselLabel = DailyUpdatesLabels.diesel(host);
         if (petrol != null) {
             if (p > 0) {
-                petrol.setText("పెట్రోల్  ₹"
+                petrol.setText(petrolLabel + "  ₹"
                         + LocalUpdatesConfigHelper.formatMoney2(p));
             } else {
-                petrol.setText("పెట్రోల్  —");
+                petrol.setText(petrolLabel + "  —");
             }
         }
         if (diesel != null) {
             if (d > 0) {
-                diesel.setText("డీజిల్  ₹"
+                diesel.setText(dieselLabel + "  ₹"
                         + LocalUpdatesConfigHelper.formatMoney2(d));
             } else {
-                diesel.setText("డీజిల్  —");
+                diesel.setText(dieselLabel + "  —");
             }
         }
         if (p > 0) {
@@ -936,10 +942,11 @@ public final class DailyUpdatesController {
             }
         }
         if (silver != null) {
+            String silverLabel = DailyUpdatesLabels.silver(host);
             if (real && skg > 0) {
-                silver.setText("వెండి  ₹" + LocalUpdatesConfigHelper.formatInr(skg));
+                silver.setText(silverLabel + "  ₹" + LocalUpdatesConfigHelper.formatInr(skg));
             } else {
-                silver.setText("వెండి  —");
+                silver.setText(silverLabel + "  —");
             }
         }
         if (real) {

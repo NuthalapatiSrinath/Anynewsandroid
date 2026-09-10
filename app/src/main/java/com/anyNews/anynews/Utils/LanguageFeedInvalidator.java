@@ -10,7 +10,8 @@ import androidx.annotation.Nullable;
  * paints. Call {@link #onLanguageChanged} as soon as the new language id is committed so
  * Home always network-fetches for that language.
  *
- * <p>Does not touch Daily Updates gold/petrol/jobs caches (separate invalidation work).
+ * <p>Also clears Rewards chip prefs and Daily Updates flash/local headline caches so
+ * Telugu splash strings cannot stick on Hindi/Malayalam.
  */
 public final class LanguageFeedInvalidator {
 
@@ -76,6 +77,15 @@ public final class LanguageFeedInvalidator {
         }
         try {
             OpenPathFeedPrefetcher.resetForLanguageChange();
+        } catch (Exception ignored) {
+        }
+        try {
+            // Stale Telugu Rewards chip prefs must not survive LanguageID flip.
+            com.anyNews.anynews.rewards.RewardsConfigHelper.clearChipCopyForLanguageChange(app);
+        } catch (Exception ignored) {
+        }
+        try {
+            DailyUpdatesConfigHelper.clearLanguageSensitiveCaches(app);
         } catch (Exception ignored) {
         }
         if (clearGeography) {

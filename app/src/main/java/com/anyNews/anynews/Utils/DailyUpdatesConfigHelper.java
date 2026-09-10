@@ -130,7 +130,7 @@ public final class DailyUpdatesConfigHelper {
             StringBuilder csv = new StringBuilder();
             if (langs != null && langs.length() > 0) {
                 for (int i = 0; i < langs.length(); i++) {
-                    int id = langs.optInt(i, 0);
+                    int id = splashNumberFromArray(langs, i);
                     if (id <= 0) continue;
                     if (csv.length() > 0) csv.append(',');
                     csv.append(id);
@@ -184,6 +184,12 @@ public final class DailyUpdatesConfigHelper {
             if (o == null) return;
             if (o.has("enabled")) {
                 putBool(app, Constants.DU_FLASH_NEWS_ENABLED, o.optBoolean("enabled", true));
+            }
+            // When splash disables Flash for this language, clear stale Telugu ticker.
+            if (o.has("enabled") && !o.optBoolean("enabled", true)) {
+                SharedPrefsData.putString(
+                        app, Constants.DU_FLASH_HEADLINES_JSON, "[]", Constants.PREF_NAME);
+                return;
             }
             JSONArray arr = o.optJSONArray("headlines");
             SharedPrefsData.putString(
@@ -482,17 +488,70 @@ public final class DailyUpdatesConfigHelper {
             @NonNull JSONObject o,
             @NonNull String jsonKey,
             @NonNull String prefsKey) {
-        JSONArray langs = o.optJSONArray(jsonKey);
         StringBuilder csv = new StringBuilder();
-        if (langs != null && langs.length() > 0) {
-            for (int i = 0; i < langs.length(); i++) {
-                int id = langs.optInt(i, 0);
-                if (id <= 0) continue;
-                if (csv.length() > 0) csv.append(',');
-                csv.append(id);
+        try {
+            Object raw = o.opt(jsonKey);
+            if (raw instanceof JSONArray) {
+                JSONArray langs = (JSONArray) raw;
+                for (int i = 0; i < langs.length(); i++) {
+                    int id = splashNumberFromArray(langs, i);
+                    if (id <= 0) continue;
+                    if (csv.length() > 0) csv.append(',');
+                    csv.append(id);
+                }
+            } else if (raw instanceof java.util.Collection) {
+                for (Object item : (java.util.Collection<?>) raw) {
+                    int id = splashNumberFromObject(item);
+                    if (id <= 0) continue;
+                    if (csv.length() > 0) csv.append(',');
+                    csv.append(id);
+                }
             }
+        } catch (Exception ignored) {
         }
         SharedPrefsData.putString(app, prefsKey, csv.toString(), Constants.PREF_NAME);
+    }
+
+    private static int splashNumberFromArray(@NonNull JSONArray arr, int index) {
+        try {
+            Object raw = arr.opt(index);
+            return splashNumberFromObject(raw);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static int splashNumberFromObject(@Nullable Object raw) {
+        if (raw == null || raw == JSONObject.NULL) return 0;
+        try {
+            if (raw instanceof Number) {
+                return (int) Math.round(((Number) raw).doubleValue());
+            }
+            if (raw instanceof String) {
+                String s = ((String) raw).trim();
+                if (s.isEmpty()) return 0;
+                return (int) Math.round(Double.parseDouble(s));
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
+    }
+
+    /**
+     * After language change: drop flash/local headline caches so the next splash/poll
+     * for the new LanguageID cannot paint Telugu ticker text.
+     * Keeps master *_language_ids CSV and kill switches.
+     */
+    public static void clearLanguageSensitiveCaches(@Nullable Context context) {
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        try {
+            SharedPrefsData.putString(app, Constants.DU_FLASH_HEADLINES_JSON, "[]", Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.DU_LOCAL_HEADLINES_JSON, "[]", Constants.PREF_NAME);
+            SharedPrefsData.putString(app, "du_mana_title_1", "", Constants.PREF_NAME);
+            SharedPrefsData.putString(app, "du_mana_title_2", "", Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
     }
 
     public static int cardImageOffsetDp(@Nullable Context context) {
@@ -684,11 +743,8 @@ public final class DailyUpdatesConfigHelper {
                 if (s.isEmpty() || "null".equalsIgnoreCase(s)) return null;
                 return new JSONObject(s);
             }
-            if (raw instanceof java.util.Map) {
-                @SuppressWarnings("unchecked")
-                java.util.Map<String, Object> map = (java.util.Map<String, Object>) raw;
-                return new JSONObject(map);
-            }
+            // Always serialize via Gson so nested ArrayList language_ids become
+            // real JSONArrays (Map constructor can drop / stringify lists).
             return new JSONObject(String.valueOf(new com.google.gson.Gson().toJson(raw)));
         } catch (Exception e) {
             return null;
