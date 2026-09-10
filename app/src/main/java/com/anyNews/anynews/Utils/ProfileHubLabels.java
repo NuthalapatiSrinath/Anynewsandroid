@@ -118,18 +118,12 @@ public final class ProfileHubLabels {
         }
     }
 
-    /** Small caption above the district name on the location row. */
+    /**
+     * Caption above the district name on the location row.
+     * Always English so users can find location controls after switching language.
+     */
     public static String selectedLocation(@Nullable Context context) {
-        switch (languageId(context)) {
-            case 1: return "തിരഞ്ഞെടുത്ത സ്ഥലം";
-            case 2: return "चयनित स्थान";
-            case 3: return "ఎంచుకున్న లొకేషన్";
-            case 4: return "தேர்ந்தெடுத்த இடம்";
-            case 5: return "ಆಯ್ಕೆಮಾಡಿದ ಸ್ಥಳ";
-            case 6: return "ବଛా ଯାଇଥିବା ସ୍ଥାନ";
-            default:
-                return str(context, R.string.profile_selected_location, "selected location");
-        }
+        return str(context, R.string.profile_selected_location, "Choose Your Location");
     }
 
     /** "Edit profile" CTA on the completion bar. */
@@ -206,16 +200,12 @@ public final class ProfileHubLabels {
         }
     }
 
+    /**
+     * Caption for the language row.
+     * Always English so users can find language controls after switching language.
+     */
     public static String selectLanguage(@Nullable Context context) {
-        switch (languageId(context)) {
-            case 1: return "ഭാഷ തിരഞ്ഞെടുക്കുക";
-            case 2: return "भाषा चुनें";
-            case 3: return "భాష ఎంచుకోండి";
-            case 4: return "மொழியைத் தேர்ந்தெடு";
-            case 5: return "ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ";
-            case 6: return "ଭାଷା ବାଛନ୍ତୁ";
-            default: return str(context, R.string.profile_change_language_menu, "Change language");
-        }
+        return str(context, R.string.profile_choose_language, "Choose Language");
     }
 
     public static String fabArticle(@Nullable Context context) {

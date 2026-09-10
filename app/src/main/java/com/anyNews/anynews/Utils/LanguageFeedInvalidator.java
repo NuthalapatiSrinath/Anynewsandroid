@@ -69,6 +69,12 @@ public final class LanguageFeedInvalidator {
         } catch (Exception ignored) {
         }
         try {
+            // Stale Get_User_Profile disk would re-apply old Writers language_id
+            // into SharedPreferences via applyProfileDataToUi.
+            ReporterProfileCache.clear(app);
+        } catch (Exception ignored) {
+        }
+        try {
             OpenPathFeedPrefetcher.resetForLanguageChange();
         } catch (Exception ignored) {
         }

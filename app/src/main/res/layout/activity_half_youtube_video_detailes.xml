@@ -322,7 +322,7 @@
                             android:background="@drawable/ic_half_image_strike_icon"
                             android:orientation="horizontal"
                             android:paddingLeft="@dimen/_15sdp"
-                            android:visibility="visible">
+                            android:visibility="gone">
 
                             <ImageView
                                 android:id="@+id/with_strips_layout_ic"

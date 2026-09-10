@@ -293,7 +293,7 @@
                     android:layout_height="match_parent"
                     android:orientation="horizontal"
                     android:paddingLeft="@dimen/_15sdp"
-                    android:visibility="visible">
+                    android:visibility="gone">
 
                     <ImageView
                         android:id="@+id/with_strips_layout_ic"

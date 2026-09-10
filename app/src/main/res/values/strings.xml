@@ -238,6 +238,8 @@
     <string name="video_news">Video News</string>
     <string name="breaking_news">Flash News</string>
     <string name="daily_updates">Daily Updates</string>
+    <!-- Short Telugu Daily Updates footer/hub title (applied via FooterTabLabels). -->
+    <string name="daily_updates_te">డైలీ అప్‌డేట్స్</string>
     <!-- Short Telugu footer label when language is Telugu (space-tight nav). -->
     <string name="video_news_te">వీడియో</string>
     <string name="video_news_empty">No videos right now</string>
@@ -323,8 +325,8 @@
     <string name="profile_logout_confirm">Logout?</string>
     <string name="profile_logout_yes">Yes</string>
     <string name="profile_logout_no">No</string>
-    <string name="profile_choose_language">భాష ఎంచుకోండి</string>
-    <string name="profile_selected_location">selected location</string>
+    <string name="profile_choose_language">Choose Language</string>
+    <string name="profile_selected_location">Choose Your Location</string>
     <string name="profile_location_change"> (Change)</string>
     <string name="profile_referral">యాప్ ని షేర్ చేయండి</string>
     <string name="profile_wallet">Wallet</string>

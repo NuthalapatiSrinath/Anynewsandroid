@@ -80,8 +80,10 @@ public final class FooterTabLabels {
 
     /**
      * Footer Daily Updates tab by in-app {@link Constants#LanguageID}
-     * (1 ML · 2 HI · 3 TE · 4 TA · 5 KN · 6 OR). Proper native wording — not
-     * English transliteration (डेली / డైలీ).
+     * (1 ML · 2 HI · 3 TE · 4 TA · 5 KN · 6 OR).
+     * Telugu uses the short product label {@code డైలీ అప్‌డేట్స్} (space-tight
+     * footer; matches {@code page_daily_updates} mock) — not the longer
+     * {@code రోజువారీ అప్‌డేట్స్}.
      */
     public static String dailyUpdates(@Nullable Context context) {
         switch (languageId(context)) {
@@ -89,8 +91,8 @@ public final class FooterTabLabels {
                 return "ദൈനംദിന അപ്‌ഡേറ്റ്";
             case 2: // Hindi
                 return "दैनिक अपडेट";
-            case 3: // Telugu
-                return "రోజువారీ అప్‌డేట్స్";
+            case 3: // Telugu — short footer label ("Daily Updates")
+                return "డైలీ అప్‌డేట్స్";
             case 4: // Tamil
                 return "தினசரி புதுப்பிப்பு";
             case 5: // Kannada

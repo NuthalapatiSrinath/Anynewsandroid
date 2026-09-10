@@ -65,7 +65,9 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
                                 app:controller_layout_id="@layout/player_custom_ui"
-                                app:default_artwork="@color/black"
+                                app:use_artwork="false"
+                                app:keep_content_on_player_reset="true"
+                                app:shutter_background_color="@android:color/transparent"
                                 app:layout_constraintTop_toTopOf="parent"
                                 app:resize_mode="fill"
                                 app:surface_type="texture_view"
@@ -321,7 +323,7 @@
                             android:background="@drawable/ic_half_image_strike_icon"
                             android:orientation="horizontal"
                             android:paddingLeft="@dimen/_15sdp"
-                            android:visibility="visible">
+                            android:visibility="gone">
 
                             <ImageView
                                 android:id="@+id/with_strips_layout_ic"

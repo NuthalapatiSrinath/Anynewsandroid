@@ -226,11 +226,17 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             nextScreen = "";
                         }
 
+                        // Returning users already finished onboarding; "main" after a
+                        // language-scoped geo restore should open Home, not AreaSelection.
+                        boolean returningUser = SharedPrefsData.getBool(
+                                context, Constants.IS_LANGUAGE_SELECTED, Constants.PREF_NAME);
+
                         if ("main".equalsIgnoreCase(nextScreen)) {
 
                             SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
                             SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
-                            Intent intent = new Intent(context, AreaSelection.class);
+                            Intent intent = new Intent(context,
+                                    returningUser ? HomePage.class : AreaSelection.class);
                             SharedPrefsData.putInt(context, Constants.Back_Button_Move, 1, Constants.PREF_NAME);
                             // Do not stamp country "India" as the selected district.
 
