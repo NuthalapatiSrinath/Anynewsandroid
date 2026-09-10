@@ -7,6 +7,8 @@ import android.widget.ImageView;
 
 import androidx.annotation.Nullable;
 
+import com.anyNews.anynews.R;
+
 /**
  * Admin-controlled size + margins for the blue circular on-image Share
  * ({@code R.drawable.ic_share_full}) used on Magazines, Special-tab galleries,
