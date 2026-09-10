@@ -185,6 +185,9 @@ public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRe
         if (cached.getTotalPoints() != null) {
             payment_total_amount.setText("\u20B9" + cached.getTotalPoints());
         }
+        applyPaymentHistoryNoticeFromApi(
+                cached.getReporterPaymentHistoryNoticeActive(),
+                cached.getReporterPaymentHistoryNoticeText());
         if (cached.getSkip() != null) page = cached.getSkip();
         if (cached.getFirstTransactionId() != null) limit = cached.getFirstTransactionId();
         adapter.setItems(new ArrayList<>(cached.getData()));
@@ -354,6 +357,9 @@ public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRe
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
         requestModel.setSkip(pageVal);
         requestModel.setFirstTransactionId(limitVal);
+        requestModel.setLanguageId(
+                SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
         String jsonString = new Gson().toJson(requestModel);
         EncritonRequestData Encriton_Request = new EncritonRequestData();
         Encriton_Request.setData(encrypt(jsonString));

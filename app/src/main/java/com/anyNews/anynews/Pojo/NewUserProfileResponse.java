@@ -94,6 +94,11 @@ public class NewUserProfileResponse {
         @Expose
         private String upcomingPaymentMessage;
 
+        /** Explicit banner active flag from profile (preferred over text-as-show). */
+        @SerializedName("reporter_payment_banner_active")
+        @Expose
+        private Boolean reporterPaymentBannerActive;
+
         /** My Articles From floor (YYYY-MM-DD) from admin. */
         @SerializedName("reporter_articles_from_date")
         @Expose
@@ -129,6 +134,10 @@ public class NewUserProfileResponse {
 
         public void setUpcomingPaymentMessage(String upcomingPaymentMessage) {
             this.upcomingPaymentMessage = upcomingPaymentMessage;
+        }
+
+        public Boolean getReporterPaymentBannerActive() {
+            return reporterPaymentBannerActive;
         }
 
         public String getReporterArticlesFromDate() {

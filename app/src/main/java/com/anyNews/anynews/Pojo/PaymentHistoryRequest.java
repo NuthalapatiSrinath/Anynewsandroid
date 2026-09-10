@@ -23,6 +23,9 @@ public class PaymentHistoryRequest {
     @SerializedName("mobile_number")
     @Expose
     private String mobileNumber;
+    @SerializedName("language_id")
+    @Expose
+    private Integer languageId;
     @SerializedName("post_status")
     @Expose
     private Long postStatus;
@@ -51,6 +54,14 @@ public class PaymentHistoryRequest {
 
     public void setMobileNumber(String mobileNumber) {
         this.mobileNumber = mobileNumber;
+    }
+
+    public Integer getLanguageId() {
+        return languageId;
+    }
+
+    public void setLanguageId(Integer languageId) {
+        this.languageId = languageId;
     }
 
     public Long getDraftId() {

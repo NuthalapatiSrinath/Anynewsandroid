@@ -2815,32 +2815,71 @@ public class newProfileDetails extends AppCompatActivity {
         setTextSafe((TextView) findViewById(R.id.tile_earnings_count), "\u20B9 " + totalPts);
 
         // Admin-controlled payment banner (not auto Notify / mark-paid).
+        // Honour explicit active flag; never treat leftover text as "show".
+        // Empty upcoming_payment_message from server means Off — do not fall back
+        // to stale prefs (that kept the white box visible after Admin Off).
         TextView upcomingBanner = findViewById(R.id.tv_upcoming_payment_banner);
         if (upcomingBanner != null) {
+            Boolean activeFlag = d.getReporterPaymentBannerActive();
             String msg = d.getUpcomingPaymentMessage();
-            if (msg != null) msg = msg.trim();
-            if (TextUtils.isEmpty(msg)
-                    && ReporterPaymentAppConfig.bannerActive(this)) {
-                msg = ReporterPaymentAppConfig.bannerText(this);
+            boolean active;
+            String display;
+            if (activeFlag != null) {
+                active = Boolean.TRUE.equals(activeFlag);
+                display = active && msg != null ? msg.trim() : "";
+                if (active && TextUtils.isEmpty(display)) {
+                    display = ReporterPaymentAppConfig.bannerText(this);
+                    if (display == null) display = "";
+                }
+            } else if (msg != null) {
+                // Field present: empty ⇒ Off (clears stale); non-empty ⇒ On.
+                display = msg.trim();
+                active = !TextUtils.isEmpty(display);
+            } else {
+                // Field absent (offline / old payload): prefs only.
+                active = ReporterPaymentAppConfig.bannerActive(this);
+                display = active ? ReporterPaymentAppConfig.bannerText(this) : "";
+                if (display == null) display = "";
             }
-            boolean show = !TextUtils.isEmpty(msg) && Boolean.TRUE.equals(d.getIsReporter());
+            if (!active) {
+                display = "";
+            }
+            boolean show = active
+                    && !TextUtils.isEmpty(display)
+                    && Boolean.TRUE.equals(d.getIsReporter());
             if (show) {
-                upcomingBanner.setText(msg);
+                upcomingBanner.setText(display);
                 upcomingBanner.setVisibility(View.VISIBLE);
             } else {
                 upcomingBanner.setVisibility(View.GONE);
             }
         }
         try {
+            Boolean activeFlag = d.getReporterPaymentBannerActive();
             String profileMsg = d.getUpcomingPaymentMessage();
-            boolean active = !TextUtils.isEmpty(profileMsg);
+            boolean active;
+            if (activeFlag != null) {
+                active = Boolean.TRUE.equals(activeFlag);
+            } else if (profileMsg != null) {
+                active = !TextUtils.isEmpty(profileMsg.trim());
+            } else {
+                active = ReporterPaymentAppConfig.bannerActive(this);
+            }
+            String saveText = "";
+            if (active) {
+                saveText = profileMsg != null ? profileMsg.trim() : "";
+                if (TextUtils.isEmpty(saveText)) {
+                    saveText = ReporterPaymentAppConfig.bannerText(this);
+                    if (saveText == null) saveText = "";
+                }
+            }
             Boolean histActive = d.getReporterPaymentHistoryNoticeActive();
             String histText = d.getReporterPaymentHistoryNoticeText();
             ReporterPaymentAppConfig.saveFromServer(
                     this,
                     d.getReporterArticlesFromDate(),
                     active,
-                    active ? profileMsg : "",
+                    saveText,
                     histActive,
                     histText != null ? histText : "");
         } catch (Exception ignored) {
