@@ -49,13 +49,26 @@ public class VideoShareHelper {
 
     public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
                                     String shareLink, ShareMode mode, OnShareCompleteListener listener) {
-        shareVideo(context, activity, videoUrl, title, shareLink, mode,
+        shareVideo(context, activity, videoUrl, title, null, shareLink, mode,
+                context.getString(R.string.video_status_sharing), listener);
+    }
+
+    public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
+                                    String description, String shareLink, ShareMode mode,
+                                    OnShareCompleteListener listener) {
+        shareVideo(context, activity, videoUrl, title, description, shareLink, mode,
                 context.getString(R.string.video_status_sharing), listener);
     }
 
     public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
                                     String shareLink, ShareMode mode, String statusMessage,
                                     OnShareCompleteListener listener) {
+        shareVideo(context, activity, videoUrl, title, null, shareLink, mode, statusMessage, listener);
+    }
+
+    public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
+                                    String description, String shareLink, ShareMode mode,
+                                    String statusMessage, OnShareCompleteListener listener) {
         if (videoUrl == null || videoUrl.trim().isEmpty()) {
             Toast.makeText(context, "Video is not available to share", Toast.LENGTH_SHORT).show();
             if (listener != null) {
@@ -70,7 +83,7 @@ public class VideoShareHelper {
         // Instant path: local/cache already ready — skip worker thread + dialog.
         PreparedShare ready = tryResolveReadyShare(context, sourceUrl);
         if (ready != null) {
-            launchShareIntent(context, activity, ready.uri, ready.mimeType, title, shareLink, mode);
+            launchShareIntent(context, activity, ready.uri, ready.mimeType, title, description, shareLink, mode);
             if (listener != null) {
                 listener.onShareStarted();
             }
@@ -91,7 +104,7 @@ public class VideoShareHelper {
                 }
                 mainHandler.post(() -> {
                     dismissProgress();
-                    launchShareIntent(context, activity, prepared.uri, prepared.mimeType, title, shareLink, mode);
+                    launchShareIntent(context, activity, prepared.uri, prepared.mimeType, title, description, shareLink, mode);
                     if (listener != null) {
                         listener.onShareStarted();
                     }
@@ -323,16 +336,36 @@ public class VideoShareHelper {
         progressDialog = null;
     }
 
-    private static String buildShareMessage(String title, String shareLink) {
+    /** Title + optional article body + share link for WhatsApp / system share captions. */
+    public static String buildShareMessage(String title, String description, String shareLink) {
         String safeTitle = title != null ? title.trim() : "";
+        String safeDesc = description != null ? description.trim() : "";
         String safeLink = shareLink != null ? shareLink.trim() : "";
-        if (!safeTitle.isEmpty() && !safeLink.isEmpty()) {
-            return safeTitle + "\n" + safeLink;
+        // Keep captions usable in WhatsApp; still include a full readable body when present.
+        if (safeDesc.length() > 3500) {
+            safeDesc = safeDesc.substring(0, 3500).trim() + "…";
         }
+        StringBuilder sb = new StringBuilder();
         if (!safeTitle.isEmpty()) {
-            return safeTitle;
+            sb.append(safeTitle);
         }
-        return safeLink;
+        if (!safeDesc.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append("\n\n");
+            }
+            sb.append(safeDesc);
+        }
+        if (!safeLink.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append("\n\n");
+            }
+            sb.append(safeLink);
+        }
+        return sb.toString();
+    }
+
+    private static String buildShareMessage(String title, String shareLink) {
+        return buildShareMessage(title, null, shareLink);
     }
 
     private static String resolveMimeType(File videoFile, String videoUrl) {
@@ -344,15 +377,22 @@ public class VideoShareHelper {
 
     private static void launchShareIntent(Context context, Activity activity, Uri uri,
                                             String mimeType, String title, String shareLink, ShareMode mode) {
+        launchShareIntent(context, activity, uri, mimeType, title, null, shareLink, mode);
+    }
+
+    private static void launchShareIntent(Context context, Activity activity, Uri uri,
+                                            String mimeType, String title, String description,
+                                            String shareLink, ShareMode mode) {
         try {
-            String shareMessage = buildShareMessage(title, shareLink);
+            String shareMessage = buildShareMessage(title, description, shareLink);
 
             Intent intent = new Intent(Intent.ACTION_SEND);
             intent.setType(mimeType != null ? mimeType : "video/*");
             intent.putExtra(Intent.EXTRA_STREAM, uri);
             if (!shareMessage.isEmpty()) {
                 intent.putExtra(Intent.EXTRA_TEXT, shareMessage);
-                intent.putExtra(Intent.EXTRA_SUBJECT, shareMessage);
+                intent.putExtra(Intent.EXTRA_SUBJECT,
+                        title != null && !title.trim().isEmpty() ? title.trim() : shareMessage);
             }
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.setClipData(ClipData.newUri(context.getContentResolver(), "shared_video", uri));

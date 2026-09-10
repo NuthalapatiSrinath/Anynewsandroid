@@ -67,7 +67,7 @@
                                 app:controller_layout_id="@layout/player_custom_ui"
                                 app:use_artwork="false"
                                 app:keep_content_on_player_reset="true"
-                                app:shutter_background_color="@android:color/transparent"
+                                app:shutter_background_color="@color/anynews_black"
                                 app:layout_constraintTop_toTopOf="parent"
                                 app:resize_mode="fill"
                                 app:surface_type="texture_view"

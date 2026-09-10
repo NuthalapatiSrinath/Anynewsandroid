@@ -69,6 +69,7 @@ import android.util.SparseBooleanArray;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
@@ -5268,7 +5269,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     exoPlayer.getPlayWhenReady(),
                     thaumbnail_for_video,
                     imageViewExoVideoPlayVideo,
-                    progress_bar_for_video);
+                    progress_bar_for_video,
+                    simpleExoPlayerViewFull);
             if (full_videoViewHolder.side_menu != null && exoPlayer.getPlayWhenReady()
                     && exoPlayer.getPlaybackState() != Player.STATE_ENDED) {
                 full_videoViewHolder.side_menu.setVisibility(View.INVISIBLE);
@@ -5289,7 +5291,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 exoPlayer.getPlayWhenReady(),
                                 thaumbnail_for_video,
                                 imageViewExoVideoPlayVideo,
-                                progress_bar_for_video);
+                                progress_bar_for_video,
+                                resumeFullPlayerView);
                         updateExoCenterControlIcons(resumeFullPlayerView);
                         if (playbackState == Player.STATE_ENDED) {
                             notifyVideoEndedForAutoplay(position);
@@ -5354,7 +5357,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 playWhenReady,
                                 thaumbnail_for_video,
                                 imageViewExoVideoPlayVideo,
-                                progress_bar_for_video);
+                                progress_bar_for_video,
+                                simpleExoPlayerViewFull);
                         LinearLayout sideMenu = finalConvertViewFull.findViewById(R.id.video_side_menu);
                         if (playbackState == Player.STATE_ENDED
                                 || (!playWhenReady && playbackState != Player.STATE_BUFFERING)) {
@@ -6737,7 +6741,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     exoPlayer.getPlayWhenReady(),
                     thaumbnail_for_video,
                     imageViewExoVideoPlayVideo,
-                    progress_bar_for_video);
+                    progress_bar_for_video,
+                    simpleExoPlayerView);
             wireHalfVideoExoPauseControl(simpleExoPlayerView);
             if (reboundSurface) {
                 attachExoCenterIconSync(simpleExoPlayerView);
@@ -6753,7 +6758,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 exoPlayer.getPlayWhenReady(),
                                 thaumbnail_for_video,
                                 imageViewExoVideoPlayVideo,
-                                progress_bar_for_video);
+                                progress_bar_for_video,
+                                resumeHalfPlayerView);
                         updateExoCenterControlIcons(resumeHalfPlayerView);
                         if (playbackState == Player.STATE_ENDED) {
                             notifyVideoEndedForAutoplay(position);
@@ -6863,7 +6869,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 playWhenReady,
                                 thaumbnail_for_video,
                                 imageViewExoVideoPlayVideo,
-                                progress_bar_for_video);
+                                progress_bar_for_video,
+                                simpleExoPlayerView);
                         updateExoCenterControlIcons(simpleExoPlayerView);
                         if (playbackState == Player.STATE_ENDED) {
                             notifyVideoEndedForAutoplay(position);
@@ -9896,10 +9903,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // decoder briefly stalls (distinct from the white buffering spinner).
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                        /* minBufferMs */ 15_000,
-                        /* maxBufferMs */ 50_000,
-                        /* bufferForPlaybackMs */ 1_500,
-                        /* bufferForPlaybackAfterRebufferMs */ 3_000)
+                        /* minBufferMs */ 25_000,
+                        /* maxBufferMs */ 60_000,
+                        /* bufferForPlaybackMs */ 2_000,
+                        /* bufferForPlaybackAfterRebufferMs */ 5_000)
                 .build();
         return new ExoPlayer.Builder(context)
                 .setLoadControl(loadControl)
@@ -10119,7 +10126,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         try {
             playerView.setKeepContentOnPlayerReset(true);
             playerView.setUseArtwork(false);
-            playerView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT);
+            // Black shutter (not transparent): when TextureView briefly clears on underrun,
+            // parent white must not flash through. keepContentOnPlayerReset still holds the
+            // last frame when Media3 can; freeze-cover below handles the rest.
+            playerView.setShutterBackgroundColor(android.graphics.Color.BLACK);
             Player attached = playerView.getPlayer();
             if (attached == exoPlayer) {
                 return false;
@@ -10141,13 +10151,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Center overlay (thumbnail / big play / spinner) from Exo state.
      * Transient IDLE while preparing with playWhenReady=true must NOT put the play button back.
+     * Mid-play BUFFERING: freeze the last TextureView frame onto the thumbnail ImageView so a
+     * black surface wipe is covered (poster thumbnail alone looks like "photo clicks").
      */
     private void applyExoOverlayState(
             int playbackState,
             boolean playWhenReady,
             ImageView thumbnail,
             ImageView centerPlay,
-            ProgressBar progress) {
+            ProgressBar progress,
+            PlayerView playerView) {
         if (playbackState == Player.STATE_BUFFERING) {
             if (progress != null) {
                 progress.setVisibility(View.VISIBLE);
@@ -10155,11 +10168,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (centerPlay != null) {
                 centerPlay.setVisibility(View.GONE);
             }
-            // Mid-play underrun: never flash the still thumbnail over live video
-            // (that reads as stroboscopic "photo clicks"). Keep last TextureView
-            // frame; spinner alone is the buffering affordance.
-            if (playWhenReady && thumbnail != null) {
-                thumbnail.setVisibility(View.GONE);
+            if (playWhenReady) {
+                // Cover TextureView underrun blanks with last decoded frame — not the poster.
+                coverExoUnderrunWithLastFrame(playerView, thumbnail);
             }
         } else if (playbackState == Player.STATE_READY) {
             if (progress != null) {
@@ -10209,6 +10220,47 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
             }
         }
+    }
+
+    /**
+     * Snapshot the live TextureView into {@code thumbnail} so brief decoder underruns do not
+     * flash black/white through the player surface. Fail closed (leave cover gone) rather than
+     * flashing the static poster artwork.
+     */
+    private void coverExoUnderrunWithLastFrame(PlayerView playerView, ImageView thumbnail) {
+        if (thumbnail == null) {
+            return;
+        }
+        try {
+            if (playerView != null) {
+                View surface = playerView.getVideoSurfaceView();
+                if (surface instanceof TextureView) {
+                    Bitmap frame = ((TextureView) surface).getBitmap();
+                    if (frame != null && frame.getWidth() > 1 && frame.getHeight() > 1) {
+                        thumbnail.setImageBitmap(frame);
+                        thumbnail.setVisibility(View.VISIBLE);
+                        return;
+                    }
+                }
+            }
+            // No usable live frame (startup buffer) — do not resurrect the poster.
+            thumbnail.setVisibility(View.GONE);
+        } catch (Exception e) {
+            try {
+                thumbnail.setVisibility(View.GONE);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** Back-compat overload when PlayerView is unavailable. */
+    private void applyExoOverlayState(
+            int playbackState,
+            boolean playWhenReady,
+            ImageView thumbnail,
+            ImageView centerPlay,
+            ProgressBar progress) {
+        applyExoOverlayState(playbackState, playWhenReady, thumbnail, centerPlay, progress, null);
     }
 
     public void resetAllFlipChildrenVideoPlayers(ViewGroup flipView) {
@@ -10599,7 +10651,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             final boolean waShare = mode == VideoShareHelper.ShareMode.WHATSAPP_CHAT
                     || mode == VideoShareHelper.ShareMode.WHATSAPP_STATUS;
-            VideoShareHelper.shareVideo(context, activity, videoUrl, item.getTitle(), item.getShareLink(), mode,
+            VideoShareHelper.shareVideo(context, activity, videoUrl, item.getTitle(),
+                    item.getDescription(), item.getShareLink(), mode,
                     () -> {
                         Share_Count_Value(shareCountProperty(waShare), item.getPostId());
                         releaseShareLaunch();
@@ -10609,6 +10662,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             releaseShareLaunch();
             Toast.makeText(context, "Unable to share video", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    /**
+     * Half/full video share caption: title + article body + link (not title/link only).
+     */
+    private String buildVideoArticleShareText(int position) {
+        if (list == null || position < 0 || position >= list.size()) {
+            return "";
+        }
+        return VideoShareHelper.buildShareMessage(
+                list.get(position).getTitle(),
+                list.get(position).getDescription(),
+                list.get(position).getShareLink());
     }
 
     private enum VideoShareLayout {
@@ -11466,7 +11532,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         half_youTubePlayerHolder.with_strip_layout.setVisibility(View.VISIBLE);
         imageViewItems.setVisibility(View.VISIBLE);
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        String msg = buildVideoArticleShareText(position);
         countDownTimer = new CountDownTimer(2, 2) {
             public void onTick(long millisUntilFinished) {
             }
@@ -11523,7 +11589,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfVideoExoPlayerHolder.with_out_strip_layout.setVisibility(View.GONE);
         halfVideoExoPlayerHolder.with_strip_layout.setVisibility(View.VISIBLE);
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        String msg = buildVideoArticleShareText(position);
         countDownTimer = new CountDownTimer(2, 2) {
 
             public void onTick(long millisUntilFinished) {
