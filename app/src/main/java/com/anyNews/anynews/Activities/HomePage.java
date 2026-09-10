@@ -165,6 +165,7 @@ import com.anyNews.anynews.Utils.PlayInAppUpdateHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
 import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.Logone;
+import com.anyNews.anynews.Utils.MagazineShareIconHelper;
 import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.MovementMethodTV;
 import com.anyNews.anynews.Utils.MyUtils;
@@ -12821,6 +12822,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getAction_icon_size_dp(),
                             encreptionRequest.getLike_circle_size_dp()
                     );
+                    applyMagazineShareIconConfig(
+                            encreptionRequest.getMagazine_share_icon_size_dp(),
+                            encreptionRequest.getMagazine_share_margin_end_dp(),
+                            encreptionRequest.getMagazine_share_margin_bottom_dp(),
+                            encreptionRequest.getMagazine_share_margin_start_dp(),
+                            encreptionRequest.getMagazine_share_margin_top_dp()
+                    );
                     // Admin-controlled reporter create-menu post-type toggles. Cache the
                     // polled values; if the create menu is open, refresh its buttons live.
                     applyReporterPostTypeConfig(
@@ -13979,6 +13987,70 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     @Override
                     public void run() {
                         FlipperAdapter.applyHalfActionIconSizes(HomePage.this, flipView);
+                        flipView.requestLayout();
+                    }
+                });
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Admin-controlled Magazines / Special / Calendar blue Share overlay size +
+     * margins (dp). Caches poll values and re-applies to the visible card live.
+     */
+    private void applyMagazineShareIconConfig(
+            Integer sizeDp,
+            Integer marginEndDp,
+            Integer marginBottomDp,
+            Integer marginStartDp,
+            Integer marginTopDp
+    ) {
+        try {
+            boolean changed = false;
+            if (sizeDp != null) {
+                int prev = SharedPrefsData.getInt(
+                        HomePage.this, Constants.MAGAZINE_SHARE_ICON_SIZE_DP, Constants.PREF_NAME);
+                if (prev != sizeDp) {
+                    changed = true;
+                }
+            }
+            if (marginEndDp != null) {
+                int prev = SharedPrefsData.getInt(
+                        HomePage.this, Constants.MAGAZINE_SHARE_MARGIN_END_DP, Constants.PREF_NAME);
+                if (prev != marginEndDp) {
+                    changed = true;
+                }
+            }
+            if (marginBottomDp != null) {
+                int prev = SharedPrefsData.getInt(
+                        HomePage.this, Constants.MAGAZINE_SHARE_MARGIN_BOTTOM_DP, Constants.PREF_NAME);
+                if (prev != marginBottomDp) {
+                    changed = true;
+                }
+            }
+            if (marginStartDp != null) {
+                int prev = SharedPrefsData.getInt(
+                        HomePage.this, Constants.MAGAZINE_SHARE_MARGIN_START_DP, Constants.PREF_NAME);
+                if (prev != marginStartDp) {
+                    changed = true;
+                }
+            }
+            if (marginTopDp != null) {
+                int prev = SharedPrefsData.getInt(
+                        HomePage.this, Constants.MAGAZINE_SHARE_MARGIN_TOP_DP, Constants.PREF_NAME);
+                if (prev != marginTopDp) {
+                    changed = true;
+                }
+            }
+            MagazineShareIconHelper.save(
+                    HomePage.this, sizeDp, marginEndDp, marginBottomDp, marginStartDp, marginTopDp);
+            if (changed && mFlipView != null) {
+                final FlipView flipView = mFlipView;
+                flipView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        MagazineShareIconHelper.applyUnder(HomePage.this, flipView);
                         flipView.requestLayout();
                     }
                 });

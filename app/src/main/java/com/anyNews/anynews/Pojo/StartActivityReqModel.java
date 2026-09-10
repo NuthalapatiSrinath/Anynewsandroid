@@ -133,6 +133,66 @@ public class StartActivityReqModel implements Serializable {
             this.likeCircleSizeDp = likeCircleSizeDp;
         }
 
+        @SerializedName("magazine_share_icon_size_dp")
+        @Expose
+        private Integer magazineShareIconSizeDp = 48;
+
+        public int getMagazineShareIconSizeDp() {
+            return magazineShareIconSizeDp != null ? magazineShareIconSizeDp : 48;
+        }
+
+        public void setMagazineShareIconSizeDp(Integer magazineShareIconSizeDp) {
+            this.magazineShareIconSizeDp = magazineShareIconSizeDp;
+        }
+
+        @SerializedName("magazine_share_margin_end_dp")
+        @Expose
+        private Integer magazineShareMarginEndDp = 20;
+
+        public int getMagazineShareMarginEndDp() {
+            return magazineShareMarginEndDp != null ? magazineShareMarginEndDp : 20;
+        }
+
+        public void setMagazineShareMarginEndDp(Integer magazineShareMarginEndDp) {
+            this.magazineShareMarginEndDp = magazineShareMarginEndDp;
+        }
+
+        @SerializedName("magazine_share_margin_bottom_dp")
+        @Expose
+        private Integer magazineShareMarginBottomDp = 64;
+
+        public int getMagazineShareMarginBottomDp() {
+            return magazineShareMarginBottomDp != null ? magazineShareMarginBottomDp : 64;
+        }
+
+        public void setMagazineShareMarginBottomDp(Integer magazineShareMarginBottomDp) {
+            this.magazineShareMarginBottomDp = magazineShareMarginBottomDp;
+        }
+
+        @SerializedName("magazine_share_margin_start_dp")
+        @Expose
+        private Integer magazineShareMarginStartDp = 0;
+
+        public int getMagazineShareMarginStartDp() {
+            return magazineShareMarginStartDp != null ? magazineShareMarginStartDp : 0;
+        }
+
+        public void setMagazineShareMarginStartDp(Integer magazineShareMarginStartDp) {
+            this.magazineShareMarginStartDp = magazineShareMarginStartDp;
+        }
+
+        @SerializedName("magazine_share_margin_top_dp")
+        @Expose
+        private Integer magazineShareMarginTopDp = 0;
+
+        public int getMagazineShareMarginTopDp() {
+            return magazineShareMarginTopDp != null ? magazineShareMarginTopDp : 0;
+        }
+
+        public void setMagazineShareMarginTopDp(Integer magazineShareMarginTopDp) {
+            this.magazineShareMarginTopDp = magazineShareMarginTopDp;
+        }
+
         @SerializedName("enable_video_post")
         @Expose
         private Boolean enableVideoPost = Boolean.TRUE;
@@ -455,6 +515,15 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("reporter_payment_banner_text")
         @Expose
         private String reporterPaymentBannerText;
+
+        /** Permanent notice inside Payment History (admin On + text). */
+        @SerializedName("reporter_payment_history_notice_active")
+        @Expose
+        private Boolean reporterPaymentHistoryNoticeActive;
+
+        @SerializedName("reporter_payment_history_notice_text")
+        @Expose
+        private String reporterPaymentHistoryNoticeText;
 
         @SerializedName("rewards_guest_chip")
         @Expose
@@ -926,6 +995,14 @@ public class StartActivityReqModel implements Serializable {
 
         public String getReporterPaymentBannerText() {
             return reporterPaymentBannerText;
+        }
+
+        public Boolean getReporterPaymentHistoryNoticeActive() {
+            return reporterPaymentHistoryNoticeActive;
+        }
+
+        public String getReporterPaymentHistoryNoticeText() {
+            return reporterPaymentHistoryNoticeText;
         }
 
         public String getRewardsGuestChip() {

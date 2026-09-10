@@ -75,6 +75,7 @@ import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Pojo.LanguageFontConfig;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.FullVideoShareCardHelper;
+import com.anyNews.anynews.Utils.MagazineShareIconHelper;
 import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.NetworkCallDeduper;
@@ -1542,6 +1543,16 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
+                        // Admin-controlled Magazines/Special/Calendar on-image Share size + margins.
+                        MagazineShareIconHelper.save(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getMagazineShareIconSizeDp(),
+                                startActivityReqModel.getData().getMagazineShareMarginEndDp(),
+                                startActivityReqModel.getData().getMagazineShareMarginBottomDp(),
+                                startActivityReqModel.getData().getMagazineShareMarginStartDp(),
+                                startActivityReqModel.getData().getMagazineShareMarginTopDp()
+                        );
+
                         // Admin-controlled reporter create-menu post-type toggles.
                         SharedPrefsData.putBool(
                                 getApplicationContext(),
@@ -1954,7 +1965,9 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getReporterArticlesFromDate(),
                                 startActivityReqModel.getData().getReporterPaymentBannerActive(),
-                                startActivityReqModel.getData().getReporterPaymentBannerText());
+                                startActivityReqModel.getData().getReporterPaymentBannerText(),
+                                startActivityReqModel.getData().getReporterPaymentHistoryNoticeActive(),
+                                startActivityReqModel.getData().getReporterPaymentHistoryNoticeText());
                         com.anyNews.anynews.rewards.RewardsConfigHelper.saveChipCopyFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsGuestChip(),

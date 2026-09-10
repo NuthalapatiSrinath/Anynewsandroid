@@ -898,6 +898,8 @@ public final class SessionAnalyticsTracker {
                         String fromDate = null;
                         Boolean bannerActive = null;
                         String bannerText = null;
+                        Boolean histNoticeActive = null;
+                        String histNoticeText = null;
                         if (resBody.has("reporter_articles_from_date")
                                 && !resBody.get("reporter_articles_from_date").isJsonNull()) {
                             fromDate = resBody.get("reporter_articles_from_date").getAsString();
@@ -912,9 +914,28 @@ public final class SessionAnalyticsTracker {
                             bannerText =
                                     resBody.get("reporter_payment_banner_text").getAsString();
                         }
-                        if (fromDate != null || bannerActive != null || bannerText != null) {
+                        if (resBody.has("reporter_payment_history_notice_active")
+                                && !resBody.get("reporter_payment_history_notice_active").isJsonNull()) {
+                            histNoticeActive =
+                                    resBody.get("reporter_payment_history_notice_active").getAsBoolean();
+                        }
+                        if (resBody.has("reporter_payment_history_notice_text")
+                                && !resBody.get("reporter_payment_history_notice_text").isJsonNull()) {
+                            histNoticeText =
+                                    resBody.get("reporter_payment_history_notice_text").getAsString();
+                        }
+                        if (fromDate != null
+                                || bannerActive != null
+                                || bannerText != null
+                                || histNoticeActive != null
+                                || histNoticeText != null) {
                             ReporterPaymentAppConfig.saveFromServer(
-                                    context, fromDate, bannerActive, bannerText);
+                                    context,
+                                    fromDate,
+                                    bannerActive,
+                                    bannerText,
+                                    histNoticeActive,
+                                    histNoticeText);
                         }
                     } catch (Exception ignored) {
                     }

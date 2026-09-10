@@ -167,6 +167,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.common.util.Util;
@@ -1674,6 +1675,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Classic hide: half → writers/reporter footer; full → likes/comments side rail.
      * When admin {@code news_tap_half_hide_engagement} is ON, half also toggles the
      * four action icons (like / comment / share / flag) with the writers row.
+     * Half uses {@link View#INVISIBLE} (not {@link View#GONE}) so article text below
+     * does not jump; the red share branding strip stays out of this path entirely.
      */
     private static void toggleClassicChrome(
             @Nullable Context ctx,
@@ -1682,21 +1685,31 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             boolean fullPost) {
         if (classicChrome == null) return;
         try {
-            if (fullPost) {
-                if (classicChrome.isShown()
-                        || classicChrome.getVisibility() == View.VISIBLE) {
-                    classicChrome.setVisibility(View.INVISIBLE);
-                } else {
-                    classicChrome.setVisibility(View.VISIBLE);
-                }
+            // Always keep share branding strip out of tap chrome (Share click shows it).
+            hideHalfShareBrandingStrip(cardRoot);
+            if (classicChrome.isShown()
+                    || classicChrome.getVisibility() == View.VISIBLE) {
+                classicChrome.setVisibility(View.INVISIBLE);
             } else {
-                if (classicChrome.isShown()
-                        || classicChrome.getVisibility() == View.VISIBLE) {
-                    classicChrome.setVisibility(View.GONE);
-                } else {
-                    classicChrome.setVisibility(View.VISIBLE);
-                }
+                classicChrome.setVisibility(View.VISIBLE);
+            }
+            if (!fullPost) {
                 syncHalfEngagementWithWritersRow(ctx, cardRoot);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Red ANYNEWS / slogan strip under media is for share-screenshot capture only.
+     * Never reveal it from content-tap chrome toggles.
+     */
+    private static void hideHalfShareBrandingStrip(@Nullable View cardRoot) {
+        if (cardRoot == null) return;
+        try {
+            View strip = cardRoot.findViewById(R.id.with_strips_layout);
+            if (strip != null) {
+                strip.setVisibility(View.GONE);
             }
         } catch (Exception ignored) {
         }
@@ -1706,11 +1719,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Half articles: optionally mirror writers-row visibility onto the engagement
      * icon row ({@code with_out_strips_layout}). When the admin toggle is OFF,
      * always keep engagement visible (writers row may still hide alone).
+     * Uses {@link View#INVISIBLE} when hiding so layout height is reserved and
+     * the sibling share branding strip cannot expand into the freed space.
      */
     private static void syncHalfEngagementWithWritersRow(
             @Nullable Context ctx, @Nullable View cardRoot) {
         if (cardRoot == null) return;
         try {
+            // Share strip must stay GONE unless an actual Share flow shows it.
+            hideHalfShareBrandingStrip(cardRoot);
             View engagement = cardRoot.findViewById(R.id.with_out_strips_layout);
             if (engagement == null) return;
             if (!NewsTapModeConfig.halfHideEngagementWithWriters(ctx)) {
@@ -1723,7 +1740,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return;
             }
             boolean writersVisible = footer.getVisibility() == View.VISIBLE;
-            engagement.setVisibility(writersVisible ? View.VISIBLE : View.GONE);
+            engagement.setVisibility(
+                    writersVisible ? View.VISIBLE : View.INVISIBLE);
         } catch (Exception ignored) {
         }
     }
@@ -2636,6 +2654,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         shareIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         shareIcon.clearColorFilter();
         shareIcon.setBackground(null);
+        MagazineShareIconHelper.apply(context, shareIcon);
         shareIcon.setVisibility(VISIBLE);
         shareIcon.setClickable(true);
         shareIcon.setFocusable(true);
@@ -3058,7 +3077,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         String mediaType = list.get(position).getMediaType();
                         if ("5".equals(mediaType)) {
                             full_videoViewHolder = new FullVideoViewHolder();
-                            convertView = inflater.inflate(R.layout.activity_full_video, parent, false);
+                            // Reuse scrap while the shared ExoPlayer is live on this card —
+                            // inflate-always destroyed TextureView and forced BUFFERING spinner blink.
+                            if (!canReuseFlipView(convertView, "full_video_exo")) {
+                                convertView = inflater.inflate(R.layout.activity_full_video, parent, false);
+                                markFlipViewType(convertView, "full_video_exo");
+                            }
                             showFullVideoWithExoPlayer(position, convertView);
                         }
                         // full youtube video
@@ -3087,10 +3111,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         String halfMediaType = list.get(position).getMediaType();
                         if ("3".equals(halfMediaType)) {
                             halfVideoExoPlayerHolder = new HalfVideoExoPlayerHolder();
-                            if (AppHelper.isTeluguLanguageSelected()) {
-                                convertView = inflater.inflate(R.layout.activity_half_exo_video_detailes_telugu, parent, false);
-                            } else {
-                                convertView = inflater.inflate(R.layout.activity_half_exo_video_detailes, parent, false);
+                            String halfExoKey = AppHelper.isTeluguLanguageSelected()
+                                    ? "normal_video_exo_telugu" : "normal_video_exo";
+                            // Reuse scrap while shared Exo is active — new inflate tears the
+                            // TextureView surface and flashes the white buffering spinner.
+                            if (!canReuseFlipView(convertView, halfExoKey)) {
+                                if (AppHelper.isTeluguLanguageSelected()) {
+                                    convertView = inflater.inflate(
+                                            R.layout.activity_half_exo_video_detailes_telugu, parent, false);
+                                } else {
+                                    convertView = inflater.inflate(
+                                            R.layout.activity_half_exo_video_detailes, parent, false);
+                                }
+                                markFlipViewType(convertView, halfExoKey);
                             }
                             showHalfPostExoPlayerVideo(convertView, position);
                         } else if ("4".equals(halfMediaType)) {
@@ -3699,7 +3732,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * FlipView scrap reuse: only keep convertView when it was inflated for the same
-     * post layout key. Video/ads/gallery/etc. stay inflate-always (stateful).
+     * post layout key. Ads/gallery/YouTube stay inflate-always (heavier stateful WebViews).
+     * Half/full Exo cards reuse scrap so an active TextureView is not torn on notify.
      */
     private static boolean canReuseFlipView(View convertView, String typeKey) {
         return convertView != null && typeKey != null && typeKey.equals(convertView.getTag());
@@ -5151,7 +5185,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         final ImageButton fullscreen_button = convertView.findViewById(R.id.fullscreen_button);
         final ImageButton mute_button = convertView.findViewById(R.id.mute_button);
         final ProgressBar progress_bar_for_video = convertView.findViewById(R.id.progress_bar_for_video);
-        if (list.get(position).getVideoUrl() != null && isValidContextForGlide(context)) {
+        if (list.get(position).getVideoUrl() != null
+                && isValidContextForGlide(context)
+                && !isSharedExoActiveFor(position)) {
             loadArticleImageGlide(
                     convertView.getContext(),
                     thaumbnail_for_video,
@@ -5197,13 +5233,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         // Re-bind while the same card is still owning the shared player: re-attach, do not reset to play.
         if (isSharedExoActiveFor(position)) {
-            detachPlayerViewSafely(simpleExoPlayerViewFull);
-            simpleExoPlayerViewFull.setPlayer(exoPlayer);
+            // Never detach→reattach the same player — that recreates TextureView and
+            // flashes progress_bar_for_video (white ring) over an already-playing frame.
+            boolean reboundSurface = attachSharedExoToPlayerView(simpleExoPlayerViewFull);
             simpleExoPlayerViewFull.setVisibility(View.VISIBLE);
             simpleExoPlayerViewFull.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
             wireFullVideoExoPauseControl(simpleExoPlayerViewFull, convertView);
             wireFullVideoExoSideMenuWithController(simpleExoPlayerViewFull, convertView);
-            attachExoCenterIconSync(simpleExoPlayerViewFull);
             applyExoOverlayState(
                     exoPlayer.getPlaybackState(),
                     exoPlayer.getPlayWhenReady(),
@@ -5214,26 +5250,32 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     && exoPlayer.getPlaybackState() != Player.STATE_ENDED) {
                 full_videoViewHolder.side_menu.setVisibility(View.INVISIBLE);
             }
-            // Fresh UI refs after reinflate — keep spinner/play in sync with shared player.
-            final PlayerView resumeFullPlayerView = simpleExoPlayerViewFull;
-            exoPlayer.addListener(new Player.Listener() {
-                @Override
-                public void onPlaybackStateChanged(int playbackState) {
-                    if (exoPlayer == null || resumeFullPlayerView.getPlayer() != exoPlayer) {
-                        return;
+            // New PlayerView (surface moved) needs listeners bound to these UI refs.
+            // Scrap reuse with player already attached keeps prior listeners.
+            if (reboundSurface) {
+                attachExoCenterIconSync(simpleExoPlayerViewFull);
+                final PlayerView resumeFullPlayerView = simpleExoPlayerViewFull;
+                exoPlayer.addListener(new Player.Listener() {
+                    @Override
+                    public void onPlaybackStateChanged(int playbackState) {
+                        if (exoPlayer == null || resumeFullPlayerView.getPlayer() != exoPlayer) {
+                            return;
+                        }
+                        applyExoOverlayState(
+                                playbackState,
+                                exoPlayer.getPlayWhenReady(),
+                                thaumbnail_for_video,
+                                imageViewExoVideoPlayVideo,
+                                progress_bar_for_video);
+                        updateExoCenterControlIcons(resumeFullPlayerView);
+                        if (playbackState == Player.STATE_ENDED) {
+                            notifyVideoEndedForAutoplay(position);
+                        }
                     }
-                    applyExoOverlayState(
-                            playbackState,
-                            exoPlayer.getPlayWhenReady(),
-                            thaumbnail_for_video,
-                            imageViewExoVideoPlayVideo,
-                            progress_bar_for_video);
-                    updateExoCenterControlIcons(resumeFullPlayerView);
-                    if (playbackState == Player.STATE_ENDED) {
-                        notifyVideoEndedForAutoplay(position);
-                    }
-                }
-            });
+                });
+            } else {
+                updateExoCenterControlIcons(simpleExoPlayerViewFull);
+            }
             // Stay playing if user already started this card.
             if (exoPlayer.getPlayWhenReady()) {
                 forceSharedExoPlay();
@@ -5260,7 +5302,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 simpleExoPlayerViewFull.setVisibility(View.VISIBLE);
                 releaseSharedExoPlayerQuietly();
                 exoPlayer = createFeedExoPlayer();
-                simpleExoPlayerViewFull.setPlayer(exoPlayer);
+                attachSharedExoToPlayerView(simpleExoPlayerViewFull);
                 simpleExoPlayerViewFull.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 MediaItem mediaItem = MediaItem.fromUri(Uri.parse(videoUrl));
                 exoPlayer.setMediaItem(mediaItem);
@@ -6637,7 +6679,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
         if (list.get(position).getTitle() != null){
-            if (list.get(position).getVideoUrl() != null && isValidContextForGlide(context)) {
+            if (list.get(position).getVideoUrl() != null
+                    && isValidContextForGlide(context)
+                    && !isSharedExoActiveFor(position)) {
                 displayArticleImage(
                         thaumbnail_for_video,
                         list.get(position),
@@ -6661,7 +6705,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         }
         if (resumeSharedExo) {
-            simpleExoPlayerView.setPlayer(exoPlayer);
+            boolean reboundSurface = attachSharedExoToPlayerView(simpleExoPlayerView);
             simpleExoPlayerView.setVisibility(View.VISIBLE);
             simpleExoPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
             imageViewExoVideoPlayVideo.setVisibility(View.GONE);
@@ -6672,32 +6716,38 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     imageViewExoVideoPlayVideo,
                     progress_bar_for_video);
             wireHalfVideoExoPauseControl(simpleExoPlayerView);
-            attachExoCenterIconSync(simpleExoPlayerView);
-            final PlayerView resumeHalfPlayerView = simpleExoPlayerView;
-            exoPlayer.addListener(new Player.Listener() {
-                @Override
-                public void onPlaybackStateChanged(int playbackState) {
-                    if (exoPlayer == null || resumeHalfPlayerView.getPlayer() != exoPlayer) {
-                        return;
+            if (reboundSurface) {
+                attachExoCenterIconSync(simpleExoPlayerView);
+                final PlayerView resumeHalfPlayerView = simpleExoPlayerView;
+                exoPlayer.addListener(new Player.Listener() {
+                    @Override
+                    public void onPlaybackStateChanged(int playbackState) {
+                        if (exoPlayer == null || resumeHalfPlayerView.getPlayer() != exoPlayer) {
+                            return;
+                        }
+                        applyExoOverlayState(
+                                playbackState,
+                                exoPlayer.getPlayWhenReady(),
+                                thaumbnail_for_video,
+                                imageViewExoVideoPlayVideo,
+                                progress_bar_for_video);
+                        updateExoCenterControlIcons(resumeHalfPlayerView);
+                        if (playbackState == Player.STATE_ENDED) {
+                            notifyVideoEndedForAutoplay(position);
+                        }
                     }
-                    applyExoOverlayState(
-                            playbackState,
-                            exoPlayer.getPlayWhenReady(),
-                            thaumbnail_for_video,
-                            imageViewExoVideoPlayVideo,
-                            progress_bar_for_video);
-                    updateExoCenterControlIcons(resumeHalfPlayerView);
-                    if (playbackState == Player.STATE_ENDED) {
-                        notifyVideoEndedForAutoplay(position);
-                    }
-                }
-            });
+                });
+            } else {
+                updateExoCenterControlIcons(simpleExoPlayerView);
+            }
             if (exoPlayer.getPlayWhenReady()) {
                 forceSharedExoPlay();
             }
         } else {
             // Detach only — never release the shared static player from a recycled scrap view.
-            simpleExoPlayerView.setPlayer(null);
+            if (simpleExoPlayerView.getPlayer() != null) {
+                simpleExoPlayerView.setPlayer(null);
+            }
             simpleExoPlayerView.setVisibility(View.GONE);
             if ("4".equalsIgnoreCase(list.get(position).getMediaType())) {
                 // Youtube
@@ -6763,7 +6813,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 simpleExoPlayerView.setVisibility(View.VISIBLE);
                 releaseSharedExoPlayerQuietly();
                 exoPlayer = createFeedExoPlayer();
-                simpleExoPlayerView.setPlayer(exoPlayer);
+                attachSharedExoToPlayerView(simpleExoPlayerView);
                 simpleExoPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 showLog("Video URL:"+videoUrl);
                 MediaItem mediaItem = MediaItem.fromUri(Uri.parse(videoUrl));
@@ -9819,7 +9869,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private ExoPlayer createFeedExoPlayer() {
+        // Larger post-rebuffer headroom reduces TextureView black wipes when the
+        // decoder briefly stalls (distinct from the white buffering spinner).
+        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                        /* minBufferMs */ 15_000,
+                        /* maxBufferMs */ 50_000,
+                        /* bufferForPlaybackMs */ 1_500,
+                        /* bufferForPlaybackAfterRebufferMs */ 3_000)
+                .build();
         return new ExoPlayer.Builder(context)
+                .setLoadControl(loadControl)
                 .setSeekBackIncrementMs(5000)
                 .setSeekForwardIncrementMs(5000)
                 .build();
@@ -10016,8 +10076,42 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 } catch (Exception ignored) {
                 }
             }
-            playerView.setPlayer(null);
+            if (playerView.getPlayer() != null) {
+                playerView.setPlayer(null);
+            }
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Bind the shared feed ExoPlayer to a PlayerView without tearing an already-attached
+     * TextureView (detach→setPlayer on the same instance causes BUFFERING + white spinner).
+     *
+     * @return true if the surface binding changed (caller may need a fresh listener)
+     */
+    private boolean attachSharedExoToPlayerView(PlayerView playerView) {
+        if (playerView == null || exoPlayer == null) {
+            return false;
+        }
+        try {
+            playerView.setKeepContentOnPlayerReset(true);
+            playerView.setUseArtwork(false);
+            playerView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT);
+            Player attached = playerView.getPlayer();
+            if (attached == exoPlayer) {
+                return false;
+            }
+            if (attached != null && attached != exoPlayer) {
+                try {
+                    attached.release();
+                } catch (Exception ignored) {
+                }
+            }
+            playerView.setPlayer(exoPlayer);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
         }
     }
 
@@ -10037,6 +10131,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             if (centerPlay != null) {
                 centerPlay.setVisibility(View.GONE);
+            }
+            // Mid-play underrun: never flash the still thumbnail over live video
+            // (that reads as stroboscopic "photo clicks"). Keep last TextureView
+            // frame; spinner alone is the buffering affordance.
+            if (playWhenReady && thumbnail != null) {
+                thumbnail.setVisibility(View.GONE);
             }
         } else if (playbackState == Player.STATE_READY) {
             if (progress != null) {

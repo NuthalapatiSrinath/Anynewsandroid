@@ -193,7 +193,7 @@
                 android:layout_height="40dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/advertise_attach"
-                android:src="@drawable/ic_hub_share"
+                android:src="@drawable/ic_advertise_attach"
                 app:tint="#FF6B00" />
 
             <EditText

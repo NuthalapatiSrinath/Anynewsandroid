@@ -18,6 +18,7 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.WalletHistoryCache;
 import com.anyNews.anynews.testing.PaginationListener;
@@ -73,6 +74,8 @@ public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRe
         payment_total_amount = findViewById(R.id.payment_total_amount);
         loading = findViewById(R.id.loading);
         txtNoData = findViewById(R.id.txtNoData);
+
+        bindPaymentHistoryNotice();
 
         swipeRefresh.setOnRefreshListener(this);
         mRecyclerView.setHasFixedSize(true);
@@ -274,6 +277,9 @@ public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRe
             if (languageModel.getTotalPoints() != null) {
                 payment_total_amount.setText("\u20B9" + languageModel.getTotalPoints());
             }
+            applyPaymentHistoryNoticeFromApi(
+                    languageModel.getReporterPaymentHistoryNoticeActive(),
+                    languageModel.getReporterPaymentHistoryNoticeText());
             if (languageModel.getSkip() != null) page = languageModel.getSkip();
             if (languageModel.getFirstTransactionId() != null) limit = languageModel.getFirstTransactionId();
 
@@ -359,6 +365,36 @@ public class PaymentHistoryDetailes extends AppCompatActivity implements SwipeRe
             activeCall.cancel();
         }
         activeCall = null;
+    }
+
+    private void bindPaymentHistoryNotice() {
+        applyPaymentHistoryNoticeFromApi(null, null);
+    }
+
+    private void applyPaymentHistoryNoticeFromApi(Boolean activeFromApi, String textFromApi) {
+        TextView notice = findViewById(R.id.tv_payment_history_notice);
+        if (notice == null) return;
+        try {
+            boolean active = activeFromApi != null
+                    ? Boolean.TRUE.equals(activeFromApi)
+                    : ReporterPaymentAppConfig.historyNoticeActive(this);
+            String msg = textFromApi != null
+                    ? textFromApi.trim()
+                    : ReporterPaymentAppConfig.historyNoticeText(this);
+            if (msg == null) msg = "";
+            if (activeFromApi != null || textFromApi != null) {
+                ReporterPaymentAppConfig.saveFromServer(
+                        this, null, null, null, active, msg);
+            }
+            if (active && !android.text.TextUtils.isEmpty(msg)) {
+                notice.setText(msg);
+                notice.setVisibility(View.VISIBLE);
+            } else {
+                notice.setVisibility(View.GONE);
+            }
+        } catch (Exception ignored) {
+            notice.setVisibility(View.GONE);
+        }
     }
 
     @Override

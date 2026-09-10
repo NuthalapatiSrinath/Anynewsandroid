@@ -2080,10 +2080,8 @@ public class newProfileDetails extends AppCompatActivity {
         }
         TextView langLabel = findViewById(R.id.profile_language_label);
         if (langLabel != null) {
-            langLabel.setText(packString(
-                    languageModelResponse != null && languageModelResponse.getData() != null
-                            ? languageModelResponse.getData().getSelectLanguage() : null,
-                    ProfileHubLabels.selectLanguage(this)));
+            // Always English heading — values (తెలుగు / हिन्दी) stay localized below.
+            langLabel.setText(ProfileHubLabels.selectLanguage(this));
         }
         if (textViewFollowingUser != null) {
             textViewFollowingUser.setText(" " + packString(
@@ -2714,15 +2712,21 @@ public class newProfileDetails extends AppCompatActivity {
             int stateId = d.getStateId() != null ? d.getStateId() : 0;
             int distId = d.getDistId() != null ? d.getDistId() : 0;
             String loc = d.getLocation() != null ? d.getLocation().trim() : "";
+            final int profileLangRaw = langId;
+            int sessionLangBefore = SharedPrefsData.getInt(
+                    getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
             if (langId > 0) {
-                int prevLang = SharedPrefsData.getInt(
-                        getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-                SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID,
-                        langId, Constants.PREF_NAME);
-                // Keep language row label in sync with LanguageID (avoid stale "हिन्दी").
-                SharedPrefsData.putString(getApplicationContext(), Constants.Lang,
-                        languageDisplayNameForId(langId), Constants.PREF_NAME);
-                if (langId != prevLang) {
+                int prevLang = sessionLangBefore;
+                // Session LanguageID (after Update_User_Language) is authoritative.
+                // Stale Writers / ReporterProfileCache must not revert it.
+                if (prevLang > 0 && langId != prevLang) {
+                    langId = prevLang;
+                } else if (langId != prevLang) {
+                    SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID,
+                            langId, Constants.PREF_NAME);
+                    // Keep language row value in sync with LanguageID (avoid stale "हिन्दी").
+                    SharedPrefsData.putString(getApplicationContext(), Constants.Lang,
+                            languageDisplayNameForId(langId), Constants.PREF_NAME);
                     try {
                         LanguageFeedInvalidator.onLanguageChanged(
                                 getApplicationContext(), langId, false);
@@ -2732,13 +2736,23 @@ public class newProfileDetails extends AppCompatActivity {
                         CategoriesDiskCache.invalidate(getApplicationContext());
                     } catch (Exception ignored) {
                     }
+                } else if (prevLang <= 0) {
+                    SharedPrefsData.putInt(getApplicationContext(), Constants.LanguageID,
+                            langId, Constants.PREF_NAME);
+                    SharedPrefsData.putString(getApplicationContext(), Constants.Lang,
+                            languageDisplayNameForId(langId), Constants.PREF_NAME);
                 }
             }
             if (stateId > 0) {
                 SharedPrefsData.putInt(getApplicationContext(), Constants.StateID,
                         stateId, Constants.PREF_NAME);
             }
-            if (distId > 0 || DistrictLabelHelper.isUsable(loc)) {
+            // Stale cache for another language must not overwrite the restored slot.
+            boolean staleLangCache = fromCache
+                    && profileLangRaw > 0
+                    && sessionLangBefore > 0
+                    && profileLangRaw != sessionLangBefore;
+            if (!staleLangCache && (distId > 0 || DistrictLabelHelper.isUsable(loc))) {
                 // Cache paint must not overwrite a fresher local district pick
                 // (e.g. user just changed district in Daily Updates).
                 if (fromCache) {
@@ -2820,11 +2834,15 @@ public class newProfileDetails extends AppCompatActivity {
         try {
             String profileMsg = d.getUpcomingPaymentMessage();
             boolean active = !TextUtils.isEmpty(profileMsg);
+            Boolean histActive = d.getReporterPaymentHistoryNoticeActive();
+            String histText = d.getReporterPaymentHistoryNoticeText();
             ReporterPaymentAppConfig.saveFromServer(
                     this,
                     d.getReporterArticlesFromDate(),
                     active,
-                    active ? profileMsg : "");
+                    active ? profileMsg : "",
+                    histActive,
+                    histText != null ? histText : "");
         } catch (Exception ignored) {
         }
 

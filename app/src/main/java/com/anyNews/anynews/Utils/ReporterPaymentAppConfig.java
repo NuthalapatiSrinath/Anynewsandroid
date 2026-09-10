@@ -6,13 +6,18 @@ import android.text.TextUtils;
 import androidx.annotation.Nullable;
 
 /**
- * Admin My Articles From floor + Profile payment banner from splash/session/profile.
+ * Admin My Articles From floor + Profile payment banner + Payment History notice
+ * from splash/session/profile.
  */
 public final class ReporterPaymentAppConfig {
 
     public static final String PREF_ARTICLES_FROM_DATE = "reporter_articles_from_date";
     public static final String PREF_BANNER_ACTIVE = "reporter_payment_banner_active";
     public static final String PREF_BANNER_TEXT = "reporter_payment_banner_text";
+    public static final String PREF_HISTORY_NOTICE_ACTIVE =
+            "reporter_payment_history_notice_active";
+    public static final String PREF_HISTORY_NOTICE_TEXT =
+            "reporter_payment_history_notice_text";
 
     private ReporterPaymentAppConfig() {}
 
@@ -21,6 +26,16 @@ public final class ReporterPaymentAppConfig {
             @Nullable String fromDate,
             @Nullable Boolean bannerActive,
             @Nullable String bannerText) {
+        saveFromServer(context, fromDate, bannerActive, bannerText, null, null);
+    }
+
+    public static void saveFromServer(
+            @Nullable Context context,
+            @Nullable String fromDate,
+            @Nullable Boolean bannerActive,
+            @Nullable String bannerText,
+            @Nullable Boolean historyNoticeActive,
+            @Nullable String historyNoticeText) {
         if (context == null) return;
         Context app = context.getApplicationContext();
         if (fromDate != null) {
@@ -37,6 +52,17 @@ public final class ReporterPaymentAppConfig {
                     app,
                     PREF_BANNER_TEXT,
                     bannerText.trim(),
+                    Constants.PREF_NAME);
+        }
+        if (historyNoticeActive != null) {
+            SharedPrefsData.putBool(
+                    app, PREF_HISTORY_NOTICE_ACTIVE, historyNoticeActive, Constants.PREF_NAME);
+        }
+        if (historyNoticeText != null) {
+            SharedPrefsData.putString(
+                    app,
+                    PREF_HISTORY_NOTICE_TEXT,
+                    historyNoticeText.trim(),
                     Constants.PREF_NAME);
         }
     }
@@ -76,6 +102,31 @@ public final class ReporterPaymentAppConfig {
                     SharedPrefsData.getString(
                             context != null ? context.getApplicationContext() : null,
                             PREF_BANNER_TEXT,
+                            Constants.PREF_NAME);
+            return v != null ? v.trim() : "";
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    public static boolean historyNoticeActive(@Nullable Context context) {
+        try {
+            return SharedPrefsData.getBool(
+                    context != null ? context.getApplicationContext() : null,
+                    PREF_HISTORY_NOTICE_ACTIVE,
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    @Nullable
+    public static String historyNoticeText(@Nullable Context context) {
+        try {
+            String v =
+                    SharedPrefsData.getString(
+                            context != null ? context.getApplicationContext() : null,
+                            PREF_HISTORY_NOTICE_TEXT,
                             Constants.PREF_NAME);
             return v != null ? v.trim() : "";
         } catch (Exception ignored) {

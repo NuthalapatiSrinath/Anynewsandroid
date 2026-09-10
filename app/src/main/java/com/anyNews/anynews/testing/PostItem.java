@@ -169,6 +169,13 @@ public class PostItem {
   @Expose
   private Long totalPoints;
 
+  @SerializedName("reporter_payment_history_notice_active")
+  @Expose
+  private Boolean reporterPaymentHistoryNoticeActive;
+
+  @SerializedName("reporter_payment_history_notice_text")
+  @Expose
+  private String reporterPaymentHistoryNoticeText;
 
   @SerializedName("first_post_id")
   @Expose
@@ -220,6 +227,14 @@ public class PostItem {
 
   public void setTotalPoints(Long totalPoints) {
     this.totalPoints = totalPoints;
+  }
+
+  public Boolean getReporterPaymentHistoryNoticeActive() {
+    return reporterPaymentHistoryNoticeActive;
+  }
+
+  public String getReporterPaymentHistoryNoticeText() {
+    return reporterPaymentHistoryNoticeText;
   }
 
   private String description;

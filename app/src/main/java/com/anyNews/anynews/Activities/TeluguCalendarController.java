@@ -51,6 +51,7 @@ import com.anyNews.anynews.Utils.CalendarRaasiLabels;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
+import com.anyNews.anynews.Utils.MagazineShareIconHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -571,14 +572,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         blinkShare.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         blinkShare.clearColorFilter();
         blinkShare.setBackground(null);
-        ViewGroup.MarginLayoutParams mlp =
-                blinkShare.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
-                        ? (ViewGroup.MarginLayoutParams) blinkShare.getLayoutParams()
-                        : null;
-        if (mlp != null) {
-            mlp.bottomMargin = applyWindowInsets ? dp(28) : dp(10);
-            blinkShare.setLayoutParams(mlp);
-        }
+        // Admin size + margins (bottom-end anchor). Same knobs as Special galleries.
+        MagazineShareIconHelper.apply(host, blinkShare);
         blinkShare.setOnClickListener(v -> {
             int page = flipPager != null ? flipPager.getCurrentPage() : 0;
             if (page == 1) {

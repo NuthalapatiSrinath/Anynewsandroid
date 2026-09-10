@@ -99,6 +99,14 @@ public class NewUserProfileResponse {
         @Expose
         private String reporterArticlesFromDate;
 
+        @SerializedName("reporter_payment_history_notice_active")
+        @Expose
+        private Boolean reporterPaymentHistoryNoticeActive;
+
+        @SerializedName("reporter_payment_history_notice_text")
+        @Expose
+        private String reporterPaymentHistoryNoticeText;
+
         public Long getComments() {
             return comments != null ? comments : 0L;
         }
@@ -125,6 +133,14 @@ public class NewUserProfileResponse {
 
         public String getReporterArticlesFromDate() {
             return reporterArticlesFromDate;
+        }
+
+        public Boolean getReporterPaymentHistoryNoticeActive() {
+            return reporterPaymentHistoryNoticeActive;
+        }
+
+        public String getReporterPaymentHistoryNoticeText() {
+            return reporterPaymentHistoryNoticeText;
         }
 
         public void setReporterArticlesFromDate(String reporterArticlesFromDate) {
