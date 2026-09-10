@@ -178,6 +178,7 @@ import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
+import com.anyNews.anynews.Utils.NewsTapModeConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
 import com.anyNews.anynews.Utils.FlipAdWorkGate;
@@ -6084,13 +6085,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             homeBookmarksEmpty.setOnClickListener(v -> toggleHomeModeChrome());
         }
 
-        // Default left segment; visibility driven by network.
-        // Classic: show News|Read + article bars on first paint; hide only on tap
-        // (do not force start-hidden — that broke first-show and Local tap reveal).
+        // Classic: News|Read chrome never appears (permanent hide).
+        // Article bars (likes / writers) still show first and hide only on tap —
+        // that is FlipperAdapter Classic hide, not this pill.
         bookmarksModeSelected = false;
-        homeModeChromeUserHidden = false;
-        refreshHomeModeToggleUi();
-        scheduleHomeModeChromeAutoHide(false);
+        if (NewsTapModeConfig.isClassic(this)) {
+            homeModeChromeUserHidden = true;
+            refreshHomeModeToggleUi();
+            setHomeModeChromeVisible(false, false);
+        } else {
+            homeModeChromeUserHidden = false;
+            refreshHomeModeToggleUi();
+            scheduleHomeModeChromeAutoHide(false);
+        }
         refreshHomeModeCounts();
         // Seed Read badge once; thereafter 30s poll + News|Read toggle only.
         try {
@@ -6765,8 +6772,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Single tap on article content (from FlipperAdapter) — hide/show the
      * News|Bookmarks / News|Read top pill when tap mode is Reader or Hybrid
-     * (upper band). Classic mode uses long-press / pill for this; content taps
-     * hide reporter/district or likes/comments chrome instead.
+     * (upper band). Classic: News|Read never appears (no-op here); content taps
+     * only toggle likes/writers via FlipperAdapter Classic hide.
      * Reveal always re-arms the {@link HomeModeChromeConfig} auto-hide delay (default 3s).
      */
     public void toggleHomeModeChrome() {
@@ -6777,6 +6784,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         // Offline Offline-News|Bookmarks or online main News|Read News only.
         if (!isHomeModeChromeActive()) return;
+        // Classic hide-bars: top News|Read must never show (likes/writers stay tap-toggle).
+        if (NewsTapModeConfig.isClassic(this) && isOnlineMainNewsChromeActive()) {
+            homeModeChromeUserHidden = true;
+            setHomeModeChromeVisible(false, false);
+            return;
+        }
         if (homeModeToggleRoot == null && homeActionChromeRoot == null) return;
         setHomeModeChromeVisible(homeModeChromeUserHidden, true);
     }
@@ -6890,10 +6903,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             forceHideAllHomeModeChrome();
             return;
         }
-        homeModeChromeUserHidden = !visible;
+        // Classic (online main News): News|Read chrome is permanently off.
+        final boolean show = visible
+                && !(NewsTapModeConfig.isClassic(this) && isOnlineMainNewsChromeActive());
+        homeModeChromeUserHidden = !show;
         cancelHomeModeChromeAnimator();
         // Every reveal re-arms 3s (or admin) auto-hide; hide cancels the timer.
-        if (visible) {
+        if (show) {
             scheduleHomeModeChromeAutoHide(true);
         } else {
             cancelHomeModeChromeAutoHide();
@@ -6910,9 +6926,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     h = (int) (56f * dens);
                 }
                 float hiddenY = -h - 8f * dens;
-                prepareChromeSlideIn(homeModeToggleRoot, visible, hiddenY);
+                prepareChromeSlideIn(homeModeToggleRoot, show, hiddenY);
                 Animator a = buildChromeSlideAlpha(
-                        homeModeToggleRoot, visible, hiddenY, animate);
+                        homeModeToggleRoot, show, hiddenY, animate);
                 if (a != null) parts.add(a);
             }
             if (homeActionChromeRoot != null) {
@@ -6921,14 +6937,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     h = (int) (56f * dens);
                 }
                 float hiddenY = h + 8f * dens; // slide down off bottom
-                prepareChromeSlideIn(homeActionChromeRoot, visible, hiddenY);
+                prepareChromeSlideIn(homeActionChromeRoot, show, hiddenY);
                 Animator a = buildChromeSlideAlpha(
-                        homeActionChromeRoot, visible, hiddenY, animate);
+                        homeActionChromeRoot, show, hiddenY, animate);
                 if (a != null) parts.add(a);
             }
 
             if (parts.isEmpty() || !animate) {
-                applyChromeVisibilityEndState(visible);
+                applyChromeVisibilityEndState(show);
                 return;
             }
 
@@ -6940,7 +6956,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             set.addListener(new AnimatorListenerAdapter() {
                 @Override
                 public void onAnimationEnd(Animator animation) {
-                    applyChromeVisibilityEndState(visible);
+                    applyChromeVisibilityEndState(show);
                     homeModeChromeAnimator = null;
                 }
 
@@ -7458,7 +7474,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         // Online but Special / Video (or other non-main): hide pill + close right panel.
         if (isDeviceOnline() && !offlineChromeMode && !onlineMain) {
-            homeModeChromeUserHidden = false;
+            // Leaving main News — clear user-hidden only when not Classic
+            // (Classic must keep News|Read permanently off when returning to main).
+            if (!NewsTapModeConfig.isClassic(this)) {
+                homeModeChromeUserHidden = false;
+            }
             cancelHomeModeChromeAnimator();
             cancelHomeModeChromeAutoHide();
             cancelClassicChromeAutoHideOnStart();
@@ -9824,7 +9844,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             offlineChromeMode = false;
-            homeModeChromeUserHidden = false;
+            // Classic: keep News|Read hidden on reconnect (never flash the pill).
+            if (!NewsTapModeConfig.isClassic(this)) {
+                homeModeChromeUserHidden = false;
+            } else {
+                homeModeChromeUserHidden = true;
+            }
             // Leave offline bookmarks list; open on main News tab of online pill.
             if (bookmarksModeSelected) {
                 bookmarksModeSelected = false;
@@ -9832,6 +9857,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             onlineNewsAllReadSkipStreak = 0;
             refreshHomeModeToggleUi();
+            if (NewsTapModeConfig.isClassic(this)) {
+                setHomeModeChromeVisible(false, false);
+            }
             refreshHomeModeCounts();
             // Instant Read badge when reconnecting to online chrome.
             refreshHomeReadNewsBadge();

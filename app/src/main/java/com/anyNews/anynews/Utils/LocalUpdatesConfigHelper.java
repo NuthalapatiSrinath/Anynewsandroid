@@ -92,6 +92,11 @@ public final class LocalUpdatesConfigHelper {
     }
 
     public static boolean isGoldEnabled(@Nullable Context context) {
+        // National IBJA rates: language matrix must not hide Gold when splash
+        // already delivered numbers (chrome is localized client-side).
+        if (hasRealGoldRates(context)) {
+            return readBool(context, Constants.GOLD_ENABLED, true);
+        }
         return readBool(context, Constants.GOLD_ENABLED, true)
                 && DailyUpdatesConfigHelper.isGoldLanguageAllowed(context);
     }

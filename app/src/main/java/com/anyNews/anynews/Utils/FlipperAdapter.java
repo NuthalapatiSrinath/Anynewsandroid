@@ -1522,8 +1522,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Content tap with Classic / Reader / Hybrid routing on main News FlipView.
-     * Long-press always toggles News|Read chrome when that chrome is active
-     * (secondary entry so Classic does not remove Chadivinavi entirely).
+     * Long-press toggles News|Read chrome when active — except Classic, where
+     * News|Read never appears (likes/writers stay content-tap Classic hide).
      */
     private static void installNewsModeTap(
             @Nullable View target,
@@ -1549,10 +1549,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         target.setOnLongClickListener(v -> {
             try {
                 HomePage hp = homePage != null ? homePage : resolveHomePageHost(v.getContext());
-                if (hp != null && hp.isHomeModeChromeActive()) {
-                    hp.toggleHomeModeChrome();
+                if (hp == null || !hp.isHomeModeChromeActive()) return false;
+                // Classic: do not surface News|Read via long-press either.
+                if (NewsTapModeConfig.isClassic(v.getContext())
+                        && hp.isOnlineMainNewsChromeActive()) {
                     return true;
                 }
+                hp.toggleHomeModeChrome();
+                return true;
             } catch (Exception ignored) {
             }
             return false;

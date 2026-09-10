@@ -91,13 +91,23 @@ public class GoldDetailActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Gold rates are national (same numbers for every LanguageID). Language only
+        // localizes chrome via GoldLabels — never reject a pack that already shows on the hub.
+        if (!LocalUpdatesConfigHelper.isGoldEnabled(this)
+                && !LocalUpdatesConfigHelper.hasRealGoldRates(this)) {
+            Toast.makeText(this, R.string.gold_disabled, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
         try {
-            if (!LocalUpdatesConfigHelper.isGoldEnabled(this)) {
-                Toast.makeText(this, R.string.gold_disabled, Toast.LENGTH_SHORT).show();
-                finish();
-                return;
-            }
             setContentView(R.layout.activity_gold_detail);
+        } catch (Throwable t) {
+            android.util.Log.e("GoldDetail", "inflate failed", t);
+            Toast.makeText(this, GoldLabels.ratesUnavailable(this), Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+        try {
             applySystemBars(R.id.gold_detail_root);
             goldSource = LocalUpdatesConfigHelper.goldJson(this);
             if (goldSource == null) goldSource = new JSONObject();
@@ -108,6 +118,12 @@ public class GoldDetailActivity extends AppCompatActivity {
                 selectedDateIso = todayIsoIst();
             }
             applyRatesForSelectedDate();
+            // Hub already showed numbers → never leave the detail on an empty table.
+            if (!displayHasRates && ratesAvailable) {
+                displayGold = goldSource;
+                displayHasRates = true;
+                goldData = displayGold;
+            }
             bindStatic();
             buildGoldTabs();
             buildSilverTabs();
@@ -115,15 +131,13 @@ public class GoldDetailActivity extends AppCompatActivity {
             bindCharts();
             wireClicks();
         } catch (Throwable t) {
-            try {
-                android.util.Log.e("GoldDetail", "open failed", t);
-            } catch (Exception ignored) {
-            }
-            try {
+            // Bind/layout faults must not masquerade as "rates unavailable" when
+            // the splash pack already has IBJA numbers (ClassCast on chart CTA, etc.).
+            android.util.Log.e("GoldDetail", "bind failed", t);
+            if (!ratesAvailable && !LocalUpdatesConfigHelper.hasRealGoldRates(this)) {
                 Toast.makeText(this, GoldLabels.ratesUnavailable(this), Toast.LENGTH_SHORT).show();
-            } catch (Exception ignored) {
+                finish();
             }
-            finish();
         }
     }
 
@@ -156,18 +170,11 @@ public class GoldDetailActivity extends AppCompatActivity {
 
     private void bindStatic() {
         JSONObject g = goldSource != null ? goldSource : new JSONObject();
-        String header = LocalUpdatesConfigHelper.optString(g, "header_title", "");
-        if (header.isEmpty() || GoldLabels.looksLikeTeluguChrome(header)) {
-            header = GoldLabels.title(this);
-        }
-        setText(R.id.gold_top_title, header);
+        // Always LanguageID chrome — splash Telugu strings must never stick on HI/ML/etc.
+        setText(R.id.gold_top_title, GoldLabels.title(this));
         setText(R.id.gold_date_label, GoldLabels.dateLabel(this));
         setText(R.id.gold_date_value, formatDateLabel(selectedDateIso));
-        String disclaimer = LocalUpdatesConfigHelper.optString(g, "disclaimer", "");
-        if (disclaimer.isEmpty() || GoldLabels.looksLikeTeluguChrome(disclaimer)) {
-            disclaimer = GoldLabels.disclaimer(this);
-        }
-        setText(R.id.gold_disclaimer, disclaimer);
+        setText(R.id.gold_disclaimer, GoldLabels.disclaimer(this));
         setText(R.id.gold_card_title, GoldLabels.cardTitle(this));
         setText(R.id.silver_card_title, GoldLabels.silverCardTitle(this));
         setText(R.id.gold_col_details, GoldLabels.colDetails(this));
@@ -176,8 +183,9 @@ public class GoldDetailActivity extends AppCompatActivity {
         setText(R.id.silver_col_details, GoldLabels.colDetails(this));
         setText(R.id.silver_col_price, GoldLabels.colPrice(this));
         setText(R.id.silver_col_change, GoldLabels.colChange(this));
-        setText(R.id.gold_chart_cta, GoldLabels.chartCta(this));
-        setText(R.id.silver_chart_cta, GoldLabels.chartCta(this));
+        // Chart CTAs are LinearLayouts with a nested TextView — never cast the root.
+        setLabelOnViewOrChild(R.id.gold_chart_cta, GoldLabels.chartCta(this));
+        setLabelOnViewOrChild(R.id.silver_chart_cta, GoldLabels.chartCta(this));
         setText(R.id.gold_chart_empty, GoldLabels.chartEmpty(this));
         setText(R.id.silver_chart_empty, GoldLabels.chartEmpty(this));
 
@@ -254,8 +262,19 @@ public class GoldDetailActivity extends AppCompatActivity {
             }
         }
 
+        // National live pack fallback: show splash IBJA numbers when the selected
+        // day is the published rate day / fetch day / calendar-today (weekend
+        // carry-forward). Unknown history days stay empty (date picker toast).
         displayGold = src;
-        displayHasRates = false;
+        if (ratesAvailable) {
+            String liveDay = isIsoDate(rateDate) ? rateDate
+                    : isoFromFetchedAt(LocalUpdatesConfigHelper.optString(src, "fetched_at", ""));
+            String today = todayIsoIst();
+            displayHasRates = selectedDateIso.equals(today)
+                    || (isIsoDate(liveDay) && selectedDateIso.equals(liveDay));
+        } else {
+            displayHasRates = false;
+        }
         goldData = displayGold;
     }
 
@@ -1062,8 +1081,7 @@ public class GoldDetailActivity extends AppCompatActivity {
             goldChart.setPriceScale(goldWeightG / 10f);
             goldChart.setHistory(hist, GoldHistoryChartView.PRICE_KEY_GOLD);
         }
-        String goldTitle = LocalUpdatesConfigHelper.optString(src, "chart_title", "");
-        if (goldTitle.isEmpty() || GoldLabels.looksLikeTeluguChrome(goldTitle)) goldTitle = GoldLabels.historyTitleGold(this);
+        String goldTitle = GoldLabels.historyTitleGold(this);
         setText(R.id.gold_chart_panel_title, goldTitle);
         updateChartEmptyHints();
     }
@@ -1079,8 +1097,7 @@ public class GoldDetailActivity extends AppCompatActivity {
             silverChart.setPriceScale(silverWeightG / 1000f);
             silverChart.setHistory(hist, GoldHistoryChartView.PRICE_KEY_SILVER);
         }
-        String silverTitle = LocalUpdatesConfigHelper.optString(src, "silver_chart_title", "");
-        if (silverTitle.isEmpty() || GoldLabels.looksLikeTeluguChrome(silverTitle)) silverTitle = GoldLabels.historyTitleSilver(this);
+        String silverTitle = GoldLabels.historyTitleSilver(this);
         setText(R.id.silver_chart_panel_title, silverTitle);
         updateChartEmptyHints();
     }
@@ -1287,8 +1304,29 @@ public class GoldDetailActivity extends AppCompatActivity {
     }
 
     private void setText(int id, String value) {
-        TextView tv = findViewById(id);
-        if (tv != null) tv.setText(value);
+        View v = findViewById(id);
+        if (v instanceof TextView) {
+            ((TextView) v).setText(value);
+        }
+    }
+
+    /** Set label on a TextView, or the first TextView child of a ViewGroup (chart CTAs). */
+    private void setLabelOnViewOrChild(int id, String value) {
+        View v = findViewById(id);
+        if (v instanceof TextView) {
+            ((TextView) v).setText(value);
+            return;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) v;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                View child = vg.getChildAt(i);
+                if (child instanceof TextView) {
+                    ((TextView) child).setText(value);
+                    return;
+                }
+            }
+        }
     }
 
     // ─── History / date helpers ───────────────────────────────────────────────
