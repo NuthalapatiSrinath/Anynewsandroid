@@ -7,7 +7,8 @@ import androidx.annotation.Nullable;
 
 /**
  * Admin-tunable auto-hide delay for home mode chrome (top News|Read bar
- * and bottom Calendar|Reload overlay).
+ * and bottom Calendar|Reload overlay) and, when News tap mode is Classic,
+ * first-paint auto-hide of article Classic bars (writers footer / likes rail).
  * Value arrives via splash / session ({@code home_mode_chrome_auto_hide_seconds}).
  *
  * <ul>
@@ -17,7 +18,8 @@ import androidx.annotation.Nullable;
  * </ul>
  *
  * Applied whenever chrome is shown (app start and every tap-to-reveal), not only
- * on first open.
+ * on first open. Classic article-bar start hide uses the same seconds once per
+ * Home session when {@code news_tap_mode=classic}.
  */
 public final class HomeModeChromeConfig {
 

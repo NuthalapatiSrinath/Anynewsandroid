@@ -170,7 +170,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="18dp" />
 
-    <!-- Categories (guest / non-reporter hub) -->
+    <!-- Categories (guest / user / reporter) -->
     <LinearLayout
         android:id="@+id/layout_profile_categories"
         android:layout_width="match_parent"

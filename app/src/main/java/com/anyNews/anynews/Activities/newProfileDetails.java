@@ -3080,7 +3080,6 @@ public class newProfileDetails extends AppCompatActivity {
         View hero = findViewById(R.id.profile_hero_brand);
         View guestCard = findViewById(R.id.profile_guest_card);
         View shortcuts = findViewById(R.id.layout_reporter_shortcuts);
-        View categories = findViewById(R.id.layout_profile_categories);
         View statusVideos = findViewById(R.id.layout_status_videos);
         View settingsRow = findViewById(R.id.layout_profile_settings_row);
         View contact = findViewById(R.id.layout_profile_contact);
@@ -3096,12 +3095,8 @@ public class newProfileDetails extends AppCompatActivity {
         if (shortcuts != null) shortcuts.setVisibility(rep);
         if (menuLang != null) menuLang.setVisibility(rep);
 
-        if (categories != null) {
-            if (isReporter) {
-                categories.setVisibility(View.GONE);
-            }
-            // Non-reporter: leave visible; setupProfileHubExtras / load path manages content.
-        }
+        // Categories strip: guest / user / reporter — visibility owned by
+        // setupProfileHubExtras / loadProfileCategories (not reporter chrome).
         // Status Videos is for everyone (guest / logged-in / reporter); admin flag only.
         if (statusVideos != null) {
             statusVideos.setVisibility(
@@ -4410,7 +4405,8 @@ public class newProfileDetails extends AppCompatActivity {
             profile_layout_shareToearn.setVisibility(View.GONE);
         }
 
-        // Categories horizontal strip (same list as SearchActivity) — guest hub only
+        // Categories horizontal strip (same list as SearchActivity) — all roles
+        // (guest / logged-in user / reporter). Not admin-gated; always load when present.
         View categoriesBlock = findViewById(R.id.layout_profile_categories);
         RecyclerView catList = findViewById(R.id.profile_categories_list);
         TextView catLabel = findViewById(R.id.profile_categories_label);
@@ -4428,14 +4424,10 @@ public class newProfileDetails extends AppCompatActivity {
                 }
             });
         }
-        boolean isRep = SharedPrefsData.getBool(this, Constants.is_reporter, Constants.PREF_NAME)
-                || showingReporterUi;
-        if (categoriesBlock != null && catList != null && !isRep) {
+        if (categoriesBlock != null && catList != null) {
             catList.setLayoutManager(
                     new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
             loadProfileCategories(catList, categoriesBlock);
-        } else if (categoriesBlock != null && isRep) {
-            categoriesBlock.setVisibility(View.GONE);
         }
         bindStatusVideosNewBadge();
         bindBecomeReporterNewBadge();

@@ -1701,6 +1701,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
+     * Force-hide Classic chrome on a card (same targets as tap Classic hide).
+     * Used for cold-start / first-paint auto-hide when {@code news_tap_mode=classic}.
+     */
+    public static void hideClassicChromeOnCard(
+            @Nullable Context ctx, @Nullable View cardRoot) {
+        if (cardRoot == null) return;
+        try {
+            hideHalfShareBrandingStrip(cardRoot);
+            View footer = cardRoot.findViewById(R.id.ll_footer_layout);
+            View sideMenu = cardRoot.findViewById(R.id.side_menu);
+            boolean fullPost = footer == null && sideMenu != null;
+            View classicChrome = footer != null ? footer : sideMenu;
+            if (classicChrome != null) {
+                classicChrome.setVisibility(View.INVISIBLE);
+            }
+            if (!fullPost) {
+                syncHalfEngagementWithWritersRow(ctx, cardRoot);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
      * Red ANYNEWS / slogan strip under media is for share-screenshot capture only.
      * Never reveal it from content-tap chrome toggles.
      */

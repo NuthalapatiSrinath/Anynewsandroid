@@ -178,6 +178,7 @@ import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
+import com.anyNews.anynews.Utils.NewsTapModeConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
 import com.anyNews.anynews.Utils.FlipAdWorkGate;
@@ -830,6 +831,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             new Handler(Looper.getMainLooper());
     private final Runnable homeModeChromeAutoHideRunnable =
             this::runHomeModeChromeAutoHide;
+    /**
+     * Classic (news_tap_mode) article-bar auto-hide after first paint into main News.
+     * Uses the same admin seconds as News|Read ({@code home_mode_chrome_auto_hide_seconds}).
+     */
+    private boolean classicChromeAutoHidePending = false;
+    private boolean classicChromeStartHideArmed = false;
+    private int classicChromeStartHideRetries = 0;
+    private final Handler classicChromeAutoHideHandler =
+            new Handler(Looper.getMainLooper());
+    private final Runnable classicChromeAutoHideRunnable =
+            this::runClassicChromeAutoHideOnStart;
     /** After first layout seat, segment switches always animate the orange thumb. */
     private boolean homeModeThumbPlaced = false;
     private Animator homeModeThumbAnimator;
@@ -6097,6 +6109,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         applyHomeModeContentVisibility();
         scheduleHomeModeChromeAutoHide(false);
+        scheduleClassicChromeAutoHideOnStart(false);
     }
 
     private void setupLocalFeedChrome() {
@@ -6831,6 +6844,74 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    /**
+     * When admin News tap mode is Classic, auto-hide article bars (writers footer /
+     * likes rail) after {@link HomeModeChromeConfig} seconds on cold start / first
+     * main-News paint — same delay as News|Read bar auto-hide. Tap still toggles.
+     * 0 disables. Runs once per Home session until cancelled by leaving main News.
+     */
+    private void scheduleClassicChromeAutoHideOnStart(boolean restartIfPending) {
+        if (!restartIfPending && (classicChromeAutoHidePending || classicChromeStartHideArmed)) {
+            return;
+        }
+        if (isFinishing() || isDestroyed()) return;
+        if (!NewsTapModeConfig.isClassic(this)) {
+            cancelClassicChromeAutoHideOnStart();
+            return;
+        }
+        if (!isOnlineMainNewsChromeActive()) {
+            cancelClassicChromeAutoHideOnStart();
+            return;
+        }
+        int seconds = HomeModeChromeConfig.getAutoHideSeconds(this);
+        if (seconds <= 0) {
+            cancelClassicChromeAutoHideOnStart();
+            return;
+        }
+        try {
+            classicChromeAutoHideHandler.removeCallbacks(classicChromeAutoHideRunnable);
+            classicChromeAutoHidePending = true;
+            classicChromeAutoHideHandler.postDelayed(
+                    classicChromeAutoHideRunnable, seconds * 1000L);
+        } catch (Exception ignored) {
+            classicChromeAutoHidePending = false;
+        }
+    }
+
+    private void runClassicChromeAutoHideOnStart() {
+        classicChromeAutoHidePending = false;
+        if (isFinishing() || isDestroyed()) return;
+        if (!NewsTapModeConfig.isClassic(this)) return;
+        if (!isOnlineMainNewsChromeActive()) return;
+        try {
+            View card = mFlipView != null ? mFlipView.getCurrentPageView() : null;
+            if (card == null) {
+                // Feed not painted yet — retry briefly (cap retries).
+                if (classicChromeStartHideRetries < 25) {
+                    classicChromeStartHideRetries++;
+                    classicChromeAutoHidePending = true;
+                    classicChromeAutoHideHandler.postDelayed(
+                            classicChromeAutoHideRunnable, 400L);
+                } else {
+                    classicChromeStartHideArmed = true;
+                }
+                return;
+            }
+            FlipperAdapter.hideClassicChromeOnCard(this, card);
+            classicChromeStartHideArmed = true;
+            classicChromeStartHideRetries = 0;
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void cancelClassicChromeAutoHideOnStart() {
+        classicChromeAutoHidePending = false;
+        try {
+            classicChromeAutoHideHandler.removeCallbacks(classicChromeAutoHideRunnable);
+        } catch (Exception ignored) {
+        }
+    }
+
     /** True when Offline News|Bookmarks pill chrome is the active UI mode. */
     public boolean isOfflineChromeMode() {
         return offlineChromeMode;
@@ -7454,6 +7535,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             homeModeChromeUserHidden = false;
             cancelHomeModeChromeAnimator();
             cancelHomeModeChromeAutoHide();
+            cancelClassicChromeAutoHideOnStart();
             cancelHomeModeThumbAnimator();
             homeModeThumbPlaced = false;
             resetHomeModeChromeTransform();
@@ -7572,6 +7654,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Arm auto-hide if chrome is visible and no timer is pending yet (e.g. first
         // presentation). Does not reset an in-flight countdown — interactions use bump.
         scheduleHomeModeChromeAutoHide(false);
+        scheduleClassicChromeAutoHideOnStart(false);
     }
 
     /**
