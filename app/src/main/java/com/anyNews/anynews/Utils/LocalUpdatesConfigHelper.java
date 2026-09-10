@@ -365,10 +365,44 @@ public final class LocalUpdatesConfigHelper {
             JSONObject o = toJsonObject(raw);
             if (o == null) return;
             Context app = context.getApplicationContext();
+            int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
             SharedPrefsData.putString(app, jsonKey, o.toString(), Constants.PREF_NAME);
             putBool(app, enabledKey, o.optBoolean("enabled", true));
             SharedPrefsData.putBool(app, setKey, true, Constants.PREF_NAME);
+            if (lang > 0) {
+                SharedPrefsData.putInt(app, Constants.LOCAL_UPDATES_SPLASH_LANG, lang, Constants.PREF_NAME);
+            }
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Drop weather/fuel/gold/jobs splash blobs so Telugu chrome cannot stick after
+     * LanguageID flip (next splash re-fills for the live language).
+     */
+    public static void clearLanguageSensitiveCaches(@Nullable Context context) {
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        try {
+            SharedPrefsData.putString(app, Constants.WEATHER_CONFIG_JSON, "", Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.FUEL_CONFIG_JSON, "", Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.GOLD_CONFIG_JSON, "", Constants.PREF_NAME);
+            SharedPrefsData.putString(app, Constants.JOBS_CONFIG_JSON, "", Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.LOCAL_UPDATES_SPLASH_LANG, 0, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** True when cached splash blobs were saved for a different LanguageID. */
+    public static boolean splashLangMismatch(@Nullable Context context) {
+        if (context == null) return false;
+        try {
+            Context app = context.getApplicationContext();
+            int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+            int stamped = SharedPrefsData.getInt(app, Constants.LOCAL_UPDATES_SPLASH_LANG, Constants.PREF_NAME);
+            return lang > 0 && stamped > 0 && stamped != lang;
+        } catch (Exception e) {
+            return false;
         }
     }
 

@@ -35,6 +35,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.StockSparklineView;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DailyUpdatesConfigHelper;
+import com.anyNews.anynews.Utils.DailyUpdatesLabels;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -91,7 +92,7 @@ public class StockMarketActivity extends AppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (!DailyUpdatesConfigHelper.isStockEnabled(this)) {
-            Toast.makeText(this, "స్టాక్ మార్కెట్ అందుబాటులో లేదు", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, DailyUpdatesLabels.stockDisabled(this), Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
@@ -112,6 +113,10 @@ public class StockMarketActivity extends AppCompatActivity {
         if (title != null) title.setText(DailyUpdatesConfigHelper.stockTitle(this));
         TextView source = findViewById(R.id.stock_source);
         if (source != null) source.setText(DailyUpdatesConfigHelper.stockLiveLabel(this));
+        TextView niftyLabel = findViewById(R.id.stock_nifty_label);
+        if (niftyLabel != null) niftyLabel.setText(DailyUpdatesLabels.nifty50(this));
+        TextView sensexLabel = findViewById(R.id.stock_sensex_label);
+        if (sensexLabel != null) sensexLabel.setText(DailyUpdatesLabels.sensex(this));
 
         ImageView back = findViewById(R.id.stock_btn_back);
         if (back != null) back.setOnClickListener(v -> finish());
@@ -126,6 +131,7 @@ public class StockMarketActivity extends AppCompatActivity {
 
         searchField = findViewById(R.id.stock_search);
         if (searchField != null) {
+            searchField.setHint(DailyUpdatesLabels.stockSearchHint(this));
             searchField.setOnFocusChangeListener((v, hasFocus) -> {
                 if (searchWrap != null) searchWrap.setSelected(hasFocus);
                 if (searchIcon != null) {
@@ -322,7 +328,7 @@ public class StockMarketActivity extends AppCompatActivity {
         items.clear();
         if (isSearch) {
             if (!rows.isEmpty()) {
-                items.add(ListItem.header("శోధన ఫలితాలు"));
+                items.add(ListItem.header(DailyUpdatesLabels.stockSearchResults(this)));
                 for (Row r : rows) items.add(ListItem.row(r));
             }
         } else {

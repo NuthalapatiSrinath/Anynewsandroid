@@ -217,4 +217,70 @@ public final class DailyUpdatesLabels {
         if (t.contains("మేఘ")) return "cloudy";
         return "partly_cloudy";
     }
+
+    @NonNull
+    public static String nifty50(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "നിഫ്റ്റി 50";
+            case 2: return "निफ्टी 50";
+            case 3: return "నిఫ్టీ 50";
+            case 4: return "நிஃப்டி 50";
+            case 5: return "ನಿಫ್ಟಿ 50";
+            case 6: return "ନିଫ୍ଟି 50";
+            default: return "Nifty 50";
+        }
+    }
+
+    @NonNull
+    public static String sensex(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "സെൻസെക്സ്";
+            case 2: return "सेंसेक्स";
+            case 3: return "సెన్సెక్స్";
+            case 4: return "சென்செக்ஸ்";
+            case 5: return "ಸೆನ್ಸೆಕ್ಸ್";
+            case 6: return "ସେନ୍ସେକ୍ସ";
+            default: return "Sensex";
+        }
+    }
+
+    /** Stock search box hint ("Share Shodana" / find shares). */
+    @NonNull
+    public static String stockSearchHint(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "ഷെയർ തിരയുക";
+            case 2: return "शेयर खोजें";
+            case 3: return "షేర్ శోధన";
+            case 4: return "பங்கு தேடல்";
+            case 5: return "ಷೇರ್ ಹುಡುಕಿ";
+            case 6: return "ସେୟାର ଖୋଜନ୍ତୁ";
+            default: return "Search shares";
+        }
+    }
+
+    @NonNull
+    public static String stockSearchResults(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "തിരച്ചിൽ ഫലങ്ങൾ";
+            case 2: return "खोज परिणाम";
+            case 3: return "శోధన ఫలితాలు";
+            case 4: return "தேடல் முடிவுகள்";
+            case 5: return "ಹುಡುಕಾಟ ಫಲಿತಾಂಶಗಳು";
+            case 6: return "ଖୋଜ ଫଳାଫଳ";
+            default: return "Search results";
+        }
+    }
+
+    @NonNull
+    public static String stockDisabled(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "സ്റ്റോക്ക് മാർക്കറ്റ് ലഭ്യമല്ല";
+            case 2: return "स्टॉक मार्केट उपलब्ध नहीं";
+            case 3: return "స్టాక్ మార్కెట్ అందుబాటులో లేదు";
+            case 4: return "பங்குச் சந்தை கிடைக்கவில்லை";
+            case 5: return "ಸ್ಟಾಕ್ ಮಾರ್ಕೆಟ್ ಲಭ್ಯವಿಲ್ಲ";
+            case 6: return "ଷ୍ଟକ୍ ମାର୍କେଟ୍ ଉପଲବ୍ଧ ନାହିଁ";
+            default: return "Stock market unavailable";
+        }
+    }
 }

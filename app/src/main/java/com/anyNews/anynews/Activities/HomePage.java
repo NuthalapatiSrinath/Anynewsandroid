@@ -6096,10 +6096,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             homeBookmarksEmpty.setOnClickListener(v -> toggleHomeModeChrome());
         }
 
-        // Default left segment; visibility driven by network.
+        // Default left segment; Classic starts with News|Read chrome hidden
+        // (never flash on cold start — user tap reveals).
         bookmarksModeSelected = false;
-        homeModeChromeUserHidden = false;
-        refreshHomeModeToggleUi();
+        if (NewsTapModeConfig.isClassic(this)) {
+            homeModeChromeUserHidden = true;
+            refreshHomeModeToggleUi();
+            setHomeModeChromeVisible(false, false);
+        } else {
+            homeModeChromeUserHidden = false;
+            refreshHomeModeToggleUi();
+            scheduleHomeModeChromeAutoHide(false);
+        }
         refreshHomeModeCounts();
         // Seed Read badge once; thereafter 30s poll + News|Read toggle only.
         try {
@@ -6108,7 +6116,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         applyHomeModeContentVisibility();
-        scheduleHomeModeChromeAutoHide(false);
         scheduleClassicChromeAutoHideOnStart(false);
     }
 
@@ -6845,10 +6852,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * When admin News tap mode is Classic, auto-hide article bars (writers footer /
-     * likes rail) after {@link HomeModeChromeConfig} seconds on cold start / first
-     * main-News paint — same delay as News|Read bar auto-hide. Tap still toggles.
-     * 0 disables. Runs once per Home session until cancelled by leaving main News.
+     * Classic mode: hide article bars immediately on first paint — never wait
+     * for auto-hide seconds (that caused a cold-start flash). Tap still toggles.
+     * Non-classic: no-op.
      */
     private void scheduleClassicChromeAutoHideOnStart(boolean restartIfPending) {
         if (!restartIfPending && (classicChromeAutoHidePending || classicChromeStartHideArmed)) {
@@ -6863,16 +6869,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             cancelClassicChromeAutoHideOnStart();
             return;
         }
-        int seconds = HomeModeChromeConfig.getAutoHideSeconds(this);
-        if (seconds <= 0) {
-            cancelClassicChromeAutoHideOnStart();
-            return;
-        }
+        // Immediate hide (post) — do not show bars first then hide after N seconds.
         try {
             classicChromeAutoHideHandler.removeCallbacks(classicChromeAutoHideRunnable);
             classicChromeAutoHidePending = true;
-            classicChromeAutoHideHandler.postDelayed(
-                    classicChromeAutoHideRunnable, seconds * 1000L);
+            classicChromeStartHideRetries = 0;
+            classicChromeAutoHideHandler.post(classicChromeAutoHideRunnable);
         } catch (Exception ignored) {
             classicChromeAutoHidePending = false;
         }
@@ -7532,7 +7534,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         // Online but Special / Video (or other non-main): hide pill + close right panel.
         if (isDeviceOnline() && !offlineChromeMode && !onlineMain) {
-            homeModeChromeUserHidden = false;
+            // Leaving main News — clear user-hidden only when not Classic
+            // (Classic must stay start-hidden when returning to main News).
+            if (!NewsTapModeConfig.isClassic(this)) {
+                homeModeChromeUserHidden = false;
+            }
             cancelHomeModeChromeAnimator();
             cancelHomeModeChromeAutoHide();
             cancelClassicChromeAutoHideOnStart();
@@ -9899,7 +9905,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             offlineChromeMode = false;
-            homeModeChromeUserHidden = false;
+            // Classic: keep News|Read hidden on reconnect (tap to reveal).
+            if (!NewsTapModeConfig.isClassic(this)) {
+                homeModeChromeUserHidden = false;
+            }
             // Leave offline bookmarks list; open on main News tab of online pill.
             if (bookmarksModeSelected) {
                 bookmarksModeSelected = false;

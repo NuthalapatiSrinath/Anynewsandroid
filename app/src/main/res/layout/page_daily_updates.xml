@@ -1088,9 +1088,10 @@
                         android:includeFontPadding="false"
                         android:marqueeRepeatLimit="marquee_forever"
                         android:singleLine="true"
-                        android:text="భారీ వర్షాలు · కొత్త రైళ్లు ప్రారంభం · రాష్ట్ర వార్తలు"
+                        android:text=""
                         android:textColor="#FFFFE8E8"
-                        android:textSize="11sp" />
+                        android:textSize="11sp"
+                        tools:text="Flash headlines…" />
 
                     <TextView
                         android:id="@+id/du_flash_more"

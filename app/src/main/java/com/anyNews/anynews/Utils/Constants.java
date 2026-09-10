@@ -528,6 +528,11 @@ public class Constants {
     public static String DU_MANA_HEADLINE_TEXT_SIZE_SP = "du_mana_headline_text_size_sp";
     /** Splash Redis/memory Flash ticker headlines JSON array. */
     public static String DU_FLASH_HEADLINES_JSON = "du_flash_headlines_json";
+    /** Language stamp for {@link #DU_FLASH_HEADLINES_JSON} — reject cross-lang Telugu ticker. */
+    public static String DU_FLASH_HEADLINES_LANG = "du_flash_headlines_lang";
+    public static String DU_LOCAL_HEADLINES_LANG = "du_local_headlines_lang";
+    /** Splash language stamp for weather/fuel/gold/jobs blobs. */
+    public static String LOCAL_UPDATES_SPLASH_LANG = "local_updates_splash_lang";
     /** Splash Redis/memory Mana Zilla local titles JSON array. */
     public static String DU_LOCAL_HEADLINES_JSON = "du_local_headlines_json";
     public static String DU_LOCAL_HEADLINES_DIST = "du_local_headlines_dist";

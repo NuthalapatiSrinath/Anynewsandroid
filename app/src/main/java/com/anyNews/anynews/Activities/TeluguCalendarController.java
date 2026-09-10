@@ -48,6 +48,7 @@ import androidx.viewpager.widget.ViewPager;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Ui.HomeFeedRevealView;
 import com.anyNews.anynews.Utils.CalendarRaasiLabels;
+import com.anyNews.anynews.Utils.PanchangLabels;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
@@ -452,6 +453,10 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (raasiBack != null) {
             if (show) {
                 raasiBack.setVisibility(View.VISIBLE);
+                raasiBack.setClickable(true);
+                raasiBack.setFocusable(true);
+                raasiBack.bringToFront();
+                raasiBack.setElevation(dp(12));
                 raasiBack.setOnClickListener(v -> requestCloseToDailyUpdates());
             } else {
                 raasiBack.setVisibility(View.GONE);
@@ -461,6 +466,10 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (panchangBack != null) {
             if (show) {
                 panchangBack.setVisibility(View.VISIBLE);
+                panchangBack.setClickable(true);
+                panchangBack.setFocusable(true);
+                panchangBack.bringToFront();
+                panchangBack.setElevation(dp(12));
                 panchangBack.setOnClickListener(v -> requestCloseToDailyUpdates());
             } else {
                 panchangBack.setVisibility(View.GONE);
@@ -886,6 +895,10 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (raasiBack != null) {
             // Dedicated DU entry shows toolbar back → Daily Updates; flip path hides it.
             syncDedicatedBackChrome();
+            raasiBack.bringToFront();
+            raasiBack.setClickable(true);
+            raasiBack.setFocusable(true);
+            raasiBack.setElevation(dp(12));
         }
         if (raasiHeaderShare != null) {
             // Match Petrol & Diesel: orange Material share in header.
@@ -1676,13 +1689,13 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             }
         }
         if (rashiLordValue != null) {
-            rashiLordValue.setText(RaasiContent.lordName(selectedRaasi));
+            rashiLordValue.setText(RaasiContent.lordName(host, selectedRaasi));
         }
         if (rashiElementValue != null) {
-            rashiElementValue.setText(RaasiContent.elementName(selectedRaasi));
+            rashiElementValue.setText(RaasiContent.elementName(host, selectedRaasi));
         }
         if (rashiGemValue != null) {
-            rashiGemValue.setText(RaasiContent.gemName(selectedRaasi));
+            rashiGemValue.setText(RaasiContent.gemName(host, selectedRaasi));
         }
         if (rashiColorValue != null) {
             rashiColorValue.setText(daily.color != null ? daily.color : "");
@@ -1715,7 +1728,9 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         int m0 = displayMonth.get(Calendar.MONTH);
         int d = selectedDay > 0 ? selectedDay : cal.get(Calendar.DAY_OF_MONTH);
         if (rashiDateValue != null) {
-            String weekday = weekdayTe(calForSelectedDay());
+            Calendar dayCal = calForSelectedDay();
+            String weekday = PanchangLabels.weekday(
+                    host, dayCal.get(java.util.Calendar.DAY_OF_WEEK));
             String dateTe = formatRashiInfoDate(y, m0, d, weekday);
             rashiDateValue.setText(dateTe);
         }
@@ -1723,7 +1738,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         if (rashiNakValue != null) {
             String nak = "—";
             if (day != null && day.nakshatra != null && day.nakshatra.name != null) {
-                nak = day.nakshatra.name;
+                nak = PanchangLabels.nakshatra(host, day.nakshatra.name);
             }
             rashiNakValue.setText(nak);
         }
@@ -1744,30 +1759,12 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
 
     @NonNull
     private String formatRashiInfoDate(int y, int m0, int d, @Nullable String weekday) {
-        String[] teMonths = {
-                "జనవరి", "ఫిబ్రవరి", "మార్చి", "ఏప్రిల్", "మే", "జూన్",
-                "జూలై", "ఆగష్టు", "సెప్టెంబర్", "అక్టోబర్", "నవంబర్", "డిసెంబర్"
-        };
-        String month = (m0 >= 0 && m0 < 12) ? teMonths[m0] : EN_MONTHS[Math.max(0, Math.min(11, m0))];
+        String month = PanchangLabels.monthName(host, m0);
         String base = d + " " + month + " " + y;
         if (weekday != null && !weekday.isEmpty()) {
             return base + " " + weekday;
         }
         return base;
-    }
-
-    @NonNull
-    private static String weekdayTe(@NonNull Calendar c) {
-        switch (c.get(Calendar.DAY_OF_WEEK)) {
-            case Calendar.SUNDAY: return "ఆదివారం";
-            case Calendar.MONDAY: return "సోమవారం";
-            case Calendar.TUESDAY: return "మంగళవారం";
-            case Calendar.WEDNESDAY: return "బుధవారం";
-            case Calendar.THURSDAY: return "గురువారం";
-            case Calendar.FRIDAY: return "శుక్రవారం";
-            case Calendar.SATURDAY: return "శనివారం";
-            default: return "";
-        }
     }
 
     /**
@@ -1814,8 +1811,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             addRashiSectionRowUnique(
                     CalendarRaasiLabels.sectionFinance(host),
                     R.drawable.ic_rashi_sec_finance,
-                    "ఈరోజు అదృష్ట సంఖ్యలు " + numbers
-                            + ". ఖర్చుల్లో జాగ్రత్త పాటించండి; అవసరమైన పనులకే డబ్బు కేటాయించండి.",
+                    PanchangLabels.financeBody(host, numbers),
                     seenBodies);
         }
 
@@ -1830,8 +1826,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             addRashiSectionRowUnique(
                     CalendarRaasiLabels.sectionHealth(host),
                     R.drawable.ic_rashi_sec_health,
-                    "ఆరోగ్యం కోసం తేలిక వ్యాయామం, నీరు, సమయానికి విశ్రాంతి అవసరం. అదృష్ట దిక్కు: "
-                            + dir + ".",
+                    PanchangLabels.healthBody(host, dir),
                     seenBodies);
         }
 
@@ -1852,8 +1847,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             addRashiSectionRowUnique(
                     CalendarRaasiLabels.sectionRemedy(host),
                     R.drawable.ic_rashi_sec_remedy,
-                    "శుభ రంగు " + color
-                            + "ను ధరించండి; నిశ్శబ్ద ప్రార్థన లేదా కృతజ్ఞతతో రోజును ముగించండి.",
+                    PanchangLabels.remedyBody(host, color),
                     seenBodies);
         }
     }
@@ -2320,21 +2314,21 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         appendShareSection(sb, CalendarRaasiLabels.shubhaTimes(host), day.safeShubha());
         appendShareSection(sb, CalendarRaasiLabels.ashubhaTimes(host),
                 day.safeAshubhaMerged(CalendarRaasiLabels.againConnector(host)));
-        appendShareSection(sb, "తిథి", day.safeTithiCard());
+        appendShareSection(sb, CalendarRaasiLabels.tithiLabel(host), day.safeTithiCard());
         if (day.nakshatra != null && day.nakshatra.name != null) {
             List<PanchangModels.TimeItem> nak = new ArrayList<>();
             nak.add(new PanchangModels.TimeItem(
-                    day.nakshatra.name,
+                    PanchangLabels.nakshatra(host, day.nakshatra.name),
                     day.nakshatra.endTime != null
-                            ? ("ముగింపు: " + day.nakshatra.endTime)
+                            ? (PanchangLabels.endTimePrefix(host) + day.nakshatra.endTime)
                             : ""));
             if (day.sunrise != null) {
-                nak.add(new PanchangModels.TimeItem("సూర్యోదయం", day.sunrise));
+                nak.add(new PanchangModels.TimeItem(PanchangLabels.sunrise(host), day.sunrise));
             }
             if (day.sunset != null) {
-                nak.add(new PanchangModels.TimeItem("సూర్యాస్తమయం", day.sunset));
+                nak.add(new PanchangModels.TimeItem(PanchangLabels.sunset(host), day.sunset));
             }
-            appendShareSection(sb, "నక్షత్రం", nak);
+            appendShareSection(sb, CalendarRaasiLabels.nakshatraLabel(host), nak);
         }
         sharePlainText(sb.toString().trim());
     }
@@ -2678,15 +2672,17 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             if (d.nakshatra != null && d.nakshatra.name != null) {
                 List<PanchangModels.TimeItem> nak = new ArrayList<>();
                 nak.add(new PanchangModels.TimeItem(
-                        d.nakshatra.name,
+                        PanchangLabels.nakshatra(host, d.nakshatra.name),
                         d.nakshatra.endTime != null
-                                ? ("ముగింపు: " + d.nakshatra.endTime)
+                                ? (PanchangLabels.endTimePrefix(host) + d.nakshatra.endTime)
                                 : ""));
                 if (d.sunrise != null) {
-                    nak.add(new PanchangModels.TimeItem("సూర్యోదయం", d.sunrise));
+                    nak.add(new PanchangModels.TimeItem(
+                            PanchangLabels.sunrise(host), d.sunrise));
                 }
                 if (d.sunset != null) {
-                    nak.add(new PanchangModels.TimeItem("సూర్యాస్తమయం", d.sunset));
+                    nak.add(new PanchangModels.TimeItem(
+                            PanchangLabels.sunset(host), d.sunset));
                 }
                 pages.add(new CardPage(
                         CalendarRaasiLabels.nakshatraLabel(host),

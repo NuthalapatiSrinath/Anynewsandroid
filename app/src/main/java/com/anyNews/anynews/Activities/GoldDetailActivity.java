@@ -31,6 +31,7 @@ import androidx.fragment.app.Fragment;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Ui.GoldHistoryChartView;
+import com.anyNews.anynews.Utils.GoldLabels;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
 import com.bumptech.glide.Glide;
 import com.google.android.material.datepicker.CalendarConstraints;
@@ -140,12 +141,30 @@ public class GoldDetailActivity extends AppCompatActivity {
 
     private void bindStatic() {
         JSONObject g = goldSource != null ? goldSource : new JSONObject();
-        setText(R.id.gold_top_title, LocalUpdatesConfigHelper.optString(g, "header_title",
-                getString(R.string.gold_title_default)));
+        String header = LocalUpdatesConfigHelper.optString(g, "header_title", "");
+        if (header.isEmpty() || GoldLabels.looksLikeTeluguChrome(header)) {
+            header = GoldLabels.title(this);
+        }
+        setText(R.id.gold_top_title, header);
+        setText(R.id.gold_date_label, GoldLabels.dateLabel(this));
         setText(R.id.gold_date_value, formatDateLabel(selectedDateIso));
         String disclaimer = LocalUpdatesConfigHelper.optString(g, "disclaimer", "");
-        if (disclaimer.isEmpty()) disclaimer = getString(R.string.gold_disclaimer_default);
+        if (disclaimer.isEmpty() || GoldLabels.looksLikeTeluguChrome(disclaimer)) {
+            disclaimer = GoldLabels.disclaimer(this);
+        }
         setText(R.id.gold_disclaimer, disclaimer);
+        setText(R.id.gold_card_title, GoldLabels.cardTitle(this));
+        setText(R.id.silver_card_title, GoldLabels.silverCardTitle(this));
+        setText(R.id.gold_col_details, GoldLabels.colDetails(this));
+        setText(R.id.gold_col_price, GoldLabels.colPrice(this));
+        setText(R.id.gold_col_change, GoldLabels.colChange(this));
+        setText(R.id.silver_col_details, GoldLabels.colDetails(this));
+        setText(R.id.silver_col_price, GoldLabels.colPrice(this));
+        setText(R.id.silver_col_change, GoldLabels.colChange(this));
+        setText(R.id.gold_chart_cta, GoldLabels.chartCta(this));
+        setText(R.id.silver_chart_cta, GoldLabels.chartCta(this));
+        setText(R.id.gold_chart_empty, GoldLabels.chartEmpty(this));
+        setText(R.id.silver_chart_empty, GoldLabels.chartEmpty(this));
 
         View source = findViewById(R.id.gold_source);
         if (source != null) source.setVisibility(View.GONE);
@@ -315,7 +334,7 @@ public class GoldDetailActivity extends AppCompatActivity {
     private void openDatePicker() {
         final TreeSet<String> available = availableHistoryDates(goldSource);
         if (available.isEmpty()) {
-            Toast.makeText(this, R.string.gold_date_no_data, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, GoldLabels.dateNoData(this), Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -373,7 +392,7 @@ public class GoldDetailActivity extends AppCompatActivity {
                 .build();
 
         MaterialDatePicker<Long> picker = MaterialDatePicker.Builder.datePicker()
-                .setTitleText(R.string.gold_date_label)
+                .setTitleText(GoldLabels.dateLabel(this))
                 .setSelection(selectionMs)
                 .setCalendarConstraints(constraints)
                 .setTheme(R.style.ThemeOverlay_AnyNews_GoldMaterialCalendar)
@@ -446,7 +465,7 @@ public class GoldDetailActivity extends AppCompatActivity {
         applyRatesForSelectedDate();
         refreshTables();
         if (!displayHasRates) {
-            Toast.makeText(this, R.string.gold_date_no_data, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, GoldLabels.dateNoData(this), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -657,11 +676,11 @@ public class GoldDetailActivity extends AppCompatActivity {
         if (tabs == null) return;
         tabs.removeAllViews();
         String[] labels = {
-                getString(R.string.gold_weight_1g),
-                getString(R.string.gold_weight_8g),
-                getString(R.string.gold_weight_10g),
-                getString(R.string.gold_weight_100g),
-                getString(R.string.gold_weight_1kg)
+                GoldLabels.weight(this, 1),
+                GoldLabels.weight(this, 8),
+                GoldLabels.weight(this, 10),
+                GoldLabels.weight(this, 100),
+                GoldLabels.weight(this, 1000)
         };
         float d = getResources().getDisplayMetrics().density;
         for (int i = 0; i < GOLD_WEIGHTS_G.length; i++) {
@@ -706,10 +725,10 @@ public class GoldDetailActivity extends AppCompatActivity {
         if (tabs == null) return;
         tabs.removeAllViews();
         String[] labels = {
-                getString(R.string.gold_weight_1g),
-                getString(R.string.gold_weight_10g),
-                getString(R.string.gold_weight_100g),
-                getString(R.string.gold_weight_1kg)
+                GoldLabels.weight(this, 1),
+                GoldLabels.weight(this, 10),
+                GoldLabels.weight(this, 100),
+                GoldLabels.weight(this, 1000)
         };
         float d = getResources().getDisplayMetrics().density;
         for (int i = 0; i < SILVER_WEIGHTS_G.length; i++) {
@@ -953,8 +972,8 @@ public class GoldDetailActivity extends AppCompatActivity {
         line.setPadding(0, (int) (12 * d), 0, (int) (8 * d));
         TextView hint = new TextView(this);
         hint.setText(displayHasRates
-                ? R.string.gold_rates_unavailable
-                : R.string.gold_date_no_data);
+                ? GoldLabels.ratesUnavailable(this)
+                : GoldLabels.dateNoData(this));
         hint.setTextColor(COLOR_MUTED);
         hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         line.addView(hint);
@@ -1029,7 +1048,7 @@ public class GoldDetailActivity extends AppCompatActivity {
             goldChart.setHistory(hist, GoldHistoryChartView.PRICE_KEY_GOLD);
         }
         String goldTitle = LocalUpdatesConfigHelper.optString(src, "chart_title", "");
-        if (goldTitle.isEmpty()) goldTitle = getString(R.string.gold_history_title_gold);
+        if (goldTitle.isEmpty() || GoldLabels.looksLikeTeluguChrome(goldTitle)) goldTitle = GoldLabels.historyTitleGold(this);
         setText(R.id.gold_chart_panel_title, goldTitle);
         updateChartEmptyHints();
     }
@@ -1046,7 +1065,7 @@ public class GoldDetailActivity extends AppCompatActivity {
             silverChart.setHistory(hist, GoldHistoryChartView.PRICE_KEY_SILVER);
         }
         String silverTitle = LocalUpdatesConfigHelper.optString(src, "silver_chart_title", "");
-        if (silverTitle.isEmpty()) silverTitle = getString(R.string.gold_history_title_silver);
+        if (silverTitle.isEmpty() || GoldLabels.looksLikeTeluguChrome(silverTitle)) silverTitle = GoldLabels.historyTitleSilver(this);
         setText(R.id.silver_chart_panel_title, silverTitle);
         updateChartEmptyHints();
     }
@@ -1169,16 +1188,16 @@ public class GoldDetailActivity extends AppCompatActivity {
         View cta = findViewById(R.id.gold_chart_cta);
         if (cta instanceof TextView) {
             ((TextView) cta).setText(goldChartOpen
-                    ? R.string.gold_chart_cta_hide
-                    : R.string.gold_chart_cta);
+                    ? GoldLabels.chartCtaHide(this)
+                    : GoldLabels.chartCta(this));
         } else if (cta instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) cta;
             for (int i = 0; i < vg.getChildCount(); i++) {
                 View child = vg.getChildAt(i);
                 if (child instanceof TextView) {
                     ((TextView) child).setText(goldChartOpen
-                            ? R.string.gold_chart_cta_hide
-                            : R.string.gold_chart_cta);
+                            ? GoldLabels.chartCtaHide(this)
+                            : GoldLabels.chartCta(this));
                     break;
                 }
             }
@@ -1195,16 +1214,16 @@ public class GoldDetailActivity extends AppCompatActivity {
         View cta = findViewById(R.id.silver_chart_cta);
         if (cta instanceof TextView) {
             ((TextView) cta).setText(silverChartOpen
-                    ? R.string.gold_chart_cta_hide
-                    : R.string.gold_chart_cta);
+                    ? GoldLabels.chartCtaHide(this)
+                    : GoldLabels.chartCta(this));
         } else if (cta instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) cta;
             for (int i = 0; i < vg.getChildCount(); i++) {
                 View child = vg.getChildAt(i);
                 if (child instanceof TextView) {
                     ((TextView) child).setText(silverChartOpen
-                            ? R.string.gold_chart_cta_hide
-                            : R.string.gold_chart_cta);
+                            ? GoldLabels.chartCtaHide(this)
+                            : GoldLabels.chartCta(this));
                     break;
                 }
             }
@@ -1235,17 +1254,16 @@ public class GoldDetailActivity extends AppCompatActivity {
         JSONObject g = goldData != null ? goldData : new JSONObject();
         String body;
         if (!displayHasRates) {
-            body = getString(R.string.gold_title_default) + " — "
-                    + getString(R.string.gold_rates_unavailable);
+            body = GoldLabels.title(this) + " — " + GoldLabels.ratesUnavailable(this);
         } else {
             double g10 = LocalUpdatesConfigHelper.optNumber(g, "gold_24k_10g", 0);
             double skg = LocalUpdatesConfigHelper.optNumber(g, "silver_kg", 0);
-            body = "బంగారం & వెండి — "
+            body = GoldLabels.title(this) + " — "
                     + LocalUpdatesConfigHelper.optString(
                     goldSource != null ? goldSource : g, "location_name", "")
                     + " (" + formatDateLabel(selectedDateIso) + ")"
                     + (g10 > 0 ? ": 24K ₹" + LocalUpdatesConfigHelper.formatInr(g10) + " /10g" : "")
-                    + (skg > 0 ? ", వెండి ₹" + LocalUpdatesConfigHelper.formatInr(skg) + " /kg" : "");
+                    + (skg > 0 ? ", Silver ₹" + LocalUpdatesConfigHelper.formatInr(skg) + " /kg" : "");
         }
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");

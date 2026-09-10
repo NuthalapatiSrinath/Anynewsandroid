@@ -32,6 +32,28 @@ public final class RaasiContent {
             "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
     };
 
+    public static final String[] NAMES_HI = {
+            "मेष", "वृषभ", "मिथुन", "कर्क", "सिंह", "कन्या",
+            "तुला", "वृश्चिक", "धनु", "मकर", "कुंभ", "मीन"
+    };
+    public static final String[] NAMES_ML = {
+            "മേഷം", "വൃഷഭം", "മിഥുനം", "കർക്കടകം", "സിംഹം", "കന്യ",
+            "തുല", "വൃശ്ചികം", "ധനു", "മകരം", "കുംഭം", "മീനം"
+    };
+    public static final String[] NAMES_TA = {
+            "மேஷம்", "ரிஷபம்", "மிதுனம்", "கடகம்", "சிம்மம்", "கன்னி",
+            "துலாம்", "விருச்சிகம்", "\u0BA4\u0BA9\u0BC1\u0BB7\u0BC1",
+            "மகரம்", "கும்பம்", "மீனம்"
+    };
+    public static final String[] NAMES_KN = {
+            "ಮೇಷ", "ವೃಷಭ", "ಮಿಥುನ", "ಕರ್ಕಾಟಕ", "ಸಿಂಹ", "ಕನ್ಯಾ",
+            "ತುಲಾ", "ವೃಶ್ಚಿಕ", "ಧನು", "ಮಕರ", "ಕುಂಭ", "ಮೀನ"
+    };
+    public static final String[] NAMES_OR = {
+            "ମେଷ", "ବୃଷ", "ମିଥୁନ", "କର୍କଟ", "ସିଂହ", "କନ୍ୟା",
+            "ତୁଳା", "ବୃଶ୍ଚିକ", "ଧନୁ", "ମକର", "କୁମ୍ଭ", "ମୀନ"
+    };
+
     /** Stable keys for admin default_rashi_id enum / splash. */
     public static final String[] KEYS = {
             "mesha", "vrishabha", "mithuna", "karkataka", "simha", "kanya",
@@ -357,7 +379,7 @@ public final class RaasiContent {
             if (pack != null) {
                 RaasiDailyCache.Item item = pack.get(id);
                 if (item != null && item.body != null) {
-                    return toDaily(id, dateKey, day, item);
+                    return toDaily(id, lang, dateKey, day, item);
                 }
             }
         }
@@ -388,14 +410,15 @@ public final class RaasiContent {
     }
 
     @NonNull
-    private static Daily toDaily(int id, @NonNull String dateKey, @NonNull Calendar day,
+    private static Daily toDaily(int id, int lang, @NonNull String dateKey, @NonNull Calendar day,
                                  @NonNull RaasiDailyCache.Item item) {
         int y = day.get(Calendar.YEAR);
         int m0 = day.get(Calendar.MONTH);
         int d = day.get(Calendar.DAY_OF_MONTH);
         String dateDisp = String.format(Locale.US, "%02d %s %d", d, EN_MONTHS[m0], y);
-        String title = NAMES_TE[id] + " రాశి ఫలితాలు (" + dateDisp + ")";
-        return new Daily(id, NAMES_TE[id], dateKey, title,
+        String name = nameForLang(lang, id);
+        String title = name + " రాశి ఫలితాలు (" + dateDisp + ")";
+        return new Daily(id, name, dateKey, title,
                 item.body != null ? item.body : "",
                 item.color != null ? item.color : "",
                 item.numbers != null ? item.numbers : "",
@@ -432,8 +455,9 @@ public final class RaasiContent {
         String dir = dirs[Math.floorMod(seed / 5 + doy, dirs.length)];
 
         String dateDisp = String.format(Locale.US, "%02d %s %d", d, EN_MONTHS[m0], y);
-        String title = NAMES_TE[id] + " రాశి ఫలితాలు (" + dateDisp + ")";
-        return new Daily(id, NAMES_TE[id], dateKey, title, body, color, numbers, dir);
+        String name = nameForLang(lang, id);
+        String title = name + " రాశి ఫలితాలు (" + dateDisp + ")";
+        return new Daily(id, name, dateKey, title, body, color, numbers, dir);
     }
 
     /** Traditional lord names (UI chrome; index 0 = Mesha). */
@@ -448,6 +472,82 @@ public final class RaasiContent {
     public static final String[] GEMS_TE = {
             "పగడం", "వజ్రం", "పచ్చ", "ముత్యం", "మాణిక్యం", "పచ్చ",
             "వజ్రం", "పగడం", "పుష్యరాగం", "నీలం", "నీలం", "పుష్యరాగం"
+    };
+
+    private static final String[] LORDS_EN = {
+            "Mars", "Venus", "Mercury", "Moon", "Sun", "Mercury",
+            "Venus", "Mars", "Jupiter", "Saturn", "Saturn", "Jupiter"
+    };
+    private static final String[] LORDS_HI = {
+            "मंगल", "शुक्र", "बुध", "चंद्र", "सूर्य", "बुध",
+            "शुक्र", "मंगल", "गुरु", "शनि", "शनि", "गुरु"
+    };
+    private static final String[] LORDS_ML = {
+            "ചൊവ്വ", "ശുക്രൻ", "ബുധൻ", "ചന്ദ്രൻ", "സൂര്യൻ", "ബുധൻ",
+            "ശുക്രൻ", "ചൊവ്വ", "വ്യാഴം", "ശനി", "ശനി", "വ്യാഴം"
+    };
+    private static final String[] LORDS_TA = {
+            "செவ்வாய்", "சுக்ரன்", "புதன்", "சந்திரன்", "சூரியன்", "புதன்",
+            "சுக்ரன்", "செவ்வாய்", "குரு", "சனி", "சனி", "குரு"
+    };
+    private static final String[] LORDS_KN = {
+            "ಮಂಗಳ", "ಶುಕ್ರ", "ಬುಧ", "ಚಂದ್ರ", "ಸೂರ್ಯ", "ಬುಧ",
+            "ಶುಕ್ರ", "ಮಂಗಳ", "ಗುರು", "ಶನಿ", "ಶನಿ", "ಗುರು"
+    };
+    private static final String[] LORDS_OR = {
+            "ମଙ୍ଗଳ", "ଶୁକ୍ର", "ବୁଧ", "ଚନ୍ଦ୍ର", "ସୂର୍ଯ୍ୟ", "ବୁଧ",
+            "ଶୁକ୍ର", "ମଙ୍ଗଳ", "ଗୁରୁ", "ଶନି", "ଶନି", "ଗୁରୁ"
+    };
+
+    private static final String[] ELEMENTS_EN = {
+            "Fire", "Earth", "Air", "Water", "Fire", "Earth",
+            "Air", "Water", "Fire", "Earth", "Air", "Water"
+    };
+    private static final String[] ELEMENTS_HI = {
+            "अग्नि", "पृथ्वी", "वायु", "जल", "अग्नि", "पृथ्वी",
+            "वायु", "जल", "अग्नि", "पृथ्वी", "वायु", "जल"
+    };
+    private static final String[] ELEMENTS_ML = {
+            "അഗ്നി", "ഭൂമി", "വായു", "ജലം", "അഗ്നി", "ഭൂമി",
+            "വായു", "ജലം", "അഗ്നി", "ഭൂമി", "വായു", "ജലം"
+    };
+    private static final String[] ELEMENTS_TA = {
+            "நெருப்பு", "பூமி", "காற்று", "நீர்", "நெருப்பு", "பூமி",
+            "காற்று", "நீர்", "நெருப்பு", "பூமி", "காற்று", "நீர்"
+    };
+    private static final String[] ELEMENTS_KN = {
+            "ಅಗ್ನಿ", "ಭೂಮಿ", "ವಾಯು", "ಜಲ", "ಅಗ್ನಿ", "ಭೂಮಿ",
+            "ವಾಯು", "ಜಲ", "ಅಗ್ನಿ", "ಭೂಮಿ", "ವಾಯು", "ಜಲ"
+    };
+    private static final String[] ELEMENTS_OR = {
+            "ଅଗ୍ନି", "ପୃଥିବୀ", "ବାୟୁ", "ଜଳ", "ଅଗ୍ନି", "ପୃଥିବୀ",
+            "ବାୟୁ", "ଜଳ", "ଅଗ୍ନି", "ପୃଥିବୀ", "ବାୟୁ", "ଜଳ"
+    };
+
+    private static final String[] GEMS_EN = {
+            "Coral", "Diamond", "Emerald", "Pearl", "Ruby", "Emerald",
+            "Diamond", "Coral", "Yellow sapphire", "Blue sapphire", "Blue sapphire",
+            "Yellow sapphire"
+    };
+    private static final String[] GEMS_HI = {
+            "मूंगा", "हीरा", "पanna", "मोती", "माणिक", "पanna",
+            "हीरा", "मूंगा", "पुखराज", "नीलम", "नीलम", "पुखराज"
+    };
+    private static final String[] GEMS_ML = {
+            "പവഴം", "വജ്രം", "പച്ച", "മുത്ത്", "മാണിക്യം", "പച്ച",
+            "വജ്രം", "പവഴം", "പുഷ്യരാഗം", "നീലം", "നീലം", "പുഷ്യരാഗം"
+    };
+    private static final String[] GEMS_TA = {
+            "பவளம்", "வைரம்", "மரகதம்", "முத்து", "மாணிக்கம்", "மரகதம்",
+            "வைரம்", "பவளம்", "புஷ்பராகம்", "நீலம்", "நீலம்", "புஷ்பராகம்"
+    };
+    private static final String[] GEMS_KN = {
+            "ಪಗಡ", "ವಜ್ರ", "ಪಚ್ಚ", "ಮುತ್ತು", "ಮಾಣಿಕ್ಯ", "ಪಚ್ಚ",
+            "ವಜ್ರ", "ಪಗಡ", "ಪುಷ್ಯರಾಗ", "ನೀಲ", "ನೀಲ", "ಪುಷ್ಯರಾಗ"
+    };
+    private static final String[] GEMS_OR = {
+            "ପମ୍ପଡି", "ହୀରା", "ପଚ୍ଚ", "ମୁକ୍ତା", "ମାଣିକ୍ୟ", "ପଚ୍ଚ",
+            "ହୀରା", "ପମ୍ପଡି", "ପୁଷ୍ୟରାଗ", "ନୀଳ", "ନୀଳ", "ପୁଷ୍ୟରାଗ"
     };
 
     /** Premium gold icon (ic_rashi_*), falls back to legacy ic_raasi_*. */
@@ -469,16 +569,88 @@ public final class RaasiContent {
         return res != 0 ? res : iconResId(context, id);
     }
 
+    /** Legacy — always Telugu lord name. */
     public static String lordName(int rashiId0) {
         return LORDS_TE[clampId(rashiId0)];
     }
 
+    /** Legacy — always Telugu element name. */
     public static String elementName(int rashiId0) {
         return ELEMENTS_TE[clampId(rashiId0)];
     }
 
+    /** Legacy — always Telugu gem name. */
     public static String gemName(int rashiId0) {
         return GEMS_TE[clampId(rashiId0)];
+    }
+
+    @NonNull
+    public static String displayName(@Nullable Context context, int rashiId0) {
+        return nameForLang(langFromContext(context), clampId(rashiId0));
+    }
+
+    @NonNull
+    public static String lordName(@Nullable Context context, int rashiId0) {
+        return pickForLang(langFromContext(context), LORDS_TE, LORDS_ML, LORDS_HI,
+                LORDS_TA, LORDS_KN, LORDS_OR, LORDS_EN, clampId(rashiId0));
+    }
+
+    @NonNull
+    public static String elementName(@Nullable Context context, int rashiId0) {
+        return pickForLang(langFromContext(context), ELEMENTS_TE, ELEMENTS_ML, ELEMENTS_HI,
+                ELEMENTS_TA, ELEMENTS_KN, ELEMENTS_OR, ELEMENTS_EN, clampId(rashiId0));
+    }
+
+    @NonNull
+    public static String gemName(@Nullable Context context, int rashiId0) {
+        return pickForLang(langFromContext(context), GEMS_TE, GEMS_ML, GEMS_HI,
+                GEMS_TA, GEMS_KN, GEMS_OR, GEMS_EN, clampId(rashiId0));
+    }
+
+    private static int langFromContext(@Nullable Context context) {
+        if (context == null) return 0;
+        try {
+            return SharedPrefsData.getInt(
+                    context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    @NonNull
+    private static String nameForLang(int lang, int rashiId0) {
+        int id = clampId(rashiId0);
+        switch (lang) {
+            case 1: return NAMES_ML[id];
+            case 2: return NAMES_HI[id];
+            case 3: return NAMES_TE[id];
+            case 4: return NAMES_TA[id];
+            case 5: return NAMES_KN[id];
+            case 6: return NAMES_OR[id];
+            default: return NAMES_EN[id];
+        }
+    }
+
+    @NonNull
+    private static String pickForLang(
+            int lang,
+            @NonNull String[] te,
+            @NonNull String[] ml,
+            @NonNull String[] hi,
+            @NonNull String[] ta,
+            @NonNull String[] kn,
+            @NonNull String[] or,
+            @NonNull String[] en,
+            int id) {
+        switch (lang) {
+            case 1: return ml[id];
+            case 2: return hi[id];
+            case 3: return te[id];
+            case 4: return ta[id];
+            case 5: return kn[id];
+            case 6: return or[id];
+            default: return en[id];
+        }
     }
 
     private static String[] templatesA(int lang) {

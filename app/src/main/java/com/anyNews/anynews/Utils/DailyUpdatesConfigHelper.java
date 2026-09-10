@@ -180,8 +180,25 @@ public final class DailyUpdatesConfigHelper {
         if (context == null) return;
         try {
             Context app = context.getApplicationContext();
+            int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
             JSONObject o = toJsonObject(raw);
-            if (o == null) return;
+            if (o == null) {
+                // Missing splash pack must not leave a prior language's ticker.
+                SharedPrefsData.putString(
+                        app, Constants.DU_FLASH_HEADLINES_JSON, "[]", Constants.PREF_NAME);
+                SharedPrefsData.putInt(app, Constants.DU_FLASH_HEADLINES_LANG, lang, Constants.PREF_NAME);
+                return;
+            }
+            if (o.has("language_id")) {
+                int packLang = o.optInt("language_id", 0);
+                if (packLang > 0 && lang > 0 && packLang != lang) {
+                    SharedPrefsData.putString(
+                            app, Constants.DU_FLASH_HEADLINES_JSON, "[]", Constants.PREF_NAME);
+                    SharedPrefsData.putInt(
+                            app, Constants.DU_FLASH_HEADLINES_LANG, lang, Constants.PREF_NAME);
+                    return;
+                }
+            }
             if (o.has("enabled")) {
                 putBool(app, Constants.DU_FLASH_NEWS_ENABLED, o.optBoolean("enabled", true));
             }
@@ -189,6 +206,7 @@ public final class DailyUpdatesConfigHelper {
             if (o.has("enabled") && !o.optBoolean("enabled", true)) {
                 SharedPrefsData.putString(
                         app, Constants.DU_FLASH_HEADLINES_JSON, "[]", Constants.PREF_NAME);
+                SharedPrefsData.putInt(app, Constants.DU_FLASH_HEADLINES_LANG, lang, Constants.PREF_NAME);
                 return;
             }
             JSONArray arr = o.optJSONArray("headlines");
@@ -197,6 +215,7 @@ public final class DailyUpdatesConfigHelper {
                     Constants.DU_FLASH_HEADLINES_JSON,
                     arr != null ? arr.toString() : "[]",
                     Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.DU_FLASH_HEADLINES_LANG, lang, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
     }
@@ -206,14 +225,21 @@ public final class DailyUpdatesConfigHelper {
         if (context == null) return;
         try {
             Context app = context.getApplicationContext();
+            int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
             JSONObject o = toJsonObject(raw);
-            if (o == null) return;
+            if (o == null) {
+                SharedPrefsData.putString(
+                        app, Constants.DU_LOCAL_HEADLINES_JSON, "[]", Constants.PREF_NAME);
+                SharedPrefsData.putInt(app, Constants.DU_LOCAL_HEADLINES_LANG, lang, Constants.PREF_NAME);
+                return;
+            }
             JSONArray arr = o.optJSONArray("titles");
             SharedPrefsData.putString(
                     app,
                     Constants.DU_LOCAL_HEADLINES_JSON,
                     arr != null ? arr.toString() : "[]",
                     Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.DU_LOCAL_HEADLINES_LANG, lang, Constants.PREF_NAME);
             putIntClamped(app, Constants.DU_LOCAL_HEADLINES_DIST, o.optInt("dist_id", 0), 0, 999999);
             String t1 = "";
             String t2 = "";
@@ -237,8 +263,14 @@ public final class DailyUpdatesConfigHelper {
     public static String[] flashHeadlines(@Nullable Context context) {
         if (context == null) return new String[0];
         try {
+            Context app = context.getApplicationContext();
+            int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+            int stamped = SharedPrefsData.getInt(app, Constants.DU_FLASH_HEADLINES_LANG, Constants.PREF_NAME);
+            if (lang > 0 && stamped > 0 && stamped != lang) {
+                return new String[0];
+            }
             String s = SharedPrefsData.getString(
-                    context.getApplicationContext(),
+                    app,
                     Constants.DU_FLASH_HEADLINES_JSON,
                     Constants.PREF_NAME);
             if (TextUtils.isEmpty(s)) return new String[0];
@@ -258,8 +290,14 @@ public final class DailyUpdatesConfigHelper {
     public static String[] localHeadlines(@Nullable Context context) {
         if (context == null) return new String[0];
         try {
+            Context app = context.getApplicationContext();
+            int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+            int stamped = SharedPrefsData.getInt(app, Constants.DU_LOCAL_HEADLINES_LANG, Constants.PREF_NAME);
+            if (lang > 0 && stamped > 0 && stamped != lang) {
+                return new String[0];
+            }
             String s = SharedPrefsData.getString(
-                    context.getApplicationContext(),
+                    app,
                     Constants.DU_LOCAL_HEADLINES_JSON,
                     Constants.PREF_NAME);
             if (TextUtils.isEmpty(s)) return new String[0];
@@ -548,8 +586,11 @@ public final class DailyUpdatesConfigHelper {
         try {
             SharedPrefsData.putString(app, Constants.DU_FLASH_HEADLINES_JSON, "[]", Constants.PREF_NAME);
             SharedPrefsData.putString(app, Constants.DU_LOCAL_HEADLINES_JSON, "[]", Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.DU_FLASH_HEADLINES_LANG, 0, Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.DU_LOCAL_HEADLINES_LANG, 0, Constants.PREF_NAME);
             SharedPrefsData.putString(app, "du_mana_title_1", "", Constants.PREF_NAME);
             SharedPrefsData.putString(app, "du_mana_title_2", "", Constants.PREF_NAME);
+            LocalUpdatesConfigHelper.clearLanguageSensitiveCaches(app);
         } catch (Exception ignored) {
         }
     }

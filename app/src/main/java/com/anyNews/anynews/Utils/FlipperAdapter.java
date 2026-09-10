@@ -1,6 +1,7 @@
 package com.anyNews.anynews.Utils;
 
 import static android.view.View.GONE;
+import static android.view.View.INVISIBLE;
 import static android.view.View.VISIBLE;
 import static androidx.core.content.ContextCompat.getSystemService;
 import static com.anyNews.anynews.R.drawable.ic__volume_up;
@@ -1421,6 +1422,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // Half: keep engagement row in sync with writers-row visibility after bind/recycle.
         if (!fullPost) {
             syncHalfEngagementWithWritersRow(convertView.getContext(), convertView);
+        }
+
+        // Classic: bars must never appear on bind (cold start / recycle).
+        if (NewsTapModeConfig.isClassic(convertView.getContext())) {
+            hideClassicChromeOnCard(convertView.getContext(), convertView);
         }
 
         // Half-article body / title regions (not footer-toggle host views).
@@ -5879,7 +5885,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         TextView textViewPostDate = convertView.findViewById(R.id.textViewPostDate);
         halfImageActivity.ll_footer_layout = convertView.findViewById(R.id.ll_footer_layout);
         showLog("ll_footer_layout:::"+halfImageActivity.ll_footer_layout.getVisibility());
-        halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
+        if (NewsTapModeConfig.isClassic(context)) {
+            halfImageActivity.ll_footer_layout.setVisibility(INVISIBLE);
+        } else {
+            halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
+        }
         halfImageActivity.parent_layout = convertView.findViewById(R.id.parent_layout);
         AvatarImageHelper.loadUil(imageLoader, halfImageActivity.writer_profile_pic, list.get(position).getWriterProfile());
         halfImageActivity.app_download_logo.setImageResource(R.drawable.ic_download_now_icon);
@@ -6397,7 +6407,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (indicator != null) {
                     indicator.setViewPager(halfImageActivity.viewPager);
                 }
-                halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
+                if (NewsTapModeConfig.isClassic(context)) {
+                    halfImageActivity.ll_footer_layout.setVisibility(INVISIBLE);
+                } else {
+                    halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
+                }
             } else {
                 halfImageActivity.galleryImageLayout.setVisibility(GONE);
                 halfImageActivity.new_half_image.setVisibility(VISIBLE);

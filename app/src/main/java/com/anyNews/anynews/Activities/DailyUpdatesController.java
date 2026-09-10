@@ -491,6 +491,9 @@ public final class DailyUpdatesController {
                         sb.append(heads[i]);
                     }
                     headline.setText(sb.toString());
+                } else {
+                    // Never leave Telugu XML placeholder / stale ticker on Hindi/etc.
+                    headline.setText("");
                 }
                 headline.setSelected(true);
             }
@@ -1815,11 +1818,11 @@ public final class DailyUpdatesController {
 
     @NonNull
     private String indexLabelNifty() {
-        return "Nifty";
+        return DailyUpdatesLabels.nifty50(host);
     }
 
     @NonNull
     private String indexLabelSensex() {
-        return "Sensex";
+        return DailyUpdatesLabels.sensex(host);
     }
 }

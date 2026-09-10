@@ -80,10 +80,11 @@
             android:paddingBottom="10dp">
 
             <TextView
+                android:id="@+id/stock_nifty_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:includeFontPadding="false"
-                android:text="నిఫ్టీ 50"
+                android:text="Nifty 50"
                 android:textColor="#FFA5B4FC"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -138,10 +139,11 @@
             android:paddingBottom="10dp">
 
             <TextView
+                android:id="@+id/stock_sensex_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:includeFontPadding="false"
-                android:text="సెన్సెక్స్"
+                android:text="Sensex"
                 android:textColor="#FFA5B4FC"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -213,7 +215,7 @@
             android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:hint="షేర్ శోధన (ఉదా: RELIANCE)"
+            android:hint="Search shares"
             android:imeOptions="actionSearch"
             android:inputType="text"
             android:maxLines="1"

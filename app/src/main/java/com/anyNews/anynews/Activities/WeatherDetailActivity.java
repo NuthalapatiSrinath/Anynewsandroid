@@ -25,6 +25,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
+import com.anyNews.anynews.Utils.WeatherDetailLabels;
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
@@ -96,7 +97,8 @@ public class WeatherDetailActivity extends AppCompatActivity {
     private void bindUi(@Nullable JSONObject w) {
         if (w == null) w = new JSONObject();
         // Prefer state / region for hero — not a district name.
-        String region = LocalUpdatesConfigHelper.optString(w, "location_region", "ఆంధ్రప్రదేశ్, భారత్");
+        String region = LocalUpdatesConfigHelper.optString(
+                w, "location_region", WeatherDetailLabels.defaultRegion(this));
         String place = LocalUpdatesConfigHelper.optString(w, "location_name", "");
         // If location_name looks like a district desk city, prefer region’s first segment.
         String heroPlace = region;
@@ -109,16 +111,21 @@ public class WeatherDetailActivity extends AppCompatActivity {
         int temp = LocalUpdatesConfigHelper.optNumberInt(w, "temp_c", 31);
         setText(R.id.weather_temp, temp + "°C");
         setText(R.id.weather_condition, LocalUpdatesConfigHelper.weatherCondition(this));
-        setText(R.id.weather_feels,
-                "అనుభూతి: " + LocalUpdatesConfigHelper.optNumberInt(w, "feels_like_c", 34) + "°C  "
-                        + "గరిష్టం: " + LocalUpdatesConfigHelper.optNumberInt(w, "high_c", 32) + "°C  "
-                        + "కనిష్టం: " + LocalUpdatesConfigHelper.optNumberInt(w, "low_c", 25) + "°C");
-        setText(R.id.weather_humidity,
-                "వర్షం " + LocalUpdatesConfigHelper.optNumberInt(w, "precip_pct", 0) + "%"
-                        + " · తేమ " + LocalUpdatesConfigHelper.optNumberInt(w, "humidity", 62) + "%");
-        setText(R.id.weather_wind, "గాలి వేగం " + LocalUpdatesConfigHelper.optNumberInt(w, "wind_kmh", 14) + " km/h");
-        setText(R.id.weather_wind_dir, "గాలి దిశ " + LocalUpdatesConfigHelper.optString(w, "wind_dir", "SW"));
-        setText(R.id.weather_visibility, "దృష్టి దూరం " + LocalUpdatesConfigHelper.optNumber(w, "visibility_km", 10) + " km");
+        setText(R.id.weather_feels, WeatherDetailLabels.feelsHighLow(
+                this,
+                LocalUpdatesConfigHelper.optNumberInt(w, "feels_like_c", 34),
+                LocalUpdatesConfigHelper.optNumberInt(w, "high_c", 32),
+                LocalUpdatesConfigHelper.optNumberInt(w, "low_c", 25)));
+        setText(R.id.weather_humidity, WeatherDetailLabels.rainHumidity(
+                this,
+                LocalUpdatesConfigHelper.optNumberInt(w, "precip_pct", 0),
+                LocalUpdatesConfigHelper.optNumberInt(w, "humidity", 62)));
+        setText(R.id.weather_wind, WeatherDetailLabels.windSpeed(
+                this, LocalUpdatesConfigHelper.optNumberInt(w, "wind_kmh", 14)));
+        setText(R.id.weather_wind_dir, WeatherDetailLabels.windDir(
+                this, LocalUpdatesConfigHelper.optString(w, "wind_dir", "SW")));
+        setText(R.id.weather_visibility, WeatherDetailLabels.visibility(
+                this, LocalUpdatesConfigHelper.optNumber(w, "visibility_km", 10)));
         setText(R.id.weather_alert_text, LocalUpdatesConfigHelper.optString(w, "alert_text", ""));
         setText(R.id.weather_sunrise, LocalUpdatesConfigHelper.optString(w, "sunrise", "05:59 AM"));
         setText(R.id.weather_sunset, LocalUpdatesConfigHelper.optString(w, "sunset", "06:23 PM"));

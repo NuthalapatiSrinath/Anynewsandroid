@@ -28,6 +28,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Ui.FuelHistoryChartView;
+import com.anyNews.anynews.Utils.FuelLabels;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
@@ -115,8 +116,11 @@ public class FuelDetailActivity extends AppCompatActivity {
         if (f == null) f = new JSONObject();
         setText(R.id.fuel_top_title, LocalUpdatesConfigHelper.optString(f, "header_title",
                 getString(R.string.fuel_title_default)));
-        setText(R.id.fuel_top_subtitle, LocalUpdatesConfigHelper.optString(f, "header_subtitle",
-                "నేటి పెట్రోల్ & డీజిల్ ధరలు"));
+        String headerSub = LocalUpdatesConfigHelper.optString(f, "header_subtitle", "");
+        if (headerSub.isEmpty() || FuelLabels.looksLikeTeluguChrome(headerSub)) {
+            headerSub = FuelLabels.subtitle(this);
+        }
+        setText(R.id.fuel_top_subtitle, headerSub);
 
         String stateLabel = stateLabelForKey(selectedStateKey, f);
         setText(R.id.fuel_location, stateLabel);
@@ -158,8 +162,8 @@ public class FuelDetailActivity extends AppCompatActivity {
                 ? ("₹" + LocalUpdatesConfigHelper.formatMoney2(petrol)) : "—");
         setText(R.id.fuel_diesel_price, diesel > 0
                 ? ("₹" + LocalUpdatesConfigHelper.formatMoney2(diesel)) : "—");
-        setText(R.id.fuel_petrol_change, changeLine(petrolCh) + " / లీటర్");
-        setText(R.id.fuel_diesel_change, changeLine(dieselCh) + " / లీటర్");
+        setText(R.id.fuel_petrol_change, changeLine(petrolCh) + FuelLabels.perLiter(this));
+        setText(R.id.fuel_diesel_change, changeLine(dieselCh) + FuelLabels.perLiter(this));
         tintChange(R.id.fuel_petrol_change, petrolCh);
         tintChange(R.id.fuel_diesel_change, dieselCh);
 
@@ -167,28 +171,34 @@ public class FuelDetailActivity extends AppCompatActivity {
         if (bannerRow != null) bannerRow.setVisibility(View.GONE);
         View banner = findViewById(R.id.fuel_banner);
         if (banner != null) banner.setVisibility(View.GONE);
-        setText(R.id.fuel_cities_title, LocalUpdatesConfigHelper.optString(f, "cities_title",
-                "ప్రధాన నగరాల ధరలు"));
+        String citiesTitle = LocalUpdatesConfigHelper.optString(f, "cities_title", "");
+        if (citiesTitle.isEmpty() || FuelLabels.looksLikeTeluguChrome(citiesTitle)) {
+            citiesTitle = FuelLabels.majorCities(this);
+        }
+        setText(R.id.fuel_cities_title, citiesTitle);
         updateStateFilterUi(stateLabel);
         setText(R.id.fuel_cities_footnote, LocalUpdatesConfigHelper.optString(f, "cities_footnote", ""));
 
         // Honest history title — source has no real 7-day series
-        String histTitle = LocalUpdatesConfigHelper.optString(f, "history_title",
-                "ధరల మార్పు (నిన్న → ఈరోజు)");
-        if (histTitle.contains("7")) {
-            histTitle = "ధరల మార్పు (నిన్న → ఈరోజు)";
+        String histTitle = LocalUpdatesConfigHelper.optString(f, "history_title", "");
+        if (histTitle.isEmpty() || histTitle.contains("7")
+                || FuelLabels.looksLikeTeluguChrome(histTitle)) {
+            histTitle = FuelLabels.historyTitle(this);
         }
         setText(R.id.fuel_history_title, histTitle);
 
         String histNote = LocalUpdatesConfigHelper.optString(f, "history_note", "");
-        if (TextUtils.isEmpty(histNote)) {
-            histNote = "పూర్తి 7 రోజుల చరిత్ర అందుబాటులో లేదు — నిన్న vs ఈరోజు మాత్రమే.";
+        if (TextUtils.isEmpty(histNote) || FuelLabels.looksLikeTeluguChrome(histNote)) {
+            histNote = FuelLabels.historyNote(this);
         }
         setText(R.id.fuel_history_note, histNote);
 
         bindPromoFromDeltas(petrolCh, dieselCh);
-        setText(R.id.fuel_promo_cta, LocalUpdatesConfigHelper.optString(f, "promo_cta",
-                "ఇతర నగరాలను చూడండి >"));
+        String promoCta = LocalUpdatesConfigHelper.optString(f, "promo_cta", "");
+        if (promoCta.isEmpty() || FuelLabels.looksLikeTeluguChrome(promoCta)) {
+            promoCta = FuelLabels.seeOtherCities(this);
+        }
+        setText(R.id.fuel_promo_cta, promoCta);
 
         View fuelSource = findViewById(R.id.fuel_source);
         if (fuelSource != null) fuelSource.setVisibility(View.GONE);
@@ -271,59 +281,37 @@ public class FuelDetailActivity extends AppCompatActivity {
         boolean pUp = petrolCh > 0.001;
         boolean dDown = dieselCh < -0.001;
         boolean dUp = dieselCh > 0.001;
+        String pAmt = LocalUpdatesConfigHelper.formatMoney2(Math.abs(petrolCh));
+        String dAmt = LocalUpdatesConfigHelper.formatMoney2(Math.abs(dieselCh));
         String title;
         String text;
         if (pDown && dDown) {
-            title = "ధరలు తగ్గాయి!";
-            text = "ఈరోజు పెట్రోల్ (▼"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(petrolCh))
-                    + ") & డీజిల్ (▼"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(dieselCh))
-                    + ") తగ్గాయి. లాభం పొందండి 🙂";
+            title = FuelLabels.promoBothDownTitle(this);
+            text = FuelLabels.promoBothDownText(this, pAmt, dAmt);
         } else if (pUp && dUp) {
-            title = "ధరలు పెరిగాయి!";
-            text = "ఈరోజు పెట్రోల్ (▲"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(petrolCh))
-                    + ") & డీజిల్ (▲"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(dieselCh))
-                    + ") పెరిగాయి.";
+            title = FuelLabels.promoBothUpTitle(this);
+            text = FuelLabels.promoBothUpText(this, pAmt, dAmt);
         } else if (pDown && dUp) {
-            title = "మిశ్రమ మార్పు";
-            text = "పెట్రోల్ తగ్గింది (▼"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(petrolCh))
-                    + "), డీజిల్ పెరిగింది (▲"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(dieselCh))
-                    + ").";
+            title = FuelLabels.promoMixedTitle(this);
+            text = FuelLabels.promoPetrolDownDieselUp(this, pAmt, dAmt);
         } else if (pUp && dDown) {
-            title = "మిశ్రమ మార్పు";
-            text = "పెట్రోల్ పెరిగింది (▲"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(petrolCh))
-                    + "), డీజిల్ తగ్గింది (▼"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(dieselCh))
-                    + ").";
+            title = FuelLabels.promoMixedTitle(this);
+            text = FuelLabels.promoPetrolUpDieselDown(this, pAmt, dAmt);
         } else if (pDown) {
-            title = "పెట్రోల్ తగ్గింది";
-            text = "ఈరోజు పెట్రోల్ తగ్గింది (▼"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(petrolCh))
-                    + "). డీజిల్ మారలేదు.";
+            title = FuelLabels.promoPetrolDownTitle(this);
+            text = FuelLabels.promoPetrolDownText(this, pAmt);
         } else if (pUp) {
-            title = "పెట్రోల్ పెరిగింది";
-            text = "ఈరోజు పెట్రోల్ పెరిగింది (▲"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(petrolCh))
-                    + "). డీజిల్ మారలేదు.";
+            title = FuelLabels.promoPetrolUpTitle(this);
+            text = FuelLabels.promoPetrolUpText(this, pAmt);
         } else if (dDown) {
-            title = "డీజిల్ తగ్గింది";
-            text = "ఈరోజు డీజిల్ తగ్గింది (▼"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(dieselCh))
-                    + "). పెట్రోల్ మారలేదు.";
+            title = FuelLabels.promoDieselDownTitle(this);
+            text = FuelLabels.promoDieselDownText(this, dAmt);
         } else if (dUp) {
-            title = "డీజిల్ పెరిగింది";
-            text = "ఈరోజు డీజిల్ పెరిగింది (▲"
-                    + LocalUpdatesConfigHelper.formatMoney2(Math.abs(dieselCh))
-                    + "). పెట్రోల్ మారలేదు.";
+            title = FuelLabels.promoDieselUpTitle(this);
+            text = FuelLabels.promoDieselUpText(this, dAmt);
         } else {
-            title = "ధరలు మారలేదు";
-            text = "ఈరోజు పెట్రోల్ & డీజిల్ ధరలు నిన్నటితో సమానం.";
+            title = FuelLabels.promoUnchangedTitle(this);
+            text = FuelLabels.promoUnchangedText(this);
         }
         setText(R.id.fuel_promo_title, title);
         setText(R.id.fuel_promo_text, text);
@@ -374,7 +362,8 @@ public class FuelDetailActivity extends AppCompatActivity {
         selectedCity = cityName;
         if (activeFuel != null) bindUi(activeFuel);
         Toast.makeText(this,
-                TextUtils.isEmpty(cityName) ? "రాష్ట్ర సగటు" : cityName,
+                TextUtils.isEmpty(cityName)
+                        ? FuelLabels.stateAverageSelected(this) : cityName,
                 Toast.LENGTH_SHORT).show();
     }
 
@@ -417,12 +406,11 @@ public class FuelDetailActivity extends AppCompatActivity {
                 double petrol = positiveOr(LocalUpdatesConfigHelper.optNumber(f, "petrol_price", 0), 0);
                 double diesel = positiveOr(LocalUpdatesConfigHelper.optNumber(f, "diesel_price", 0), 0);
                 String where = stateLabelForKey(selectedStateKey, f);
-                String body = "ఇంధన ధరలు — "
-                        + (where.isEmpty() ? "" : (where + " — "))
-                        + "పెట్రోల్ ₹" + (petrol > 0
-                        ? LocalUpdatesConfigHelper.formatMoney2(petrol) : "—")
-                        + ", డీజిల్ ₹" + (diesel > 0
-                        ? LocalUpdatesConfigHelper.formatMoney2(diesel) : "—");
+                String body = FuelLabels.shareBody(
+                        this,
+                        where,
+                        petrol > 0 ? LocalUpdatesConfigHelper.formatMoney2(petrol) : "—",
+                        diesel > 0 ? LocalUpdatesConfigHelper.formatMoney2(diesel) : "—");
                 Intent send = new Intent(Intent.ACTION_SEND);
                 send.setType("text/plain");
                 send.putExtra(Intent.EXTRA_TEXT, body);
@@ -474,7 +462,10 @@ public class FuelDetailActivity extends AppCompatActivity {
         if (byState == null) byState = new JSONObject();
 
         String[] keys = {KEY_AP, KEY_TG};
-        String[] labels = {"ఆంధ్రప్రదేశ్", "తెలంగాణ"};
+        String[] labels = {
+                FuelLabels.stateAndhra(this),
+                FuelLabels.stateTelangana(this)
+        };
         java.util.List<String[]> out = new java.util.ArrayList<>();
         String rootKey = resolveStateKey(root);
         for (int i = 0; i < keys.length; i++) {
@@ -508,7 +499,7 @@ public class FuelDetailActivity extends AppCompatActivity {
         BottomSheetDialog sheet = new BottomSheetDialog(this);
         View content = getLayoutInflater().inflate(R.layout.bottom_sheet_fuel_picker, null);
         TextView title = content.findViewById(R.id.fuel_picker_title);
-        if (title != null) title.setText("రాష్ట్రం ఎంచుకోండి");
+        if (title != null) title.setText(FuelLabels.pickState(this));
         TextView sub = content.findViewById(R.id.fuel_picker_subtitle);
         if (sub != null) sub.setVisibility(View.GONE);
         LinearLayout list = content.findViewById(R.id.fuel_picker_list);
@@ -562,23 +553,24 @@ public class FuelDetailActivity extends AppCompatActivity {
         JSONObject f = activeFuel != null ? activeFuel : new JSONObject();
         JSONArray cities = LocalUpdatesConfigHelper.optArray(f, "cities");
         if (cities.length() == 0) {
-            Toast.makeText(this, "నగర ధరలు లేవు", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, FuelLabels.noCityRates(this), Toast.LENGTH_SHORT).show();
             return;
         }
         BottomSheetDialog sheet = new BottomSheetDialog(this);
         View content = getLayoutInflater().inflate(R.layout.bottom_sheet_fuel_picker, null);
         TextView title = content.findViewById(R.id.fuel_picker_title);
-        if (title != null) title.setText("నగరం ఎంచుకోండి");
+        if (title != null) title.setText(FuelLabels.pickCity(this));
         TextView sub = content.findViewById(R.id.fuel_picker_subtitle);
         if (sub != null) {
             sub.setVisibility(View.VISIBLE);
-            sub.setText(stateLabelForKey(selectedStateKey, f) + " — హీరో ధరలు నవీకరించబడతాయి");
+            sub.setText(FuelLabels.cityPickerSub(
+                    this, stateLabelForKey(selectedStateKey, f)));
         }
         LinearLayout list = content.findViewById(R.id.fuel_picker_list);
         float dens = getResources().getDisplayMetrics().density;
 
         // Option: state average / clear city override
-        list.addView(pickerRow("రాష్ట్ర సగటు / ప్రాథమిక",
+        list.addView(pickerRow(FuelLabels.stateAveragePrimary(this),
                 heroPriceLabel(f), TextUtils.isEmpty(selectedCity), dens, () -> {
                     sheet.dismiss();
                     selectedCity = null;
@@ -714,16 +706,16 @@ public class FuelDetailActivity extends AppCompatActivity {
     }
 
     @NonNull
-    private static String stateLabelForKey(@NonNull String key, @Nullable JSONObject f) {
-        if (KEY_TG.equals(key)) return "తెలంగాణ";
-        if (KEY_AP.equals(key)) return "ఆంధ్రప్రదేశ్";
+    private String stateLabelForKey(@NonNull String key, @Nullable JSONObject f) {
+        if (KEY_TG.equals(key)) return FuelLabels.stateTelangana(this);
+        if (KEY_AP.equals(key)) return FuelLabels.stateAndhra(this);
         if (f != null) {
             String s = LocalUpdatesConfigHelper.optString(f, "state_filter", "");
             if (!TextUtils.isEmpty(s)) return s.replace("▾", "").replace("▼", "").trim();
             s = LocalUpdatesConfigHelper.optString(f, "location_region", "");
             if (!TextUtils.isEmpty(s)) return s;
         }
-        return "ఆంధ్రప్రదేశ్";
+        return FuelLabels.stateAndhra(this);
     }
 
     @Nullable
