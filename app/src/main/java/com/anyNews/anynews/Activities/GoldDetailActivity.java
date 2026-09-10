@@ -91,25 +91,40 @@ public class GoldDetailActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (!LocalUpdatesConfigHelper.isGoldEnabled(this)) {
-            Toast.makeText(this, R.string.gold_disabled, Toast.LENGTH_SHORT).show();
+        try {
+            if (!LocalUpdatesConfigHelper.isGoldEnabled(this)) {
+                Toast.makeText(this, R.string.gold_disabled, Toast.LENGTH_SHORT).show();
+                finish();
+                return;
+            }
+            setContentView(R.layout.activity_gold_detail);
+            applySystemBars(R.id.gold_detail_root);
+            goldSource = LocalUpdatesConfigHelper.goldJson(this);
+            if (goldSource == null) goldSource = new JSONObject();
+            goldData = goldSource;
+            ratesAvailable = LocalUpdatesConfigHelper.hasRealGoldRates(this);
+            selectedDateIso = resolveDefaultDateIso(goldSource);
+            if (selectedDateIso == null || selectedDateIso.isEmpty()) {
+                selectedDateIso = todayIsoIst();
+            }
+            applyRatesForSelectedDate();
+            bindStatic();
+            buildGoldTabs();
+            buildSilverTabs();
+            refreshTables();
+            bindCharts();
+            wireClicks();
+        } catch (Throwable t) {
+            try {
+                android.util.Log.e("GoldDetail", "open failed", t);
+            } catch (Exception ignored) {
+            }
+            try {
+                Toast.makeText(this, GoldLabels.ratesUnavailable(this), Toast.LENGTH_SHORT).show();
+            } catch (Exception ignored) {
+            }
             finish();
-            return;
         }
-        setContentView(R.layout.activity_gold_detail);
-        applySystemBars(R.id.gold_detail_root);
-        goldSource = LocalUpdatesConfigHelper.goldJson(this);
-        if (goldSource == null) goldSource = new JSONObject();
-        goldData = goldSource;
-        ratesAvailable = LocalUpdatesConfigHelper.hasRealGoldRates(this);
-        selectedDateIso = resolveDefaultDateIso(goldSource);
-        applyRatesForSelectedDate();
-        bindStatic();
-        buildGoldTabs();
-        buildSilverTabs();
-        refreshTables();
-        bindCharts();
-        wireClicks();
     }
 
     private void applySystemBars(int rootId) {

@@ -377,23 +377,26 @@ public final class LocalUpdatesConfigHelper {
     }
 
     /**
-     * Drop weather/fuel/gold/jobs splash blobs so Telugu chrome cannot stick after
-     * LanguageID flip (next splash re-fills for the live language).
+     * After LanguageID flip: do <b>not</b> wipe weather/fuel/gold/jobs numeric splash
+     * blobs — those rates are language-agnostic and chrome is localized client-side
+     * ({@code DailyUpdatesLabels} / {@code GoldLabels} / {@code FuelLabels}).
+     * Clearing them caused hub 0°C / petrol-gold dashes until the next splash.
+     * Stamp is reset so a later splash can re-tag the pack language.
      */
     public static void clearLanguageSensitiveCaches(@Nullable Context context) {
         if (context == null) return;
         Context app = context.getApplicationContext();
         try {
-            SharedPrefsData.putString(app, Constants.WEATHER_CONFIG_JSON, "", Constants.PREF_NAME);
-            SharedPrefsData.putString(app, Constants.FUEL_CONFIG_JSON, "", Constants.PREF_NAME);
-            SharedPrefsData.putString(app, Constants.GOLD_CONFIG_JSON, "", Constants.PREF_NAME);
-            SharedPrefsData.putString(app, Constants.JOBS_CONFIG_JSON, "", Constants.PREF_NAME);
+            // Keep WEATHER/FUEL/GOLD/JOBS JSON + enabled flags intact.
             SharedPrefsData.putInt(app, Constants.LOCAL_UPDATES_SPLASH_LANG, 0, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
     }
 
-    /** True when cached splash blobs were saved for a different LanguageID. */
+    /**
+     * True when cached splash blobs were saved for a different LanguageID.
+     * Informational only — never reject valid numeric payloads on mismatch.
+     */
     public static boolean splashLangMismatch(@Nullable Context context) {
         if (context == null) return false;
         try {

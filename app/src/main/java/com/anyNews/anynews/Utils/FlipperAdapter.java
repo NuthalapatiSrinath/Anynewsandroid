@@ -1424,11 +1424,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             syncHalfEngagementWithWritersRow(convertView.getContext(), convertView);
         }
 
-        // Classic: bars must never appear on bind (cold start / recycle).
-        if (NewsTapModeConfig.isClassic(convertView.getContext())) {
-            hideClassicChromeOnCard(convertView.getContext(), convertView);
-        }
-
         // Half-article body / title regions (not footer-toggle host views).
         final View titleBlock = convertView.findViewById(R.id.layoutParentTitle);
         View relativeBottom = convertView.findViewById(R.id.relativeBottom);
@@ -1601,6 +1596,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         try {
             HomePage hp = resolveHomePageHost(ctx);
             if (hp != null && hp.isLocalFeedChromeActive()) {
+                // Local: toggle writers/likes (Classic bars) AND Local|District pill.
+                // Previously only the pill toggled, so force-hidden article bars
+                // never came back on tap.
+                toggleClassicChrome(ctx, bandRoot, classicChrome, fullPost);
                 hp.toggleHomeModeChrome();
                 return true;
             }
@@ -5884,10 +5883,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfImageActivity.layoutParentDate = convertView.findViewById(R.id.layoutParentDate);
         TextView textViewPostDate = convertView.findViewById(R.id.textViewPostDate);
         halfImageActivity.ll_footer_layout = convertView.findViewById(R.id.ll_footer_layout);
-        showLog("ll_footer_layout:::"+halfImageActivity.ll_footer_layout.getVisibility());
-        if (NewsTapModeConfig.isClassic(context)) {
-            halfImageActivity.ll_footer_layout.setVisibility(INVISIBLE);
-        } else {
+        if (halfImageActivity.ll_footer_layout != null) {
+            showLog("ll_footer_layout:::" + halfImageActivity.ll_footer_layout.getVisibility());
+            // Always show writers/reporters on bind; Classic hide is tap-only.
             halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
         }
         halfImageActivity.parent_layout = convertView.findViewById(R.id.parent_layout);
@@ -6407,9 +6405,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (indicator != null) {
                     indicator.setViewPager(halfImageActivity.viewPager);
                 }
-                if (NewsTapModeConfig.isClassic(context)) {
-                    halfImageActivity.ll_footer_layout.setVisibility(INVISIBLE);
-                } else {
+                if (halfImageActivity.ll_footer_layout != null) {
                     halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
                 }
             } else {
