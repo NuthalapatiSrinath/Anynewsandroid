@@ -2534,11 +2534,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         setFooterHeight(pill, footerHeightPx());
         if (labelView != null) {
-            try {
-                labelView.setMaxWidth((int) context.getResources().getDimension(R.dimen._90sdp));
-            } catch (Exception ignored) {
-                labelView.setMaxWidth((int) (90 * density));
-            }
+            labelView.setMaxWidth((int) (90 * density));
         }
     }
 
@@ -2629,11 +2625,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private int footerHeightPx() {
-        try {
-            return (int) context.getResources().getDimension(R.dimen._40sdp);
-        } catch (Exception ignored) {
-            return (int) (40 * context.getResources().getDisplayMetrics().density);
-        }
+        return (int) (40 * context.getResources().getDisplayMetrics().density);
     }
 
     private void setFooterHeight(@Nullable View pill, int heightPx) {

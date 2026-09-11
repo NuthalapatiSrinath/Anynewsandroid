@@ -271,10 +271,10 @@ public class RewardsWalletActivity extends AppCompatActivity {
             if (amt <= 0) continue;
             String sign = credit ? "+" : "−";
             String when = formatWhen(row);
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(20), dp(16), dp(20), dp(16));
+            LinearLayout line = new LinearLayout(this);
+            line.setOrientation(LinearLayout.HORIZONTAL);
+            line.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            line.setPadding(dp(20), dp(16), dp(20), dp(16));
             TextView amtView = new TextView(this);
             amtView.setText(sign + "₹" + formatMoney(amt));
             amtView.setTextColor(Color.parseColor("#FFE4C27A"));
@@ -289,9 +289,9 @@ public class RewardsWalletActivity extends AppCompatActivity {
                     new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
             whenLp.setMarginStart(dp(16));
             whenView.setLayoutParams(whenLp);
-            row.addView(amtView);
-            row.addView(whenView);
-            history.addView(row);
+            line.addView(amtView);
+            line.addView(whenView);
+            history.addView(line);
         }
     }
 
