@@ -319,6 +319,12 @@ public class Constants {
      */
     public static String FLASH_NEWS_IN_MAIN_FEED_SLOT = "flash_news_in_main_feed_slot";
     /**
+     * Show Flash News and Rewards chips together on the writers row.
+     * Default false. Ignored unless {@link #REWARDS_MASTER} is ON.
+     * Splash / session / feed poll: {@code show_flash_and_rewards_together}.
+     */
+    public static String SHOW_FLASH_AND_REWARDS_TOGETHER = "show_flash_and_rewards_together";
+    /**
      * When true (default), reporters cannot see Rewards / rewards wallet UI.
      * Splash: rewards_exclude_reporters.
      */

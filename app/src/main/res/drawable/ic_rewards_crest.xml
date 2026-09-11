@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gold coin / crest. No photo — a single mark for the balance card. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:fillColor="#FFE4C27A"
+        android:fillType="evenOdd"
+        android:pathData="M32,3.5C16.26,3.5 3.5,16.26 3.5,32S16.26,60.5 32,60.5 60.5,47.74 60.5,32 47.74,3.5 32,3.5zM32,9C19.3,9 9,19.3 9,32s10.3,23 23,23 23,-10.3 23,-23S44.7,9 32,9z" />
+    <path
+        android:fillColor="#FFF3E2B3"
+        android:pathData="M32,18 L44,32 L32,46 L20,32 Z" />
+    <path
+        android:fillColor="#FF8E2F3C"
+        android:pathData="M32,25 L37.5,32 L32,39 L26.5,32 Z" />
+</vector>

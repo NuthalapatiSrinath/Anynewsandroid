@@ -58,18 +58,20 @@
                         <RelativeLayout
                             android:id="@+id/exo_play_layout"
                             android:layout_width="match_parent"
-                            android:layout_height="match_parent">
+                            android:layout_height="match_parent"
+                            android:background="@color/anynews_black">
 
                             <androidx.media3.ui.PlayerView
                                 android:id="@+id/normal_video_player"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
+                                android:background="@color/anynews_black"
                                 app:controller_layout_id="@layout/player_custom_ui"
                                 app:use_artwork="false"
                                 app:keep_content_on_player_reset="true"
-                                app:shutter_background_color="@color/anynews_black"
+                                app:shutter_background_color="@android:color/transparent"
                                 app:layout_constraintTop_toTopOf="parent"
-                                app:resize_mode="fill"
+                                app:resize_mode="fit"
                                 app:surface_type="texture_view"
                                 app:use_controller="true" />
 
@@ -79,7 +81,9 @@
                                 android:layout_height="match_parent"
                                 android:layout_centerInParent="true"
                                 android:adjustViewBounds="true"
-                                android:scaleType="fitXY" />
+                                android:background="@color/anynews_black"
+                                android:scaleType="fitXY"
+                                android:visibility="gone" />
 
                             <ProgressBar
                                 android:id="@+id/progress_bar_for_video"

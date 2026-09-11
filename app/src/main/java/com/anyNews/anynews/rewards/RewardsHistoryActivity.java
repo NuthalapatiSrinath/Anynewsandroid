@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -76,10 +77,14 @@ public class RewardsHistoryActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(window, false);
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.parseColor("#FFFFFBF7"));
+        window.setStatusBarColor(Color.parseColor("#FF0B1020"));
+        window.setNavigationBarColor(Color.parseColor("#FF0B1020"));
         WindowInsetsControllerCompat c =
                 WindowCompat.getInsetsController(window, window.getDecorView());
-        if (c != null) c.setAppearanceLightStatusBars(true);
+        if (c != null) {
+            c.setAppearanceLightStatusBars(false);
+            c.setAppearanceLightNavigationBars(false);
+        }
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(R.id.rewards_history_root),
                 (v, insets) -> {
@@ -139,20 +144,8 @@ public class RewardsHistoryActivity extends AppCompatActivity {
                 });
         int n = Math.min(historyLimit, rows.size());
         for (int i = 0; i < n; i++) {
-            TextView line = new TextView(this);
-            line.setText(rows.get(i).text);
-            line.setTextColor(Color.parseColor("#FF44403C"));
-            line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-            line.setPadding(14, 12, 14, 12);
-            list.addView(line);
-            if (i < n - 1) {
-                View div = new View(this);
-                div.setBackgroundColor(Color.parseColor("#FFF5F5F4"));
-                LinearLayout.LayoutParams lp =
-                        new LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT, 1);
-                list.addView(div, lp);
-            }
+            addLedgerRow(rows.get(i).amount, rows.get(i).title, rows.get(i).meta);
+            if (i < n - 1) addHairline();
         }
         if (hint != null) {
             if (n > 0 || list.getChildCount() > 0) {
@@ -165,11 +158,64 @@ public class RewardsHistoryActivity extends AppCompatActivity {
         if (list.getChildCount() == 0) {
             TextView empty = new TextView(this);
             empty.setText(RewardsLabels.noHistory(this));
-            empty.setTextColor(Color.parseColor("#FFA8A29E"));
+            empty.setTextColor(Color.parseColor("#FFA89880"));
             empty.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-            empty.setPadding(14, 24, 14, 24);
+            empty.setPadding(dp(20), dp(28), dp(20), dp(28));
             list.addView(empty);
         }
+    }
+
+    /** Gold +amount, cream factor, muted time. Generous padding — never a cramped line. */
+    private void addLedgerRow(String amount, String title, String meta) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(20), dp(18), dp(20), dp(18));
+
+        TextView amt = new TextView(this);
+        amt.setText(amount == null ? "" : amount);
+        amt.setTextColor(Color.parseColor("#FFE4C27A"));
+        amt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        amt.setTypeface(amt.getTypeface(), android.graphics.Typeface.BOLD);
+        amt.setMinWidth(dp(72));
+        row.addView(amt);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams colLp =
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        colLp.setMarginStart(dp(16));
+        col.setLayoutParams(colLp);
+
+        TextView name = new TextView(this);
+        name.setText(title == null ? "" : title);
+        name.setTextColor(Color.parseColor("#FFF4EDE0"));
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        col.addView(name);
+
+        if (!TextUtils.isEmpty(meta)) {
+            TextView sub = new TextView(this);
+            sub.setText(meta);
+            sub.setTextColor(Color.parseColor("#FFA89880"));
+            sub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            sub.setPadding(0, dp(4), 0, 0);
+            col.addView(sub);
+        }
+        row.addView(col);
+        list.addView(row);
+    }
+
+    private void addHairline() {
+        View div = new View(this);
+        div.setBackgroundColor(Color.parseColor("#FF243049"));
+        LinearLayout.LayoutParams lp =
+                new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1);
+        lp.setMargins(dp(20), 0, dp(20), 0);
+        list.addView(div, lp);
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     /** Today’s ledger-by-factor (server aggregate) — account user_id, not device. */
@@ -179,42 +225,44 @@ public class RewardsHistoryActivity extends AppCompatActivity {
         if (arr.size() == 0) return;
         TextView head = new TextView(this);
         head.setText(RewardsLabels.todayByTask(this));
-        head.setTextColor(Color.parseColor("#FF78716C"));
-        head.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        head.setPadding(14, 8, 14, 4);
+        head.setTextColor(Color.parseColor("#FFE4C27A"));
+        head.setLetterSpacing(0.04f);
+        head.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        head.setPadding(dp(20), dp(16), dp(20), dp(8));
         list.addView(head);
+        boolean any = false;
         for (int i = 0; i < arr.size(); i++) {
             JsonObject row = arr.get(i).getAsJsonObject();
             int coins = optInt(row, "coins");
             int events = optInt(row, "events");
             if (coins <= 0) continue;
+            if (any) addHairline();
+            any = true;
             String factor = optStr(row, "factor", "");
-            TextView line = new TextView(this);
-            line.setText(
-                    "+"
-                            + coins
-                            + "  ·  "
-                            + RewardsLabels.factorLabel(this, factor)
-                            + (events > 0 ? " (" + events + ")" : ""));
-            line.setTextColor(Color.parseColor("#FF57534E"));
-            line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            line.setPadding(14, 6, 14, 6);
-            list.addView(line);
+            String eventsBit = events > 0 ? "(" + events + ")" : "";
+            addLedgerRow(
+                    "+" + coins,
+                    RewardsLabels.factorLabel(this, factor),
+                    eventsBit);
         }
         View div = new View(this);
-        div.setBackgroundColor(Color.parseColor("#FFE7E5E4"));
+        div.setBackgroundColor(Color.parseColor("#55E4C27A"));
         LinearLayout.LayoutParams lp =
-                new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 2);
-        lp.setMargins(14, 8, 14, 8);
+                new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1);
+        lp.setMargins(dp(20), dp(10), dp(20), dp(6));
         list.addView(div, lp);
     }
 
     private static final class Row {
-        final String text;
+        final String amount;
+        final String title;
+        final String meta;
         final long atMs;
 
-        Row(String text, long atMs) {
-            this.text = text;
+        Row(String amount, String title, String meta, long atMs) {
+            this.amount = amount;
+            this.title = title;
+            this.meta = meta;
             this.atMs = atMs;
         }
     }
@@ -229,17 +277,11 @@ public class RewardsHistoryActivity extends AppCompatActivity {
             String sign = coins > 0 ? "+" : "";
             String when = formatWhen(row);
             String factor = optStr(row, "factor", "");
-            String factorBit =
+            String title =
                     TextUtils.isEmpty(factor)
-                            ? ""
-                            : "  ·  " + RewardsLabels.factorLabel(this, factor);
-            out.add(
-                    new Row(
-                            sign
-                                    + coins
-                                    + factorBit
-                                    + (TextUtils.isEmpty(when) ? "" : "  ·  " + when),
-                            parseWhenMs(row)));
+                            ? RewardsLabels.coinsWord(this)
+                            : RewardsLabels.factorLabel(this, factor);
+            out.add(new Row(sign + coins, title, when, parseWhenMs(row)));
         }
     }
 
@@ -253,13 +295,9 @@ public class RewardsHistoryActivity extends AppCompatActivity {
             if (amt <= 0) continue;
             String sign = credit ? "+" : "−";
             String when = formatWhen(row);
-            out.add(
-                    new Row(
-                            sign
-                                    + "₹"
-                                    + formatMoney(amt)
-                                    + (TextUtils.isEmpty(when) ? "" : "  ·  " + when),
-                            parseWhenMs(row)));
+            String title =
+                    credit ? RewardsLabels.convertCoins(this) : RewardsLabels.withdraw(this);
+            out.add(new Row(sign + "₹" + formatMoney(amt), title, when, parseWhenMs(row)));
         }
     }
 

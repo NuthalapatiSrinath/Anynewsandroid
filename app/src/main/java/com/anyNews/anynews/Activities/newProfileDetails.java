@@ -4520,6 +4520,8 @@ public class newProfileDetails extends AppCompatActivity {
                                     try {
                                         JsonObject root = response.body();
                                         if (root == null) return;
+                                        com.anyNews.anynews.rewards.RewardsConfigHelper.applyFromRewardsPayload(
+                                                newProfileDetails.this, root);
                                         try {
                                             SharedPrefsData.putLong(
                                                     newProfileDetails.this,

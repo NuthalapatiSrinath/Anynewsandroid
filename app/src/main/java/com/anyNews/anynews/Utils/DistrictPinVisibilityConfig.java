@@ -10,7 +10,8 @@ import androidx.annotation.Nullable;
  * Values arrive via splash / session:
  * {@code hide_district_on_main_feed}, {@code rewards_master},
  * {@code rewards_in_main_feed_slot}, {@code keep_rewards_after_join},
- * {@code flash_news_in_main_feed_slot}, {@code flash_news_chip_label}.
+ * {@code flash_news_in_main_feed_slot}, {@code show_flash_and_rewards_together},
+ * {@code flash_news_chip_label}.
  *
  * <p>Visibility matrix:
  * <ul>
@@ -18,10 +19,13 @@ import androidx.annotation.Nullable;
  *   <li>Main + district/local post ({@code dist_id > 0} or post category 11) — always
  *       show that district (even when hide-district is ON).</li>
  *   <li>Main + non-district — hide when hide-district ON; otherwise show as before.</li>
+ *   <li>Show both ON (and Rewards master ON) — Flash (if Flash News is enabled
+ *       for the selected language) and Rewards (join text, or Rewards chip after
+ *       join) at the same time. Does not use the single-chip matrix below.</li>
  *   <li>Rewards chip — hide ON, not district, master ON, slot ON; until join, or after
- *       join when keep_rewards_after_join ON.</li>
+ *       join when keep_rewards_after_join ON. Show-both OFF only.</li>
  *   <li>Flash News chip — hide ON, not district, flash slot ON, Rewards not taking slot
- *       (prefer Flash after join unless keep_rewards_after_join).</li>
+ *       (prefer Flash after join unless keep_rewards_after_join). Show-both OFF only.</li>
  * </ul>
  */
 public final class DistrictPinVisibilityConfig {
@@ -36,6 +40,11 @@ public final class DistrictPinVisibilityConfig {
     public static final boolean DEFAULT_KEEP_REWARDS_AFTER_JOIN = false;
     /** Show Flash News chip in the same slot when Rewards is not taking it. */
     public static final boolean DEFAULT_FLASH_IN_MAIN_FEED_SLOT = true;
+    /**
+     * Show Flash News and Rewards together. Default OFF.
+     * Forced off when Rewards master is OFF.
+     */
+    public static final boolean DEFAULT_SHOW_FLASH_AND_REWARDS_TOGETHER = false;
     /** Default ON: reporters excluded from rewards / rewards wallet. */
     public static final boolean DEFAULT_EXCLUDE_REPORTERS = true;
 
@@ -95,6 +104,26 @@ public final class DistrictPinVisibilityConfig {
             @Nullable Boolean excludeReporters,
             @Nullable Boolean flashInMainFeedSlot,
             @Nullable Boolean keepRewardsAfterJoin) {
+        saveFromServer(
+                context,
+                hideOnMainFeed,
+                rewardsMaster,
+                rewardsInMainFeedSlot,
+                excludeReporters,
+                flashInMainFeedSlot,
+                keepRewardsAfterJoin,
+                null);
+    }
+
+    public static void saveFromServer(
+            @Nullable Context context,
+            @Nullable Boolean hideOnMainFeed,
+            @Nullable Boolean rewardsMaster,
+            @Nullable Boolean rewardsInMainFeedSlot,
+            @Nullable Boolean excludeReporters,
+            @Nullable Boolean flashInMainFeedSlot,
+            @Nullable Boolean keepRewardsAfterJoin,
+            @Nullable Boolean showFlashAndRewardsTogether) {
         if (context == null) return;
         Context app = context.getApplicationContext();
         if (hideOnMainFeed != null) {
@@ -130,6 +159,13 @@ public final class DistrictPinVisibilityConfig {
                     app,
                     Constants.FLASH_NEWS_IN_MAIN_FEED_SLOT,
                     flashInMainFeedSlot ? "true" : "false",
+                    Constants.PREF_NAME);
+        }
+        if (showFlashAndRewardsTogether != null) {
+            SharedPrefsData.putString(
+                    app,
+                    Constants.SHOW_FLASH_AND_REWARDS_TOGETHER,
+                    showFlashAndRewardsTogether ? "true" : "false",
                     Constants.PREF_NAME);
         }
         if (excludeReporters != null) {
@@ -205,6 +241,18 @@ public final class DistrictPinVisibilityConfig {
                 context, Constants.FLASH_NEWS_IN_MAIN_FEED_SLOT, DEFAULT_FLASH_IN_MAIN_FEED_SLOT);
     }
 
+    /**
+     * Admin toggle: show Flash News and Rewards together.
+     * Always false when Rewards master is OFF, even if a stale true was saved.
+     */
+    public static boolean showFlashAndRewardsTogetherEnabled(@Nullable Context context) {
+        if (!rewardsMasterEnabled(context)) return false;
+        return readBool(
+                context,
+                Constants.SHOW_FLASH_AND_REWARDS_TOGETHER,
+                DEFAULT_SHOW_FLASH_AND_REWARDS_TOGETHER);
+    }
+
     /** Local / Mana Zilla feed surface. */
     public static boolean isLocalFeed(int feedCategoryId) {
         return feedCategoryId == -1;
@@ -276,9 +324,11 @@ public final class DistrictPinVisibilityConfig {
      * Show Rewards promo in the district slot (main feed only).
      * Never on Local; never when the post keeps its district.
      * After join: only when {@link #keepRewardsAfterJoinEnabled}.
+     * Single-chip matrix only — show-both uses {@link #shouldShowRewardsWhenBoth}.
      */
     public static boolean shouldShowRewardsInDistrictSlot(
             @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
+        if (showFlashAndRewardsTogetherEnabled(context)) return false;
         if (isLocalFeed(feedCategoryId)) return false;
         if (isDistrictOrLocalPost(post)) return false;
         if (!hideOnMainFeed(context)) return false;
@@ -295,9 +345,11 @@ public final class DistrictPinVisibilityConfig {
      * Show Flash News chip in the same right slot (main feed only).
      * Prefer Flash when Rewards is not taking the slot (including after join,
      * unless keep_rewards_after_join keeps Rewards).
+     * Single-chip matrix only — show-both uses {@link #shouldShowFlashWhenBoth}.
      */
     public static boolean shouldShowFlashInDistrictSlot(
             @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
+        if (showFlashAndRewardsTogetherEnabled(context)) return false;
         if (isLocalFeed(feedCategoryId)) return false;
         if (isDistrictOrLocalPost(post)) return false;
         if (!hideOnMainFeed(context)) return false;
@@ -305,6 +357,44 @@ public final class DistrictPinVisibilityConfig {
         // Rewards promo wins while eligible (pre-join, or post-join with keep ON).
         if (shouldShowRewardsInDistrictSlot(context, feedCategoryId, post)) return false;
         return true;
+    }
+
+    /** Slot where a promo chip may replace district (not Local, not district posts). */
+    public static boolean isPromoSlotEligible(
+            @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
+        if (isLocalFeed(feedCategoryId)) return false;
+        if (isDistrictOrLocalPost(post)) return false;
+        return hideOnMainFeed(context);
+    }
+
+    /**
+     * Flash chip while show-both is ON. Language gate matches Daily Updates Flash
+     * (enabled + allowed language). The single-slot Flash toggle does not hide it.
+     */
+    public static boolean shouldShowFlashWhenBoth(
+            @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
+        if (!showFlashAndRewardsTogetherEnabled(context)) return false;
+        if (!isPromoSlotEligible(context, feedCategoryId, post)) return false;
+        return DailyUpdatesConfigHelper.isFlashNewsEnabled(context);
+    }
+
+    /**
+     * Rewards chip while show-both is ON. Stays after join (join text vs Rewards
+     * chip is copy only). Does not require the Rewards slot toggle.
+     */
+    public static boolean shouldShowRewardsWhenBoth(
+            @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
+        if (!showFlashAndRewardsTogetherEnabled(context)) return false;
+        if (!isPromoSlotEligible(context, feedCategoryId, post)) return false;
+        if (!rewardsMasterEnabled(context)) return false;
+        return rewardsVisibleForUser(context);
+    }
+
+    /** True when the writers row should bind the dual-chip path (one or both). */
+    public static boolean shouldBindDualFeedChips(
+            @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
+        return shouldShowFlashWhenBoth(context, feedCategoryId, post)
+                || shouldShowRewardsWhenBoth(context, feedCategoryId, post);
     }
 
     private static boolean readBool(

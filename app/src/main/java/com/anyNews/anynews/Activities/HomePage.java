@@ -151,6 +151,7 @@ import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketFooterLabel;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
+import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
@@ -413,23 +414,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     pendingFullAdRebind = false;
                     return;
                 }
-                if (isNewsFlipAnimating()) {
+                if (isNewsFlipAnimating() || isNewsUserDrivingFlip()) {
                     scheduleFlipSafeAdRebind(64L);
                     return;
                 }
                 if (pendingFullAdRebind) {
                     pendingFullAdRebind = false;
                     if (adapter != null) {
-                        adapter.notifyDataSetChanged();
+                        adapter.notifyWhenFlipSettled();
                     }
                     return;
                 }
                 if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
                     return;
                 }
-                if (adapter != null) {
-                    adapter.notifyDataSetChanged();
-                }
+                // No full recycle here. A notify during a fast swipe used to reset
+                // FlipView to page 0; ad shells stay on the placeholder until settle.
             } catch (Exception ignored) {
             }
         }
@@ -2247,6 +2247,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return animating;
         } catch (Exception e) {
             FlipAdWorkGate.setFlipAnimating(false);
+            return false;
+        }
+    }
+
+    /**
+     * True while the user is dragging or the fling scroller is running.
+     * Pagination / ad rebind must wait — a recycle in this window snaps to page 0.
+     */
+    public boolean isNewsUserDrivingFlip() {
+        try {
+            return mFlipView != null && mFlipView.isUserDrivingFlip();
+        } catch (Exception e) {
             return false;
         }
     }
@@ -5057,7 +5069,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     //countforshareanddownload(list.get(positionx).getPostId(), list.get(positionx).getSubPostId(), 0);
 
                 }
-                adapter.notifyDataSetChanged();
+                adapter.notifyWhenFlipSettled();
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -7232,16 +7244,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void flipToPostIdIfPresent(long postId) {
         if (postId <= 0L || list == null || list.isEmpty()) return;
         try {
-            for (int i = 0; i < list.size(); i++) {
-                ModelClass.Datum d = list.get(i);
-                if (d == null || d.getPostId() == null) continue;
-                if (d.getPostId() == postId) {
-                    positionx = i;
-                    lastSettledFlipIndex = i;
-                    if (mFlipView != null) {
-                        mFlipView.flipTo(i);
-                    }
-                    return;
+            int i = findNearestListIndexForPostId(postId, positionx);
+            if (i >= 0) {
+                positionx = i;
+                lastSettledFlipIndex = i;
+                if (mFlipView != null) {
+                    mFlipView.flipTo(i);
                 }
             }
         } catch (Exception ignored) {
@@ -7908,7 +7916,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             savedOnlineNewsPage = 0;
             try {
                 if (mFlipView != null) {
-                    savedOnlineNewsPage = Math.max(0, mFlipView.getCurrentPage());
+                    int cur = mFlipView.getCurrentPage();
+                    savedOnlineNewsPage = cur >= 0 ? cur : Math.max(0, positionx);
                 } else {
                     savedOnlineNewsPage = Math.max(0, positionx);
                 }
@@ -7950,6 +7959,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             if (hasSavedOnlineNewsSession) {
                 list.addAll(savedOnlineNewsList);
+                collapseDuplicateFeedPosts(list);
                 FeedEndHelper.stripAll(list);
                 skip = savedOnlineNewsSkip;
                 actual_skip = savedOnlineNewsActualSkip;
@@ -8120,8 +8130,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
                     }
                     // Deep-link land: ensure the exact article is in the Read deck.
+                    collapseDuplicateFeedPosts(list);
                     if (landPostId > 0) {
-                        int existing = findListIndexForPostId(landPostId);
+                        int existing = findNearestListIndexForPostId(landPostId, 0);
                         if (existing < 0) {
                             ModelClass.Datum pin = landDatum;
                             if (pin == null) {
@@ -11631,6 +11642,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performFeedReload() {
         showLog("performFeedReload initialCall=" + initialCall);
+        // Drop mid-watch video position before the feed rebuilds. Same article often
+        // comes back first; without this the shared Exo player reattaches and resumes.
+        // Does not touch flip jump-to-first (prepareFreshPage0FeedCursors below).
+        try {
+            FlipperAdapter.resetPlaybackOnFeedReload();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (adapter != null) {
+                adapter.clearUserPausedVideoAutoplay();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (player != null) {
+                player.setPlayWhenReady(false);
+                player.pause();
+                player.seekTo(0);
+                player.stop();
+            }
+        } catch (Exception ignored) {
+        }
         // Leaving any Mana Zilla local path when Reload / News main is requested.
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
@@ -12672,10 +12705,92 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 existingIndex.put(key, list.size());
                 list.add(d);
             } else {
+                // Refresh in place so an admin edit lands, but never append a twin page.
+                // Keep the pin index on the refreshed row so collapse still treats it as sticky.
+                ModelClass.Datum kept = list.get(idx);
+                if (kept != null && ReadArticleStore.isStickyArticle(kept)
+                        && (d.getStickyPosition() == null || d.getStickyPosition() < 0)) {
+                    d.setStickyPosition(kept.getStickyPosition());
+                }
                 list.set(idx, d);
                 showLog("DEDUP replaced post key=" + key + " at=" + idx);
             }
         }
+        collapseDuplicateFeedPosts(list);
+    }
+
+    /**
+     * One visible card per post_id. Sticky stays at its own index; the later
+     * timeline twin is dropped. Ads, share, ratings, and rows with no id are kept
+     * — distinct articles that share no id are never hidden.
+     */
+    private void collapseDuplicateFeedPosts(
+            @androidx.annotation.Nullable java.util.List<ModelClass.Datum> items) {
+        if (items == null || items.size() < 2) {
+            return;
+        }
+        java.util.HashMap<Long, Integer> stickyAt = new java.util.HashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            ModelClass.Datum d = items.get(i);
+            if (!isCollapsibleArticle(d)) {
+                continue;
+            }
+            if (ReadArticleStore.isStickyArticle(d)) {
+                stickyAt.put(d.getPostId(), i);
+            }
+        }
+        java.util.HashSet<Long> seen = new java.util.HashSet<>();
+        java.util.ArrayList<ModelClass.Datum> out = new java.util.ArrayList<>(items.size());
+        int dropped = 0;
+        for (int i = 0; i < items.size(); i++) {
+            ModelClass.Datum d = items.get(i);
+            if (!isCollapsibleArticle(d)) {
+                out.add(d);
+                continue;
+            }
+            long id = d.getPostId();
+            Integer pin = stickyAt.get(id);
+            if (pin != null && pin != i) {
+                dropped++;
+                continue;
+            }
+            if (!seen.add(id)) {
+                dropped++;
+                continue;
+            }
+            out.add(d);
+        }
+        if (dropped > 0) {
+            items.clear();
+            items.addAll(out);
+            showLog("DEDUP collapsed duplicate post_ids dropped=" + dropped
+                    + " size=" + items.size());
+        }
+    }
+
+    private static boolean isCollapsibleArticle(@androidx.annotation.Nullable ModelClass.Datum d) {
+        if (d == null || d.getPostId() == null || d.getPostId() <= 0) {
+            return false;
+        }
+        String postType = d.getPostType();
+        if (postType == null) {
+            return true;
+        }
+        if (postType.equalsIgnoreCase("ad")
+                || postType.equalsIgnoreCase("web_ads")
+                || postType.equalsIgnoreCase("web")
+                || postType.equalsIgnoreCase("ratings")
+                || postType.equalsIgnoreCase("share_app")
+                || postType.equalsIgnoreCase("google_vasttag")) {
+            return false;
+        }
+        try {
+            if (FeedEndHelper.isFeedEnd(d) || FeedEndHelper.isFeedEndType(postType)) {
+                return false;
+            }
+        } catch (Exception ignored) {
+        }
+        return true;
     }
 
     public void convertListOfArticles(Response<EncreptionRequest> response,int reqPos){
@@ -12949,6 +13064,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 Boolean.TRUE.equals(encreptionRequest.getVideo_autoplay_enabled()),
                                 Constants.PREF_NAME);
                     }
+                    // Writers-row chips. Null fields are omitted and must not wipe splash.
+                    if (encreptionRequest.getHide_district_on_main_feed() != null
+                            || encreptionRequest.getRewards_master() != null
+                            || encreptionRequest.getRewards_in_main_feed_slot() != null
+                            || encreptionRequest.getKeep_rewards_after_join() != null
+                            || encreptionRequest.getFlash_news_in_main_feed_slot() != null
+                            || encreptionRequest.getShow_flash_and_rewards_together() != null) {
+                        DistrictPinVisibilityConfig.saveFromServer(
+                                getApplicationContext(),
+                                encreptionRequest.getHide_district_on_main_feed(),
+                                encreptionRequest.getRewards_master(),
+                                encreptionRequest.getRewards_in_main_feed_slot(),
+                                null,
+                                encreptionRequest.getFlash_news_in_main_feed_slot(),
+                                encreptionRequest.getKeep_rewards_after_join(),
+                                encreptionRequest.getShow_flash_and_rewards_together());
+                    }
+                    if (encreptionRequest.getFlash_news_chip_label() != null
+                            && !encreptionRequest.getFlash_news_chip_label().trim().isEmpty()) {
+                        FlashNewsChipHelper.saveLabelFromServer(
+                                getApplicationContext(),
+                                encreptionRequest.getFlash_news_chip_label());
+                    }
                     // Daily Updates + Birthday hub kill switches (live; never stub on errors).
                     applyDailyUpdatesHubPollConfig(encreptionRequest);
                     // Cricket: seed mini/footer from feed active_match (no cricket HTTP).
@@ -13108,7 +13246,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             }
                             try {
                                 if (adapter != null) {
-                                    adapter.notifyDataSetChanged();
+                                    adapter.notifyWhenFlipSettled();
                                 }
                             } catch (Exception ignored) {
                             }
@@ -13132,7 +13270,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     rememberFeedStickiesFrom(list);
                                     // Full chronological News — do not strip read articles.
                                     if (adapter != null) {
-                                        adapter.notifyDataSetChanged();
+                                        adapter.notifyWhenFlipSettled();
                                     }
                                     if (list != null && !list.isEmpty()) {
                                         try {
@@ -14268,6 +14406,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (list == null || position < 0 || position >= list.size()) {
             return;
         }
+        // Super-fast swipe on a short screen used to dispatch page 0 mid-fling.
+        // Ignore that unless the user actually started on page 0/1.
+        if (position == 0 && lastSettledFlipIndex > 1
+                && mFlipView != null && mFlipView.isUserDrivingFlip()) {
+            int anchored = mFlipView.getCurrentPage();
+            if (anchored > 1) {
+                showLog("onFlippedToPage ignored spurious page 0 during flip seat=" + anchored);
+                return;
+            }
+        }
         // Same destination as already settled — skip pause/settle/tracking churn.
         if (position == lastSettledFlipIndex
                 && position == positionx
@@ -14595,16 +14743,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         int target = -1;
         if (pendingRestorePostId > 0) {
-            for (int i = 0; i < list.size(); i++) {
-                try {
-                    Long id = list.get(i).getPostId();
-                    if (id != null && id.longValue() == pendingRestorePostId) {
-                        target = i;
-                        break;
-                    }
-                } catch (Exception ignored) {
-                }
-            }
+            // Nearest to the saved flip index — first match is often the sticky at 0
+            // and used to send a mid-feed restore home.
+            target = findNearestListIndexForPostId(
+                    pendingRestorePostId, pendingRestoreFlipIndex);
         }
         if (target < 0 && pendingRestoreFlipIndex > 0 && pendingRestoreFlipIndex < list.size()) {
             target = pendingRestoreFlipIndex;
@@ -15004,8 +15146,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         DistrictLabelHelper.applyTo(HomePage.this, local_distic_name, selelcted_local_distic_name);
         if (adapter != null && category_id == 0) {
             try {
-                // Force visible page(s) to re-bind via partial notify when possible.
-                adapter.notifyDataSetChanged();
+                adapter.notifyWhenFlipSettled();
             } catch (Exception ignored) {
             }
         }
@@ -15208,10 +15349,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             PostDwellTracker.get().onPaused(this);
         } catch (Exception ignored) {
         }
-        // Leave Home → deliver queued impressions so admin views are not stuck
-        // on the timer (ProcessLifecycle ON_STOP still covers true background).
+        // Leave Home → one delivery if the views queue changed. Empty = no HTTP.
+        // ProcessLifecycle ON_STOP still covers true background (also empty-gated).
         try {
-            ViewsBatchTracker.get().flush(getApplicationContext(), false);
+            if (ViewsBatchTracker.get().hasPending()) {
+                ViewsBatchTracker.get().flush(getApplicationContext(), false);
+            }
             MediaAccessReporter.get().flush(getApplicationContext(), false);
         } catch (Exception ignored) {
         }
@@ -15651,7 +15794,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 list.add(0, shared);
                 idx = 0;
                 if (adapter != null) {
-                    adapter.notifyDataSetChanged();
+                    adapter.notifyWhenFlipSettled();
                 }
                 showLog("deep-link moved share post to index 0 postId=" + targetId);
             } catch (Exception e) {
@@ -16062,20 +16205,21 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         } catch (Exception ignored) {
             try {
                 if (adapter != null) {
-                    adapter.notifyDataSetChanged();
+                    adapter.notifyWhenFlipSettled();
                 }
             } catch (Exception ignored2) {
             }
         }
         try {
             if (mFlipView != null && list.size() > 0) {
-                int cur = 0;
-                try {
-                    cur = mFlipView.getCurrentPage();
-                } catch (Exception ignored) {
+                int cur = mFlipView.getCurrentPage();
+                if (cur < 0) {
+                    cur = positionx;
                 }
-                if (cur < 0 || cur >= list.size()) {
-                    mFlipView.flipTo(0);
+                // A recycle can briefly report no page. Never treat that as "go home".
+                if (cur >= list.size()) {
+                    int stay = cur < 0 ? 0 : Math.min(cur, list.size() - 1);
+                    mFlipView.flipTo(stay);
                 }
             }
         } catch (Exception ignored) {
@@ -16089,14 +16233,37 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     private int findListIndexForPostId(long postId) {
+        int near = positionx;
+        try {
+            if (mFlipView != null) {
+                int cur = mFlipView.getCurrentPage();
+                if (cur >= 0) near = cur;
+            }
+        } catch (Exception ignored) {
+        }
+        return findNearestListIndexForPostId(postId, near);
+    }
+
+    /**
+     * Match post_id nearest {@code preferNear}. Never prefers index 0 when another
+     * copy is closer to the flip seat (sticky + timeline twins).
+     */
+    private int findNearestListIndexForPostId(long postId, int preferNear) {
         if (postId <= 0 || list == null || list.isEmpty()) return -1;
+        int best = -1;
+        int bestDist = Integer.MAX_VALUE;
         for (int i = 0; i < list.size(); i++) {
             ModelClass.Datum d = list.get(i);
-            if (d != null && d.getPostId() != null && d.getPostId() == postId) {
-                return i;
+            if (d == null || d.getPostId() == null || d.getPostId() != postId) {
+                continue;
+            }
+            int dist = preferNear < 0 ? (list.size() - i) : Math.abs(i - preferNear);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = i;
             }
         }
-        return -1;
+        return best;
     }
 
     private JsonObject jsonObjectRequest_Views() {

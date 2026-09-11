@@ -10,6 +10,10 @@ public class Recycler {
 	static class Scrap {
 		View v;
 		boolean valid;
+		/** post_id (or synthetic seat id) the view was last painted for. */
+		long boundItemId;
+		/** FlipView bind generation. Mismatch means the dataset changed under this scrap. */
+		int boundGeneration;
 
 		public Scrap(View scrap, boolean valid) {
 			this.v = scrap;
@@ -60,12 +64,19 @@ public class Recycler {
 	 */
 	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
 	void addScrapView(View scrap, int position, int viewType) {
+		addScrapView(scrap, position, viewType, 0L, 0);
+	}
+
+	@TargetApi(Build.VERSION_CODES.ICE_CREAM_SANDWICH)
+	void addScrapView(View scrap, int position, int viewType, long boundItemId, int boundGeneration) {
 		// create a new Scrap
 		Scrap item = new Scrap(scrap, true);
-		
+		item.boundItemId = boundItemId;
+		item.boundGeneration = boundGeneration;
+
 		if (viewTypeCount == 1) {
 			currentScraps.put(position, item);
-		} else {
+		} else if (viewType >= 0 && viewType < scraps.length) {
 			scraps[viewType].put(position, item);
 		}
 

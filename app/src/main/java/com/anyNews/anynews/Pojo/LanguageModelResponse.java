@@ -1247,6 +1247,11 @@ public class LanguageModelResponse {
     @Expose
     private String nextScreen;
 
+    /** Active states for the language just selected. >1 means the state picker is required. */
+    @SerializedName("states_count")
+    @Expose
+    private Integer statesCount;
+
     public Boolean getSuccess() {
         return success;
     }
@@ -1269,6 +1274,14 @@ public class LanguageModelResponse {
 
     public void setNextScreen(String nextScreen) {
         this.nextScreen = nextScreen;
+    }
+
+    public Integer getStatesCount() {
+        return statesCount;
+    }
+
+    public void setStatesCount(Integer statesCount) {
+        this.statesCount = statesCount;
     }
 
 }

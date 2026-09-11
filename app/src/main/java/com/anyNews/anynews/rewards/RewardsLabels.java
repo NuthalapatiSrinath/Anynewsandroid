@@ -4,6 +4,8 @@ import android.content.Context;
 
 import androidx.annotation.Nullable;
 
+import java.util.Locale;
+
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 
@@ -188,24 +190,19 @@ public final class RewardsLabels {
         }
     }
 
-    /** Short label for history factor keys (account ledger / credits). */
+    /**
+     * Short label for history factor keys (account ledger / credits).
+     * Display only — does not change scoring keys or awarded coins.
+     * unique_open shares the quality_read name so users never see unique opens.
+     */
     public static String factorLabel(@Nullable Context c, @Nullable String factor) {
-        String f = factor == null ? "" : factor.trim();
-        if (f.isEmpty()) return "";
+        String raw = factor == null ? "" : factor.trim();
+        if (raw.isEmpty()) return "";
+        String f = canonicalFactorKey(raw);
         switch (f) {
             case "unique_open":
-                switch (languageId(c)) {
-                    case 3: return "ఆర్టికల్ ఓపెన్";
-                    case 2: return "आर्टिकल ओपन";
-                    case 4: return "கட்டுரை திறப்பு";
-                    default: return "Article open";
-                }
             case "quality_read":
-                switch (languageId(c)) {
-                    case 3: return "క్వాలిటీ రీడ్";
-                    case 2: return "क्वालिटी रीड";
-                    default: return "Quality read";
-                }
+                return qualityReadingLabel(c);
             case "scroll_depth":
                 switch (languageId(c)) {
                     case 3: return "స్క్రోల్";
@@ -232,7 +229,7 @@ public final class RewardsLabels {
             case "follow":
                 return "Follow";
             default:
-                return f;
+                return raw;
         }
     }
 
@@ -269,6 +266,47 @@ public final class RewardsLabels {
             case 5: return "(" + redeemed + " ಈ ವಾರ ರಿಡೀಮ್)";
             case 6: return "(" + redeemed + " ଏହି ସପ୍ତାହ ରିଡିମ୍)";
             default: return "(" + redeemed + " redeemed this week)";
+        }
+    }
+
+    public static String adsLimitReached(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "ഇന്നത്തെ പരിധി തീർന്നു";
+            case 2: return "आज की सीमा पूरी";
+            case 3: return "రోజు పరిమితి అయిపోయింది";
+            case 4: return "இன்றைய வரம்பு முடிந்தது";
+            case 5: return "ಇಂದಿನ ಮಿತಿ ಮುಗಿದಿದೆ";
+            case 6: return "ଆଜିର ସୀମା ସରିଗଲା";
+            default: return "Daily limit reached";
+        }
+    }
+
+    public static String adsComeBackLater(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "പിന്നീട് വീണ്ടും വരിക. അടുത്ത ദിവസം വരെ കൂടുതൽ പരസ്യങ്ങൾ കാണാനാകില്ല.";
+            case 2: return "बाद में आएं. आज और रिवॉर्ड विज्ञापन नहीं देख सकते.";
+            case 3: return "తర్వాత రండి. ఈ రోజు మరిన్ని రివార్డ్ యాడ్స్ చూడలేరు.";
+            case 4: return "பிறகு வாருங்கள். இன்று மேலும் ரிவார்டு விளம்பரங்கள் இல்லை.";
+            case 5: return "ನಂತರ ಬನ್ನಿ. ಇಂದು ಇನ್ನಷ್ಟು ರಿವಾರ್ಡ್ ಜಾಹೀರಾತುಗಳಿಲ್ಲ.";
+            case 6: return "ପରେ ଆସନ୍ତୁ. ଆଜି ଆଉ ରିୱାର୍ଡ ବିଜ୍ଞାପନ ନାହିଁ.";
+            default: return "Come back later. You can't watch more reward ads today.";
+        }
+    }
+
+    public static String adsLimitWait(@Nullable Context c, int totalSec) {
+        int sec = Math.max(0, totalSec);
+        int h = sec / 3600;
+        int m = (sec % 3600) / 60;
+        int s = sec % 60;
+        String clock = String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, s);
+        switch (languageId(c)) {
+            case 1: return "വീണ്ടും " + clock;
+            case 2: return clock + " बाद फिर आएं";
+            case 3: return clock + " తర్వాత తిరిగి రండి";
+            case 4: return clock + " கழித்து வாருங்கள்";
+            case 5: return clock + " ನಂತರ ಮತ್ತೆ";
+            case 6: return clock + " ପରେ ଆସନ୍ତୁ";
+            default: return "Come back in " + clock;
         }
     }
 
@@ -550,6 +588,95 @@ public final class RewardsLabels {
             case 5: return "UPI ID ನಮೂದಿಸಿ";
             case 6: return "UPI ID ଲେଖନ୍ତୁ";
             default: return "Enter UPI ID";
+        }
+    }
+
+    /**
+     * User-visible name for quality_read. unique_open history rows use this
+     * same string so "Unique article open" never appears. Points stay as awarded.
+     */
+    public static String qualityReadingLabel(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "നിലവാരമുള്ള വായന";
+            case 2: return "क्वालिटी रीड";
+            case 3: return "క్వాలిటీ రీడ్";
+            case 4: return "தரமான வாசிப்பு";
+            case 5: return "ಗುಣಮಟ್ಟದ ಓದು";
+            case 6: return "ଗୁଣବତ୍ତା ପଢ଼ା";
+            default: return "Quality reading";
+        }
+    }
+
+    /** Map scoring keys and leaked unique-open copy onto history factor ids. */
+    private static String canonicalFactorKey(String factor) {
+        String f = factor.trim().toLowerCase(Locale.US);
+        f = f.replace('-', '_').replace(' ', '_');
+        while (f.contains("__")) {
+            f = f.replace("__", "_");
+        }
+        if ("unique_article_open".equals(f)
+                || "unique_article_opens".equals(f)
+                || "unique_opens".equals(f)
+                || "unique_open".equals(f)
+                || "uniqueopen".equals(f)
+                || "article_open".equals(f)
+                || "article_opens".equals(f)) {
+            return "unique_open";
+        }
+        if ("quality_reading".equals(f)
+                || "quality_reads".equals(f)
+                || "quality_read".equals(f)
+                || "qualityread".equals(f)) {
+            return "quality_read";
+        }
+        return f;
+    }
+
+    public static String memberBalance(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "അംഗ ബാലൻസ്";
+            case 2: return "सदस्य बैलेंस";
+            case 3: return "సభ్యుల బ్యాలెన్స్";
+            case 4: return "உறுப்பினர் இருப்பு";
+            case 5: return "ಸದಸ್ಯ ಬ್ಯಾಲೆನ್ಸ್";
+            case 6: return "ସଭ୍ୟ ବାଲାନ୍ସ";
+            default: return "Member balance";
+        }
+    }
+
+    public static String primaryEarn(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "പ്രധാന നേട്ടം";
+            case 2: return "मुख्य कमाई";
+            case 3: return "ప్రధాన సంపాదన";
+            case 4: return "முதன்மை சம்பாதிப்பு";
+            case 5: return "ಪ್ರಮುಖ ಗಳಿಕೆ";
+            case 6: return "ପ୍ରମୁଖ ରୋଜଗାର";
+            default: return "Primary earn";
+        }
+    }
+
+    public static String alsoEarn(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "കൂടുതൽ നേടുക";
+            case 2: return "और कमाएँ";
+            case 3: return "ఇంకా సంపాదించండి";
+            case 4: return "மேலும் சம்பாதிக்கவும்";
+            case 5: return "ಇನ್ನಷ್ಟು ಗಳಿಸಿ";
+            case 6: return "ଅଧିକ ରୋଜଗାର";
+            default: return "Also earn";
+        }
+    }
+
+    public static String watchAdsTitle(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "പരസ്യങ്ങൾ കാണുക";
+            case 2: return "विज्ञापन देखें";
+            case 3: return "యాడ్స్ చూడండి";
+            case 4: return "விளம்பரங்கள் பார்க்க";
+            case 5: return "ಜಾಹೀರಾತು ನೋಡಿ";
+            case 6: return "ବିଜ୍ଞାପନ ଦେଖନ୍ତୁ";
+            default: return "Watch ads";
         }
     }
 

@@ -185,6 +185,35 @@ public class EncreptionRequest {
     @Expose
     private Boolean jobs_enabled;
 
+    /** Writers-row chips from feed poll. Null when omitted — do not wipe splash. */
+    @SerializedName("hide_district_on_main_feed")
+    @Expose
+    private Boolean hide_district_on_main_feed;
+
+    @SerializedName("rewards_master")
+    @Expose
+    private Boolean rewards_master;
+
+    @SerializedName("rewards_in_main_feed_slot")
+    @Expose
+    private Boolean rewards_in_main_feed_slot;
+
+    @SerializedName("keep_rewards_after_join")
+    @Expose
+    private Boolean keep_rewards_after_join;
+
+    @SerializedName("flash_news_in_main_feed_slot")
+    @Expose
+    private Boolean flash_news_in_main_feed_slot;
+
+    @SerializedName("show_flash_and_rewards_together")
+    @Expose
+    private Boolean show_flash_and_rewards_together;
+
+    @SerializedName("flash_news_chip_label")
+    @Expose
+    private String flash_news_chip_label;
+
     /** Daily Updates hub kill switches + language matrices (same shape as splash). */
     @SerializedName("daily_updates")
     @Expose
@@ -384,6 +413,34 @@ public class EncreptionRequest {
 
     public void setVideo_autoplay_enabled(Boolean video_autoplay_enabled) {
         this.video_autoplay_enabled = video_autoplay_enabled;
+    }
+
+    public Boolean getHide_district_on_main_feed() {
+        return hide_district_on_main_feed;
+    }
+
+    public Boolean getRewards_master() {
+        return rewards_master;
+    }
+
+    public Boolean getRewards_in_main_feed_slot() {
+        return rewards_in_main_feed_slot;
+    }
+
+    public Boolean getKeep_rewards_after_join() {
+        return keep_rewards_after_join;
+    }
+
+    public Boolean getFlash_news_in_main_feed_slot() {
+        return flash_news_in_main_feed_slot;
+    }
+
+    public Boolean getShow_flash_and_rewards_together() {
+        return show_flash_and_rewards_together;
+    }
+
+    public String getFlash_news_chip_label() {
+        return flash_news_chip_label;
     }
 
     public Boolean getEnable_birthday_special() {

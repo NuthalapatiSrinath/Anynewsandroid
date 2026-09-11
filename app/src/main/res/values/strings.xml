@@ -427,4 +427,10 @@
     <string name="notif_help_step5">5. No restrictions</string>
     <string name="notif_help_contact">Need help? Contact @Team AnyNews · support@anynews.co.in</string>
     <string name="notif_help_go_settings">Go to settings</string>
+
+    <!-- Rewards club chrome. In-app language packs override these via RewardsLabels. -->
+    <string name="rewards_member_balance">Member balance</string>
+    <string name="rewards_primary_earn">Primary earn</string>
+    <string name="rewards_watch_title">Watch ads</string>
+    <string name="rewards_also_earn">Also earn</string>
 </resources>

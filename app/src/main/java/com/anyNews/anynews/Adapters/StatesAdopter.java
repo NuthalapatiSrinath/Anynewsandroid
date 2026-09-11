@@ -120,20 +120,58 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
             return;
         }
         StatesModel.Datum state = arrayList.get(position);
+        int previousStateId = SharedPrefsData.getInt(context, Constants.StateID, Constants.PREF_NAME);
+        int selectedId = state.getId() != null ? state.getId() : 0;
 
         index = position;
         notifyDataSetChanged();
 
-        SharedPrefsData.putInt(context, Constants.StateID, state.getId(), Constants.PREF_NAME);
-
-        if (state.getId() != null && state.getId() == -1) {
-            UpdateStates(state.getId());
-        } else {
-            SharedPrefsData.putInt(context, Constants.Back_Button_Move, 2, Constants.PREF_NAME);
-            SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "district", Constants.PREF_NAME);
-            Intent intent = new Intent(context, Districs.class);
-            context.startActivity(intent);
+        if (selectedId == -1) {
+            SharedPrefsData.putInt(context, Constants.StateID, selectedId, Constants.PREF_NAME);
+            UpdateStates(selectedId);
+            return;
         }
+
+        // Same state: keep district so Hyderabad is not dropped just to reopen
+        // the picker. A different state follows existing geo rules and clears it.
+        boolean differentState = previousStateId > 0 && selectedId > 0 && selectedId != previousStateId;
+        if (differentState) {
+            clearDistrictForNewState(selectedId);
+            return;
+        }
+
+        SharedPrefsData.putInt(context, Constants.StateID, selectedId, Constants.PREF_NAME);
+        openDistricts();
+    }
+
+    /**
+     * Drop the previous district only after a real state change, then open
+     * that state's district list. Same-state taps never call this.
+     */
+    private void clearDistrictForNewState(int selectedStateId) {
+        DistrictLabelHelper.clearActiveSelection(context);
+        SharedPrefsData.putInt(context, Constants.StateID, selectedStateId, Constants.PREF_NAME);
+        JsonObject otp = set_update_states(selectedStateId);
+        APIService apiService = RestApiClient.getClient().create(APIService.class);
+        Call<EncreptionRequest> apiResponse = apiService.update_state("v3", otp);
+        apiResponse.enqueue(new Callback<EncreptionRequest>() {
+            @Override
+            public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                openDistricts();
+            }
+
+            @Override
+            public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                openDistricts();
+            }
+        });
+    }
+
+    private void openDistricts() {
+        SharedPrefsData.putInt(context, Constants.Back_Button_Move, 2, Constants.PREF_NAME);
+        SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "district", Constants.PREF_NAME);
+        Intent intent = new Intent(context, Districs.class);
+        context.startActivity(intent);
     }
 
     private void bindLandmark(ImageView imageView, StatesModel.Datum state, boolean selected) {
@@ -246,11 +284,15 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
     }
 
     private JsonObject set_update_states() {
+        return set_update_states(-1);
+    }
+
+    private JsonObject set_update_states(int stateId) {
 
         LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
 
         requestModel.setDraftId(SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME));
-        requestModel.setStateId(-1);
+        requestModel.setStateId(stateId);
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
         encrpt_data = encrypt(jsonString);

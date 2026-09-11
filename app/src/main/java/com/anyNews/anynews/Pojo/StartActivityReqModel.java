@@ -496,6 +496,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean flashNewsInMainFeedSlot;
 
+        /**
+         * Show Flash News and Rewards chips together. Null on old servers.
+         * App treats as off when rewards_master is OFF.
+         */
+        @SerializedName("show_flash_and_rewards_together")
+        @Expose
+        private Boolean showFlashAndRewardsTogether;
+
         /** Admin Flash News chip label for this splash language. */
         @SerializedName("flash_news_chip_label")
         @Expose
@@ -556,6 +564,43 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("rewards_period_unit")
         @Expose
         private String rewardsPeriodUnit;
+
+        /** JSON string of IST-day factor caps (ads_seen and siblings). */
+        @SerializedName("rewards_factor_caps")
+        @Expose
+        private String rewardsFactorCaps;
+
+        @SerializedName("rewards_ads_seen_cap")
+        @Expose
+        private Integer rewardsAdsSeenCap;
+
+        @SerializedName("rewards_ads_seen_remaining")
+        @Expose
+        private Integer rewardsAdsSeenRemaining;
+
+        @SerializedName("rewards_ads_seen_capped")
+        @Expose
+        private Boolean rewardsAdsSeenCapped;
+
+        @SerializedName("rewards_program_status")
+        @Expose
+        private String rewardsProgramStatus;
+
+        @SerializedName("rewards_scoring_open")
+        @Expose
+        private Boolean rewardsScoringOpen;
+
+        @SerializedName("rewards_period_ended")
+        @Expose
+        private String rewardsPeriodEnded;
+
+        @SerializedName("rewards_period_upcoming")
+        @Expose
+        private String rewardsPeriodUpcoming;
+
+        @SerializedName("rewards_period_banner")
+        @Expose
+        private String rewardsPeriodBanner;
 
         @SerializedName("play_store_package")
         @Expose
@@ -981,6 +1026,10 @@ public class StartActivityReqModel implements Serializable {
             return flashNewsInMainFeedSlot;
         }
 
+        public Boolean getShowFlashAndRewardsTogether() {
+            return showFlashAndRewardsTogether;
+        }
+
         public String getFlashNewsChipLabel() {
             return flashNewsChipLabel;
         }
@@ -1035,6 +1084,42 @@ public class StartActivityReqModel implements Serializable {
 
         public String getRewardsPeriodUnit() {
             return rewardsPeriodUnit;
+        }
+
+        public String getRewardsFactorCaps() {
+            return rewardsFactorCaps;
+        }
+
+        public Integer getRewardsAdsSeenCap() {
+            return rewardsAdsSeenCap;
+        }
+
+        public Integer getRewardsAdsSeenRemaining() {
+            return rewardsAdsSeenRemaining;
+        }
+
+        public Boolean getRewardsAdsSeenCapped() {
+            return rewardsAdsSeenCapped;
+        }
+
+        public String getRewardsProgramStatus() {
+            return rewardsProgramStatus;
+        }
+
+        public Boolean getRewardsScoringOpen() {
+            return rewardsScoringOpen;
+        }
+
+        public String getRewardsPeriodEnded() {
+            return rewardsPeriodEnded;
+        }
+
+        public String getRewardsPeriodUpcoming() {
+            return rewardsPeriodUpcoming;
+        }
+
+        public String getRewardsPeriodBanner() {
+            return rewardsPeriodBanner;
         }
 
         public String getPlayStorePackage() {

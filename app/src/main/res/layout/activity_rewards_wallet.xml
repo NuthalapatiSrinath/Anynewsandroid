@@ -4,7 +4,7 @@
     android:id="@+id/wallet_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFF8F4EC"
+    android:background="@color/rewards_ink"
     android:fitsSystemWindows="false"
     tools:context=".rewards.RewardsWalletActivity">
 
@@ -19,15 +19,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingBottom="32dp">
+            android:paddingBottom="36dp">
 
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingStart="14dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="8dp">
+                android:paddingStart="8dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="6dp">
 
                 <ImageView
                     android:id="@+id/wallet_back"
@@ -39,7 +39,7 @@
                     android:contentDescription="@string/cancel"
                     android:padding="8dp"
                     android:src="@drawable/ic_calendar_chevron_left"
-                    android:tint="#FF1C1917" />
+                    android:tint="@color/rewards_gold" />
 
                 <TextView
                     android:id="@+id/wallet_top_title"
@@ -50,28 +50,42 @@
                     android:fontFamily="@font/sreekrushnadevaraya_regular"
                     android:paddingStart="4dp"
                     android:text="Wallet"
-                    android:textColor="#FF1C1917"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/rewards_cream"
+                    android:textSize="22sp" />
             </RelativeLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="14dp"
-                android:layout_marginEnd="14dp"
+                android:layout_marginStart="18dp"
+                android:layout_marginEnd="18dp"
                 android:background="@drawable/bg_rewards_hero"
                 android:orientation="vertical"
-                android:padding="18dp">
+                android:padding="22dp">
 
-                <TextView
-                    android:id="@+id/wallet_balance_label"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Balance"
-                    android:textAllCaps="true"
-                    android:textColor="#FF78716C"
-                    android:textSize="12sp" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/wallet_balance_label"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:letterSpacing="0.06"
+                        android:text="Balance"
+                        android:textAllCaps="true"
+                        android:textColor="@color/rewards_gold"
+                        android:textSize="11sp" />
+
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_rewards_crest" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/wallet_balance"
@@ -79,10 +93,10 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:fontFamily="@font/sreekrushnadevaraya_regular"
+                    android:includeFontPadding="false"
                     android:text="₹0"
-                    android:textColor="#FF1C1917"
-                    android:textSize="42sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/rewards_gold_bright"
+                    android:textSize="48sp" />
 
                 <TextView
                     android:id="@+id/wallet_coins_line"
@@ -90,9 +104,8 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="0 coins"
-                    android:textColor="#FFB45309"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/rewards_gold"
+                    android:textSize="15sp" />
 
                 <TextView
                     android:id="@+id/wallet_rate"
@@ -100,7 +113,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="100 coins = ₹1"
-                    android:textColor="#FF78716C"
+                    android:textColor="@color/rewards_cream"
                     android:textSize="13sp" />
 
                 <TextView
@@ -109,19 +122,19 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:text="Credit usually takes 24–48 hours."
-                    android:textColor="#FFA8A29E"
+                    android:textColor="@color/rewards_cream_muted"
                     android:textSize="12sp" />
             </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="14dp"
-                android:layout_marginTop="14dp"
-                android:layout_marginEnd="14dp"
+                android:layout_marginStart="18dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginEnd="18dp"
                 android:background="@drawable/bg_rewards_card"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="18dp">
 
                 <TextView
                     android:id="@+id/wallet_convert_btn"
@@ -130,85 +143,84 @@
                     android:background="@drawable/bg_rewards_btn_secondary"
                     android:gravity="center"
                     android:text="Convert coins → ₹"
-                    android:textColor="#FF44403C"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/rewards_gold"
+                    android:textSize="15sp" />
 
                 <EditText
                     android:id="@+id/wallet_upi"
                     android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:layout_marginTop="14dp"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="16dp"
                     android:background="@drawable/bg_rewards_input"
                     android:hint="UPI ID"
                     android:inputType="textEmailAddress"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:textColor="#FF1C1917"
-                    android:textColorHint="#FFA8A29E"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:textColor="@color/rewards_cream"
+                    android:textColorHint="@color/rewards_cream_muted"
                     android:textSize="14sp" />
 
                 <TextView
                     android:id="@+id/wallet_save_upi"
                     android:layout_width="match_parent"
-                    android:layout_height="44dp"
+                    android:layout_height="46dp"
                     android:layout_marginTop="10dp"
                     android:background="@drawable/bg_rewards_btn_secondary"
                     android:gravity="center"
                     android:text="Save UPI"
-                    android:textColor="#FF44403C"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/rewards_cream"
+                    android:textSize="14sp" />
 
                 <EditText
                     android:id="@+id/wallet_withdraw_amount"
                     android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:layout_marginTop="14dp"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="16dp"
                     android:background="@drawable/bg_rewards_input"
                     android:hint="Amount ₹"
                     android:inputType="numberDecimal"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:textColor="#FF1C1917"
-                    android:textColorHint="#FFA8A29E"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:textColor="@color/rewards_cream"
+                    android:textColorHint="@color/rewards_cream_muted"
                     android:textSize="14sp" />
 
                 <TextView
                     android:id="@+id/wallet_withdraw_btn"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="10dp"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="12dp"
                     android:background="@drawable/bg_rewards_btn_primary"
                     android:gravity="center"
                     android:text="Withdraw"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
+                    android:textColor="@color/rewards_ink_text"
+                    android:textSize="15sp" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/wallet_history_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="18dp"
-                android:layout_marginTop="18dp"
+                android:layout_marginStart="22dp"
+                android:layout_marginTop="24dp"
                 android:layout_marginEnd="18dp"
+                android:letterSpacing="0.04"
                 android:text="History"
-                android:textColor="#FF1C1917"
-                android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textAllCaps="true"
+                android:textColor="@color/rewards_gold"
+                android:textSize="11sp" />
 
             <LinearLayout
                 android:id="@+id/wallet_history"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="14dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="14dp"
+                android:layout_marginStart="18dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="18dp"
                 android:background="@drawable/bg_rewards_card"
                 android:orientation="vertical"
-                android:padding="8dp" />
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </FrameLayout>

@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFF8F4EC"
+    android:background="@color/rewards_ink"
     android:fillViewport="true">
 
     <LinearLayout
@@ -11,65 +11,126 @@
         android:layout_height="wrap_content"
         android:gravity="center_horizontal"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:paddingStart="24dp"
+        android:paddingTop="28dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="32dp">
+
+        <ImageView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_rewards_crest" />
 
         <TextView
+            android:id="@+id/watch_ads_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:fontFamily="@font/sreekrushnadevaraya_regular"
             android:gravity="center"
-            android:text="Watch ads"
-            android:textColor="#FF1C1917"
-            android:textSize="22sp"
-            android:textStyle="bold" />
+            android:text="@string/rewards_watch_title"
+            android:textColor="@color/rewards_cream"
+            android:textSize="26sp" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <View
+                android:layout_width="7dp"
+                android:layout_height="7dp"
+                android:background="@drawable/bg_rewards_garnet_pip" />
+
+            <TextView
+                android:id="@+id/watch_ads_kicker"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:letterSpacing="0.06"
+                android:text="@string/rewards_primary_earn"
+                android:textAllCaps="true"
+                android:textColor="@color/rewards_gold"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/watch_ads_progress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="8dp"
+            android:fontFamily="@font/sreekrushnadevaraya_regular"
             android:gravity="center"
+            android:includeFontPadding="false"
             android:text="0 / 3"
-            android:textColor="#FFB45309"
-            android:textSize="28sp"
-            android:textStyle="bold" />
+            android:textColor="@color/rewards_gold_bright"
+            android:textSize="48sp" />
+
+        <TextView
+            android:id="@+id/watch_ads_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="@font/sreekrushnadevaraya_regular"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:textColor="@color/rewards_garnet"
+            android:textSize="40sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/watch_ads_wait"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:letterSpacing="0.06"
+            android:textColor="@color/rewards_gold"
+            android:textSize="13sp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/watch_ads_hint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="12dp"
             android:gravity="center"
+            android:lineSpacingExtra="3dp"
             android:text="Complete the ads to earn coins. Cooldown applies after each session."
-            android:textColor="#FF78716C"
+            android:textColor="@color/rewards_cream_muted"
             android:textSize="14sp" />
 
         <FrameLayout
             android:id="@+id/watch_ads_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="20dp"
             android:minHeight="200dp" />
 
         <TextView
             android:id="@+id/watch_ads_next_btn"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="20dp"
+            android:layout_height="52dp"
+            android:layout_marginTop="22dp"
             android:background="@drawable/bg_rewards_btn_primary"
             android:gravity="center"
+            android:letterSpacing="0.04"
             android:text="Watch next ad"
-            android:textColor="#FFFFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            android:textColor="@color/rewards_ink_text"
+            android:textSize="15sp" />
 
         <TextView
             android:id="@+id/watch_ads_close_btn"
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             android:gravity="center"
+            android:letterSpacing="0.08"
             android:text="Close"
-            android:textColor="#FF78716C"
+            android:textColor="@color/rewards_cream_muted"
             android:textSize="14sp" />
     </LinearLayout>
 </ScrollView>

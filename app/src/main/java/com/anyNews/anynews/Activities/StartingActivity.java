@@ -1957,7 +1957,8 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getRewardsInMainFeedSlot(),
                                 startActivityReqModel.getData().getRewardsExcludeReporters(),
                                 startActivityReqModel.getData().getFlashNewsInMainFeedSlot(),
-                                startActivityReqModel.getData().getKeepRewardsAfterJoin());
+                                startActivityReqModel.getData().getKeepRewardsAfterJoin(),
+                                startActivityReqModel.getData().getShowFlashAndRewardsTogether());
                         FlashNewsChipHelper.saveLabelFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getFlashNewsChipLabel());
@@ -1968,6 +1969,13 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getReporterPaymentBannerText(),
                                 startActivityReqModel.getData().getReporterPaymentHistoryNoticeActive(),
                                 startActivityReqModel.getData().getReporterPaymentHistoryNoticeText());
+                        com.anyNews.anynews.rewards.RewardsConfigHelper.saveProgramWindow(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getRewardsProgramStatus(),
+                                startActivityReqModel.getData().getRewardsScoringOpen(),
+                                startActivityReqModel.getData().getRewardsPeriodEnded(),
+                                startActivityReqModel.getData().getRewardsPeriodUpcoming(),
+                                startActivityReqModel.getData().getRewardsPeriodBanner());
                         com.anyNews.anynews.rewards.RewardsConfigHelper.saveChipCopyFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsGuestChip(),
@@ -1976,6 +1984,38 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getRewardsChipColor(),
                                 startActivityReqModel.getData().getRewardsChipSizeSp(),
                                 startActivityReqModel.getData().getRewardsChipWeight());
+                        try {
+                            String capsJson =
+                                    startActivityReqModel.getData().getRewardsFactorCaps();
+                            if (capsJson != null && !capsJson.trim().isEmpty()) {
+                                com.anyNews.anynews.rewards.RewardsConfigHelper
+                                        .applyFactorCapsJson(
+                                                getApplicationContext(), capsJson);
+                            } else if (startActivityReqModel.getData().getRewardsAdsSeenCap()
+                                            != null
+                                    || startActivityReqModel.getData().getRewardsAdsSeenCapped()
+                                            != null) {
+                                com.google.gson.JsonObject ads = new com.google.gson.JsonObject();
+                                Integer cap =
+                                        startActivityReqModel.getData().getRewardsAdsSeenCap();
+                                Integer rem =
+                                        startActivityReqModel
+                                                .getData()
+                                                .getRewardsAdsSeenRemaining();
+                                Boolean capped =
+                                        startActivityReqModel.getData().getRewardsAdsSeenCapped();
+                                if (cap != null) ads.addProperty("cap_per_day", cap);
+                                if (rem != null) ads.addProperty("remaining", rem);
+                                if (capped != null) ads.addProperty("capped", capped);
+                                com.google.gson.JsonObject wrap = new com.google.gson.JsonObject();
+                                wrap.add("ads_seen", ads);
+                                com.anyNews.anynews.rewards.RewardsConfigHelper.applyFactorCaps(
+                                        getApplicationContext(),
+                                        wrap,
+                                        com.anyNews.anynews.rewards.RewardsConfigHelper.istDayKey());
+                            }
+                        } catch (Exception ignored) {
+                        }
                         // Read / చదివినవి recency window (default 24h; 1–168).
                         ReadHistoryConfig.saveHoursFromServer(
                                 getApplicationContext(),

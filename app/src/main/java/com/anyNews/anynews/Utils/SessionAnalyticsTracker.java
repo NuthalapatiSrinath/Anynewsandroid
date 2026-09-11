@@ -844,6 +844,7 @@ public final class SessionAnalyticsTracker {
                         Boolean rewardsSlot = null;
                         Boolean keepRewardsAfterJoin = null;
                         Boolean flashSlot = null;
+                        Boolean showBothChips = null;
                         Boolean excludeReporters = null;
                         if (resBody.has("hide_district_on_main_feed")
                                 && !resBody.get("hide_district_on_main_feed").isJsonNull()) {
@@ -869,16 +870,27 @@ public final class SessionAnalyticsTracker {
                             flashSlot =
                                     resBody.get("flash_news_in_main_feed_slot").getAsBoolean();
                         }
+                        if (resBody.has("show_flash_and_rewards_together")
+                                && !resBody.get("show_flash_and_rewards_together").isJsonNull()) {
+                            showBothChips =
+                                    resBody.get("show_flash_and_rewards_together").getAsBoolean();
+                        }
                         if (resBody.has("rewards_exclude_reporters")
                                 && !resBody.get("rewards_exclude_reporters").isJsonNull()) {
                             excludeReporters =
                                     resBody.get("rewards_exclude_reporters").getAsBoolean();
+                        }
+                        try {
+                            com.anyNews.anynews.rewards.RewardsConfigHelper
+                                    .applyFromRewardsPayload(context, resBody);
+                        } catch (Exception ignored) {
                         }
                         if (hideDistrict != null
                                 || rewardsMaster != null
                                 || rewardsSlot != null
                                 || keepRewardsAfterJoin != null
                                 || flashSlot != null
+                                || showBothChips != null
                                 || excludeReporters != null) {
                             DistrictPinVisibilityConfig.saveFromServer(
                                     context,
@@ -887,7 +899,8 @@ public final class SessionAnalyticsTracker {
                                     rewardsSlot,
                                     excludeReporters,
                                     flashSlot,
-                                    keepRewardsAfterJoin);
+                                    keepRewardsAfterJoin,
+                                    showBothChips);
                         }
                         if (resBody.has("flash_news_chip_label")
                                 && !resBody.get("flash_news_chip_label").isJsonNull()) {

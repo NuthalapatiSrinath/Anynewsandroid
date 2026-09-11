@@ -44,11 +44,16 @@ import retrofit2.Response;
  *
  * <ul>
  *   <li>Flip settle only enqueues — no per-flip network.</li>
- *   <li>Foreground flush timer every admin {@code views_batch_flush_interval_seconds}
- *       (default 60s) — only while Home is resumed.</li>
+ *   <li>Foreground timer every admin {@code views_batch_flush_interval_seconds}
+ *       (default 60s) — only while Home is resumed and the process is foreground.
+ *       The tick may run, but POST /views/batch only if the local queue is
+ *       non-empty. Idle windows do not hit the network.</li>
  *   <li>Early flush when buffer reaches admin {@code views_batch_flush_at_count}
- *       (default 12).</li>
- *   <li>Immediate flush on leave-Home / background / screen-off / trim / kill.</li>
+ *       (default 12) — that path only runs because events were just queued.</li>
+ *   <li>Offline never POSTs; the queue stays local and goes out on the next
+ *       tick (or return-to-app) only if it is still non-empty and online.</li>
+ *   <li>Leave-Home / background / screen-off / trim / kill: one flush of
+ *       pending events, then the timer stops. Empty queue = no HTTP.</li>
  *   <li>Article onFlip GCM/API is disabled on new builds; this is the sole
  *       post-views path. Old Play still uses onFlip → consume.</li>
  *   <li>Session close can attach a rollup via {@link #snapshotActivitySummary()} —
@@ -91,8 +96,8 @@ public final class ViewsBatchTracker {
     }
 
     /**
-     * Home onResume → true (start timer). Home onPause → false (stop timer + flush).
-     * Background / ProcessLifecycle still flush independently.
+     * Home onResume → true (start timer only while the process is foreground).
+     * Home onPause → false (stop timer). Does not POST by itself.
      */
     public void setHomeFlushActive(boolean active) {
         homeActive = active;
@@ -101,6 +106,17 @@ public final class ViewsBatchTracker {
         } else {
             stopFlushTimer();
         }
+    }
+
+    /** Queued view/dwell events not yet accepted by the server. */
+    public int pendingCount() {
+        synchronized (lock) {
+            return pending.size();
+        }
+    }
+
+    public boolean hasPending() {
+        return pendingCount() > 0;
     }
 
     public void init(Application application) {
@@ -116,20 +132,23 @@ public final class ViewsBatchTracker {
                 if (homeActive) {
                     startFlushTimer();
                 }
-                // Deliver anything restored after a kill.
-                flush(appContext, false);
+                // Deliver a restored / offline-held queue only. Idle return = no HTTP.
+                if (hasPending()) {
+                    flush(appContext, false);
+                }
             }
 
             @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
             public void onAppBackground() {
                 foreground = false;
                 stopFlushTimer();
-                // End in-progress dwell into the queue, then POST the batch.
+                // End in-progress dwell into the queue, then one POST if anything is queued.
                 try {
                     PostDwellTracker.get().flush(appContext, false);
                 } catch (Exception ignored) {
                 }
-                // Sync prefs before best-effort network so a kill mid-POST can restore.
+                // Empty queue: no heartbeat, no HTTP. Offline: flush() keeps the queue.
+                if (!hasPending()) return;
                 synchronized (lock) {
                     persistBackupLocked(appContext);
                 }
@@ -140,7 +159,7 @@ public final class ViewsBatchTracker {
         application.registerComponentCallbacks(new ComponentCallbacks2() {
             @Override
             public void onTrimMemory(int level) {
-                if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN && hasPending()) {
                     flush(appContext, true);
                 }
             }
@@ -150,7 +169,9 @@ public final class ViewsBatchTracker {
 
             @Override
             public void onLowMemory() {
-                flush(appContext, true);
+                if (hasPending()) {
+                    flush(appContext, true);
+                }
             }
         });
     }
@@ -277,7 +298,12 @@ public final class ViewsBatchTracker {
                 ? context.getApplicationContext()
                 : appContext;
         if (appCtx == null) return;
-        // Keep offline views on disk until online — avoid spinning failed POSTs.
+        // Nothing changed in this window — do not touch the network.
+        synchronized (lock) {
+            if (pending.isEmpty()) return;
+        }
+        // Offline: keep the local queue. Next online tick / return-to-app sends
+        // only if it is still non-empty. Never POST from here while offline.
         try {
             if (!BookmarkStore.isNetworkAvailable(appCtx)) {
                 synchronized (lock) {
@@ -286,6 +312,10 @@ public final class ViewsBatchTracker {
                 return;
             }
         } catch (Exception ignored) {
+            synchronized (lock) {
+                persistBackupLocked(appCtx);
+            }
+            return;
         }
 
         final List<JSONObject> batch;
@@ -373,7 +403,10 @@ public final class ViewsBatchTracker {
             @Override
             public void run() {
                 if (!foreground || !homeActive) return;
-                flush(appContext, false);
+                // Tick may run on an idle Home. POST only if events were queued.
+                if (pendingCount() > 0) {
+                    flush(appContext, false);
+                }
                 if (foreground && homeActive) {
                     long next = AnalyticsBatchConfig.getViewsFlushIntervalMs(appContext);
                     mainHandler.postDelayed(this, next);

@@ -308,4 +308,15 @@
     <color name="feed_shimmer_highlight">#55FFFFFF</color>
     <color name="feed_shimmer_highlight_center">#99FFFFFF</color>
 
+    <!-- Rewards club: gold on ink. Garnet is the only live/earn accent. -->
+    <color name="rewards_ink">#0B1020</color>
+    <color name="rewards_ink_raised">#12182B</color>
+    <color name="rewards_gold">#E4C27A</color>
+    <color name="rewards_gold_bright">#F3E2B3</color>
+    <color name="rewards_cream">#F4EDE0</color>
+    <color name="rewards_cream_muted">#A89880</color>
+    <color name="rewards_garnet">#8E2F3C</color>
+    <color name="rewards_hairline">#243049</color>
+    <color name="rewards_ink_text">#0B1020</color>
+
 </resources>

@@ -10,7 +10,9 @@ import androidx.annotation.Nullable;
  * {@code media_access_flush_interval_seconds},
  * {@code rewards_engagement_flush_interval_seconds}).
  *
- * <p>Timers apply while Home is resumed; leave-Home / background still flush.
+ * <p>Timers apply while Home is resumed and the process is foreground. A tick
+ * does not POST when the local queue is empty, and never POSTs while offline.
+ * Leave-Home / background flush once if events are queued, then stop.
  * Rewards engagement interval is ignored when rewards master is OFF or the user
  * has not joined — those paths never call {@code rewards_events_batch}.
  */

@@ -15,6 +15,7 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
+import com.anyNews.anynews.Utils.BookmarkStore;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -33,7 +34,13 @@ import retrofit2.Response;
 /**
  * Batches engagement events (opens, reads, scroll, ads…) and flushes on an
  * admin-tunable interval ({@code rewards_engagement_flush_interval_seconds},
- * default 45s) while Home is resumed — or when the buffer is full / background.
+ * default 45s) only while Home is resumed and the process is foreground.
+ *
+ * <p>The delayed tick may run, but {@code rewards_events_batch} is posted only
+ * when the local queue is non-empty and the device is online. An idle window
+ * does not hit the network. Offline keeps the queue and retries on the next
+ * tick while the user is still in the app. Background / leave-Home sends at
+ * most one flush of pending events, then stops — an empty queue does not call.
  *
  * <p>Hard gate: rewards master OFF or user not joined → never enqueue and never
  * call {@code rewards_events_batch}.
@@ -66,13 +73,24 @@ public final class RewardsEngagementBatcher {
         }
     }
 
-    /** Home onResume → true; Home onPause → false (+ flush if eligible). */
+    /** Home onResume → true; Home onPause → false (one flush if the queue changed). */
     public void setHomeFlushActive(boolean active) {
         homeActive = active;
         if (!active) {
-            // Leave Home: deliver any pending engagement while still eligible.
-            flushInternal();
+            // Leave Home: one delivery of pending events, then stop. Empty = no HTTP.
+            if (pendingCount() > 0) {
+                flushInternal();
+            }
             cancelScheduledFlush();
+            return;
+        }
+        if (!processForeground || pendingCount() == 0) return;
+        // Back on Home with a held queue (offline / off-Home). Send only if online.
+        if (isOnline(appContext)) {
+            cancelScheduledFlush();
+            flushInternal();
+        } else {
+            scheduleFlushIfUsingApp();
         }
     }
 
@@ -86,12 +104,22 @@ public final class RewardsEngagementBatcher {
                                 @OnLifecycleEvent(Lifecycle.Event.ON_START)
                                 public void onAppForeground() {
                                     processForeground = true;
+                                    // One delivery of a held queue. Idle return = no HTTP, no timer.
+                                    if (pendingCount() == 0) return;
+                                    if (isOnline(appContext)) {
+                                        flushInternal();
+                                    } else if (homeActive) {
+                                        scheduleFlushIfUsingApp();
+                                    }
                                 }
 
                                 @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
                                 public void onAppBackground() {
                                     processForeground = false;
-                                    flushInternal();
+                                    // One flush of pending events, then stop. Empty queue = no call.
+                                    if (pendingCount() > 0) {
+                                        flushInternal();
+                                    }
                                     cancelScheduledFlush();
                                 }
                             });
@@ -164,6 +192,10 @@ public final class RewardsEngagementBatcher {
             clearBufferQuietly();
             return;
         }
+        // Daily cap already reached — do not post another scored event.
+        if (RewardsConfigHelper.isFactorCapped(appContext, factor)) {
+            return;
+        }
 
         JsonObject evt = new JsonObject();
         evt.addProperty("factor", factor);
@@ -171,6 +203,7 @@ public final class RewardsEngagementBatcher {
         if (readSeconds > 0) evt.addProperty("read_seconds", readSeconds);
         if (scrollPct > 0) evt.addProperty("scroll_pct", scrollPct);
         if (count > 1) evt.addProperty("count", count);
+        RewardsConfigHelper.noteFactorQueued(appContext, factor, Math.max(1, count));
 
         synchronized (buffer) {
             buffer.add(evt);
@@ -179,12 +212,43 @@ public final class RewardsEngagementBatcher {
                 flushInternal();
                 return;
             }
-            // Schedule delayed flush only while Home is active (or buffer will
-            // flush on leave-Home / background via setHomeFlushActive / lifecycle).
-            if (homeActive && processForeground && !flushScheduled) {
-                flushScheduled = true;
-                long delay = AnalyticsBatchConfig.getRewardsFlushIntervalMs(appContext);
-                handler.postDelayed(flushRunnable, delay);
+            // Delayed flush only while the user is on Home in the foreground.
+            // Off Home / background: leave-Home and ON_STOP deliver once if queued.
+            scheduleFlushIfUsingApp();
+        }
+    }
+
+    private int pendingCount() {
+        synchronized (buffer) {
+            return buffer.size();
+        }
+    }
+
+    private boolean isOnline(@Nullable Context ctx) {
+        Context c = ctx != null ? ctx : appContext;
+        if (c == null) return false;
+        try {
+            return BookmarkStore.isNetworkAvailable(c);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    /** Interval tick only while Home is resumed and the process is foreground. */
+    private void scheduleFlushIfUsingApp() {
+        if (!homeActive || !processForeground || flushScheduled) return;
+        if (appContext == null || pendingCount() == 0) return;
+        flushScheduled = true;
+        long delay = AnalyticsBatchConfig.getRewardsFlushIntervalMs(appContext);
+        handler.postDelayed(flushRunnable, delay);
+    }
+
+    private void requeue(@Nullable List<JsonObject> batch) {
+        if (batch == null || batch.isEmpty()) return;
+        synchronized (buffer) {
+            buffer.addAll(0, batch);
+            while (buffer.size() > MAX_BUFFER) {
+                buffer.remove(buffer.size() - 1);
             }
         }
     }
@@ -209,6 +273,13 @@ public final class RewardsEngagementBatcher {
             clearBufferQuietly();
             return;
         }
+        // Score/queue unchanged — no HTTP, and do not keep a heartbeat running.
+        if (pendingCount() == 0) return;
+        // Offline: keep the queue. Retry only while the user is still in the app.
+        if (!isOnline(appContext)) {
+            scheduleFlushIfUsingApp();
+            return;
+        }
         final List<JsonObject> batch;
         synchronized (buffer) {
             if (buffer.isEmpty()) return;
@@ -231,7 +302,12 @@ public final class RewardsEngagementBatcher {
             } catch (Exception ignored) {
             }
         }
-        if (numericId <= 0) return;
+        if (numericId <= 0) {
+            // Cannot address the user yet — keep the queue, do not POST.
+            requeue(batch);
+            scheduleFlushIfUsingApp();
+            return;
+        }
         userId = String.valueOf(numericId);
         try {
             draftId = SharedPrefsData.getInt(appContext, Constants.DraftID, Constants.PREF_NAME);
@@ -263,12 +339,17 @@ public final class RewardsEngagementBatcher {
         for (JsonObject e : batch) events.add(e);
         body.add("events", events);
 
+        if (events.size() == 0) return;
         try {
             APIService api = RestApiClient.getClient().create(APIService.class);
             api.rewards_events_batch("v3", body).enqueue(new Callback<JsonObject>() {
                 @Override
                 public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
-                    // soft — ignore body
+                    try {
+                        RewardsConfigHelper.applyFromRewardsPayload(
+                                appContext, response != null ? response.body() : null);
+                    } catch (Exception ignored) {
+                    }
                 }
 
                 @Override
@@ -277,6 +358,9 @@ public final class RewardsEngagementBatcher {
                 }
             });
         } catch (Exception e) {
+            // Request never started — keep the queue for the next online window.
+            requeue(batch);
+            scheduleFlushIfUsingApp();
             Log.d(TAG, "flush error: " + e.getMessage());
         }
     }

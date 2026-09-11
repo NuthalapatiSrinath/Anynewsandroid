@@ -8,7 +8,6 @@ import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.content.Context;
-import android.content.Intent;
 import android.content.res.TypedArray;
 import android.database.DataSetObserver;
 import android.graphics.Camera;
@@ -36,7 +35,6 @@ import android.widget.Scroller;
 import androidx.core.view.MotionEventCompat;
 import androidx.core.view.VelocityTrackerCompat;
 
-import com.anyNews.anynews.Activities.HomePage;
 import com.anyNews.anynews.R;
 
 import java.util.ArrayList;
@@ -137,6 +135,32 @@ public class FlipView extends FrameLayout {
     // the landing article — likes worked, Users/Impressions stayed 0.
     private int mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
     private long mCurrentPageId = 0;
+    /**
+     * Last page the user was actually on. Survives {@link #dataSetChanged()} so a
+     * chained notify cannot treat the seat as unknown and snap to the first card.
+     * Never overwritten with 0 unless the user is really on page 0.
+     */
+    private int mAnchorPageIndex = INVALID_PAGE_POSITION;
+    private long mAnchorPageId = 0;
+    private float mAnchorFlipDistance = INVALID_FLIP_DISTANCE;
+    /**
+     * Settled seat (index + post_id). Independent of a mid-gesture distance that
+     * can explode to 0 on a short FlipView. Never written as 0 unless the user
+     * actually landed on page 0.
+     */
+    private int mCommittedPageIndex = INVALID_PAGE_POSITION;
+    private long mCommittedPageId = 0;
+    /** Page the current finger-down started on. One gesture may move at most one page. */
+    private int mGestureAnchorPage = INVALID_PAGE_POSITION;
+    /**
+     * Bumped on every dataset change. Scrap may be reused only when this matches
+     * the generation the view was painted in — otherwise buffer pages keep the
+     * previous article (sticky twin / overlay).
+     */
+    private int mBindGeneration = 0;
+    /** Re-entrant notify from getView during restore must not resolve a wiped index. */
+    private int mDataSetChangeDepth = 0;
+    private Runnable mRestoreAfterFlip;
     private OverFlipMode mOverFlipMode;
     private OverFlipper mOverFlipper;
     //
@@ -267,75 +291,307 @@ public class FlipView extends FrameLayout {
     }
 
     public void dataSetChanged() {
-        //session = new SessionManager(mContext);
-        final int currentPage = mCurrentPageIndex;
-        newPosition = currentPage;
-        // if the adapter has stable ids, try to keep the page currently on
-        // stable.
-        // mPageCount = mAdapter.getCount();
-        // ////System.out.println("mPageCount   " + mPageCount);
-        // startloading(mPageCount);
-        if (mAdapter.hasStableIds() && currentPage != INVALID_PAGE_POSITION) {
-            newPosition = getNewPositionOfCurrentPage();
-        } else if (currentPage == INVALID_PAGE_POSITION) {
-            newPosition = 0;
+        if (mAdapter == null) {
+            return;
         }
-        // remove all the current views
+        // getView during restore can notify again. The outer call already captured
+        // the user's seat — a nested pass that sees INVALID index used to snap home.
+        if (mDataSetChangeDepth > 0) {
+            try {
+                mPageCount = mAdapter.getCount();
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+        mDataSetChangeDepth++;
         try {
-//			if (MainActivity.isNightMode == 1) {
-//				recycleActiveViews();
-//				mRecycler.setViewTypeCount(mAdapter.getViewTypeCount());
-//				mRecycler.invalidateScraps();
-//				MainActivity.isNightMode = 0;
-//			}
-
-            /*if (BuzzActivity.isNightMode == 1) {
-                recycleActiveViews();
-                mRecycler.setViewTypeCount(mAdapter.getViewTypeCount());
+            rememberFlipAnchor();
+            // Any notify invalidates painted scrap. Same-position scrap must not
+            // be returned as-is when the post_id at that index changed.
+            mBindGeneration++;
+            if (mRecycler != null) {
                 mRecycler.invalidateScraps();
-                BuzzActivity.isNightMode = 0;
-            }*/
-        } catch (Exception e) {
-            e.printStackTrace();
+            }
+            final boolean driving = isUserDrivingFlip();
+            int restore = resolvePageAfterDataChange();
+            newPosition = restore;
+            mPageCount = mAdapter.getCount();
+            if (mPageCount < 1) {
+                // Intentional clear (tab switch) may reset. A mid-flip empty must
+                // not wipe the page id — the next append would then land on card 0.
+                if (!driving) {
+                    clearFlipAnchor();
+                    clearCommittedSeat();
+                    mFlipDistance = INVALID_FLIP_DISTANCE;
+                    mCurrentPageIndex = INVALID_PAGE_POSITION;
+                    mCurrentPageId = -1;
+                    mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
+                    setFlipDistance(0);
+                }
+                updateEmptyStatus();
+                return;
+            }
+            if (restore == INVALID_PAGE_POSITION) {
+                restore = fallbackPageNeverHomeUnlessOnZero();
+            } else if (restore > mPageCount - 1) {
+                restore = mPageCount - 1;
+            } else if (restore < 0) {
+                restore = 0;
+            }
+            newPosition = restore;
+            // Never recycle or snap while the user is still swiping. A recycle here
+            // aborted the gesture and the next notify treated the seat as unknown.
+            if (driving) {
+                rememberFlipAnchor();
+                scheduleRestoreAfterFlip();
+                invalidate();
+                updateEmptyStatus();
+                return;
+            }
+            // Apply the restored page BEFORE layout. Do not clear index, flip
+            // distance, or page id first — that window was the snap-to-first bug.
+            // Same page: keep last-dispatched so we do not re-fire onFlippedToPage(0).
+            setFlipDistance(restore * (float) FLIP_DISTANCE_PER_PAGE, true);
+            updateEmptyStatus();
+        } finally {
+            mDataSetChangeDepth--;
         }
-        mPageCount = mAdapter.getCount();
-        // put the current page within the new adapter range
-        newPosition = Math.min(mPageCount - 1,
-                newPosition == INVALID_PAGE_POSITION ? 0 : newPosition);
-        // ////System.out.println("new position " + newPosition);
-        if (newPosition != INVALID_PAGE_POSITION) {
-            // TODO pretty confusing
-            // this will be correctly set in setFlipDistance method
-            mCurrentPageIndex = INVALID_PAGE_POSITION;
-            mFlipDistance = INVALID_FLIP_DISTANCE;
-            // dataSetChanged often lands back on 0; reset so landing page is tracked.
-            mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
-            flipTo(newPosition);
-        } else {
-            mFlipDistance = INVALID_FLIP_DISTANCE;
-            mPageCount = 0;
-            mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
-            setFlipDistance(0);
-        }
-        updateEmptyStatus();
     }
 
-    private int getNewPositionOfCurrentPage() {
-        // check if id is on same position, this is because it will
-        // often be that and this way you do not need to iterate the whole
-        // dataset. If it is the same position, you are done.
-        if (mCurrentPageId == mAdapter.getItemId(mCurrentPageIndex)) {
-            return mCurrentPageIndex;
+    /**
+     * Page to show after a dataset change. Never defaults to 0 when the user was
+     * further into the feed. Duplicate post_ids (sticky + chrono) use the match
+     * nearest the flip seat, not the first list occurrence.
+     */
+    private int resolvePageAfterDataChange() {
+        final int count;
+        try {
+            count = mAdapter.getCount();
+        } catch (Exception e) {
+            return INVALID_PAGE_POSITION;
         }
-        // iterate the dataset and look for the correct id. If it
-        // exists, set that position as the current position.
-        for (int i = 0; i < mAdapter.getCount(); i++) {
-            if (mCurrentPageId == mAdapter.getItemId(i)) {
-                return i;
+        if (count < 1) {
+            return INVALID_PAGE_POSITION;
+        }
+        final int reference = bestKnownPageIndex();
+        final long pageId = bestKnownPageId();
+        if (reference != INVALID_PAGE_POSITION) {
+            final int clamped = Math.max(0, Math.min(count - 1, reference));
+            if (pageId == 0 || pageId == -1) {
+                return clamped;
+            }
+            try {
+                if (mAdapter.getItemId(clamped) == pageId) {
+                    return clamped;
+                }
+            } catch (Exception ignored) {
+                return clamped;
+            }
+            int nearest = nearestIndexForPageId(pageId, reference, count);
+            if (nearest != INVALID_PAGE_POSITION) {
+                return nearest;
+            }
+            return clamped;
+        }
+        if (pageId != 0 && pageId != -1) {
+            int nearest = nearestIndexForPageId(pageId, INVALID_PAGE_POSITION, count);
+            if (nearest != INVALID_PAGE_POSITION) {
+                return nearest;
             }
         }
-        // Id no longer is dataset, keep current page
-        return mCurrentPageIndex;
+        return fallbackPageNeverHomeUnlessOnZero();
+    }
+
+    /**
+     * When the seat is unknown, stay on the last committed page. Page 0 is only
+     * legal if the user actually landed there (or has never landed anywhere).
+     */
+    private int fallbackPageNeverHomeUnlessOnZero() {
+        if (mCommittedPageIndex > 0) {
+            return mCommittedPageIndex;
+        }
+        if (mAnchorPageIndex > 0) {
+            return mAnchorPageIndex;
+        }
+        if (mLastDispatchedPageEventIndex > 0) {
+            return mLastDispatchedPageEventIndex;
+        }
+        if (isActuallyOnFirstPage()) {
+            return 0;
+        }
+        return 0;
+    }
+
+    private int nearestIndexForPageId(long pageId, int origin, int count) {
+        int best = INVALID_PAGE_POSITION;
+        int bestDist = Integer.MAX_VALUE;
+        for (int i = 0; i < count; i++) {
+            long id;
+            try {
+                id = mAdapter.getItemId(i);
+            } catch (Exception e) {
+                continue;
+            }
+            if (id != pageId) {
+                continue;
+            }
+            // No flip seat: do not prefer index 0 (sticky twin). Prefer the later
+            // copy so a lost index cannot send the user home.
+            final int dist = origin == INVALID_PAGE_POSITION
+                    ? (count - i)
+                    : Math.abs(i - origin);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    private int bestKnownPageIndex() {
+        // A wiped or exploded distance of 0 must not beat a committed mid-feed seat.
+        if (mCurrentPageIndex > 0) {
+            return mCurrentPageIndex;
+        }
+        if (mCurrentPageIndex == 0 && isActuallyOnFirstPage()) {
+            return 0;
+        }
+        int fromDistance = pageIndexFromDistance(mFlipDistance);
+        if (fromDistance > 0) {
+            return fromDistance;
+        }
+        if (mCommittedPageIndex > 0) {
+            return mCommittedPageIndex;
+        }
+        if (mAnchorPageIndex > 0) {
+            return mAnchorPageIndex;
+        }
+        int fromAnchor = pageIndexFromDistance(mAnchorFlipDistance);
+        if (fromAnchor > 0) {
+            return fromAnchor;
+        }
+        if (mLastDispatchedPageEventIndex > 0) {
+            return mLastDispatchedPageEventIndex;
+        }
+        if (mCurrentPageIndex == 0 || fromDistance == 0 || mCommittedPageIndex == 0
+                || mAnchorPageIndex == 0) {
+            return 0;
+        }
+        return INVALID_PAGE_POSITION;
+    }
+
+    private int pageIndexFromDistance(float distance) {
+        if (distance == INVALID_FLIP_DISTANCE || distance < 0 || FLIP_DISTANCE_PER_PAGE < 1) {
+            return INVALID_PAGE_POSITION;
+        }
+        return Math.round(distance / (float) FLIP_DISTANCE_PER_PAGE);
+    }
+
+    /**
+     * True only when flip distance and the settled seat both say page 0.
+     * A 0 index left behind by a short-screen fling is not "on the first card".
+     */
+    private boolean isActuallyOnFirstPage() {
+        if (mFlipDistance != INVALID_FLIP_DISTANCE
+                && mFlipDistance >= FLIP_DISTANCE_PER_PAGE * 0.5f) {
+            return false;
+        }
+        if (mCurrentPageIndex > 0) {
+            return false;
+        }
+        // A mid-feed seat must not be treated as page 0 just because distance exploded.
+        if (mCommittedPageIndex > 1 && mCurrentPageIndex == 0) {
+            return false;
+        }
+        return mCurrentPageIndex == 0
+                || mCommittedPageIndex == 0
+                || (mCurrentPageIndex == INVALID_PAGE_POSITION
+                && mCommittedPageIndex <= 0
+                && (mFlipDistance == INVALID_FLIP_DISTANCE || mFlipDistance < 1f));
+    }
+
+    private long bestKnownPageId() {
+        if (mCurrentPageId != 0 && mCurrentPageId != -1) {
+            return mCurrentPageId;
+        }
+        if (mCommittedPageId != 0 && mCommittedPageId != -1) {
+            return mCommittedPageId;
+        }
+        return mAnchorPageId;
+    }
+
+    private void rememberFlipAnchor() {
+        int page = INVALID_PAGE_POSITION;
+        if (mCurrentPageIndex != INVALID_PAGE_POSITION && mCurrentPageIndex >= 0) {
+            page = mCurrentPageIndex;
+        } else if (mFlipDistance != INVALID_FLIP_DISTANCE && mFlipDistance >= 0) {
+            page = Math.round(mFlipDistance / (float) FLIP_DISTANCE_PER_PAGE);
+        }
+        if (page > 0) {
+            mAnchorPageIndex = page;
+            mCommittedPageIndex = page;
+        } else if (page == 0 && isActuallyOnFirstPage()) {
+            mAnchorPageIndex = 0;
+            mCommittedPageIndex = 0;
+        }
+        if (mCurrentPageId != 0 && mCurrentPageId != -1) {
+            mAnchorPageId = mCurrentPageId;
+            if (mCommittedPageIndex == page || mCommittedPageIndex < 0) {
+                mCommittedPageId = mCurrentPageId;
+            }
+        }
+        if (mFlipDistance != INVALID_FLIP_DISTANCE && mFlipDistance >= 0
+                && (mFlipDistance > 0 || page == 0)) {
+            mAnchorFlipDistance = mFlipDistance;
+        }
+    }
+
+    private void clearCommittedSeat() {
+        mCommittedPageIndex = INVALID_PAGE_POSITION;
+        mCommittedPageId = 0;
+        mGestureAnchorPage = INVALID_PAGE_POSITION;
+    }
+
+    private void clearFlipAnchor() {
+        mAnchorPageIndex = INVALID_PAGE_POSITION;
+        mAnchorPageId = 0;
+        mAnchorFlipDistance = INVALID_FLIP_DISTANCE;
+        if (mRestoreAfterFlip != null) {
+            removeCallbacks(mRestoreAfterFlip);
+            mRestoreAfterFlip = null;
+        }
+    }
+
+    /** Re-apply a dataset change once the swipe/fling has stopped. */
+    private void scheduleRestoreAfterFlip() {
+        if (mRestoreAfterFlip != null) {
+            return;
+        }
+        mRestoreAfterFlip = new Runnable() {
+            @Override
+            public void run() {
+                if (isUserDrivingFlip()) {
+                    postDelayed(this, 32L);
+                    return;
+                }
+                mRestoreAfterFlip = null;
+                dataSetChanged();
+            }
+        };
+        postDelayed(mRestoreAfterFlip, 32L);
+    }
+
+    /**
+     * Page to keep after a recycle. {@code -1} only when the user has never landed.
+     */
+    public int getAnchoredPage() {
+        if (mCurrentPageIndex > 0) {
+            return mCurrentPageIndex;
+        }
+        if (mCurrentPageIndex == 0 && isActuallyOnFirstPage()) {
+            return 0;
+        }
+        return bestKnownPageIndex();
     }
 
     private void dataSetInvalidated() {
@@ -410,29 +666,65 @@ public class FlipView extends FrameLayout {
     }
 
     private void setFlipDistance(float flipDistance) {
+        setFlipDistance(flipDistance, false);
+    }
+
+    /**
+     * @param forceRebind recycle even when the page index is unchanged (dataset
+     *                    refresh). Never used to pass through an invalid index —
+     *                    callers must set the target page first.
+     */
+    private void setFlipDistance(float flipDistance, boolean forceRebind) {
         try {
             if (mPageCount < 1) {
-                //////System.out.println("FLIP_DISTANCE_PER_PAGE11111111111111   "+FLIP_DISTANCE_PER_PAGE);
-                mFlipDistance = 0;
-                mCurrentPageIndex = INVALID_PAGE_POSITION;
-                mCurrentPageId = -1;
+                rememberFlipAnchor();
+                if (!isUserDrivingFlip()) {
+                    clearFlipAnchor();
+                    mFlipDistance = 0;
+                    mCurrentPageIndex = INVALID_PAGE_POSITION;
+                    mCurrentPageId = -1;
+                }
                 recycleActiveViews();
                 return;
             }
 
+            if (Float.isNaN(flipDistance) || Float.isInfinite(flipDistance)) {
+                int keep = bestKnownPageIndex();
+                if (keep < 0) {
+                    keep = 0;
+                }
+                flipDistance = keep * (float) Math.max(1, FLIP_DISTANCE_PER_PAGE);
+            }
             /*
              * if (flipDistance == mFlipDistance) { return; }
              */
             mFlipDistance = flipDistance;
             // ////System.out.println(mFlipDistance + "   :::mFlipDistance");
             int currentPageIndex = Math.round(mFlipDistance
-                    / FLIP_DISTANCE_PER_PAGE);
+                    / (float) Math.max(1, FLIP_DISTANCE_PER_PAGE));
+            if (currentPageIndex < 0) {
+                currentPageIndex = 0;
+            } else if (currentPageIndex > mPageCount - 1) {
+                currentPageIndex = mPageCount - 1;
+            }
+            int unclampedPage = currentPageIndex;
+            currentPageIndex = clampPageAgainstExplodedDistance(currentPageIndex);
+            if (currentPageIndex != unclampedPage && currentPageIndex >= 0) {
+                mFlipDistance = currentPageIndex * (float) Math.max(1, FLIP_DISTANCE_PER_PAGE);
+            }
             // if(mCurrentPageIndex==currentPageIndex){
             // return;
             // }
-            if (mCurrentPageIndex != currentPageIndex) {
+            if (forceRebind || mCurrentPageIndex != currentPageIndex) {
                 mCurrentPageIndex = currentPageIndex;
-                mCurrentPageId = mAdapter.getItemId(mCurrentPageIndex);
+                try {
+                    long id = mAdapter.getItemId(mCurrentPageIndex);
+                    if (id != 0 && id != -1) {
+                        mCurrentPageId = id;
+                    }
+                } catch (Exception ignored) {
+                }
+                rememberFlipAnchor();
                 // TODO be smarter about this. Dont remove a view that will be added
                 // again on the next line.
                 // ////System.out.println("before recycleActiveViews  "
@@ -441,31 +733,21 @@ public class FlipView extends FrameLayout {
                 // ////System.out.println("After recycleActiveViews  "
                 // + //System.currentTimeMillis());
                 // add the new active views
-                if (mCurrentPageIndex > 0) {
-//                removeView(mPreviousPage.v);
+                if (mCurrentPageIndex > 0
+                        && !isSamePaintedArticle(mCurrentPageIndex - 1, mCurrentPageIndex)) {
                     fillPageForIndex(mPreviousPage, mCurrentPageIndex - 1,
                             (mCurrentPageIndex - 1) % 3);
-//                if(mCurrentPageIndex<3){
-//                    removeView(mPreviousPage.v);
-//                }
-                    addView(mPreviousPage.v);
+                    addFlipChild(mPreviousPage.v);
                 }
                 if (mCurrentPageIndex >= 0 && mCurrentPageIndex < mPageCount) {
                     fillPageForIndex(mCurrentPage, mCurrentPageIndex, (mCurrentPageIndex) % 3);
-//                if(mCurrentPageIndex<3){
-//                    removeView(mCurrentPage.v);
-//                }
-//          
-                    addView(mCurrentPage.v);
+                    addFlipChild(mCurrentPage.v);
                 }
-                if (mCurrentPageIndex < mPageCount - 1) {
-//                removeView(mNextPage.v);
+                if (mCurrentPageIndex < mPageCount - 1
+                        && !isSamePaintedArticle(mCurrentPageIndex + 1, mCurrentPageIndex)) {
                     fillPageForIndex(mNextPage, mCurrentPageIndex + 1,
                             (mCurrentPageIndex + 1) % 3);
-//                if(mCurrentPageIndex<3){
-//                    removeView(mNextPage.v);
-//                }
-                    addView(mNextPage.v);
+                    addFlipChild(mNextPage.v);
                     // ////System.out.println("aaaaa adview  "
                     // + //System.currentTimeMillis());
                     /*
@@ -477,6 +759,7 @@ public class FlipView extends FrameLayout {
                 }
 
             } else {
+                rememberFlipAnchor();
                 invalidate();
                 if (-mFlipDistance < 140) {
                     if (mOnOverFlipListener != null) {
@@ -508,7 +791,7 @@ public class FlipView extends FrameLayout {
         // }else if(l==1){
         p.viewType = mAdapter.getItemViewType(p.position);
         p.v = getView(p.position, p.viewType);
-        // p.v=bufferedViews.get(i).v;
+        stampBoundIdentity(p);
         //
         // }
         // else {
@@ -539,6 +822,7 @@ public class FlipView extends FrameLayout {
         p.position = i;
         p.viewType = mAdapter.getItemViewType(p.position);
         p.v = getView(p.position, p.viewType);
+        stampBoundIdentity(p);
         p.valid = true;
         prvpage.v = p.v;
         prvpage.viewType = p.viewType;
@@ -551,63 +835,129 @@ public class FlipView extends FrameLayout {
         if (mPreviousPage.valid) {
             removeView(mPreviousPage.v);
             mRecycler.addScrapView(mPreviousPage.v, mPreviousPage.position,
-                    mPreviousPage.viewType);
+                    mPreviousPage.viewType, mPreviousPage.boundItemId,
+                    mPreviousPage.boundGeneration);
             mPreviousPage.valid = false;
         }
         if (mCurrentPage.valid) {
             removeView(mCurrentPage.v);
             mRecycler.addScrapView(mCurrentPage.v, mCurrentPage.position,
-                    mCurrentPage.viewType);
+                    mCurrentPage.viewType, mCurrentPage.boundItemId,
+                    mCurrentPage.boundGeneration);
             mCurrentPage.valid = false;
         }
         if (mNextPage.valid) {
             removeView(mNextPage.v);
             mRecycler.addScrapView(mNextPage.v, mNextPage.position,
-                    mNextPage.viewType);
+                    mNextPage.viewType, mNextPage.boundItemId,
+                    mNextPage.boundGeneration);
             mNextPage.valid = false;
         }
     }
 
     public void setViewscrap(int index) {
-        // get the scrap from the recycler corresponding to the correct view
-        // type
-        Recycler.Scrap scrap = mRecycler.getScrapView(index, 0);
-        // get a view from the adapter if a scrap was not found or it is
-        // invalid.
-        View v = null;
-        if (scrap == null || !scrap.valid) {
-            // v = mAdapter.getView(index, scrap == null ? null : scrap.v,
-            // this);
-            // mAdapter.getView(index+1, scrap == null ? null : scrap.v, this);
-            // mAdapter.getView(index+2, scrap == null ? null : scrap.v, this);
-            v = mAdapter.getView(index, scrap == null ? null : scrap.v, this);
-            mRecycler.addScrapView(v, index, 0);
-
-        }
-        // return view
-        // return v;
+        // Unused prefetch. Always rebind — a valid scrap is not a painted page.
+        getView(index, 0);
     }
 
+    /**
+     * Buffer pages must not keep a previously painted article.
+     * Same-position scrap is a convertView only when its bound post_id and
+     * bind generation still match. Otherwise {@link ListAdapter#getView} rebinds.
+     */
     private View getView(int index, int viewType) {
-        // get the scrap from the recycler corresponding to the correct view
-        // type
-        Recycler.Scrap scrap = mRecycler.getScrapView(index, 0);
-        // get a view from the adapter if a scrap was not found or it is
-        // invalid.
-        View v = null;
-        // ////System.out.println("scrapscrap  ::::" + scrap);
-        if (scrap == null || !scrap.valid) {
-            v = mAdapter.getView(index, scrap == null ? null : scrap.v, this);
-            /*
-             * mAdapter.getView(index+1, scrap == null ? null : scrap.v, this);
-             * mAdapter.getView(index+2, scrap == null ? null : scrap.v, this);
-             * mAdapter.getView(index+3, scrap == null ? null : scrap.v, this);
-             */
-        } else {
-            v = scrap.v;
+        int type = viewType;
+        if (mAdapter != null) {
+            try {
+                type = mAdapter.getItemViewType(index);
+            } catch (Exception ignored) {
+                type = viewType;
+            }
         }
-        // return view
+        Recycler.Scrap scrap = mRecycler.getScrapView(index, type);
+        final long want = itemIdAt(index);
+        if (canReturnScrapWithoutRebind(scrap, want) && !isActivePageView(scrap.v)) {
+            return scrap.v;
+        }
+        View convert = scrap == null ? null : scrap.v;
+        if (convert != null && isActivePageView(convert)) {
+            convert = null;
+        }
+        View v = null;
+        try {
+            if (mAdapter != null) {
+                v = mAdapter.getView(index, convert, this);
+            }
+        } catch (Exception ignored) {
+        }
+        if (v == null) {
+            v = convert;
+        }
+        if (v != null && isActivePageView(v)) {
+            try {
+                v = mAdapter.getView(index, null, this);
+            } catch (Exception ignored) {
+            }
+        }
         return v;
+    }
+
+    private boolean canReturnScrapWithoutRebind(Recycler.Scrap scrap, long want) {
+        if (scrap == null || !scrap.valid || scrap.v == null) {
+            return false;
+        }
+        if (scrap.boundGeneration != mBindGeneration) {
+            return false;
+        }
+        if (want == 0L || want == -1L) {
+            return false;
+        }
+        return scrap.boundItemId == want;
+    }
+
+    private boolean isActivePageView(View v) {
+        if (v == null) return false;
+        return (mPreviousPage.valid && mPreviousPage.v == v)
+                || (mCurrentPage.valid && mCurrentPage.v == v)
+                || (mNextPage.valid && mNextPage.v == v);
+    }
+
+    private void stampBoundIdentity(Page p) {
+        if (p == null) return;
+        p.boundItemId = itemIdAt(p.position);
+        p.boundGeneration = mBindGeneration;
+    }
+
+    /** Sticky + timeline twins share a post_id. Do not paint both buffer pages. */
+    private boolean isSamePaintedArticle(int index, int other) {
+        long a = itemIdAt(index);
+        long b = itemIdAt(other);
+        if (a == 0L || a == -1L || b == 0L || b == -1L) {
+            return false;
+        }
+        return a == b;
+    }
+
+    private long itemIdAt(int index) {
+        if (mAdapter == null || index < 0) return 0L;
+        try {
+            return mAdapter.getItemId(index);
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
+
+    /** Never attach a view twice — that painted the same card on two buffer pages. */
+    private void addFlipChild(View v) {
+        if (v == null) return;
+        android.view.ViewParent parent = v.getParent();
+        if (parent == this) {
+            return;
+        }
+        if (parent instanceof android.view.ViewGroup) {
+            ((android.view.ViewGroup) parent).removeView(v);
+        }
+        addView(v);
     }
 
     private View getView1(int index, int viewType) {
@@ -681,6 +1031,7 @@ public class FlipView extends FrameLayout {
                         mIsUnableToFlip = true;
                     } else {
                         mIsFlipping = true;
+                        rememberGestureAnchor();
                         mLastX = x;
                         mLastY = y;
                     }
@@ -728,8 +1079,10 @@ public class FlipView extends FrameLayout {
         switch (action & MotionEvent.ACTION_MASK) {
             case MotionEvent.ACTION_DOWN:
                 // start flipping immediately if interrupting some sort of animation
+                clearGestureAnchor();
                 if (endScroll() || endPeak()) {
                     mIsFlipping = true;
+                    rememberGestureAnchor();
                 }
                 // Remember where the motion event started
                 mLastX = ev.getX();
@@ -759,6 +1112,7 @@ public class FlipView extends FrameLayout {
                             // Child still scrolling — do not start page flip.
                         } else {
                             mIsFlipping = true;
+                            rememberGestureAnchor();
                             mLastX = x;
                             mLastY = y;
                         }
@@ -811,8 +1165,10 @@ public class FlipView extends FrameLayout {
 //                            ? getHeight()
 //                            : getWidth()) / FLIP_DISTANCE_PER_PAGE));
 //                    //System.out.println("mLastX        :: " + mLastX);
-                    deltaFlipDistance /= ((isFlippingVertically() ? getHeight()
-                            - (getHeight() / 3) : getWidth()) / FLIP_DISTANCE_PER_PAGE);
+                    deltaFlipDistance /= pageTravelScale();
+                    // One motion event cannot skip the feed or slam distance to 0/end.
+                    // Small phones used to divide by 0 here (short FlipView) and explode.
+                    deltaFlipDistance = clampFlipDelta(deltaFlipDistance);
 //                    //System.out.println("mFlipDistance   ::" + mFlipDistance);
 //                    //System.out.println("deltaFlipDistance   ::" + deltaFlipDistance);
 					farword = deltaFlipDistance < 0;
@@ -914,7 +1270,8 @@ public class FlipView extends FrameLayout {
                     } else {
                         str1 = true;
                     }
-                    smoothFlipTo(getNextPage(velocity));
+                    smoothFlipTo(clampLandingPage(getNextPage(velocity)));
+                    clearGestureAnchor();
                     mActivePointerId = INVALID_POINTER;
                     endFlip();
                     mOverFlipper.overFlipEnded();
@@ -969,9 +1326,12 @@ public class FlipView extends FrameLayout {
                     mOnFlipCompleteListener.OnFlipCompletedListener(FlipView.this);
                 }
                 endScroll();
+                commitSettledPage();
                 setDrawWithLayer(mCurrentPage.v, false);
                 hideOtherPages(mCurrentPage);
-                drawChild(canvas, mCurrentPage.v, 0);
+                if (mCurrentPage.v != null) {
+                    drawChild(canvas, mCurrentPage.v, 0);
+                }
                 // dispatch listener event now that we have "landed" on a page.
                 // TODO not the prettiest to have this with the drawing logic,
                 // should change.
@@ -1024,11 +1384,11 @@ public class FlipView extends FrameLayout {
                     mNextPage.v.setVisibility(GONE);
                 }
             }
-            p.v.setVisibility(VISIBLE);
+            if (p != null && p.v != null) {
+                p.v.setVisibility(VISIBLE);
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            Intent i = new Intent(mContext, HomePage.class);
-            mContext.startActivity(i);
         }
     }
 
@@ -1051,9 +1411,6 @@ public class FlipView extends FrameLayout {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            Intent i = new Intent(mContext, HomePage.class);
-            mContext.startActivity(i);
-
         }
 
     }
@@ -1427,6 +1784,84 @@ public class FlipView extends FrameLayout {
      * @param velocity
      * @return the page you should "land" on
      */
+    /**
+     * Finger travel → flip distance. Never 0: a short FlipView (small phones,
+     * gesture bars) used integer division and turned one swipe into Infinity,
+     * which rounded to page 0 or the last card.
+     */
+    private float pageTravelScale() {
+        int span = isFlippingVertically()
+                ? Math.max(1, getHeight() - (getHeight() / 3))
+                : Math.max(1, getWidth());
+        int per = Math.max(1, FLIP_DISTANCE_PER_PAGE);
+        float div = span / (float) per;
+        if (div < 1f) {
+            div = 1f;
+        }
+        return div;
+    }
+
+    /** At most one page per motion event so a fling walks N, N+1, N+2. */
+    private float clampFlipDelta(float delta) {
+        float maxStep = Math.max(1, FLIP_DISTANCE_PER_PAGE);
+        if (delta > maxStep) {
+            return maxStep;
+        }
+        if (delta < -maxStep) {
+            return -maxStep;
+        }
+        return delta;
+    }
+
+    private void rememberGestureAnchor() {
+        if (mGestureAnchorPage >= 0) {
+            return;
+        }
+        int page = mCurrentPageIndex;
+        if (page < 0) {
+            page = bestKnownPageIndex();
+        }
+        if (page < 0 && mCommittedPageIndex >= 0) {
+            page = mCommittedPageIndex;
+        }
+        mGestureAnchorPage = page;
+    }
+
+    private void clearGestureAnchor() {
+        mGestureAnchorPage = INVALID_PAGE_POSITION;
+    }
+
+    /**
+     * Finger-up must not snap to page 0 unless the gesture actually reached the
+     * start. A sequential drag from a later page may still land on 0.
+     */
+    private int clampLandingPage(int nextPage) {
+        if (nextPage != 0) {
+            return Math.max(0, nextPage);
+        }
+        int origin = mGestureAnchorPage >= 0 ? mGestureAnchorPage : mCommittedPageIndex;
+        if (origin <= 1) {
+            return 0;
+        }
+        int dragged = getCurrentPageRound();
+        if (dragged <= 1) {
+            return Math.max(0, dragged);
+        }
+        return dragged;
+    }
+
+    /**
+     * A leap from mid-feed to page 0 is the short-screen distance explosion.
+     * Adjacent steps (2 → 1 → 0) stay legal so a real drag can still reach the start.
+     */
+    private int clampPageAgainstExplodedDistance(int page) {
+        int previous = mCurrentPageIndex >= 0 ? mCurrentPageIndex : mCommittedPageIndex;
+        if (previous <= 1 || page != 0) {
+            return page;
+        }
+        return previous;
+    }
+
     private int getNextPage(int velocity) {
         int nextPage;
         if (velocity > mMinimumVelocity) {
@@ -1576,6 +2011,8 @@ public class FlipView extends FrameLayout {
         }
         // TODO pretty confusing
         // this will be correctly set in setFlipDistance method
+        clearFlipAnchor();
+        clearCommittedSeat();
         mCurrentPageIndex = INVALID_PAGE_POSITION;
         mFlipDistance = INVALID_FLIP_DISTANCE;
         // Force first-page (index 0) to dispatch onFlippedToPage after setAdapter.
@@ -1589,7 +2026,59 @@ public class FlipView extends FrameLayout {
     }
 
     public int getCurrentPage() {
-        return mCurrentPageIndex;
+        if (mCurrentPageIndex > 0) {
+            return mCurrentPageIndex;
+        }
+        if (mCurrentPageIndex == 0 && isActuallyOnFirstPage()) {
+            return 0;
+        }
+        // During a dataset restore the index is briefly unknown. Callers that
+        // treat -1 as "go to first article" must not see that window.
+        int known = getAnchoredPage();
+        if (known == 0 && mCommittedPageIndex > 0 && !isActuallyOnFirstPage()) {
+            return mCommittedPageIndex;
+        }
+        return known < 0 ? 0 : known;
+    }
+
+    /** Last page the user actually landed on. 0 only if that seat is page 0. */
+    public long getCommittedPageId() {
+        if (mCommittedPageId != 0 && mCommittedPageId != -1) {
+            return mCommittedPageId;
+        }
+        return bestKnownPageId();
+    }
+
+    private void commitSettledPage() {
+        if (mIsFlipping || (mScroller != null && !mScroller.isFinished())) {
+            return;
+        }
+        if (mCurrentPageIndex > 0) {
+            mCommittedPageIndex = mCurrentPageIndex;
+            if (mCurrentPageId != 0 && mCurrentPageId != -1) {
+                mCommittedPageId = mCurrentPageId;
+            }
+            return;
+        }
+        if (mCurrentPageIndex == 0 && isActuallyOnFirstPage()) {
+            mCommittedPageIndex = 0;
+            if (mCurrentPageId != 0 && mCurrentPageId != -1) {
+                mCommittedPageId = mCurrentPageId;
+            }
+        }
+    }
+
+    /**
+     * True while the user is dragging or the fling scroller is running.
+     * Does not include the idle peak-next hint — that must not delay first paint.
+     * Dataset notifies must wait for this to clear so the feed cannot snap home.
+     */
+    public boolean isUserDrivingFlip() {
+        try {
+            return mIsFlipping || (mScroller != null && !mScroller.isFinished());
+        } catch (Exception e) {
+            return mIsFlipping;
+        }
     }
 
     /**
@@ -1667,7 +2156,24 @@ public class FlipView extends FrameLayout {
         }
 //        //Log.e("TRACKING","flipTo "+page);
         endFlip();
+        clearGestureAnchor();
+        // Explicit navigation (deep link, restore) is a real land — including page 0.
+        mCommittedPageIndex = page;
         setFlipDistance(page * FLIP_DISTANCE_PER_PAGE);
+        commitExplicitPage(page);
+    }
+
+    private void commitExplicitPage(int page) {
+        if (page < 0) return;
+        mCommittedPageIndex = page;
+        mCurrentPageIndex = page;
+        long id = itemIdAt(page);
+        if (id != 0L && id != -1L) {
+            mCommittedPageId = id;
+            mCurrentPageId = id;
+            mAnchorPageId = id;
+        }
+        mAnchorPageIndex = page;
     }
     // public void startloading(int count, int currentpos) {
     //
@@ -1891,6 +2397,8 @@ public class FlipView extends FrameLayout {
         int position;
         int viewType;
         boolean valid;
+        long boundItemId;
+        int boundGeneration;
     }
 
 

@@ -28,6 +28,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.rewards.RewardsConfigHelper;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -94,10 +95,14 @@ public class RewardsWalletActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(window, false);
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.parseColor("#FFF8F4EC"));
+        window.setStatusBarColor(Color.parseColor("#FF0B1020"));
+        window.setNavigationBarColor(Color.parseColor("#FF0B1020"));
         WindowInsetsControllerCompat c =
                 WindowCompat.getInsetsController(window, window.getDecorView());
-        if (c != null) c.setAppearanceLightStatusBars(true);
+        if (c != null) {
+            c.setAppearanceLightStatusBars(false);
+            c.setAppearanceLightNavigationBars(false);
+        }
         View root = findViewById(R.id.wallet_root);
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -179,6 +184,7 @@ public class RewardsWalletActivity extends AppCompatActivity {
     private void applyWallet(JsonObject body) {
         guest = body.has("guest") && body.get("guest").getAsBoolean();
         joined = body.has("joined") && body.get("joined").getAsBoolean();
+        RewardsConfigHelper.applyFromRewardsPayload(this, body);
 
         JsonObject copy =
                 body.has("copy") && body.get("copy").isJsonObject()
@@ -245,9 +251,9 @@ public class RewardsWalletActivity extends AppCompatActivity {
         if (history.getChildCount() == 0) {
             TextView empty = new TextView(this);
             empty.setText(RewardsLabels.noHistory(this));
-            empty.setTextColor(Color.parseColor("#FFA8A29E"));
-            empty.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            empty.setPadding(12, 16, 12, 16);
+            empty.setTextColor(Color.parseColor("#FFA89880"));
+            empty.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            empty.setPadding(dp(20), dp(24), dp(20), dp(24));
             history.addView(empty);
         }
     }
@@ -265,12 +271,27 @@ public class RewardsWalletActivity extends AppCompatActivity {
             if (amt <= 0) continue;
             String sign = credit ? "+" : "−";
             String when = formatWhen(row);
-            TextView line = new TextView(this);
-            line.setText(sign + "₹" + formatMoney(amt) + (TextUtils.isEmpty(when) ? "" : "  ·  " + when));
-            line.setTextColor(Color.parseColor("#FF44403C"));
-            line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            line.setPadding(12, 8, 12, 8);
-            history.addView(line);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(20), dp(16), dp(20), dp(16));
+            TextView amtView = new TextView(this);
+            amtView.setText(sign + "₹" + formatMoney(amt));
+            amtView.setTextColor(Color.parseColor("#FFE4C27A"));
+            amtView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            amtView.setTypeface(amtView.getTypeface(), android.graphics.Typeface.BOLD);
+            amtView.setMinWidth(dp(72));
+            TextView whenView = new TextView(this);
+            whenView.setText(when);
+            whenView.setTextColor(Color.parseColor("#FFF4EDE0"));
+            whenView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            LinearLayout.LayoutParams whenLp =
+                    new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            whenLp.setMarginStart(dp(16));
+            whenView.setLayoutParams(whenLp);
+            row.addView(amtView);
+            row.addView(whenView);
+            history.addView(row);
         }
     }
 
@@ -379,6 +400,10 @@ public class RewardsWalletActivity extends AppCompatActivity {
                 toast("Network error");
             }
         });
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void toast(String msg) {

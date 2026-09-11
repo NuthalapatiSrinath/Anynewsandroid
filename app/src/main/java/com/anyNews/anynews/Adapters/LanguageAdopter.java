@@ -33,6 +33,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
+import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Utils.TranslatorPackHelper;
@@ -104,11 +105,19 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                 holder.neomorphFrameLayout.setVisibility(View.GONE);
                 holder.second_neomorphFrameLayout.setVisibility(View.VISIBLE);
 
-                SharedPrefsData.putInt(context,Constants.LanguageID,arrayList.get(position).getId(),Constants.PREF_NAME);
+                int selectedLanguageId = arrayList.get(position).getId();
+                int previousLanguageId = SharedPrefsData.getInt(
+                        context, Constants.LanguageID, Constants.PREF_NAME);
+                boolean sameLanguage = previousLanguageId > 0
+                        && previousLanguageId == selectedLanguageId;
+                SharedPrefsData.putInt(context,Constants.LanguageID,selectedLanguageId,Constants.PREF_NAME);
                 SharedPrefsData.putString(context, Constants.Lang, arrayList.get(position).getName(), Constants.PREF_NAME);
-                // Drop previous-language OpenPath / offline pack before Update_User_Language returns.
-                LanguageFeedInvalidator.onLanguageChanged(context, arrayList.get(position).getId());
-                LanguageSelection(arrayList.get(position).getId(), arrayList.get(position).getName());
+                // Same-language reselect is a location change, not a language flip.
+                // Keep district (and the current feed) until they pick a different state.
+                if (!sameLanguage) {
+                    LanguageFeedInvalidator.onLanguageChanged(context, selectedLanguageId);
+                }
+                LanguageSelection(selectedLanguageId, arrayList.get(position).getName(), previousLanguageId);
 
             }
         });
@@ -156,14 +165,13 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
     }
 
 
-    private void LanguageSelection(int language_id, String language_name) {
+    private void LanguageSelection(int language_id, String language_name, int previousLanguageId) {
 
         int draftId = SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME);
         if (draftId <= 0) {
             // Splash must create/store draft before language update works. Without this,
             // tap shows "Draft id is required." and looks like a broken language screen.
-            SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
-            SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+            rollbackLanguagePick(language_id, previousLanguageId);
             Toast.makeText(context,
                     "Setting up your device… please wait a moment and try again.",
                     Toast.LENGTH_LONG).show();
@@ -191,11 +199,8 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
             public void onResponse(Call<JsonObject> call, Response<JsonObject> response) {
 
                 if (response == null || !response.isSuccessful() || response.body() == null) {
-                    SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
-                    SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+                    rollbackLanguagePick(language_id, previousLanguageId);
                     Toast.makeText(context, "Unable to update language. Please try again.", Toast.LENGTH_SHORT).show();
-                    index = -1;
-                    notifyDataSetChanged();
                     return;
                 }
 
@@ -226,12 +231,19 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             nextScreen = "";
                         }
 
-                        // Returning users already finished onboarding; "main" after a
-                        // language-scoped geo restore should open Home, not AreaSelection.
+                        // "main" after geo restore used to finish straight to News when the
+                        // picked language already matched session LanguageID. Multi-state
+                        // languages (Telugu, Hindi) must still open the state picker so
+                        // the user can change state without switching language away and back.
+                        // Single-state "main" still skips a one-card state screen.
                         boolean returningUser = SharedPrefsData.getBool(
                                 context, Constants.IS_LANGUAGE_SELECTED, Constants.PREF_NAME);
+                        boolean multiState = languageHasMultipleStates(
+                                language_id, languageSelectionResponse);
 
-                        if ("main".equalsIgnoreCase(nextScreen)) {
+                        if (multiState && !"language".equalsIgnoreCase(nextScreen)) {
+                            openStatePicker(language_id, language_name);
+                        } else if ("main".equalsIgnoreCase(nextScreen)) {
 
                             SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
                             SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
@@ -246,15 +258,7 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                                 context.startActivity(intent);
                             }
                         } else if ("state".equalsIgnoreCase(nextScreen)) {
-                            Intent intent = new Intent(context, States.class);
-                            SharedPrefsData.putInt(context, Constants.Back_Button_Move, 2, Constants.PREF_NAME);
-                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
-
-                            intent.putExtra("LANGUAGE_ID",language_id );
-                            intent.putExtra("LANGUAGE_NAME", language_name);
-                            if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
-                                context.startActivity(intent);
-                            }
+                            openStatePicker(language_id, language_name);
                         } else if ("district".equalsIgnoreCase(nextScreen)) {
                             Intent intent = new Intent(context, Districs.class);
                             SharedPrefsData.putInt(context, Constants.StateID,0,Constants.PREF_NAME);
@@ -268,13 +272,10 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             }
                         } else {
                             // next_screen language (or unknown) — stay on picker
-                            SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
-                            SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+                            rollbackLanguagePick(language_id, previousLanguageId);
                             Toast.makeText(context,
                                     "This language is not ready yet. Please select another language.",
                                     Toast.LENGTH_LONG).show();
-                            index = -1;
-                            notifyDataSetChanged();
                         }
 
 
@@ -286,11 +287,8 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
                             }
                         } catch (Exception ignored) {
                         }
-                        SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
-                        SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+                        rollbackLanguagePick(language_id, previousLanguageId);
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();
-                        index = -1;
-                        notifyDataSetChanged();
                     }
 
                 }
@@ -299,16 +297,62 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
 
             @Override
             public void onFailure(Call<JsonObject> call, Throwable t) {
-                SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
-                SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+                rollbackLanguagePick(language_id, previousLanguageId);
                 Toast.makeText(context,
                         t != null && t.getMessage() != null ? t.getMessage() : "Network error. Please try again.",
                         Toast.LENGTH_LONG).show();
-                index = -1;
-                notifyDataSetChanged();
             }
         });
 
+    }
+
+    /**
+     * Telugu / Hindi (and any language with more than one state) must show the
+     * state list after pick, even when the server still says "main" because geo
+     * was already set. Prefer {@code states_count} from Update_User_Language;
+     * fall back to the cached state list when an older response omits the count.
+     */
+    private boolean languageHasMultipleStates(int languageId, LanguageModelResponse response) {
+        if (response != null && response.getStatesCount() != null && response.getStatesCount() > 1) {
+            return true;
+        }
+        try {
+            java.util.List<com.anyNews.anynews.models.StatesModel.Datum> cached =
+                    SelectionListCache.loadStates(context, languageId);
+            return cached != null && cached.size() > 1;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void openStatePicker(int languageId, String languageName) {
+        SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "state", Constants.PREF_NAME);
+        Intent intent = new Intent(context, States.class);
+        SharedPrefsData.putInt(context, Constants.Back_Button_Move, 2, Constants.PREF_NAME);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                | Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra("LANGUAGE_ID", languageId);
+        intent.putExtra("LANGUAGE_NAME", languageName);
+        if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+            context.startActivity(intent);
+        }
+    }
+
+    /**
+     * Same-language reselect must not drop session LanguageID or district if the
+     * request fails. A real language change still clears the incomplete pick.
+     */
+    private void rollbackLanguagePick(int requestedLanguageId, int previousLanguageId) {
+        boolean sameLanguage = previousLanguageId > 0 && previousLanguageId == requestedLanguageId;
+        if (sameLanguage) {
+            SharedPrefsData.putInt(context, Constants.LanguageID, previousLanguageId, Constants.PREF_NAME);
+        } else {
+            SharedPrefsData.putInt(context, Constants.LanguageID, 0, Constants.PREF_NAME);
+            SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, false, Constants.PREF_NAME);
+        }
+        index = -1;
+        notifyDataSetChanged();
     }
 
     private JsonObject  SetUpdateLanguage(int language_id) {

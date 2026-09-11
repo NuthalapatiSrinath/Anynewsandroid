@@ -78,7 +78,8 @@ public final class PostDwellTracker {
 
     public synchronized void flush(Context context, boolean critical) {
         if (postId <= 0 || startedAtMs <= 0) {
-            if (critical) {
+            // No dwell to add. Do not POST /views/batch unless something is already queued.
+            if (critical && ViewsBatchTracker.get().hasPending()) {
                 ViewsBatchTracker.get().flush(context, true);
             }
             return;

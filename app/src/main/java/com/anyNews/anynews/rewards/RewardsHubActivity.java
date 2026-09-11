@@ -70,6 +70,7 @@ public class RewardsHubActivity extends AppCompatActivity {
     private TextView rankView;
     private TextView rateView;
     private TextView weekView;
+    private TextView periodBanner;
     private TextView subtitleView;
     private TextView rulesView;
     private TextView joinBtn;
@@ -90,6 +91,8 @@ public class RewardsHubActivity extends AppCompatActivity {
     private boolean joined;
     private boolean guest;
     private boolean earnBlocked;
+    private boolean periodScoringOpen = true;
+    private String periodBannerText = "";
     private int historyLimit = 20;
     private String outOfTop10Copy = "";
     private int watchAdsRequired = 3;
@@ -103,6 +106,9 @@ public class RewardsHubActivity extends AppCompatActivity {
     private boolean watchAdsAvailable;
     private boolean ratingAvailable;
     private int watchCooldownSec;
+    private boolean watchAdsCapped;
+    private int watchAdsRemaining = -1;
+    private int watchCooldownMinutes = 5;
     private boolean pendingScreenshotAfterStore;
     private String leaderboardSubtitle = "";
     private String historyShowingLast = "";
@@ -118,7 +124,7 @@ public class RewardsHubActivity extends AppCompatActivity {
                         if (watchCooldownSec > 0) {
                             cooldownHandler.postDelayed(this, 1000);
                         } else {
-                            watchAdsAvailable = joined && !guest;
+                            watchAdsAvailable = joined && !guest && periodScoringOpen;
                             paintWatchAdsButton();
                         }
                     }
@@ -198,10 +204,14 @@ public class RewardsHubActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(window, false);
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        window.setStatusBarColor(Color.parseColor("#FFFFE4C4"));
+        window.setStatusBarColor(Color.parseColor("#FF0B1020"));
+        window.setNavigationBarColor(Color.parseColor("#FF0B1020"));
         WindowInsetsControllerCompat c =
                 WindowCompat.getInsetsController(window, window.getDecorView());
-        if (c != null) c.setAppearanceLightStatusBars(true);
+        if (c != null) {
+            c.setAppearanceLightStatusBars(false);
+            c.setAppearanceLightNavigationBars(false);
+        }
         View root = findViewById(R.id.rewards_root);
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -216,6 +226,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         rankView = findViewById(R.id.rewards_rank);
         rateView = findViewById(R.id.rewards_rate);
         weekView = findViewById(R.id.rewards_week);
+        periodBanner = findViewById(R.id.rewards_period_banner);
         subtitleView = findViewById(R.id.rewards_subtitle);
         rulesView = findViewById(R.id.rewards_rules);
         joinBtn = findViewById(R.id.rewards_join_btn);
@@ -236,11 +247,19 @@ public class RewardsHubActivity extends AppCompatActivity {
         if (historyRow != null) {
             historyRow.setOnClickListener(v -> openHistory());
         }
+        View watchPanel = findViewById(R.id.rewards_watch_panel);
+        if (watchPanel != null && watchAdsBtn != null) {
+            watchPanel.setOnClickListener(v -> watchAdsBtn.performClick());
+        }
+        TextView heroKicker = findViewById(R.id.rewards_hero_kicker);
+        if (heroKicker != null) heroKicker.setText(RewardsLabels.memberBalance(this));
+        TextView watchKicker = findViewById(R.id.rewards_watch_kicker);
+        if (watchKicker != null) watchKicker.setText(RewardsLabels.primaryEarn(this));
     }
 
     private void applyStaticLabels() {
         if (coinsCaption != null) coinsCaption.setText(RewardsLabels.coinsThisWeek(this));
-        if (earnTitle != null) earnTitle.setText(RewardsLabels.earnMore(this));
+        if (earnTitle != null) earnTitle.setText(RewardsLabels.alsoEarn(this));
         if (leaderboardTitle != null) leaderboardTitle.setText(RewardsLabels.leaderboard(this));
         if (leaderboardHint != null) {
             leaderboardHint.setText(RewardsLabels.leaderboardHint(this));
@@ -310,6 +329,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         guest = body.has("guest") && body.get("guest").getAsBoolean();
         joined = body.has("joined") && body.get("joined").getAsBoolean();
         RewardsConfigHelper.setJoined(this, joined && !guest);
+        RewardsConfigHelper.applyFromRewardsPayload(this, body);
 
         JsonObject copy =
                 body.has("copy") && body.get("copy").isJsonObject()
@@ -423,6 +443,7 @@ public class RewardsHubActivity extends AppCompatActivity {
             }
             weekView.setText(label != null ? label : "");
         }
+        applyPeriodBanner(body);
 
         double walletRupees =
                 body.has("wallet_rupees") ? body.get("wallet_rupees").getAsDouble() : 0;
@@ -456,6 +477,20 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
 
         applyEarnState(body);
+        if (!periodScoringOpen) {
+            checkinAvailable = false;
+            watchAdsAvailable = false;
+            ratingAvailable = false;
+            if (checkinBtn != null) {
+                checkinBtn.setEnabled(false);
+                checkinBtn.setAlpha(0.45f);
+            }
+            if (ratingBtn != null) {
+                ratingBtn.setEnabled(false);
+                ratingBtn.setAlpha(0.45f);
+            }
+            paintWatchAdsButton();
+        }
         if (earnBlocked && earnCard != null) {
             // Soft-disable earn actions; wallet still reachable
             if (checkinBtn != null) {
@@ -523,6 +558,39 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
     }
 
+    private void applyPeriodBanner(JsonObject body) {
+        RewardsConfigHelper.applyProgramWindow(this, body);
+        String status = optStr(body, "program_status", "");
+        if (body.has("program") && body.get("program").isJsonObject()) {
+            JsonObject program = body.getAsJsonObject("program");
+            if (TextUtils.isEmpty(status)) status = optStr(program, "status", "");
+        }
+        if (body.has("scoring_open") && !body.get("scoring_open").isJsonNull()) {
+            periodScoringOpen = body.get("scoring_open").getAsBoolean();
+        } else if (!TextUtils.isEmpty(status)) {
+            periodScoringOpen = "live".equalsIgnoreCase(status);
+        } else {
+            periodScoringOpen = RewardsConfigHelper.scoringOpen(this);
+        }
+        periodBannerText = optStr(body, "period_banner", "");
+        if (TextUtils.isEmpty(periodBannerText)) {
+            periodBannerText = RewardsConfigHelper.periodBannerText(this);
+        }
+        if (periodBanner != null) {
+            if (!periodScoringOpen && !TextUtils.isEmpty(periodBannerText)) {
+                periodBanner.setText(periodBannerText);
+                periodBanner.setVisibility(View.VISIBLE);
+            } else {
+                periodBanner.setVisibility(View.GONE);
+            }
+        }
+        if (!periodScoringOpen) {
+            checkinAvailable = false;
+            watchAdsAvailable = false;
+            ratingAvailable = false;
+        }
+    }
+
     private void applyEarnState(JsonObject body) {
         if (body.has("checkin") && body.get("checkin").isJsonObject()) {
             JsonObject c = body.getAsJsonObject("checkin");
@@ -548,12 +616,27 @@ public class RewardsHubActivity extends AppCompatActivity {
                     w.has("cooldown_remaining_sec")
                             ? w.get("cooldown_remaining_sec").getAsInt()
                             : 0;
+            if (w.has("cooldown_minutes") && !w.get("cooldown_minutes").isJsonNull()) {
+                watchCooldownMinutes = Math.max(0, w.get("cooldown_minutes").getAsInt());
+            }
             if (w.has("persist_progress") && !w.get("persist_progress").isJsonNull()) {
                 watchPersistProgress = w.get("persist_progress").getAsBoolean();
             }
             if (w.has("ad_unit_id") && !w.get("ad_unit_id").isJsonNull()) {
                 watchAdsUnit = w.get("ad_unit_id").getAsString();
             }
+            watchAdsCapped =
+                    w.has("capped") && !w.get("capped").isJsonNull() && w.get("capped").getAsBoolean();
+            if (w.has("ads_remaining") && !w.get("ads_remaining").isJsonNull()) {
+                try {
+                    watchAdsRemaining = w.get("ads_remaining").getAsInt();
+                } catch (Exception ignored) {
+                    watchAdsRemaining = -1;
+                }
+            } else {
+                watchAdsRemaining = RewardsConfigHelper.factorRemaining(this, "ads_seen");
+            }
+            if (!watchAdsCapped && watchAdsRemaining == 0) watchAdsCapped = true;
             if (w.has("ad_format") && !w.get("ad_format").isJsonNull()) {
                 String fmt = w.get("ad_format").getAsString();
                 if (!TextUtils.isEmpty(fmt)) {
@@ -581,24 +664,50 @@ public class RewardsHubActivity extends AppCompatActivity {
             }
         }
         if (earnCard != null) earnCard.setVisibility(View.VISIBLE);
-        if (earnTitle != null) earnTitle.setText(RewardsLabels.earnMore(this));
+        if (earnTitle != null) earnTitle.setText(RewardsLabels.alsoEarn(this));
     }
 
     private void paintWatchAdsButton() {
         if (watchAdsBtn == null) return;
-        if (watchCooldownSec > 0) {
+        if (!periodScoringOpen) {
+            watchAdsBtn.setEnabled(false);
+            watchAdsBtn.setAlpha(0.45f);
+            View panel = findViewById(R.id.rewards_watch_panel);
+            if (panel != null) panel.setAlpha(0.55f);
+            return;
+        }
+        if (watchAdsCapped || watchAdsRemaining == 0) {
+            // Opens the watch-ad page in the limit state. Does not load an ad.
+            watchAdsBtn.setText(RewardsLabels.adsLimitReached(this));
+            watchAdsBtn.setEnabled(joined && !guest);
+            watchAdsBtn.setAlpha(1f);
+        } else if (watchCooldownSec > 0) {
             watchAdsBtn.setText(RewardsLabels.watchAdsWait(this, watchCooldownSec));
             watchAdsBtn.setEnabled(false);
             watchAdsBtn.setAlpha(0.45f);
         } else {
-            watchAdsBtn.setText(
-                    RewardsLabels.watchAds(this, watchAdsRequired, watchAdsCoins));
+            int hubAds = watchAdsRequired;
+            int hubCoins = watchAdsCoins;
+            int cap = RewardsConfigHelper.factorCapPerDay(this, "ads_seen");
+            int factorCoins = RewardsConfigHelper.factorCoinsPer(this, "ads_seen");
+            if (cap > 0) hubAds = cap;
+            if (factorCoins > 0) hubCoins = factorCoins;
+            watchAdsBtn.setText(RewardsLabels.watchAds(this, hubAds, hubCoins));
             watchAdsBtn.setEnabled(watchAdsAvailable && joined && !guest);
             watchAdsBtn.setAlpha(watchAdsBtn.isEnabled() ? 1f : 0.45f);
         }
+        View panel = findViewById(R.id.rewards_watch_panel);
+        if (panel != null) panel.setAlpha(watchAdsBtn.isEnabled() ? 1f : 0.55f);
     }
 
     private void onCheckin() {
+        if (!periodScoringOpen) {
+            toast(
+                    !TextUtils.isEmpty(periodBannerText)
+                            ? periodBannerText
+                            : RewardsConfigHelper.periodBannerText(this));
+            return;
+        }
         if (!requireLogin()) return;
         if (!joined) {
             toast(RewardsLabels.joinFirst(this));
@@ -637,16 +746,33 @@ public class RewardsHubActivity extends AppCompatActivity {
     }
 
     private void onWatchAds() {
+        if (!periodScoringOpen || !RewardsConfigHelper.scoringOpen(this)) {
+            String msg =
+                    !TextUtils.isEmpty(periodBannerText)
+                            ? periodBannerText
+                            : RewardsConfigHelper.periodBannerText(this);
+            toast(msg);
+            return;
+        }
         if (!requireLogin()) return;
         if (!joined) {
             toast(RewardsLabels.joinFirst(this));
             return;
         }
+        int adsRequired = watchAdsRequired;
+        int adsCoins = watchAdsCoins;
+        int adsCap = RewardsConfigHelper.factorCapPerDay(this, "ads_seen");
+        int adsCoinsTotal = RewardsConfigHelper.factorCoinsPer(this, "ads_seen");
+        if (adsCap > 0) adsRequired = adsCap;
+        if (adsCoinsTotal > 0) adsCoins = adsCoinsTotal;
         Intent intent = new Intent(this, RewardsWatchAdsActivity.class);
-        intent.putExtra(RewardsWatchAdsActivity.EXTRA_ADS_REQUIRED, watchAdsRequired);
-        intent.putExtra(RewardsWatchAdsActivity.EXTRA_COINS, watchAdsCoins);
+        intent.putExtra(RewardsWatchAdsActivity.EXTRA_ADS_REQUIRED, adsRequired);
+        intent.putExtra(RewardsWatchAdsActivity.EXTRA_COINS, adsCoins);
         intent.putExtra(RewardsWatchAdsActivity.EXTRA_AD_FORMAT, watchAdsFormat);
-        intent.putExtra(RewardsWatchAdsActivity.EXTRA_PERSIST_PROGRESS, watchPersistProgress);
+        intent.putExtra(RewardsWatchAdsActivity.EXTRA_COOLDOWN_MINUTES, watchCooldownMinutes);
+        intent.putExtra(RewardsWatchAdsActivity.EXTRA_PERSIST_PROGRESS, false);
+        intent.putExtra(RewardsWatchAdsActivity.EXTRA_ADS_CAPPED, watchAdsCapped);
+        intent.putExtra(RewardsWatchAdsActivity.EXTRA_ADS_REMAINING, watchAdsRemaining);
         if (!TextUtils.isEmpty(watchAdsUnit)) {
             intent.putExtra(RewardsWatchAdsActivity.EXTRA_AD_UNIT, watchAdsUnit);
         }
@@ -848,7 +974,7 @@ public class RewardsHubActivity extends AppCompatActivity {
             HistoryRow r = rows.get(i);
             TextView line = new TextView(this);
             line.setText(r.text);
-            line.setTextColor(Color.parseColor("#FF44403C"));
+            line.setTextColor(Color.parseColor("#FFF4EDE0"));
             line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             line.setPadding(12, 8, 12, 8);
             history.addView(line);
@@ -868,7 +994,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         if (history.getChildCount() == 0) {
             TextView empty = new TextView(this);
             empty.setText(RewardsLabels.noHistory(this));
-            empty.setTextColor(Color.parseColor("#FFA8A29E"));
+            empty.setTextColor(Color.parseColor("#FFA89880"));
             empty.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             empty.setPadding(12, 16, 12, 16);
             history.addView(empty);
@@ -967,7 +1093,7 @@ public class RewardsHubActivity extends AppCompatActivity {
                     TextView empty = new TextView(RewardsHubActivity.this);
                     empty.setText("Leaderboard empty");
                     empty.setPadding(16, 16, 16, 16);
-                    empty.setTextColor(Color.parseColor("#FFA8A29E"));
+                    empty.setTextColor(Color.parseColor("#FFA89880"));
                     leaderboard.addView(empty);
                     return;
                 }
@@ -977,21 +1103,21 @@ public class RewardsHubActivity extends AppCompatActivity {
                     JsonObject r = rows.get(i).getAsJsonObject();
                     LinearLayout row = new LinearLayout(RewardsHubActivity.this);
                     row.setOrientation(LinearLayout.HORIZONTAL);
-                    row.setPadding(14, 12, 14, 12);
+                    row.setPadding(dp(20), dp(16), dp(20), dp(16));
                     row.setAlpha(0f);
                     TextView rank = new TextView(RewardsHubActivity.this);
                     rank.setText("#" + optInt(r, "rank"));
-                    rank.setTextColor(Color.parseColor("#FFB45309"));
+                    rank.setTextColor(Color.parseColor("#FFE4C27A"));
                     rank.setTypeface(rank.getTypeface(), android.graphics.Typeface.BOLD);
                     rank.setMinWidth(dp(42));
                     TextView name = new TextView(RewardsHubActivity.this);
                     name.setText(optStr(r, "name", "Reader"));
-                    name.setTextColor(Color.parseColor("#FF1C1917"));
+                    name.setTextColor(Color.parseColor("#FFF4EDE0"));
                     name.setLayoutParams(
                             new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
                     TextView coins = new TextView(RewardsHubActivity.this);
                     coins.setText(optInt(r, "coins") + " coins");
-                    coins.setTextColor(Color.parseColor("#FF78716C"));
+                    coins.setTextColor(Color.parseColor("#FFA89880"));
                     row.addView(rank);
                     row.addView(name);
                     row.addView(coins);
@@ -1004,7 +1130,7 @@ public class RewardsHubActivity extends AppCompatActivity {
                             .start();
                     if (i < n - 1) {
                         View divider = new View(RewardsHubActivity.this);
-                        divider.setBackgroundColor(Color.parseColor("#FFF5F5F4"));
+                        divider.setBackgroundColor(Color.parseColor("#FF243049"));
                         divider.setLayoutParams(
                                 new LinearLayout.LayoutParams(
                                         LinearLayout.LayoutParams.MATCH_PARENT, 1));
