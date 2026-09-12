@@ -152,7 +152,6 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketFooterLabel;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
-import com.anyNews.anynews.Utils.FeedExoOverlayHost;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
@@ -786,9 +785,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     // Cricket Live Mini Player — draggable floating overlay over the news feed.
     private com.anyNews.anynews.Utils.CricketMiniPlayerManager cricketMiniPlayerManager;
-    /** Dedicated feed Exo PlayerView outside FlipView scrap (half/full uploaded video). */
-    @Nullable
-    private com.anyNews.anynews.Utils.FeedExoOverlayHost feedExoOverlayHost;
 
     // Top segmented toggle: offline Offline News|Bookmarks; online main News|Read News.
     private View homeModeToggleRoot;
@@ -997,8 +993,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         my_feed_text = findViewById(R.id.my_feed_text);
 
         mFlipView = findViewById(R.id.flip_view);
-        feedExoOverlayHost = FeedExoOverlayHost.bind(this);
-        FlipperAdapter.setFeedExoOverlayHost(feedExoOverlayHost);
         homeCalendarHost = findViewById(R.id.home_calendar_host);
         homeDailyUpdatesHost = findViewById(R.id.home_daily_updates_host);
         setupHomeCalendarTtdToggle();
@@ -9043,10 +9037,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (cricketMiniPlayerManager != null) {
             cricketMiniPlayerManager.setHiddenForFlipGesture(true);
         }
-        // Flat overlay must not sit on a rotating Flip card — hide; settle/play shows again.
-        if (feedExoOverlayHost != null) {
-            feedExoOverlayHost.setHiddenForFlipGesture(true);
-        }
         // FAB refresh is handled in OnFlipCompletedListener — avoid a second layout
         // pass 80ms after appear (stacking with settle work on low-end).
     }
@@ -9145,9 +9135,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 return;
             }
             FlipperAdapter.releaseActiveExoPlayer();
-            if (feedExoOverlayHost != null) {
-                feedExoOverlayHost.clearPlayerBinding();
-            }
             try {
                 if (FlipperAdapter.youTubePlayerViewHalf != null) {
                     FlipperAdapter.youTubePlayerViewHalf.pause();
@@ -9193,10 +9180,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Restore cricket mini-player after flip gesture (feature kept; only paused visually).
         if (cricketMiniPlayerManager != null) {
             cricketMiniPlayerManager.setHiddenForFlipGesture(false);
-        }
-        // Allow dedicated feed Exo overlay to show again (autoplay / resume calls showOver).
-        if (feedExoOverlayHost != null) {
-            feedExoOverlayHost.setHiddenForFlipGesture(false);
         }
         // Sync gate: scroller finished; settle-grace still defers AdMob.
         FlipAdWorkGate.noteFlipInteraction();
@@ -14942,14 +14925,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             playInAppUpdateHelper = null;
         }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onDestroy();
-        try {
-            if (feedExoOverlayHost != null) {
-                feedExoOverlayHost.clearPlayerBinding();
-            }
-            FlipperAdapter.setFeedExoOverlayHost(null);
-            feedExoOverlayHost = null;
-        } catch (Exception ignored) {
-        }
         clearNativeAdPools();
         adapter = null;
         stopMagazineShareBlink();

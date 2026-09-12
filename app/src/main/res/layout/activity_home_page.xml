@@ -395,39 +395,6 @@
 
                 </LinearLayout>
 
-                <!-- Dedicated feed Exo surface: outside FlipView scrap so TextureView never
-                     recycles / setPlayer-hops mid-play. Aligned over card exo_play_layout.
-                     Pass-through FrameLayout so likes/share under the video stay tappable. -->
-                <com.anyNews.anynews.Ui.FeedExoOverlayFrameLayout
-                    android:id="@+id/feed_exo_overlay_host"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clickable="false"
-                    android:focusable="false"
-                    android:visibility="gone">
-
-                    <androidx.media3.ui.PlayerView
-                        android:id="@+id/feed_exo_overlay_player"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:background="@color/anynews_black"
-                        app:controller_layout_id="@layout/player_custom_ui"
-                        app:keep_content_on_player_reset="true"
-                        app:resize_mode="fit"
-                        app:shutter_background_color="@android:color/transparent"
-                        app:surface_type="texture_view"
-                        app:use_artwork="false"
-                        app:use_controller="true" />
-
-                    <ProgressBar
-                        android:id="@+id/feed_exo_overlay_spinner"
-                        android:layout_width="56dp"
-                        android:layout_height="56dp"
-                        android:indeterminate="true"
-                        android:indeterminateDrawable="@drawable/way2_buffering_spinner"
-                        android:visibility="gone" />
-                </com.anyNews.anynews.Ui.FeedExoOverlayFrameLayout>
-
                 <LinearLayout
                     android:id="@+id/layout_with_out_data"
                     android:layout_width="match_parent"

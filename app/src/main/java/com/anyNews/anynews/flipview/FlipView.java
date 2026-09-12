@@ -36,7 +36,6 @@ import androidx.core.view.MotionEventCompat;
 import androidx.core.view.VelocityTrackerCompat;
 
 import com.anyNews.anynews.R;
-import com.anyNews.anynews.Utils.FlipperAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -716,15 +715,6 @@ public class FlipView extends FrameLayout {
             // if(mCurrentPageIndex==currentPageIndex){
             // return;
             // }
-            final boolean sameIndexForceRebind = forceRebind
-                    && mCurrentPageIndex == currentPageIndex;
-            View pinLiveExoHost = null;
-            if (sameIndexForceRebind && mCurrentPage.valid
-                    && FlipperAdapter.isPinnedLiveExoHost(mCurrentPage.v)) {
-                // Likes/progress notify must not recycle the live video card into scrap —
-                // neighbor fills steal that scrap and setPlayer moves the TextureView (blink).
-                pinLiveExoHost = mCurrentPage.v;
-            }
             if (forceRebind || mCurrentPageIndex != currentPageIndex) {
                 mCurrentPageIndex = currentPageIndex;
                 try {
@@ -739,7 +729,7 @@ public class FlipView extends FrameLayout {
                 // again on the next line.
                 // ////System.out.println("before recycleActiveViews  "
                 // + //System.currentTimeMillis());
-                recycleActiveViews(pinLiveExoHost);
+                recycleActiveViews();
                 // ////System.out.println("After recycleActiveViews  "
                 // + //System.currentTimeMillis());
                 // add the new active views
@@ -750,25 +740,7 @@ public class FlipView extends FrameLayout {
                     addFlipChild(mPreviousPage.v);
                 }
                 if (mCurrentPageIndex >= 0 && mCurrentPageIndex < mPageCount) {
-                    if (pinLiveExoHost != null) {
-                        // Chrome-only rebind on the same tree — PlayerView stays attached.
-                        mCurrentPage.position = mCurrentPageIndex;
-                        try {
-                            mCurrentPage.viewType = mAdapter.getItemViewType(mCurrentPageIndex);
-                        } catch (Exception ignored) {
-                            mCurrentPage.viewType = 0;
-                        }
-                        View rebound = null;
-                        try {
-                            rebound = mAdapter.getView(mCurrentPageIndex, pinLiveExoHost, this);
-                        } catch (Exception ignored) {
-                        }
-                        mCurrentPage.v = rebound != null ? rebound : pinLiveExoHost;
-                        stampBoundIdentity(mCurrentPage);
-                        mCurrentPage.valid = true;
-                    } else {
-                        fillPageForIndex(mCurrentPage, mCurrentPageIndex, (mCurrentPageIndex) % 3);
-                    }
+                    fillPageForIndex(mCurrentPage, mCurrentPageIndex, (mCurrentPageIndex) % 3);
                     addFlipChild(mCurrentPage.v);
                 }
                 if (mCurrentPageIndex < mPageCount - 1
@@ -859,40 +831,26 @@ public class FlipView extends FrameLayout {
     }
 
     public void recycleActiveViews() {
-        recycleActiveViews(null);
-    }
-
-    /**
-     * @param pinKeep when non-null, leave this view attached (do not scrap). Used to
-     *                keep a live ExoPlayer TextureView across same-seat notify rebinds.
-     */
-    public void recycleActiveViews(View pinKeep) {
         // remove and recycle the currently active views
         if (mPreviousPage.valid) {
-            if (mPreviousPage.v != pinKeep) {
-                removeView(mPreviousPage.v);
-                mRecycler.addScrapView(mPreviousPage.v, mPreviousPage.position,
-                        mPreviousPage.viewType, mPreviousPage.boundItemId,
-                        mPreviousPage.boundGeneration);
-            }
+            removeView(mPreviousPage.v);
+            mRecycler.addScrapView(mPreviousPage.v, mPreviousPage.position,
+                    mPreviousPage.viewType, mPreviousPage.boundItemId,
+                    mPreviousPage.boundGeneration);
             mPreviousPage.valid = false;
         }
         if (mCurrentPage.valid) {
-            if (mCurrentPage.v != pinKeep) {
-                removeView(mCurrentPage.v);
-                mRecycler.addScrapView(mCurrentPage.v, mCurrentPage.position,
-                        mCurrentPage.viewType, mCurrentPage.boundItemId,
-                        mCurrentPage.boundGeneration);
-            }
+            removeView(mCurrentPage.v);
+            mRecycler.addScrapView(mCurrentPage.v, mCurrentPage.position,
+                    mCurrentPage.viewType, mCurrentPage.boundItemId,
+                    mCurrentPage.boundGeneration);
             mCurrentPage.valid = false;
         }
         if (mNextPage.valid) {
-            if (mNextPage.v != pinKeep) {
-                removeView(mNextPage.v);
-                mRecycler.addScrapView(mNextPage.v, mNextPage.position,
-                        mNextPage.viewType, mNextPage.boundItemId,
-                        mNextPage.boundGeneration);
-            }
+            removeView(mNextPage.v);
+            mRecycler.addScrapView(mNextPage.v, mNextPage.position,
+                    mNextPage.viewType, mNextPage.boundItemId,
+                    mNextPage.boundGeneration);
             mNextPage.valid = false;
         }
     }
@@ -918,26 +876,11 @@ public class FlipView extends FrameLayout {
         }
         Recycler.Scrap scrap = mRecycler.getScrapView(index, type);
         final long want = itemIdAt(index);
-        // Never hand the live Exo host to a neighbor seat — that moves setPlayer mid-play.
-        if (scrap != null && scrap.v != null
-                && FlipperAdapter.isPinnedLiveExoHost(scrap.v)
-                && FlipperAdapter.getPinnedLiveExoPosition() != index) {
-            mRecycler.addScrapView(scrap.v, FlipperAdapter.getPinnedLiveExoPosition(), type,
-                    scrap.boundItemId, scrap.boundGeneration);
-            scrap = null;
-        }
         if (canReturnScrapWithoutRebind(scrap, want) && !isActivePageView(scrap.v)) {
             return scrap.v;
         }
         View convert = scrap == null ? null : scrap.v;
         if (convert != null && isActivePageView(convert)) {
-            convert = null;
-        }
-        if (convert != null && FlipperAdapter.isPinnedLiveExoHost(convert)
-                && FlipperAdapter.getPinnedLiveExoPosition() != index) {
-            mRecycler.addScrapView(convert, FlipperAdapter.getPinnedLiveExoPosition(), type,
-                    scrap != null ? scrap.boundItemId : 0L,
-                    scrap != null ? scrap.boundGeneration : 0);
             convert = null;
         }
         View v = null;
