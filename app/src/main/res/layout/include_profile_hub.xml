@@ -481,7 +481,7 @@
                 android:background="@color/profile_way2_divider" />
         </LinearLayout>
 
-        <!-- Rewards — gated by admin rewards_master (splash/session prefs). -->
+        <!-- Rewards — gated by admin rewards_master (not Profile wallet). -->
         <LinearLayout
             android:id="@+id/layout_profile_rewards"
             android:layout_width="match_parent"
@@ -549,7 +549,7 @@
                 android:background="@color/profile_way2_divider" />
         </LinearLayout>
 
-        <!-- Shared Wallet (rewards / future programs) — same master gate as Rewards. -->
+        <!-- Shared Wallet (coins + convert) — gated by show_wallet_in_profile (not rewards_master). -->
         <LinearLayout
             android:id="@+id/layout_profile_rewards_wallet"
             android:layout_width="match_parent"

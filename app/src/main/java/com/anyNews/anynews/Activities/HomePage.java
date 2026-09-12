@@ -13089,6 +13089,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             adapter.notifyWhenFlipSettled();
                         }
                     }
+                    // Wallet flag separate so omitting it never wipes splash to OFF.
+                    if (encreptionRequest.getShow_wallet_in_profile() != null) {
+                        DistrictPinVisibilityConfig.saveWalletVisibilityFromServer(
+                                getApplicationContext(),
+                                encreptionRequest.getShow_wallet_in_profile());
+                    }
                     if (encreptionRequest.getFlash_news_chip_label() != null
                             && !encreptionRequest.getFlash_news_chip_label().trim().isEmpty()) {
                         FlashNewsChipHelper.saveLabelFromServer(

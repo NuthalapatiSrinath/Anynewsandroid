@@ -1959,6 +1959,9 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getFlashNewsInMainFeedSlot(),
                                 startActivityReqModel.getData().getKeepRewardsAfterJoin(),
                                 startActivityReqModel.getData().getShowFlashAndRewardsTogether());
+                        DistrictPinVisibilityConfig.saveWalletVisibilityFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getShowWalletInProfile());
                         DistrictPinVisibilityConfig.saveReporterGate(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsExcludeReporters(),

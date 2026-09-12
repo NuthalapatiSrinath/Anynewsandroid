@@ -194,6 +194,10 @@ public class EncreptionRequest {
     @Expose
     private Boolean rewards_master;
 
+    @SerializedName("show_wallet_in_profile")
+    @Expose
+    private Boolean show_wallet_in_profile;
+
     @SerializedName("rewards_in_main_feed_slot")
     @Expose
     private Boolean rewards_in_main_feed_slot;
@@ -441,6 +445,10 @@ public class EncreptionRequest {
 
     public Boolean getRewards_master() {
         return rewards_master;
+    }
+
+    public Boolean getShow_wallet_in_profile() {
+        return show_wallet_in_profile;
     }
 
     public Boolean getRewards_in_main_feed_slot() {

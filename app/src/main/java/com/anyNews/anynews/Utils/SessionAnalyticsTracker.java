@@ -841,6 +841,7 @@ public final class SessionAnalyticsTracker {
                     try {
                         Boolean hideDistrict = null;
                         Boolean rewardsMaster = null;
+                        Boolean showWalletInProfile = null;
                         Boolean rewardsSlot = null;
                         Boolean keepRewardsAfterJoin = null;
                         Boolean flashSlot = null;
@@ -854,6 +855,11 @@ public final class SessionAnalyticsTracker {
                         if (resBody.has("rewards_master")
                                 && !resBody.get("rewards_master").isJsonNull()) {
                             rewardsMaster = resBody.get("rewards_master").getAsBoolean();
+                        }
+                        if (resBody.has("show_wallet_in_profile")
+                                && !resBody.get("show_wallet_in_profile").isJsonNull()) {
+                            showWalletInProfile =
+                                    resBody.get("show_wallet_in_profile").getAsBoolean();
                         }
                         if (resBody.has("rewards_in_main_feed_slot")
                                 && !resBody.get("rewards_in_main_feed_slot").isJsonNull()) {
@@ -906,6 +912,10 @@ public final class SessionAnalyticsTracker {
                                     flashSlot,
                                     keepRewardsAfterJoin,
                                     showBothChips);
+                        }
+                        if (showWalletInProfile != null) {
+                            DistrictPinVisibilityConfig.saveWalletVisibilityFromServer(
+                                    context, showWalletInProfile);
                         }
                         if (excludeReporters != null || allowReporters != null) {
                             DistrictPinVisibilityConfig.saveReporterGate(

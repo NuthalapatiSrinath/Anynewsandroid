@@ -296,10 +296,16 @@ public class Constants {
      */
     public static String HIDE_DISTRICT_ON_MAIN_FEED = "hide_district_on_main_feed";
     /**
-     * Rewards feature master (Profile row + optional main-feed slot). Default false.
-     * Splash/session: {@code rewards_master}.
+     * Rewards feature master (Profile rewards row + optional main-feed slot).
+     * Does NOT control Profile wallet — see {@link #SHOW_WALLET_IN_PROFILE}.
+     * Default false. Splash/session: {@code rewards_master}.
      */
     public static String REWARDS_MASTER = "rewards_master";
+    /**
+     * Profile wallet row (coins + convert). Independent of {@link #REWARDS_MASTER}.
+     * Default true when missing. Splash/session/feed: {@code show_wallet_in_profile}.
+     */
+    public static String SHOW_WALLET_IN_PROFILE = "show_wallet_in_profile";
     /**
      * When hide-district is ON, show rewards promo in the main-feed district slot
      * for non-district posts. Never on Local / district posts. Default false.

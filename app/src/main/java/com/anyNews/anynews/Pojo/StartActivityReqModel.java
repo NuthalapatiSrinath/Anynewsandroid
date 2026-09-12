@@ -468,10 +468,18 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean hideDistrictOnMainFeed;
 
-        /** Rewards feature master (Profile + optional feed slot). Null on old servers. */
+        /** Rewards feature master (Profile rewards + optional feed slot). Null on old servers. */
         @SerializedName("rewards_master")
         @Expose
         private Boolean rewardsMaster;
+
+        /**
+         * Profile wallet (coins + convert). Independent of rewards_master.
+         * Null on old servers → app default ON.
+         */
+        @SerializedName("show_wallet_in_profile")
+        @Expose
+        private Boolean showWalletInProfile;
 
         /**
          * Show rewards promo in main-feed district slot when district would be hidden.
@@ -1032,6 +1040,10 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getRewardsMaster() {
             return rewardsMaster;
+        }
+
+        public Boolean getShowWalletInProfile() {
+            return showWalletInProfile;
         }
 
         public Boolean getRewardsInMainFeedSlot() {

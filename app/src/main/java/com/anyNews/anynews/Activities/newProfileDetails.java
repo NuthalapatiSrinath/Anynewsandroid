@@ -4488,8 +4488,8 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     /**
-     * Soft-refresh rewards_master + exclude_reporters from rewards_hub so
-     * Profile reflects admin toggle without requiring a full splash restart.
+     * Soft-refresh rewards_master + show_wallet_in_profile + exclude_reporters from
+     * rewards_hub so Profile reflects admin toggles without a full splash restart.
      * TTL 5–15 min (10 min) — not every Profile resume.
      */
     private void softRefreshRewardsFlags() {
@@ -4502,10 +4502,12 @@ public class newProfileDetails extends AppCompatActivity {
                             SharedPrefsData.getString(
                                     this, Constants.REWARDS_MASTER, Constants.PREF_NAME));
             boolean masterOff = !DistrictPinVisibilityConfig.rewardsMasterEnabled(this);
+            boolean walletOff = !DistrictPinVisibilityConfig.walletInProfileEnabled(this);
             // Missing or stale OFF: do not trust the TTL. A previous fetch can pin
-            // Profile to hidden for 10 minutes after admin turned Rewards ON.
+            // Profile to hidden for 10 minutes after admin turned Rewards/Wallet ON.
             if (!masterMissing
                     && !masterOff
+                    && !walletOff
                     && last > 0L
                     && System.currentTimeMillis() - last < 10L * 60L * 1000L) {
                 return;
@@ -4541,6 +4543,7 @@ public class newProfileDetails extends AppCompatActivity {
                                         } catch (Exception ignored) {
                                         }
                                         Boolean master = null;
+                                        Boolean showWallet = null;
                                         Boolean exclude = null;
                                         Boolean allow = null;
                                         Boolean slot = null;
@@ -4553,6 +4556,11 @@ public class newProfileDetails extends AppCompatActivity {
                                         if (root.has("rewards_master")
                                                 && !root.get("rewards_master").isJsonNull()) {
                                             master = root.get("rewards_master").getAsBoolean();
+                                        }
+                                        if (root.has("show_wallet_in_profile")
+                                                && !root.get("show_wallet_in_profile").isJsonNull()) {
+                                            showWallet =
+                                                    root.get("show_wallet_in_profile").getAsBoolean();
                                         }
                                         if (root.has("rewards_in_main_feed_slot")
                                                 && !root.get("rewards_in_main_feed_slot").isJsonNull()) {
@@ -4593,6 +4601,10 @@ public class newProfileDetails extends AppCompatActivity {
                                                     flash,
                                                     keep,
                                                     showBoth);
+                                        }
+                                        if (showWallet != null) {
+                                            DistrictPinVisibilityConfig.saveWalletVisibilityFromServer(
+                                                    newProfileDetails.this, showWallet);
                                         }
                                         if (exclude != null || allow != null) {
                                             DistrictPinVisibilityConfig.saveReporterGate(
@@ -4719,14 +4731,16 @@ public class newProfileDetails extends AppCompatActivity {
                 walletSubtitle.setVisibility(View.GONE);
             }
         }
+        // Wallet is independent of rewards_master — mid-program convert stays available.
+        boolean walletOn = DistrictPinVisibilityConfig.walletVisibleForUser(this);
         if (layoutWallet != null) {
-            layoutWallet.setVisibility(on ? View.VISIBLE : View.GONE);
+            layoutWallet.setVisibility(walletOn ? View.VISIBLE : View.GONE);
             layoutWallet.setOnClickListener(v -> openRewardsWalletFromProfile());
         }
     }
 
     private void openRewardsWalletFromProfile() {
-        if (!DistrictPinVisibilityConfig.rewardsVisibleForUser(this)) {
+        if (!DistrictPinVisibilityConfig.walletVisibleForUser(this)) {
             Toast.makeText(this, "Wallet is currently off", Toast.LENGTH_SHORT).show();
             return;
         }

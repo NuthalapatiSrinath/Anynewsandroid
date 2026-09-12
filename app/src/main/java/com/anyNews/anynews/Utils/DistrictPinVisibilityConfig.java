@@ -9,11 +9,14 @@ import androidx.annotation.Nullable;
  * District pin / Rewards / Flash News chip visibility on half-article cards.
  * Values arrive via splash / session:
  * {@code hide_district_on_main_feed}, {@code rewards_master},
- * {@code rewards_in_main_feed_slot}, {@code keep_rewards_after_join},
+ * {@code show_wallet_in_profile}, {@code rewards_in_main_feed_slot},
+ * {@code keep_rewards_after_join},
  * {@code flash_news_in_main_feed_slot}, {@code show_flash_and_rewards_together},
  * {@code flash_news_chip_label}, {@code dual_chip_size_dp},
  * {@code dual_chip_shift_left_dp}.
  *
+ * <p>{@code rewards_master} gates Profile Rewards + feed chips only — not Wallet.
+ * {@code show_wallet_in_profile} gates Profile Wallet (coins + convert); default ON.
  * <p>Visibility matrix:
  * <ul>
  *   <li>Local feed ({@code categoryId == -1}) — always show district; never promo chips.</li>
@@ -35,6 +38,11 @@ public final class DistrictPinVisibilityConfig {
     public static final boolean DEFAULT_HIDE_ON_MAIN_FEED = true;
     /** Rewards feature master — default OFF until product enables it. */
     public static final boolean DEFAULT_REWARDS_MASTER = false;
+    /**
+     * Profile wallet (coins + convert). Default ON so mid-program users keep
+     * convert when Rewards master is turned OFF. Missing key → ON.
+     */
+    public static final boolean DEFAULT_SHOW_WALLET_IN_PROFILE = true;
     /** Show rewards promo in main-feed district slot when district would be hidden. */
     public static final boolean DEFAULT_REWARDS_IN_MAIN_FEED_SLOT = false;
     /** Keep Rewards chip after join (instead of Flash / empty). Default OFF. */
@@ -229,6 +237,20 @@ public final class DistrictPinVisibilityConfig {
         }
     }
 
+    /**
+     * Persist Profile wallet visibility. Null leaves the cached value (poll must
+     * not wipe to OFF). Missing key reads as ON ({@link #DEFAULT_SHOW_WALLET_IN_PROFILE}).
+     */
+    public static void saveWalletVisibilityFromServer(
+            @Nullable Context context, @Nullable Boolean showWalletInProfile) {
+        if (context == null || showWalletInProfile == null) return;
+        SharedPrefsData.putStringImmediate(
+                context.getApplicationContext(),
+                Constants.SHOW_WALLET_IN_PROFILE,
+                showWalletInProfile ? "true" : "false",
+                Constants.PREF_NAME);
+    }
+
     /** Backward-compatible overload used by older call sites. */
     public static void saveFromServer(@Nullable Context context, @Nullable Boolean hideOnMainFeed) {
         saveFromServer(context, hideOnMainFeed, null, null);
@@ -347,7 +369,8 @@ public final class DistrictPinVisibilityConfig {
     }
 
     /**
-     * Master switch for rewards UI (Profile row + optional main-feed slot).
+     * Master switch for rewards UI (Profile rewards row + optional main-feed slot).
+     * Does not control Profile wallet — see {@link #walletInProfileEnabled}.
      * Missing key is not a hard OFF when a sibling flag only the server sends
      * with master ON is already true (show-both / feed slot). A boolean stored
      * by the Settings switch is honored — not only the splash string.
@@ -360,6 +383,36 @@ public final class DistrictPinVisibilityConfig {
         if (readBool(context, Constants.SHOW_FLASH_AND_REWARDS_TOGETHER, false)) return true;
         if (readBool(context, Constants.REWARDS_IN_MAIN_FEED_SLOT, false)) return true;
         return false;
+    }
+
+    /**
+     * Admin Profile wallet toggle. Missing key → ON (safe for mid-program convert).
+     * Independent of {@link #rewardsMasterEnabled}.
+     */
+    public static boolean walletInProfileEnabled(@Nullable Context context) {
+        return readBool(
+                context, Constants.SHOW_WALLET_IN_PROFILE, DEFAULT_SHOW_WALLET_IN_PROFILE);
+    }
+
+    /**
+     * True when this device user may see Profile wallet (admin wallet ON and not
+     * an excluded reporter). Does not require rewards_master or the Settings
+     * Rewards switch.
+     */
+    public static boolean walletVisibleForUser(@Nullable Context context) {
+        if (!walletInProfileEnabled(context)) return false;
+        if (!excludeReporters(context)) return true;
+        if (!isLoggedIn(context)) return true;
+        try {
+            boolean isReporter =
+                    SharedPrefsData.getBool(
+                            context.getApplicationContext(),
+                            Constants.is_reporter,
+                            Constants.PREF_NAME);
+            return !isReporter;
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 
     /**

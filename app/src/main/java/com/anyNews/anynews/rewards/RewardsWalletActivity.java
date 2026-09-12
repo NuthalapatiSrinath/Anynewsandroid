@@ -67,8 +67,7 @@ public class RewardsWalletActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (!DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
-                || !DistrictPinVisibilityConfig.rewardsVisibleForUser(this)) {
+        if (!DistrictPinVisibilityConfig.walletVisibleForUser(this)) {
             Toast.makeText(this, "Wallet is currently off", Toast.LENGTH_SHORT).show();
             finish();
             return;
@@ -161,7 +160,11 @@ public class RewardsWalletActivity extends AppCompatActivity {
                     toast("Could not load wallet");
                     return;
                 }
-                if (body.has("enabled") && !body.get("enabled").getAsBoolean()) {
+                // show_wallet_in_profile missing → ON (old server / safe default).
+                // Do not gate on enabled (rewards_master) — wallet is independent.
+                if (body.has("show_wallet_in_profile")
+                        && !body.get("show_wallet_in_profile").isJsonNull()
+                        && !body.get("show_wallet_in_profile").getAsBoolean()) {
                     toast("Wallet is currently off");
                     finish();
                     return;
