@@ -16,12 +16,18 @@ import com.google.android.play.core.review.ReviewManagerFactory;
 
 /**
  * Google Play In-App Review / store listing helper.
- * The explicit "Rate on Google Play" CTA should open the Play Store listing.
- * {@link #launch} uses ReviewManager when available and falls back to the listing.
+ * The explicit "Rate on Google Play" CTA must open only the ANYNEWS Play listing
+ * ({@link #PLAY_STORE_URL}) — never a market chooser for other stores when avoidable.
  */
 public final class PlayInAppReviewHelper {
 
     private static final String TAG = "PlayInAppReview";
+    public static final String PLAY_PACKAGE = "com.anyNews.anynews";
+    /** Exact listing URL required by product. */
+    public static final String PLAY_STORE_URL =
+            "https://play.google.com/store/apps/details?id=com.anyNews.anynews&hl=en_IN";
+    private static final String PLAY_MARKET_URI =
+            "market://details?id=com.anyNews.anynews&hl=en_IN";
 
     public interface Listener {
         /** Review UI finished (or Play dismissed / quota). */
@@ -70,23 +76,60 @@ public final class PlayInAppReviewHelper {
         }
     }
 
-    /** Open the store listing only — cannot pre-select a star rating (Google restriction). */
+    /** Open the Play Store listing only — pin to Play Store package when possible. */
     public static boolean openPlayStoreListing(@NonNull Activity activity) {
-        final String appPackageName = activity.getPackageName();
+        // Prefer https with explicit Play Store package — avoids OEM market choosers.
         try {
-            activity.startActivity(new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("market://details?id=" + appPackageName)));
+            Intent https = new Intent(Intent.ACTION_VIEW, Uri.parse(PLAY_STORE_URL));
+            https.setPackage("com.android.vending");
+            https.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(https);
+            return true;
+        } catch (Exception ignored) {
+        }
+        try {
+            Intent market = new Intent(Intent.ACTION_VIEW, Uri.parse(PLAY_MARKET_URI));
+            market.setPackage("com.android.vending");
+            market.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(market);
             return true;
         } catch (ActivityNotFoundException anfe) {
             try {
-                activity.startActivity(new Intent(Intent.ACTION_VIEW,
-                        Uri.parse("https://play.google.com/store/apps/details?id="
-                                + appPackageName)));
+                Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(PLAY_STORE_URL));
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(fallback);
                 return true;
             } catch (Exception e) {
                 Log.w(TAG, "openPlayStoreListing failed", e);
                 return false;
             }
+        } catch (Exception e) {
+            Log.w(TAG, "openPlayStoreListing failed", e);
+            return false;
+        }
+    }
+
+    /** Same as {@link #openPlayStoreListing(Activity)} for non-Activity contexts. */
+    public static boolean openPlayStoreListing(@NonNull android.content.Context context) {
+        if (context instanceof Activity) {
+            return openPlayStoreListing((Activity) context);
+        }
+        try {
+            Intent https = new Intent(Intent.ACTION_VIEW, Uri.parse(PLAY_STORE_URL));
+            https.setPackage("com.android.vending");
+            https.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(https);
+            return true;
+        } catch (Exception ignored) {
+        }
+        try {
+            Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(PLAY_STORE_URL));
+            fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(fallback);
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "openPlayStoreListing(context) failed", e);
+            return false;
         }
     }
 }

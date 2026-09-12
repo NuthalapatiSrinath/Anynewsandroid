@@ -12,6 +12,7 @@ import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
 import com.anyNews.anynews.R;
+import com.anyNews.anynews.Ui.FeedExoOverlayFrameLayout;
 
 /**
  * Single feed Exo {@link PlayerView} hosted outside FlipView scrap.
@@ -65,6 +66,9 @@ public final class FeedExoOverlayHost {
         // Pass-through when hidden; when shown, PlayerView consumes video taps.
         container.setClickable(false);
         container.setFocusable(false);
+        if (container instanceof FeedExoOverlayFrameLayout) {
+            ((FeedExoOverlayFrameLayout) container).setTouchTarget(playerView);
+        }
     }
 
     @Nullable

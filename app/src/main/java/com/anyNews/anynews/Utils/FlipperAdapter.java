@@ -4102,20 +4102,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                             PlayInAppReviewHelper.launch(host, null);
                                         }
                                     } else {
-                                        try {
-                                            final String appPackageName = context.getPackageName();
-                                            context.startActivity(new Intent(Intent.ACTION_VIEW,
-                                                    Uri.parse("market://details?id=" + appPackageName)));
-                                            openedStore = true;
-                                        } catch (android.content.ActivityNotFoundException anfe) {
-                                            try {
-                                                context.startActivity(new Intent(Intent.ACTION_VIEW,
-                                                        Uri.parse("https://play.google.com/store/apps/details?id="
-                                                                + context.getPackageName())));
-                                                openedStore = true;
-                                            } catch (Exception ignored) {
-                                            }
-                                        }
+                                        openedStore = PlayInAppReviewHelper.openPlayStoreListing(context);
                                     }
                                     // Leave the prompt; remove so return from Play is not thank-you.
                                     removeRatingsCardAt(position);
@@ -4642,6 +4629,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     @Nullable
     private static PlayerView overlayFeedPlayerView() {
         return feedExoOverlayHost != null ? feedExoOverlayHost.getPlayerView() : null;
+    }
+
+    /**
+     * Chrome (mute / fullscreen / red progress / center play) must target the live
+     * overlay PlayerView — scrap controllers stay GONE and never paint Way2 chrome.
+     */
+    @Nullable
+    private static PlayerView feedChromePlayerView(@Nullable PlayerView scrapOrBound) {
+        PlayerView overlay = overlayFeedPlayerView();
+        if (overlay != null) {
+            return overlay;
+        }
+        return scrapOrBound;
     }
 
     /**
@@ -6153,8 +6153,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         final ImageView imageViewExoVideoPlayVideo = convertView.findViewById(R.id.imageViewVideoPlayVideo);
         imageViewExoVideoPlayVideo.setImageResource(R.drawable.ic_way2_play_circle);
 
-        final ImageButton fullscreen_button = simpleExoPlayerViewFull.findViewById(R.id.fullscreen_button);
-        final ImageButton mute_button = simpleExoPlayerViewFull.findViewById(R.id.mute_button);
+        final ImageButton fullscreen_button = feedChromePlayerView(simpleExoPlayerViewFull) != null
+                ? feedChromePlayerView(simpleExoPlayerViewFull).findViewById(R.id.fullscreen_button)
+                : null;
+        final ImageButton mute_button = feedChromePlayerView(simpleExoPlayerViewFull) != null
+                ? feedChromePlayerView(simpleExoPlayerViewFull).findViewById(R.id.mute_button)
+                : null;
         final ProgressBar progress_bar_for_video = convertView.findViewById(R.id.progress_bar_for_video);
         if (isFeedExoSurfaceLive(simpleExoPlayerViewFull)) {
             setFeedExoPosterCover(thaumbnail_for_video, simpleExoPlayerViewFull, false);
@@ -7536,8 +7540,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         hardenFeedPlayerSurface(simpleExoPlayerView);
         final ImageView thaumbnail_for_video = convertView.findViewById(R.id.thaumbnail_for_video);
         final ImageView imageViewExoVideoPlayVideo = convertView.findViewById(R.id.imageViewVideoPlayVideo);
-        final ImageButton fullscreen_button = simpleExoPlayerView.findViewById(R.id.fullscreen_button);
-        final ImageButton mute_button = simpleExoPlayerView.findViewById(R.id.mute_button);
+        // Mute / fullscreen live on the overlay PlayerView controller, not the scrap.
+        final PlayerView chromeForControls = feedChromePlayerView(simpleExoPlayerView);
+        final ImageButton fullscreen_button = chromeForControls != null
+                ? chromeForControls.findViewById(R.id.fullscreen_button) : null;
+        final ImageButton mute_button = chromeForControls != null
+                ? chromeForControls.findViewById(R.id.mute_button) : null;
         final ProgressBar progress_bar_for_video = convertView.findViewById(R.id.progress_bar_for_video);
         halfVideoExoPlayerHolder.layoutParentDate = convertView.findViewById(R.id.layoutParentDate);
         TextView textViewPostDate = convertView.findViewById(R.id.textViewPostDate);
@@ -11893,10 +11901,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Way2News chrome: play circle when idle/paused; mute + fullscreen + thin red line when
-     * playing; no center pause, no ±10, no timestamp. Media3 1.1.0 does not drive legacy
-     * {@code exo_play}/{@code exo_pause}, so we manage visibility from player state.
+     * playing with current/duration scrub text; no center pause, no ±10. Media3 1.1.0 does not
+     * drive legacy {@code exo_play}/{@code exo_pause}, so we manage visibility from player state.
      */
     private void updateExoCenterControlIcons(PlayerView playerView) {
+        playerView = feedChromePlayerView(playerView);
         if (playerView == null) {
             return;
         }
@@ -11929,14 +11938,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (playBtn != null) {
                 playBtn.setVisibility(GONE);
             }
-            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, false);
+            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, playerView, false);
         } else if (playing) {
-            // Image 4: mute + fullscreen + thin red line only.
+            // Image 4: mute + fullscreen + thin red line + time readout.
             // Do not re-show the controller on every tick — that fades an overlay over the picture.
             if (playBtn != null) {
                 playBtn.setVisibility(GONE);
             }
-            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, true);
+            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, playerView, true);
             pinFeedExoLastFrame(playerView);
             if (muteBtn == null || muteBtn.getVisibility() != VISIBLE) {
                 try {
@@ -11949,13 +11958,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (playBtn != null) {
                 playBtn.setVisibility(GONE);
             }
-            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, false);
+            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, playerView, false);
         } else {
             // Image 2: idle / paused — large play circle only.
             if (playBtn != null) {
                 playBtn.setVisibility(VISIBLE);
             }
-            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, false);
+            setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, playerView, false);
             try {
                 playerView.showController();
             } catch (Exception ignored) {
@@ -11964,7 +11973,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void setWay2PlayingChromeVisible(View muteBtn, View fullscreenBtn, View progressBar,
-                                             boolean visible) {
+                                             PlayerView playerView, boolean visible) {
         int vis = visible ? VISIBLE : GONE;
         if (muteBtn != null) {
             muteBtn.setVisibility(vis);
@@ -11980,23 +11989,32 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         if (progressBar != null) {
             progressBar.setVisibility(vis);
-            // Scrub readout only while dragging; never leave it up when chrome hides.
-            View scrubTime = null;
-            if (progressBar.getParent() instanceof View) {
-                View parent = (View) progressBar.getParent();
-                scrubTime = parent.findViewById(R.id.exo_scrub_time);
-            }
-            if (scrubTime == null && progressBar.getRootView() != null) {
-                scrubTime = progressBar.getRootView().findViewById(R.id.exo_scrub_time);
-            }
-            if (!visible && scrubTime != null) {
+        }
+        TextView scrubTime = null;
+        if (playerView != null) {
+            scrubTime = playerView.findViewById(R.id.exo_scrub_time);
+        }
+        if (scrubTime == null && progressBar != null && progressBar.getParent() instanceof View) {
+            scrubTime = ((View) progressBar.getParent()).findViewById(R.id.exo_scrub_time);
+        }
+        if (scrubTime != null) {
+            if (visible) {
+                updateWay2ScrubTimeText(scrubTime);
+                scrubTime.setVisibility(VISIBLE);
+            } else {
                 scrubTime.setVisibility(GONE);
             }
         }
     }
 
+    private void setWay2PlayingChromeVisible(View muteBtn, View fullscreenBtn, View progressBar,
+                                             boolean visible) {
+        setWay2PlayingChromeVisible(muteBtn, fullscreenBtn, progressBar, null, visible);
+    }
+
     /** Keep Way2 chrome always available (no auto-hide strip / dark overlay flash). */
     private void applyWay2ControllerPolicy(PlayerView playerView) {
+        playerView = feedChromePlayerView(playerView);
         if (playerView == null) {
             return;
         }
@@ -12013,12 +12031,33 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         wireWay2ScrubTime(playerView);
     }
 
+    private void updateWay2ScrubTimeText(@Nullable TextView scrubTime) {
+        if (scrubTime == null || exoPlayer == null) {
+            return;
+        }
+        try {
+            long pos = Math.max(0L, exoPlayer.getCurrentPosition());
+            long dur = exoPlayer.getDuration();
+            if (dur < 0L || dur == androidx.media3.common.C.TIME_UNSET) {
+                dur = 0L;
+            }
+            StringBuilder formatBuilder = new StringBuilder();
+            Formatter formatter = new Formatter(formatBuilder, Locale.getDefault());
+            String cur = Util.getStringForTime(formatBuilder, formatter, pos);
+            formatBuilder.setLength(0);
+            String total = Util.getStringForTime(formatBuilder, formatter, dur);
+            scrubTime.setText(cur + "/" + total);
+        } catch (Exception ignored) {
+        }
+    }
+
     /**
-     * While the user drags the red progress line, show seek position (e.g. {@code 0:50}).
-     * Hidden at all other times. Seeking itself is already handled by Media3.
+     * While playing show {@code current/duration} (e.g. {@code 0:47/1:20}); while dragging,
+     * update live. Seeking itself is already handled by Media3.
      */
     @OptIn(markerClass = UnstableApi.class)
     private void wireWay2ScrubTime(PlayerView playerView) {
+        playerView = feedChromePlayerView(playerView);
         if (playerView == null) {
             return;
         }
@@ -12041,14 +12080,40 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         timeBar.addListener(new TimeBar.OnScrubListener() {
             @Override
             public void onScrubStart(TimeBar timeBar, long position) {
-                scrubTime.setText(Util.getStringForTime(formatBuilder, formatter, position));
+                long dur = 0L;
+                try {
+                    if (exoPlayer != null) {
+                        dur = exoPlayer.getDuration();
+                        if (dur < 0L || dur == androidx.media3.common.C.TIME_UNSET) {
+                            dur = 0L;
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                String cur = Util.getStringForTime(formatBuilder, formatter, position);
+                formatBuilder.setLength(0);
+                String total = Util.getStringForTime(formatBuilder, formatter, dur);
+                scrubTime.setText(cur + "/" + total);
                 scrubTime.setVisibility(VISIBLE);
                 scrubTime.bringToFront();
             }
 
             @Override
             public void onScrubMove(TimeBar timeBar, long position) {
-                scrubTime.setText(Util.getStringForTime(formatBuilder, formatter, position));
+                long dur = 0L;
+                try {
+                    if (exoPlayer != null) {
+                        dur = exoPlayer.getDuration();
+                        if (dur < 0L || dur == androidx.media3.common.C.TIME_UNSET) {
+                            dur = 0L;
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                String cur = Util.getStringForTime(formatBuilder, formatter, position);
+                formatBuilder.setLength(0);
+                String total = Util.getStringForTime(formatBuilder, formatter, dur);
+                scrubTime.setText(cur + "/" + total);
                 if (scrubTime.getVisibility() != VISIBLE) {
                     scrubTime.setVisibility(VISIBLE);
                 }
@@ -12056,9 +12121,43 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             @Override
             public void onScrubStop(TimeBar timeBar, long position, boolean canceled) {
-                scrubTime.setVisibility(GONE);
+                updateWay2ScrubTimeText(scrubTime);
+                if (exoPlayer != null && exoPlayer.getPlayWhenReady()
+                        && exoPlayer.getPlaybackState() != Player.STATE_ENDED) {
+                    scrubTime.setVisibility(VISIBLE);
+                } else {
+                    scrubTime.setVisibility(GONE);
+                }
             }
         });
+        // Tick the readout while playing so 0:47/1:20 stays live.
+        exoPlayerAddScrubTicker(playerView, scrubTime);
+    }
+
+    private void exoPlayerAddScrubTicker(PlayerView playerView, TextView scrubTime) {
+        if (exoPlayer == null || scrubTime == null || playerView == null) {
+            return;
+        }
+        Object tagged = scrubTime.getTag(R.id.exo_progress);
+        if (Boolean.TRUE.equals(tagged)) {
+            return;
+        }
+        scrubTime.setTag(R.id.exo_progress, Boolean.TRUE);
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final Runnable[] tickRef = new Runnable[1];
+        tickRef[0] = () -> {
+            try {
+                if (exoPlayer == null || playerView.getPlayer() != exoPlayer) {
+                    return;
+                }
+                if (scrubTime.getVisibility() == VISIBLE) {
+                    updateWay2ScrubTimeText(scrubTime);
+                }
+                handler.postDelayed(tickRef[0], 500L);
+            } catch (Exception ignored) {
+            }
+        };
+        handler.post(tickRef[0]);
     }
 
     /**
@@ -12066,27 +12165,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * (auto-play start, buffering, pause, end). Used by both half and full video.
      */
     private void attachExoCenterIconSync(PlayerView playerView) {
+        playerView = feedChromePlayerView(playerView);
         if (playerView == null || exoPlayer == null) {
             return;
         }
-        applyWay2ControllerPolicy(playerView);
+        final PlayerView chrome = playerView;
+        applyWay2ControllerPolicy(chrome);
         exoPlayer.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                updateExoCenterControlIcons(playerView);
+                updateExoCenterControlIcons(chrome);
             }
 
             @Override
             public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
-                updateExoCenterControlIcons(playerView);
+                updateExoCenterControlIcons(chrome);
             }
 
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
-                updateExoCenterControlIcons(playerView);
+                updateExoCenterControlIcons(chrome);
             }
         });
-        updateExoCenterControlIcons(playerView);
+        updateExoCenterControlIcons(chrome);
     }
 
     /**
@@ -12094,6 +12195,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * playing shows mute + fullscreen + thin progress.
      */
     private void wireHalfVideoExoPauseControl(PlayerView playerView) {
+        playerView = feedChromePlayerView(playerView);
         if (playerView == null) {
             return;
         }
@@ -12103,6 +12205,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void wireFullVideoExoPauseControl(PlayerView playerView, View convertView) {
+        playerView = feedChromePlayerView(playerView);
         if (playerView == null || convertView == null) {
             return;
         }
@@ -12118,11 +12221,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void wireWay2PlayPauseControls(PlayerView playerView, View convertView) {
+        playerView = feedChromePlayerView(playerView);
+        if (playerView == null) {
+            return;
+        }
         View playBtn = playerView.findViewById(R.id.exo_play);
         View root = playerView.findViewById(R.id.exo_controller_root);
         if (root == null) {
             root = playerView;
         }
+        final PlayerView chrome = playerView;
         if (playBtn != null) {
             playBtn.setOnClickListener(v -> {
                 if (exoPlayer != null) {
@@ -12131,7 +12239,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     }
                     forceSharedExoPlay();
                 }
-                updateExoCenterControlIcons(playerView);
+                updateExoCenterControlIcons(chrome);
             });
         }
         // Tap empty area while playing → pause (Image 2 play circle returns).
@@ -12146,7 +12254,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 markUserPausedVideoAutoplay();
                 exoPlayer.setPlayWhenReady(false);
                 exoPlayer.pause();
-                updateExoCenterControlIcons(playerView);
+                updateExoCenterControlIcons(chrome);
                 if (convertView != null) {
                     LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
                     if (sideMenu != null) {

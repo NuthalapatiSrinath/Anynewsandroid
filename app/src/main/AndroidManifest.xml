@@ -286,11 +286,15 @@
                     android:host="anws.in"
                     android:pathPattern="/.*" />
             </intent-filter>
-            <!-- Firebase-style short share host: https://share.anynews.co.in/{code} -->
+            <!-- Firebase-style short share host: https://share.anynews.co.in/{code} and /p/{id} -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="share.anynews.co.in"
+                    android:pathPrefix="/p/" />
                 <data
                     android:scheme="https"
                     android:host="share.anynews.co.in"

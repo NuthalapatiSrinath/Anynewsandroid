@@ -102,7 +102,7 @@
         tool:ignore="RtlHardcoded"
         android:contentDescription="Fullscreen" />
 
-    <!-- Scrub position readout — visible only while dragging the progress line -->
+    <!-- Scrub position readout — while playing shows current/duration (e.g. 0:47/1:20) -->
     <TextView
         android:id="@+id/exo_scrub_time"
         android:layout_width="wrap_content"
@@ -120,7 +120,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         tool:ignore="SpeakableTextPresentCheck"
-        tool:text="0:50"
+        tool:text="0:47/1:20"
         tool:visibility="visible" />
 
     <!-- Thin solid red progress line flush with video bottom (bottom-aligned track) -->

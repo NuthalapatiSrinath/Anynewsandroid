@@ -34,6 +34,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
+import com.anyNews.anynews.Utils.PlayInAppReviewHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Pojo.UserImagePojoResponse;
 import com.google.gson.JsonArray;
@@ -811,20 +812,10 @@ public class RewardsHubActivity extends AppCompatActivity {
             return;
         }
         try {
-            String pkg = getPackageName();
-            if (TextUtils.isEmpty(pkg)) pkg = "com.anyNews.anynews";
-            Intent market =
-                    new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + pkg));
-            market.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                startActivity(market);
-            } catch (Exception e) {
-                startActivity(
-                        new Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse(
-                                        "https://play.google.com/store/apps/details?id="
-                                                + pkg)));
+            boolean opened = PlayInAppReviewHelper.openPlayStoreListing(this);
+            if (!opened) {
+                toast("Could not open Play Store");
+                return;
             }
             pendingScreenshotAfterStore = true;
             toast("Rate 5★ on Play Store, then return here");
