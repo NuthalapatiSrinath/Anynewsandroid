@@ -418,6 +418,14 @@
                         app:surface_type="texture_view"
                         app:use_artwork="false"
                         app:use_controller="true" />
+
+                    <ProgressBar
+                        android:id="@+id/feed_exo_overlay_spinner"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:indeterminate="true"
+                        android:indeterminateDrawable="@drawable/way2_buffering_spinner"
+                        android:visibility="gone" />
                 </com.anyNews.anynews.Ui.FeedExoOverlayFrameLayout>
 
                 <LinearLayout

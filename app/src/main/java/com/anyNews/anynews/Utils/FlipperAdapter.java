@@ -73,6 +73,7 @@ import android.view.LayoutInflater;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.webkit.MimeTypeMap;
@@ -319,7 +320,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private static final Runnable SHOW_EXO_SPINNER = new Runnable() {
         @Override
         public void run() {
-            if (feedExoSpinnerArmed && pendingExoSpinner != null) {
+            if (!feedExoSpinnerArmed) {
+                return;
+            }
+            if (feedExoOverlayHost != null && feedExoOverlayHost.getBufferingSpinner() != null) {
+                feedExoOverlayHost.showBufferingSpinner();
+                return;
+            }
+            if (pendingExoSpinner != null) {
                 pendingExoSpinner.setVisibility(View.VISIBLE);
             }
         }
@@ -11335,11 +11343,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             pendingExoSpinner.setVisibility(View.GONE);
         }
         pendingExoSpinner = null;
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.hideBufferingSpinner();
+        }
     }
 
     /**
      * Buffering ring only before the first frame. After that a stall must not paint
      * the white ring (or the poster) over the picture — the last frame stays.
+     * Spinner is shown on the overlay host (card ProgressBar sits under the TextureView).
      */
     private static void scheduleExoSpinner(ProgressBar progress, boolean startup) {
         EXO_OVERLAY_HANDLER.removeCallbacks(SHOW_EXO_SPINNER);
@@ -11349,18 +11361,32 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 progress.setVisibility(View.GONE);
             }
             pendingExoSpinner = null;
+            if (feedExoOverlayHost != null) {
+                feedExoOverlayHost.hideBufferingSpinner();
+            }
             return;
         }
-        pendingExoSpinner = progress;
+        ProgressBar overlaySpinner = feedExoOverlayHost != null
+                ? feedExoOverlayHost.getBufferingSpinner() : null;
+        ProgressBar target = overlaySpinner != null ? overlaySpinner : progress;
+        pendingExoSpinner = target;
         feedExoSpinnerArmed = true;
-        if (progress == null) {
+        if (target == null) {
             return;
         }
         if (startup) {
-            progress.setVisibility(View.VISIBLE);
+            if (feedExoOverlayHost != null && overlaySpinner != null) {
+                feedExoOverlayHost.showBufferingSpinner();
+            } else {
+                target.setVisibility(View.VISIBLE);
+            }
             return;
         }
-        progress.setVisibility(View.GONE);
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.hideBufferingSpinner();
+        } else if (target != null) {
+            target.setVisibility(View.GONE);
+        }
         EXO_OVERLAY_HANDLER.postDelayed(SHOW_EXO_SPINNER, EXO_SPINNER_DEBOUNCE_MS);
     }
 
@@ -11989,7 +12015,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         if (progressBar != null) {
             progressBar.setVisibility(vis);
+            if (visible) {
+                progressBar.bringToFront();
+            }
         }
+        // Time readout stays GONE unless the user is actively scrubbing.
         TextView scrubTime = null;
         if (playerView != null) {
             scrubTime = playerView.findViewById(R.id.exo_scrub_time);
@@ -11997,13 +12027,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (scrubTime == null && progressBar != null && progressBar.getParent() instanceof View) {
             scrubTime = ((View) progressBar.getParent()).findViewById(R.id.exo_scrub_time);
         }
-        if (scrubTime != null) {
-            if (visible) {
-                updateWay2ScrubTimeText(scrubTime);
-                scrubTime.setVisibility(VISIBLE);
-            } else {
-                scrubTime.setVisibility(GONE);
-            }
+        if (scrubTime != null && !Boolean.TRUE.equals(scrubTime.getTag(R.id.exo_scrub_time_scrubbing))) {
+            scrubTime.setVisibility(GONE);
         }
     }
 
@@ -12031,29 +12056,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         wireWay2ScrubTime(playerView);
     }
 
-    private void updateWay2ScrubTimeText(@Nullable TextView scrubTime) {
-        if (scrubTime == null || exoPlayer == null) {
-            return;
-        }
-        try {
-            long pos = Math.max(0L, exoPlayer.getCurrentPosition());
-            long dur = exoPlayer.getDuration();
-            if (dur < 0L || dur == androidx.media3.common.C.TIME_UNSET) {
-                dur = 0L;
-            }
-            StringBuilder formatBuilder = new StringBuilder();
-            Formatter formatter = new Formatter(formatBuilder, Locale.getDefault());
-            String cur = Util.getStringForTime(formatBuilder, formatter, pos);
-            formatBuilder.setLength(0);
-            String total = Util.getStringForTime(formatBuilder, formatter, dur);
-            scrubTime.setText(cur + "/" + total);
-        } catch (Exception ignored) {
-        }
-    }
-
     /**
-     * While playing show {@code current/duration} (e.g. {@code 0:47/1:20}); while dragging,
-     * update live. Seeking itself is already handled by Media3.
+     * Scrub time (e.g. {@code 0:47/1:20}) only while dragging the red line.
+     * Also blocks FlipView vertical flip for the duration of the scrub.
      */
     @OptIn(markerClass = UnstableApi.class)
     private void wireWay2ScrubTime(PlayerView playerView) {
@@ -12066,7 +12071,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (!(progress instanceof TimeBar) || scrubTime == null) {
             return;
         }
-        // Avoid stacking duplicate listeners when the same PlayerView is re-wired.
         Object wired = scrubTime.getTag(R.id.exo_scrub_time);
         if (Boolean.TRUE.equals(wired)) {
             return;
@@ -12076,20 +12080,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         final StringBuilder formatBuilder = new StringBuilder();
         final Formatter formatter = new Formatter(formatBuilder, Locale.getDefault());
+        final PlayerView chrome = playerView;
         TimeBar timeBar = (TimeBar) progress;
         timeBar.addListener(new TimeBar.OnScrubListener() {
             @Override
             public void onScrubStart(TimeBar timeBar, long position) {
-                long dur = 0L;
-                try {
-                    if (exoPlayer != null) {
-                        dur = exoPlayer.getDuration();
-                        if (dur < 0L || dur == androidx.media3.common.C.TIME_UNSET) {
-                            dur = 0L;
-                        }
-                    }
-                } catch (Exception ignored) {
-                }
+                scrubTime.setTag(R.id.exo_scrub_time_scrubbing, Boolean.TRUE);
+                setFlipDisallowDuringScrub(chrome, true);
+                long dur = scrubDurationMs();
                 String cur = Util.getStringForTime(formatBuilder, formatter, position);
                 formatBuilder.setLength(0);
                 String total = Util.getStringForTime(formatBuilder, formatter, dur);
@@ -12100,16 +12098,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             @Override
             public void onScrubMove(TimeBar timeBar, long position) {
-                long dur = 0L;
-                try {
-                    if (exoPlayer != null) {
-                        dur = exoPlayer.getDuration();
-                        if (dur < 0L || dur == androidx.media3.common.C.TIME_UNSET) {
-                            dur = 0L;
-                        }
-                    }
-                } catch (Exception ignored) {
-                }
+                long dur = scrubDurationMs();
                 String cur = Util.getStringForTime(formatBuilder, formatter, position);
                 formatBuilder.setLength(0);
                 String total = Util.getStringForTime(formatBuilder, formatter, dur);
@@ -12121,43 +12110,43 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             @Override
             public void onScrubStop(TimeBar timeBar, long position, boolean canceled) {
-                updateWay2ScrubTimeText(scrubTime);
-                if (exoPlayer != null && exoPlayer.getPlayWhenReady()
-                        && exoPlayer.getPlaybackState() != Player.STATE_ENDED) {
-                    scrubTime.setVisibility(VISIBLE);
-                } else {
-                    scrubTime.setVisibility(GONE);
-                }
+                scrubTime.setTag(R.id.exo_scrub_time_scrubbing, Boolean.FALSE);
+                scrubTime.setVisibility(GONE);
+                setFlipDisallowDuringScrub(chrome, false);
             }
         });
-        // Tick the readout while playing so 0:47/1:20 stays live.
-        exoPlayerAddScrubTicker(playerView, scrubTime);
     }
 
-    private void exoPlayerAddScrubTicker(PlayerView playerView, TextView scrubTime) {
-        if (exoPlayer == null || scrubTime == null || playerView == null) {
-            return;
-        }
-        Object tagged = scrubTime.getTag(R.id.exo_progress);
-        if (Boolean.TRUE.equals(tagged)) {
-            return;
-        }
-        scrubTime.setTag(R.id.exo_progress, Boolean.TRUE);
-        final Handler handler = new Handler(Looper.getMainLooper());
-        final Runnable[] tickRef = new Runnable[1];
-        tickRef[0] = () -> {
-            try {
-                if (exoPlayer == null || playerView.getPlayer() != exoPlayer) {
-                    return;
-                }
-                if (scrubTime.getVisibility() == VISIBLE) {
-                    updateWay2ScrubTimeText(scrubTime);
-                }
-                handler.postDelayed(tickRef[0], 500L);
-            } catch (Exception ignored) {
+    private long scrubDurationMs() {
+        try {
+            if (exoPlayer == null) {
+                return 0L;
             }
-        };
-        handler.post(tickRef[0]);
+            long dur = exoPlayer.getDuration();
+            if (dur < 0L || dur == androidx.media3.common.C.TIME_UNSET) {
+                return 0L;
+            }
+            return dur;
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    private void setFlipDisallowDuringScrub(@Nullable View from, boolean disallow) {
+        if (from == null) {
+            return;
+        }
+        try {
+            ViewParent p = from.getParent();
+            while (p != null) {
+                p.requestDisallowInterceptTouchEvent(disallow);
+                if (p instanceof com.anyNews.anynews.flipview.FlipView) {
+                    break;
+                }
+                p = p.getParent();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     /**
