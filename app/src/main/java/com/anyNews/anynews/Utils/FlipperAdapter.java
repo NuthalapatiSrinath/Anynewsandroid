@@ -10613,23 +10613,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * through ready, rebuffer, and a brief idle while playWhenReady is still true.
      */
     private static boolean isFeedExoSurfaceLive(PlayerView playerView) {
-        if (!feedExoFrameRendered || exoPlayer == null) {
+        if (!feedExoFrameRendered || exoPlayer == null || playerView == null) {
             return false;
         }
-        PlayerView surface = stableFeedSurfacePlayerView();
-        if (surface == null) {
-            surface = playerView;
-        }
-        if (surface == null || surface.getPlayer() != exoPlayer) {
-            // Chrome-only scrap may hold the player while picture is on the stable host.
-            if (playerView == null || playerView.getPlayer() != exoPlayer) {
-                return false;
-            }
-            surface = stableFeedSurfacePlayerView() != null
-                    ? stableFeedSurfacePlayerView() : playerView;
-            if (surface.getPlayer() != exoPlayer && playerView.getPlayer() != exoPlayer) {
-                return false;
-            }
+        if (playerView.getPlayer() != exoPlayer) {
+            return false;
         }
         try {
             int state = exoPlayer.getPlaybackState();
@@ -11054,10 +11042,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Bind the shared feed ExoPlayer to the stable surface host (picture) and the scrap
-     * PlayerView (in-card chrome only). Never hops TextureView across FlipView scrap.
-     *
-     * @return true if the surface binding changed (caller may need a fresh listener)
+     * Bind shared Exo to the in-card PlayerView (TextureView). FeedExoSurfaceHost is
+     * disabled for playback — reparent + surface_type=none left a black picture with
+     * chrome only. FlipView pin still avoids scrap thrash mid-play.
      */
     private boolean attachSharedExoToPlayerView(PlayerView scrapPlayerView) {
         View cardRoot = findExoCardRoot(scrapPlayerView);
@@ -11065,36 +11052,30 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private boolean attachSharedExoToPlayerView(PlayerView scrapPlayerView, View cardRoot) {
-        if (exoPlayer == null) {
+        if (exoPlayer == null || scrapPlayerView == null) {
             return false;
         }
-        PlayerView surface = scrapPlayerView;
-        ViewGroup playLayout = null;
-        if (cardRoot != null) {
-            View pl = cardRoot.findViewById(R.id.exo_play_layout);
-            if (pl instanceof ViewGroup) {
-                playLayout = (ViewGroup) pl;
+        // Park any leftover surface-host view so it cannot sit under/over the card blank.
+        try {
+            if (feedExoSurfaceHost != null) {
+                feedExoSurfaceHost.parkSurface();
             }
-        } else if (scrapPlayerView != null && scrapPlayerView.getParent() instanceof ViewGroup) {
-            playLayout = (ViewGroup) scrapPlayerView.getParent();
+        } catch (Exception ignored) {
         }
-        if (feedExoSurfaceHost != null && playLayout != null) {
-            feedExoSurfaceHost.attachUnderChrome(playLayout, cardRoot != null ? cardRoot : playLayout);
-            surface = feedExoSurfaceHost.getPlayerView();
-            rememberFeedExoHost(cardRoot != null ? cardRoot : playLayout);
-            prepareScrapAsChromeOnly(scrapPlayerView);
+        if (cardRoot != null) {
+            rememberFeedExoHost(cardRoot);
         }
-        if (surface == null) {
-            return false;
-        }
-        rememberFeedExoPlayerView(surface);
+        rememberFeedExoPlayerView(scrapPlayerView);
         boolean changed = false;
         try {
-            hardenFeedPlayerSurface(surface);
-            Player attached = surface.getPlayer();
+            if (scrapPlayerView.getVisibility() != View.VISIBLE) {
+                scrapPlayerView.setVisibility(View.VISIBLE);
+            }
+            hardenFeedPlayerSurface(scrapPlayerView);
+            Player attached = scrapPlayerView.getPlayer();
             if (attached == exoPlayer) {
                 if (feedExoFrameRendered) {
-                    pinFeedExoLastFrame(surface);
+                    pinFeedExoLastFrame(scrapPlayerView);
                 }
             } else {
                 if (attached != null && attached != exoPlayer) {
@@ -11103,13 +11084,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     } catch (Exception ignored) {
                     }
                 }
-                surface.setPlayer(exoPlayer);
-                hardenFeedPlayerSurface(surface);
+                scrapPlayerView.setPlayer(exoPlayer);
+                hardenFeedPlayerSurface(scrapPlayerView);
                 changed = true;
-            }
-            // Scrap owns Way2 mute/fs/progress — surface_type=none so setPlayer won't steal TextureView.
-            if (scrapPlayerView != null && scrapPlayerView != surface) {
-                bindScrapChromePlayer(scrapPlayerView);
             }
             return changed;
         } catch (Exception e) {
