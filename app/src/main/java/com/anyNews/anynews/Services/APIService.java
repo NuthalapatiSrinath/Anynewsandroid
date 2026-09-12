@@ -485,6 +485,10 @@ public interface APIService {
     @POST("app/{version}/rewards_history")
     Call<JsonObject> rewards_history(@Path("version") String version, @Body JsonObject body);
 
+    @POST("app/{version}/rewards_withdrawal_proof")
+    Call<JsonObject> rewards_withdrawal_proof(
+            @Path("version") String version, @Body JsonObject body);
+
     @POST("app/{version}/rewards_checkin")
     Call<JsonObject> rewards_checkin(@Path("version") String version, @Body JsonObject body);
 
@@ -509,6 +513,19 @@ public interface APIService {
 
     @POST("app/{version}/advertise_send")
     Call<JsonObject> advertise_send(@Path("version") String version, @Body JsonObject body);
+
+    /** Automatic Birthday Special — config + schedule (logged-in). */
+    @POST("app/{version}/birthday_config")
+    Call<JsonObject> birthday_config(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/birthday_schedule")
+    Call<JsonObject> birthday_schedule(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/birthday_my")
+    Call<JsonObject> birthday_my(@Path("version") String version, @Body JsonObject body);
+
+    @POST("app/{version}/birthday_cancel")
+    Call<JsonObject> birthday_cancel(@Path("version") String version, @Body JsonObject body);
 
     /** General media upload (image/video/voice) → OCI URL in extras.url. */
     @Multipart

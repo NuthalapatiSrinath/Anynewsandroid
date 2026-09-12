@@ -4406,7 +4406,7 @@ public class newProfileDetails extends AppCompatActivity {
             });
         }
 
-        // Birthday Special — photo / name / location → chat (admin master toggle)
+        // Birthday Special — automatic scheduled banner (login required)
         View layoutBirthday = findViewById(R.id.layout_birthday_special);
         TextView birthdayLabel = findViewById(R.id.profile_birthday_label);
         if (birthdayLabel != null) {
@@ -4419,13 +4419,24 @@ public class newProfileDetails extends AppCompatActivity {
             layoutBirthday.setOnClickListener(
                     v -> {
                         markBirthdaySpecialBadgeSeen();
+                        boolean loggedIn =
+                                SharedPrefsData.getBool(
+                                        newProfileDetails.this,
+                                        Constants.is_login,
+                                        Constants.PREF_NAME);
+                        if (!loggedIn) {
+                            Toast.makeText(
+                                            newProfileDetails.this,
+                                            R.string.birthday_auto_login_required,
+                                            Toast.LENGTH_LONG)
+                                    .show();
+                            openReporterLogin();
+                            return;
+                        }
                         Intent i =
                                 new Intent(
                                         newProfileDetails.this,
-                                        AdvertiseOnAnyNewsActivity.class);
-                        i.putExtra(
-                                AdvertiseOnAnyNewsActivity.EXTRA_MODE,
-                                AdvertiseOnAnyNewsActivity.MODE_BIRTHDAY);
+                                        BirthdayAutoActivity.class);
                         startActivity(i);
                     });
         }
