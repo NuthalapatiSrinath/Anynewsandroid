@@ -880,6 +880,11 @@ public final class SessionAnalyticsTracker {
                             excludeReporters =
                                     resBody.get("rewards_exclude_reporters").getAsBoolean();
                         }
+                        Boolean allowReporters = null;
+                        if (resBody.has("allow_reporters")
+                                && !resBody.get("allow_reporters").isJsonNull()) {
+                            allowReporters = resBody.get("allow_reporters").getAsBoolean();
+                        }
                         try {
                             com.anyNews.anynews.rewards.RewardsConfigHelper
                                     .applyFromRewardsPayload(context, resBody);
@@ -902,11 +907,36 @@ public final class SessionAnalyticsTracker {
                                     keepRewardsAfterJoin,
                                     showBothChips);
                         }
+                        if (excludeReporters != null || allowReporters != null) {
+                            DistrictPinVisibilityConfig.saveReporterGate(
+                                    context, excludeReporters, allowReporters);
+                        }
                         if (resBody.has("flash_news_chip_label")
                                 && !resBody.get("flash_news_chip_label").isJsonNull()) {
                             FlashNewsChipHelper.saveLabelFromServer(
                                     context,
                                     resBody.get("flash_news_chip_label").getAsString());
+                        }
+                        Integer pairSizeDp = null;
+                        Integer pairShiftLeftDp = null;
+                        Integer pairShiftUpDp = null;
+                        if (resBody.has("dual_chip_size_dp")
+                                && !resBody.get("dual_chip_size_dp").isJsonNull()) {
+                            pairSizeDp = resBody.get("dual_chip_size_dp").getAsInt();
+                        }
+                        if (resBody.has("dual_chip_shift_left_dp")
+                                && !resBody.get("dual_chip_shift_left_dp").isJsonNull()) {
+                            pairShiftLeftDp =
+                                    resBody.get("dual_chip_shift_left_dp").getAsInt();
+                        }
+                        if (resBody.has("dual_chip_shift_up_dp")
+                                && !resBody.get("dual_chip_shift_up_dp").isJsonNull()) {
+                            pairShiftUpDp =
+                                    resBody.get("dual_chip_shift_up_dp").getAsInt();
+                        }
+                        if (pairSizeDp != null || pairShiftLeftDp != null || pairShiftUpDp != null) {
+                            DistrictPinVisibilityConfig.savePairLayoutFromServer(
+                                    context, pairSizeDp, pairShiftLeftDp, pairShiftUpDp);
                         }
                         String fromDate = null;
                         Boolean bannerActive = null;

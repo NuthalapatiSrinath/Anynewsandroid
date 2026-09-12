@@ -4497,7 +4497,17 @@ public class newProfileDetails extends AppCompatActivity {
             long last =
                     SharedPrefsData.getLong(
                             this, Constants.REWARDS_HUB_FLAGS_FETCHED_AT, Constants.PREF_NAME);
-            if (last > 0L && System.currentTimeMillis() - last < 10L * 60L * 1000L) {
+            boolean masterMissing =
+                    TextUtils.isEmpty(
+                            SharedPrefsData.getString(
+                                    this, Constants.REWARDS_MASTER, Constants.PREF_NAME));
+            boolean masterOff = !DistrictPinVisibilityConfig.rewardsMasterEnabled(this);
+            // Missing or stale OFF: do not trust the TTL. A previous fetch can pin
+            // Profile to hidden for 10 minutes after admin turned Rewards ON.
+            if (!masterMissing
+                    && !masterOff
+                    && last > 0L
+                    && System.currentTimeMillis() - last < 10L * 60L * 1000L) {
                 return;
             }
             APIService api = RestApiClient.getClient().create(APIService.class);
@@ -4532,20 +4542,61 @@ public class newProfileDetails extends AppCompatActivity {
                                         }
                                         Boolean master = null;
                                         Boolean exclude = null;
+                                        Boolean allow = null;
+                                        Boolean slot = null;
+                                        Boolean keep = null;
+                                        Boolean flash = null;
+                                        Boolean showBoth = null;
                                         if (root.has("enabled") && !root.get("enabled").isJsonNull()) {
                                             master = root.get("enabled").getAsBoolean();
+                                        }
+                                        if (root.has("rewards_master")
+                                                && !root.get("rewards_master").isJsonNull()) {
+                                            master = root.get("rewards_master").getAsBoolean();
+                                        }
+                                        if (root.has("rewards_in_main_feed_slot")
+                                                && !root.get("rewards_in_main_feed_slot").isJsonNull()) {
+                                            slot = root.get("rewards_in_main_feed_slot").getAsBoolean();
+                                        }
+                                        if (root.has("keep_rewards_after_join")
+                                                && !root.get("keep_rewards_after_join").isJsonNull()) {
+                                            keep = root.get("keep_rewards_after_join").getAsBoolean();
+                                        }
+                                        if (root.has("flash_news_in_main_feed_slot")
+                                                && !root.get("flash_news_in_main_feed_slot").isJsonNull()) {
+                                            flash = root.get("flash_news_in_main_feed_slot").getAsBoolean();
+                                        }
+                                        if (root.has("show_flash_and_rewards_together")
+                                                && !root.get("show_flash_and_rewards_together").isJsonNull()) {
+                                            showBoth = root.get("show_flash_and_rewards_together").getAsBoolean();
                                         }
                                         if (root.has("exclude_reporters")
                                                 && !root.get("exclude_reporters").isJsonNull()) {
                                             exclude = root.get("exclude_reporters").getAsBoolean();
                                         }
-                                        if (master != null || exclude != null) {
+                                        if (root.has("allow_reporters")
+                                                && !root.get("allow_reporters").isJsonNull()) {
+                                            allow = root.get("allow_reporters").getAsBoolean();
+                                        }
+                                        if (master != null
+                                                || slot != null
+                                                || keep != null
+                                                || flash != null
+                                                || showBoth != null
+                                                || exclude != null) {
                                             DistrictPinVisibilityConfig.saveFromServer(
                                                     newProfileDetails.this,
                                                     null,
                                                     master,
-                                                    null,
-                                                    exclude);
+                                                    slot,
+                                                    exclude,
+                                                    flash,
+                                                    keep,
+                                                    showBoth);
+                                        }
+                                        if (exclude != null || allow != null) {
+                                            DistrictPinVisibilityConfig.saveReporterGate(
+                                                    newProfileDetails.this, exclude, allow);
                                         }
                                         runOnUiThread(
                                                 () -> {
@@ -4615,6 +4666,12 @@ public class newProfileDetails extends AppCompatActivity {
         View layoutWallet = findViewById(R.id.layout_profile_rewards_wallet);
         TextView walletLabel = findViewById(R.id.profile_rewards_wallet_label);
         TextView walletSubtitle = findViewById(R.id.profile_rewards_wallet_subtitle);
+        // Settings switch defaults ON. If it was never written, persist that
+        // before painting so the row matches the switch (not a missing pref).
+        if (DistrictPinVisibilityConfig.rewardsMasterEnabled(this)
+                && DistrictPinVisibilityConfig.userRewardsPrefMissing(this)) {
+            DistrictPinVisibilityConfig.setUserRewardsEnabled(this, true);
+        }
         boolean on = DistrictPinVisibilityConfig.rewardsVisibleForUser(this);
         if (rewardsLabel != null) {
             rewardsLabel.setTextSize(menuSp);

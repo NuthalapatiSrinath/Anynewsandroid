@@ -1959,9 +1959,18 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getFlashNewsInMainFeedSlot(),
                                 startActivityReqModel.getData().getKeepRewardsAfterJoin(),
                                 startActivityReqModel.getData().getShowFlashAndRewardsTogether());
+                        DistrictPinVisibilityConfig.saveReporterGate(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getRewardsExcludeReporters(),
+                                startActivityReqModel.getData().getRewardsAllowReporters());
                         FlashNewsChipHelper.saveLabelFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getFlashNewsChipLabel());
+                        DistrictPinVisibilityConfig.savePairLayoutFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getDualChipSizeDp(),
+                                startActivityReqModel.getData().getDualChipShiftLeftDp(),
+                                startActivityReqModel.getData().getDualChipShiftUpDp());
                         ReporterPaymentAppConfig.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getReporterArticlesFromDate(),

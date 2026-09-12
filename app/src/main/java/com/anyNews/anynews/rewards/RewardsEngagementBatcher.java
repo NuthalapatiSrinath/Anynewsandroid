@@ -159,10 +159,11 @@ public final class RewardsEngagementBatcher {
         enqueue(ctx, "follow", null, 0, 0, 1);
     }
 
-    public void trackAdsSeen(@Nullable Context ctx, int count) {
-        if (count <= 0) return;
-        enqueue(ctx, "ads_seen", null, 0, 0, Math.min(5, count));
-    }
+    /**
+     * No-op. Feed impressions must not enqueue {@code ads_seen}. Rewarded
+     * video completions are counted on the existing watch-ad claim call.
+     */
+    public void trackAdsSeen(@Nullable Context ctx, int count) {}
 
     public void flushNow(@Nullable Context ctx) {
         ensure(ctx);

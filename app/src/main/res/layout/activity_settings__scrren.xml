@@ -268,6 +268,46 @@
                         android:minHeight="0dp"
                         android:showText="false" />
                 </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/cell_rewards"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:paddingStart="2dp"
+                    android:paddingEnd="2dp">
+
+                    <ImageView
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_hub_rewards" />
+
+                    <TextView
+                        android:id="@+id/label_rewards"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:ellipsize="end"
+                        android:gravity="center"
+                        android:maxLines="2"
+                        android:text="@string/settings_rewards"
+                        android:textColor="@color/settings_grid_label"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switch_rewards"
+                        style="@style/SettingsSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:contentDescription="@string/settings_rewards"
+                        android:minHeight="0dp"
+                        android:showText="false" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Bookmarks + Clear Cache side-by-side -->

@@ -214,6 +214,26 @@ public class EncreptionRequest {
     @Expose
     private String flash_news_chip_label;
 
+    /** Dual-chip pair text size (dp). Null when the poll omits it. */
+    @SerializedName("dual_chip_size_dp")
+    @Expose
+    private Integer dual_chip_size_dp;
+
+    /** Extra end margin (dp) that shifts the pair left only. Null when omitted. */
+    @SerializedName("dual_chip_shift_left_dp")
+    @Expose
+    private Integer dual_chip_shift_left_dp;
+
+    /** Extra lift (dp) that moves the pair up. Null when omitted. */
+    @SerializedName("dual_chip_shift_up_dp")
+    @Expose
+    private Integer dual_chip_shift_up_dp;
+
+    /** Allow-reporters inverse. Null when omitted — do not wipe splash. */
+    @SerializedName("rewards_exclude_reporters")
+    @Expose
+    private Boolean rewards_exclude_reporters;
+
     /** Daily Updates hub kill switches + language matrices (same shape as splash). */
     @SerializedName("daily_updates")
     @Expose
@@ -441,6 +461,22 @@ public class EncreptionRequest {
 
     public String getFlash_news_chip_label() {
         return flash_news_chip_label;
+    }
+
+    public Integer getDual_chip_size_dp() {
+        return dual_chip_size_dp;
+    }
+
+    public Integer getDual_chip_shift_left_dp() {
+        return dual_chip_shift_left_dp;
+    }
+
+    public Integer getDual_chip_shift_up_dp() {
+        return dual_chip_shift_up_dp;
+    }
+
+    public Boolean getRewards_exclude_reporters() {
+        return rewards_exclude_reporters;
     }
 
     public Boolean getEnable_birthday_special() {

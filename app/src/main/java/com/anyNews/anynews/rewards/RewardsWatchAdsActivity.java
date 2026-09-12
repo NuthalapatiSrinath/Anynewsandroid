@@ -52,7 +52,9 @@ import retrofit2.Response;
 /**
  * Rewards watch-ad page. The ad preloads during a 5s countdown and starts only
  * when the user taps. Leaving the page drops the loaded ad so it cannot play
- * on Home or the feed. Coins follow ads_seen (total coins / cap-day ad count).
+ * on Home or the feed. Completions here are the only ads that count toward
+ * the daily cap. Coins follow Earn actions (total coins / N ads per streak).
+ * Rules ads_seen is cap-only and must not set the pay amount.
  */
 public class RewardsWatchAdsActivity extends AppCompatActivity {
 
@@ -138,11 +140,25 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                         return;
                     }
                     waitSeconds--;
-                    if (waitSeconds <= 0 && dailyLimit && !noRewardSlots()) {
-                        dailyLimit = false;
-                        sessionClosed = false;
-                        beginCountdownAndPreload();
-                        return;
+                    if (waitSeconds <= 0) {
+                        if (dailyLimit && !noRewardSlots()) {
+                            dailyLimit = false;
+                            sessionClosed = false;
+                            watched = 0;
+                            sessionEarned = 0;
+                            if (nextBtn != null) nextBtn.setVisibility(View.VISIBLE);
+                            beginCountdownAndPreload();
+                            return;
+                        }
+                        // Streak cooldown finished — next Earn-actions N ads.
+                        if (!dailyLimit && sessionClosed && !noRewardSlots()) {
+                            sessionClosed = false;
+                            watched = 0;
+                            sessionEarned = 0;
+                            if (nextBtn != null) nextBtn.setVisibility(View.VISIBLE);
+                            beginCountdownAndPreload();
+                            return;
+                        }
                     }
                     paint();
                     if (waitSeconds > 0) uiHandler.postDelayed(this, 1000);
@@ -223,12 +239,10 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
         startFreshEntry();
     }
 
-    /** ads_seen Coins = session total, cap/day = ad count. Intent values are fallback. */
+    /** Daily cap only — pay (N + coins) comes from Earn actions / intent extras. */
     private void applyAdsSeenFactor() {
-        int cap = RewardsConfigHelper.factorCapPerDay(this, "ads_seen");
-        int factorCoins = RewardsConfigHelper.factorCoinsPer(this, "ads_seen");
-        if (cap > 0) required = cap;
-        if (factorCoins > 0) coins = factorCoins;
+        // Do not override required/coins from Rules ads_seen. That field is
+        // cap/day only; using coins_per here caused +4000 history rows.
         required = Math.max(1, required);
         coins = Math.max(0, coins);
     }

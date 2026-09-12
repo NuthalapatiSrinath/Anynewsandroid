@@ -74,6 +74,7 @@ public class Settings_Scrren extends AppCompatActivity {
     private SwitchCompat switchNotifications;
     private SwitchCompat switchNight;
     private SwitchCompat switchLocal;
+    private SwitchCompat switchRewards;
 
     private LanguageModelResponse languageModelResponse;
     private Allsharedpreference prefShare;
@@ -101,6 +102,7 @@ public class Settings_Scrren extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        applyToggleVisibility();
         boolean systemOn = isSystemNotificationsEnabled();
         if (pendingEnableNotifications && systemOn) {
             pendingEnableNotifications = false;
@@ -174,6 +176,7 @@ public class Settings_Scrren extends AppCompatActivity {
         switchNotifications = findViewById(R.id.switch_notifications);
         switchNight = findViewById(R.id.switch_night);
         switchLocal = findViewById(R.id.switch_local);
+        switchRewards = findViewById(R.id.switch_rewards);
     }
 
     /**
@@ -184,9 +187,14 @@ public class Settings_Scrren extends AppCompatActivity {
         View cellNotif = findViewById(R.id.cell_notifications);
         View cellNight = findViewById(R.id.cell_night);
         View cellLocal = findViewById(R.id.cell_local);
+        View cellRewards = findViewById(R.id.cell_rewards);
         setCellVisible(cellNotif, ProfileHubConfigHelper.isSettingsShowNotifications(this));
         setCellVisible(cellNight, ProfileHubConfigHelper.isSettingsShowNightMode(this));
         setCellVisible(cellLocal, ProfileHubConfigHelper.isSettingsShowLocalStories(this));
+        // Visible whenever admin master is ON. The switch writes the flag the hub reads.
+        setCellVisible(
+                cellRewards,
+                com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.rewardsMasterEnabled(this));
 
         LinearLayout row = findViewById(R.id.row_settings_toggles);
         if (row == null) return;
@@ -240,6 +248,7 @@ public class Settings_Scrren extends AppCompatActivity {
                 R.id.label_local,
                 firstNonEmpty(
                         d != null ? d.getLocal() : null, getString(R.string.settings_local_stories)));
+        setText(R.id.label_rewards, getString(R.string.settings_rewards));
 
         setText(R.id.label_bookmarks, getString(R.string.settings_bookmarks));
         setText(R.id.label_clear_cache, getString(R.string.settings_clear_cache));
@@ -322,6 +331,11 @@ public class Settings_Scrren extends AppCompatActivity {
 
         if (switchNight != null) switchNight.setChecked(night);
         if (switchLocal != null) switchLocal.setChecked(local);
+        boolean rewardsOn =
+                com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.userRewardsEnabled(this);
+        if (switchRewards != null) switchRewards.setChecked(rewardsOn);
+        // Persist whatever the switch shows so Profile/feed read the same ON/OFF.
+        com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.setUserRewardsEnabled(this, rewardsOn);
         suppressToggleCallbacks = false;
         applyNotificationSwitchState();
     }
@@ -439,6 +453,15 @@ public class Settings_Scrren extends AppCompatActivity {
                         if (suppressToggleCallbacks) return;
                         SharedPrefsData.putBool(
                                 this, Constants.LOCAL_STORIES, isChecked, Constants.PREF_NAME);
+                    });
+        }
+
+        if (switchRewards != null) {
+            switchRewards.setOnCheckedChangeListener(
+                    (buttonView, isChecked) -> {
+                        if (suppressToggleCallbacks) return;
+                        com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.setUserRewardsEnabled(
+                                Settings_Scrren.this, isChecked);
                     });
         }
 

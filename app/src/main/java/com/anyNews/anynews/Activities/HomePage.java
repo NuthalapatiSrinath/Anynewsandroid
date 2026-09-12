@@ -152,6 +152,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketFooterLabel;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
+import com.anyNews.anynews.Utils.FeedExoOverlayHost;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
@@ -338,6 +339,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean pendingFlipSettleWork = false;
     /** Skip redundant settle when complete fires for the same page again. */
     private int lastSettledFlipIndex = -1;
+    /** When true, bottom nav / News|Read chrome waits for post-settle (leave/enter ad). */
+    private boolean deferFlipChromeUntilSettle = false;
     /** Debounce views+dwell when rapid flips land on the same post. */
     private long lastTrackedFlipPostId = -1L;
     private long lastTrackedFlipAtMs = 0L;
@@ -783,6 +786,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     // Cricket Live Mini Player — draggable floating overlay over the news feed.
     private com.anyNews.anynews.Utils.CricketMiniPlayerManager cricketMiniPlayerManager;
+    /** Dedicated feed Exo PlayerView outside FlipView scrap (half/full uploaded video). */
+    @Nullable
+    private com.anyNews.anynews.Utils.FeedExoOverlayHost feedExoOverlayHost;
 
     // Top segmented toggle: offline Offline News|Bookmarks; online main News|Read News.
     private View homeModeToggleRoot;
@@ -991,6 +997,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         my_feed_text = findViewById(R.id.my_feed_text);
 
         mFlipView = findViewById(R.id.flip_view);
+        feedExoOverlayHost = FeedExoOverlayHost.bind(this);
+        FlipperAdapter.setFeedExoOverlayHost(feedExoOverlayHost);
         homeCalendarHost = findViewById(R.id.home_calendar_host);
         homeDailyUpdatesHost = findViewById(R.id.home_daily_updates_host);
         setupHomeCalendarTtdToggle();
@@ -6935,7 +6943,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (homeModeToggleRoot != null) {
                 int h = homeModeToggleRoot.getHeight();
                 if (h <= 0) {
-                    h = (int) (56f * dens);
+                    // Must match layout_home_news_bookmarks_toggle bar
+                    // (pill 44dp + padding 12dp/14dp). Too short clips the hide slide.
+                    h = (int) (72f * dens);
                 }
                 float hiddenY = -h - 8f * dens;
                 prepareChromeSlideIn(homeModeToggleRoot, show, hiddenY);
@@ -9033,6 +9043,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (cricketMiniPlayerManager != null) {
             cricketMiniPlayerManager.setHiddenForFlipGesture(true);
         }
+        // Flat overlay must not sit on a rotating Flip card — hide; settle/play shows again.
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.setHiddenForFlipGesture(true);
+        }
         // FAB refresh is handled in OnFlipCompletedListener — avoid a second layout
         // pass 80ms after appear (stacking with settle work on low-end).
     }
@@ -9131,6 +9145,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 return;
             }
             FlipperAdapter.releaseActiveExoPlayer();
+            if (feedExoOverlayHost != null) {
+                feedExoOverlayHost.clearPlayerBinding();
+            }
             try {
                 if (FlipperAdapter.youTubePlayerViewHalf != null) {
                     FlipperAdapter.youTubePlayerViewHalf.pause();
@@ -9176,6 +9193,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Restore cricket mini-player after flip gesture (feature kept; only paused visually).
         if (cricketMiniPlayerManager != null) {
             cricketMiniPlayerManager.setHiddenForFlipGesture(false);
+        }
+        // Allow dedicated feed Exo overlay to show again (autoplay / resume calls showOver).
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.setHiddenForFlipGesture(false);
         }
         // Sync gate: scroller finished; settle-grace still defers AdMob.
         FlipAdWorkGate.noteFlipInteraction();
@@ -13070,22 +13091,38 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             || encreptionRequest.getRewards_in_main_feed_slot() != null
                             || encreptionRequest.getKeep_rewards_after_join() != null
                             || encreptionRequest.getFlash_news_in_main_feed_slot() != null
-                            || encreptionRequest.getShow_flash_and_rewards_together() != null) {
+                            || encreptionRequest.getShow_flash_and_rewards_together() != null
+                            || encreptionRequest.getRewards_exclude_reporters() != null) {
                         DistrictPinVisibilityConfig.saveFromServer(
                                 getApplicationContext(),
                                 encreptionRequest.getHide_district_on_main_feed(),
                                 encreptionRequest.getRewards_master(),
                                 encreptionRequest.getRewards_in_main_feed_slot(),
-                                null,
+                                encreptionRequest.getRewards_exclude_reporters(),
                                 encreptionRequest.getFlash_news_in_main_feed_slot(),
                                 encreptionRequest.getKeep_rewards_after_join(),
                                 encreptionRequest.getShow_flash_and_rewards_together());
+                        if (adapter != null) {
+                            adapter.notifyWhenFlipSettled();
+                        }
                     }
                     if (encreptionRequest.getFlash_news_chip_label() != null
                             && !encreptionRequest.getFlash_news_chip_label().trim().isEmpty()) {
                         FlashNewsChipHelper.saveLabelFromServer(
                                 getApplicationContext(),
                                 encreptionRequest.getFlash_news_chip_label());
+                    }
+                    if (encreptionRequest.getDual_chip_size_dp() != null
+                            || encreptionRequest.getDual_chip_shift_left_dp() != null
+                            || encreptionRequest.getDual_chip_shift_up_dp() != null) {
+                        DistrictPinVisibilityConfig.savePairLayoutFromServer(
+                                getApplicationContext(),
+                                encreptionRequest.getDual_chip_size_dp(),
+                                encreptionRequest.getDual_chip_shift_left_dp(),
+                                encreptionRequest.getDual_chip_shift_up_dp());
+                        if (adapter != null) {
+                            adapter.notifyWhenFlipSettled();
+                        }
                     }
                     // Daily Updates + Birthday hub kill switches (live; never stub on errors).
                     applyDailyUpdatesHubPollConfig(encreptionRequest);
@@ -14439,6 +14476,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (adapter != null) {
             adapter.clearUserPausedVideoAutoplay();
         }
+        final int previousFlipIndex = positionx;
+        final String previousPostType = post_type != null ? post_type : "";
         positionx = position;
         // Flip restore prefs are written after settle paint (not mid-flip / not at settle start)
         // to avoid SharedPreferences editor work during the animation.
@@ -14449,22 +14488,37 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (adapter != null) {
             adapter.setCurrentFlipPage(position);
         }
-        // Do NOT prefetch AdMob here — onFlippedToPage runs mid-animation. Prefetch
-        // is deferred to runDeferredFlipSettleWork (after scroller finishes).
-        // Online: always keep bottom tabs. Offline/ads may still hide (legacy).
-        if (isDeviceOnline() && !offlineChromeMode) {
-            ensureOnlineBottomNavVisible();
-        } else if (post_type.equalsIgnoreCase("ad")
-                || post_type.equalsIgnoreCase("share_app")
-                || post_type.equalsIgnoreCase("ratings")) {
-            home_page_navigation.setVisibility(View.INVISIBLE);
-        } else {
-            home_page_navigation.setVisibility(View.VISIBLE);
+        // Leave-ad: soft-hide MediaView now; destroy/strip only after settle so detach
+        // cannot jolt the next article mid-gesture.
+        final boolean leftAdShell = isFlipChromeInterstitialType(previousPostType)
+                && !isFlipChromeInterstitialType(post_type);
+        final boolean enteredAdShell = !isFlipChromeInterstitialType(previousPostType)
+                && isFlipChromeInterstitialType(post_type);
+        if (leftAdShell && adapter != null && previousFlipIndex >= 0) {
+            try {
+                adapter.pauseAdMediaForLeaveGesture(previousFlipIndex);
+            } catch (Exception ignored) {
+            }
         }
-        // Ads / Share shell: hide News|Read pill (no meaningful article chrome).
-        try {
-            refreshHomeModeToggleUi();
-        } catch (Exception ignored) {
+        // Defer bottom nav / News|Read chrome when leaving or entering an ad shell —
+        // mid-gesture visibility thrash is the leave-ad jolt.
+        deferFlipChromeUntilSettle = leftAdShell || enteredAdShell
+                || isFlipChromeInterstitialType(post_type);
+        if (!deferFlipChromeUntilSettle) {
+            // Online: always keep bottom tabs. Offline/ads may still hide (legacy).
+            if (isDeviceOnline() && !offlineChromeMode) {
+                ensureOnlineBottomNavVisible();
+            } else if (post_type.equalsIgnoreCase("ad")
+                    || post_type.equalsIgnoreCase("share_app")
+                    || post_type.equalsIgnoreCase("ratings")) {
+                home_page_navigation.setVisibility(View.INVISIBLE);
+            } else {
+                home_page_navigation.setVisibility(View.VISIBLE);
+            }
+            try {
+                refreshHomeModeToggleUi();
+            } catch (Exception ignored) {
+            }
         }
         if (position >= 0 && position < 2) {
             ppi = position;
@@ -14569,6 +14623,51 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // AdMob load / MediaView bind / pool refill — never on the settle frame.
         // Wait settle-grace; cancel if the user flips again before then.
         scheduleSettledAdWork(position);
+        // Leave-ad chrome + MediaView hard strip — only after settle (no mid-gesture jolt).
+        applyDeferredFlipChromeAfterSettle();
+        try {
+            if (adapter != null) {
+                adapter.releaseOffscreenAdMediaAfterSettle(position);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Ads / share / ratings shells that hide article chrome. */
+    private static boolean isFlipChromeInterstitialType(@Nullable String type) {
+        if (type == null || type.isEmpty()) {
+            return false;
+        }
+        return type.equalsIgnoreCase("ad")
+                || type.equalsIgnoreCase("share_app")
+                || type.equalsIgnoreCase("ratings")
+                || type.equalsIgnoreCase("web_ads")
+                || type.equalsIgnoreCase("web");
+    }
+
+    /**
+     * Apply bottom nav / News|Read visibility that was skipped mid-flip when
+     * entering or leaving an ad shell.
+     */
+    private void applyDeferredFlipChromeAfterSettle() {
+        if (!deferFlipChromeUntilSettle) {
+            return;
+        }
+        deferFlipChromeUntilSettle = false;
+        try {
+            String type = post_type != null ? post_type : "";
+            if (isDeviceOnline() && !offlineChromeMode) {
+                ensureOnlineBottomNavVisible();
+            } else if (type.equalsIgnoreCase("ad")
+                    || type.equalsIgnoreCase("share_app")
+                    || type.equalsIgnoreCase("ratings")) {
+                home_page_navigation.setVisibility(View.INVISIBLE);
+            } else {
+                home_page_navigation.setVisibility(View.VISIBLE);
+            }
+            refreshHomeModeToggleUi();
+        } catch (Exception ignored) {
+        }
     }
 
 
@@ -14843,6 +14942,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             playInAppUpdateHelper = null;
         }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onDestroy();
+        try {
+            if (feedExoOverlayHost != null) {
+                feedExoOverlayHost.clearPlayerBinding();
+            }
+            FlipperAdapter.setFeedExoOverlayHost(null);
+            feedExoOverlayHost = null;
+        } catch (Exception ignored) {
+        }
         clearNativeAdPools();
         adapter = null;
         stopMagazineShareBlink();

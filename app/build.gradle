@@ -57,8 +57,8 @@ android {
         minSdkVersion 24
         targetSdk 35
         multiDexEnabled true
-        versionCode 258
-        versionName "3.41.30"
+        versionCode 259
+        versionName "3.41.31"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
@@ -241,7 +241,7 @@ dependencies {
     implementation 'com.google.android.ump:user-messaging-platform:2.2.0'
 //    implementation project(':nativetemplates')
     implementation 'androidx.core:core-splashscreen:1.0.0-beta02'
-    implementation 'com.facebook.android:facebook-applinks:[4,5)'
+    implementation 'com.facebook.android:facebook-applinks:5.15.3'
 
     implementation(platform("org.jetbrains.kotlin:kotlin-bom:1.8.0"))
     implementation 'androidx.browser:browser:1.4.0'

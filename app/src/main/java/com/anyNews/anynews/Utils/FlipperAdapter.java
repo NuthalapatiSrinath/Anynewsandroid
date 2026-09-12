@@ -298,6 +298,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private static boolean feedExoFrameRendered = false;
     /** PlayerView currently showing {@link #exoPlayer}. Used to pin the last frame. */
     private static java.lang.ref.WeakReference<PlayerView> feedExoPlayerViewRef;
+    /**
+     * Flip card root that owns chrome for the live feed Exo seat. FlipView may keep this
+     * tree on same-seat notify rebinds; the TextureView itself lives on
+     * {@link FeedExoOverlayHost} outside scrap.
+     */
+    private static java.lang.ref.WeakReference<View> feedExoHostRootRef;
+    /**
+     * Single dedicated PlayerView outside FlipView (Home overlay). Never recycled with scrap.
+     */
+    @Nullable
+    private static FeedExoOverlayHost feedExoOverlayHost;
     /** Debounce the white buffering ring so a one-frame rebuffer does not strobe it. */
     private static final long EXO_SPINNER_DEBOUNCE_MS = 600L;
     private static final Handler EXO_OVERLAY_HANDLER = new Handler(Looper.getMainLooper());
@@ -352,6 +363,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private final SparseArray<java.lang.ref.WeakReference<FrameLayout>> adShellPlaceholders =
             new SparseArray<>();
     private final SparseArray<Integer> adShellFromViewTypes = new SparseArray<>();
+    /**
+     * Ad roots that currently own a MediaView / NativeAdView. Soft-pause on leave
+     * gesture; hard clear only after FlipAdWorkGate settle so mid-flip detach
+     * cannot jolt the next article.
+     */
+    private final SparseArray<java.lang.ref.WeakReference<View>> adShellsWithMedia =
+            new SparseArray<>();
+    private static final String FLIP_TYPE_AD = "ad";
+    private static final String FLIP_TYPE_AD_FB = "ad_fb";
     /**
      * Ad shell without creative: show the default share/house-ad screen immediately
      * (never blank white). Seat stays {@code ad} so a late fill can replace the
@@ -599,25 +619,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Paint filled Google natives into live empty shells without a full adapter
-     * recycle. Returns true if at least one shell was painted.
+     * recycle. Only the landed ad seat — never MediaView into FlipView buffer
+     * neighbors (that janks super-fast flips through ads).
      */
     public boolean tryPaintReadyGoogleNativesInPlace() {
-        boolean painted = false;
         try {
-            for (int i = adShellAwaitingCreative.size() - 1; i >= 0; i--) {
-                int page = adShellAwaitingCreative.keyAt(i);
-                if (tryPaintGoogleNativeInPlace(page)) {
-                    painted = true;
-                }
+            if (shouldDeferAdWork() || isHomeFlipAnimating()) {
+                return false;
             }
+            return tryPaintGoogleNativeInPlace(currentFlipPage);
         } catch (Exception ignored) {
+            return false;
         }
-        return painted;
     }
 
     private boolean tryPaintGoogleNativeInPlace(int position) {
         try {
             if (list == null || position < 0 || position >= list.size()) {
+                return false;
+            }
+            // Creative only on the landed seat after settle — never buffer neighbors.
+            if (position != currentFlipPage
+                    || shouldDeferAdWork()
+                    || isHomeFlipAnimating()) {
                 return false;
             }
             ModelClass.Datum slot = list.get(position);
@@ -663,7 +687,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 convertView = fl;
             }
             paintGoogleNativeIntoSeat(fl, ad, myView, fromView, convertView, position);
-            return true;
+            return adShellMarkedHasMedia(convertView)
+                    || !adShellAwaitingCreative.get(position, false);
         } catch (Exception e) {
             showLog("tryPaintGoogleNativeInPlace: " + e.getMessage());
             return false;
@@ -825,7 +850,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 fl.setLayoutParams(flLp);
             }
             fl.setVisibility(VISIBLE);
-            mountDefaultAdPlaceholder(fl);
+            // Reused empty shells already have the house placeholder — skip second inflate.
+            if (!hasDefaultAdPlaceholder(fl)) {
+                mountDefaultAdPlaceholder(fl);
+            }
+            View shellRoot = findAdShellRoot(fl);
+            markAdShellHasMedia(shellRoot, false);
             adShellAwaitingCreative.put(position, true);
             rememberAdShellPlaceholder(position, fl, fromView);
             // Arm demote clock only when this seat is on-screen.
@@ -847,6 +877,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         try {
+            if (hasDefaultAdPlaceholder(container)) {
+                container.setVisibility(VISIBLE);
+                return;
+            }
+            // Never destroy MediaView mid-flip — caller must only pass empty shells
+            // or call after FlipAdWorkGate settle.
             container.removeAllViews();
             View placeholder = LayoutInflater.from(context).inflate(
                     R.layout.ad_default_placeholder, container, false);
@@ -874,6 +910,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
+    /** True when container already shows the lightweight house placeholder. */
+    private static boolean hasDefaultAdPlaceholder(@Nullable ViewGroup container) {
+        if (container == null || container.getChildCount() != 1) {
+            return false;
+        }
+        View child = container.getChildAt(0);
+        return child != null
+                && child.findViewById(R.id.ad_default_placeholder_root) != null;
+    }
+
     /** FB / generic container path: default ad screen + timeout bookkeeping. */
     private void mountFbAdPendingDefaultShell(
             @Nullable NativeAdLayout nativeAdLayout, int position) {
@@ -881,7 +927,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         try {
-            mountDefaultAdPlaceholder(nativeAdLayout);
+            if (!hasDefaultAdPlaceholder(nativeAdLayout)) {
+                mountDefaultAdPlaceholder(nativeAdLayout);
+            }
             adShellAwaitingCreative.put(position, true);
             if (position == currentFlipPage) {
                 scheduleAdShellFillTimeout(position);
@@ -893,9 +941,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Paint a loaded Google native into the seat (current or FlipView buffer page).
-     * Buffer pages must show the creative before the flip gesture so the animation
-     * already has the ad texture — not share_app.
+     * Paint a loaded Google native into the landed ad seat only. Buffer / mid-flip
+     * binds must keep the lightweight house placeholder — MediaView work stays on
+     * the ad screen after FlipAdWorkGate settle.
      */
     private void paintGoogleNativeIntoSeat(
             @NonNull FrameLayout fl_adplaceholder,
@@ -904,6 +952,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             int fromView,
             @NonNull View convertView,
             int position) {
+        if (shouldDeferAdWork() || isHomeFlipAnimating() || position != currentFlipPage) {
+            // Keep placeholder; settle path will paint.
+            rememberAdShellPlaceholder(position, fl_adplaceholder, fromView);
+            adShellAwaitingCreative.put(position, true);
+            showLog("paintGoogleNativeIntoSeat deferred pos=" + position
+                    + " current=" + currentFlipPage);
+            return;
+        }
         cancelAdShellFillTimeout(position);
         adShellAwaitingCreative.delete(position);
         pendingNativeAdBinds.remove(position);
@@ -917,8 +973,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             } else {
                 displayGoogleNativeAd(fl_adplaceholder, ad, myView, convertView, position);
             }
+            markAdShellHasMedia(convertView, true);
+            rememberAdShellWithMedia(position, convertView);
         } catch (Exception displayEx) {
             showLog("native ad display failed → default placeholder: " + displayEx.getMessage());
+            markAdShellHasMedia(convertView, false);
             mountAdPendingEmptyShell(fl_adplaceholder, position, fromView);
         }
     }
@@ -927,6 +986,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public void bindPendingNativeAdMediaForPage(int page) {
         PendingNativeAdBind pending = pendingNativeAdBinds.get(page);
         if (pending == null) {
+            return;
+        }
+        if (shouldDeferAdWork() || isHomeFlipAnimating() || page != currentFlipPage) {
             return;
         }
         pendingNativeAdBinds.remove(page);
@@ -947,6 +1009,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     }
                     displayFBNativeAd(pending.convertView, pending.fbAd,
                             pending.fbAdView, pending.fbNativeAdLayout);
+                    markAdShellHasMedia(pending.convertView, true);
+                    rememberAdShellWithMedia(page, pending.convertView);
                 }
             } else if (pending.ad != null && pending.placeholder != null) {
                 if (pending.fromView == 0) {
@@ -959,6 +1023,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     displayGoogleNativeAd(pending.placeholder, pending.ad,
                             pending.myView, pending.convertView, currentFlipPage);
                 }
+                markAdShellHasMedia(pending.convertView, true);
+                rememberAdShellWithMedia(page, pending.convertView);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -1310,6 +1376,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             adShellAwaitingCreative.clear();
             adShellPlaceholders.clear();
             adShellFromViewTypes.clear();
+            adShellsWithMedia.clear();
             nativeAd = null;
             fbAd = null;
         } catch (Exception ignored) {
@@ -2356,7 +2423,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Show-both: Flash stays on the existing right pill; Rewards sits beside it
-     * (or stacked if the row is too narrow). Single-chip modes never call this.
+     * on the same row. Tight rows shrink text or slide the pair left — never
+     * stack upward over the article. Single-chip modes never call this.
      */
     private void bindDualFeedChips(
             @Nullable TextView labelView,
@@ -2370,15 +2438,28 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 DistrictPinVisibilityConfig.shouldShowRewardsWhenBoth(context, categery_id, post);
         String flashLabel = FlashNewsChipHelper.chipLabel(context);
         String rewardsLabel = resolveRewardsSlotLabel();
+        // Once both is ON, a later bind must not drop Rewards (width, recycle,
+        // or a single-slot path). Joining does not hide it.
+        if (DistrictPinVisibilityConfig.showFlashAndRewardsTogetherEnabled(context)
+                && DistrictPinVisibilityConfig.isPromoSlotEligible(context, categery_id, post)
+                && DistrictPinVisibilityConfig.rewardsVisibleForUser(context)) {
+            showRewards = true;
+        }
         if (showFlash && showRewards) {
             View companion = ensureCompanionFeedChip(pill);
             bindOnePromoChip(labelView, pinView, pill, flashLabel, true);
             bindCompanionRewardsChip(companion, rewardsLabel);
             layoutDualChipRow(pill, companion, labelView, flashLabel, rewardsLabel);
-            pill.setOnClickListener(v -> openFlashNewsFromChip());
+            // Recycle / flip used to leave the companion GONE so only Flash
+            // was visible while the page was moving. Force both visible.
+            pill.setVisibility(View.VISIBLE);
+            pill.setAlpha(1f);
             if (companion != null) {
+                companion.setVisibility(View.VISIBLE);
+                companion.setAlpha(1f);
                 companion.setOnClickListener(v -> openRewardsHubFromChip());
             }
+            pill.setOnClickListener(v -> openFlashNewsFromChip());
             return;
         }
         hideCompanionFeedChip(pill);
@@ -2526,6 +2607,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             android.widget.LinearLayout host = (android.widget.LinearLayout) pill.getParent();
             host.setOrientation(android.widget.LinearLayout.HORIZONTAL);
             host.setGravity(android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL);
+            clearPairShiftLeft(host);
+            host.setTranslationY(0f);
         }
         ViewGroup.LayoutParams plp = pill.getLayoutParams();
         if (plp != null) {
@@ -2539,8 +2622,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Place Rewards (companion, left) and Flash (primary, right). Side by side
-     * when they fit; otherwise grow the writers row and stack so both stay tappable.
+     * Place Rewards (companion, left) and Flash (primary, right) on one row.
+     * Admin size + left shift apply here. If the pair does not fit, shrink text
+     * and/or slide the column left — never stack upward over the article.
      */
     private void layoutDualChipRow(
             @Nullable View pill,
@@ -2553,56 +2637,143 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         android.widget.LinearLayout host = (android.widget.LinearLayout) pill.getParent();
         float density = context.getResources().getDisplayMetrics().density;
         int screenW = context.getResources().getDisplayMetrics().widthPixels;
-        int flashLen = flashLabel == null ? 0 : flashLabel.length();
-        int rewardsLen = rewardsLabel == null ? 0 : rewardsLabel.length();
-        float textPx = 9f * density;
-        float estimated = (flashLen + rewardsLen) * textPx * 0.62f + (72f * density);
-        int available = (int) (screenW * 0.52f);
-        boolean stack = screenW < (360 * density) || estimated > available;
+        int sizeDp = Math.max(
+                DistrictPinVisibilityConfig.pairSizeDp(context),
+                Math.round(com.anyNews.anynews.rewards.RewardsConfigHelper.chipSizeSp(context)));
+        int shiftDp = DistrictPinVisibilityConfig.pairShiftLeftDp(context);
+        int shiftUpDp = DistrictPinVisibilityConfig.pairShiftUpDp(context);
+        float textPx = sizeDp * density;
+        float minPx = 8f * density;
+        int shiftPx = (int) (shiftDp * density);
+        int avatarPx = (int) (48 * density);
+        int writerFloor = (int) (72 * density);
+        int baseEnd = peekBaseMarginEnd(host);
+        int available = screenW - avatarPx - writerFloor - baseEnd - shiftPx - (int) (8 * density);
+        if (available < (int) (96 * density)) {
+            available = (int) (96 * density);
+        }
+        float estimated = estimatePairWidth(flashLabel, rewardsLabel, textPx, density);
+        while (estimated > available && textPx > minPx + 0.5f) {
+            textPx = Math.max(minPx, textPx - density);
+            estimated = estimatePairWidth(flashLabel, rewardsLabel, textPx, density);
+        }
+        // Still tight: slide further left (writer column gives way), never up.
+        int extraShift = 0;
+        if (estimated > available) {
+            extraShift = (int) Math.min(48f * density, estimated - available);
+        }
+        // Admin left inset slides the pair left. Admin up-lift stays a lift
+        // only — tightness never stacks the chips over the article.
+        applyPairShiftLeft(host, shiftPx + extraShift);
+        applyPairShiftUp(host, (int) (shiftUpDp * density));
 
-        host.setOrientation(
-                stack
-                        ? android.widget.LinearLayout.VERTICAL
-                        : android.widget.LinearLayout.HORIZONTAL);
+        host.setOrientation(android.widget.LinearLayout.HORIZONTAL);
         host.setGravity(android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL);
         host.setClipChildren(false);
+        // Keep both chips on the same baseline; writer-strip offset must not split them.
+        pill.setTranslationY(0f);
+        pill.setTranslationX(0f);
+        companion.setTranslationY(0f);
+        companion.setTranslationX(0f);
 
-        int maxW = (int) (screenW * (stack ? 0.46f : 0.30f));
-        int minTouch = (int) (32 * density);
-        applyCompactChip(flashLabelView, pill, maxW, textPx, minTouch, stack);
+        int maxW = Math.max((int) (72 * density), available / 2);
+        applyCompactChip(flashLabelView, pill, maxW, textPx, 0, false);
         android.widget.TextView companionLabel = null;
         if (companion instanceof android.view.ViewGroup) {
             companionLabel = findTaggedText((android.view.ViewGroup) companion, COMPANION_LABEL_TAG);
         }
-        applyCompactChip(companionLabel, companion, maxW, textPx, minTouch, stack);
+        applyCompactChip(companionLabel, companion, maxW, textPx, 0, false);
 
         ViewGroup.LayoutParams clp = companion.getLayoutParams();
         if (clp instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) clp;
-            mlp.height = stack
-                    ? android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                    : android.view.ViewGroup.LayoutParams.MATCH_PARENT;
-            if (stack) {
-                mlp.bottomMargin = (int) (2 * density);
-                mlp.setMarginEnd(0);
-            } else {
-                mlp.bottomMargin = 0;
-                mlp.setMarginEnd((int) (4 * density));
-            }
+            mlp.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+            mlp.topMargin = 0;
+            mlp.bottomMargin = 0;
+            mlp.setMarginEnd((int) (4 * density));
             companion.setLayoutParams(mlp);
         }
         ViewGroup.LayoutParams plp = pill.getLayoutParams();
         if (plp != null) {
-            plp.height = stack
-                    ? android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                    : android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+            plp.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT;
             pill.setLayoutParams(plp);
         }
-        int footerH = stack
-                ? Math.max(footerHeightPx() + (int) (22 * density), (int) (58 * density))
-                : footerHeightPx();
-        setFooterHeight(pill, footerH);
+        companion.setVisibility(View.VISIBLE);
+        pill.setVisibility(View.VISIBLE);
+        setFooterHeight(pill, footerHeightPx());
         host.requestLayout();
+    }
+
+    private static float estimatePairWidth(
+            @Nullable String flashLabel,
+            @Nullable String rewardsLabel,
+            float textPx,
+            float density) {
+        int flashLen = flashLabel == null ? 0 : flashLabel.length();
+        int rewardsLen = rewardsLabel == null ? 0 : rewardsLabel.length();
+        // Indic glyphs are closer to full em; 0.72 avoids under-estimating and stacking.
+        return (flashLen + rewardsLen) * textPx * 0.72f + (56f * density);
+    }
+
+    /** Layout end margin before any dual-chip left shift (captured once). */
+    private int peekBaseMarginEnd(@Nullable View chipColumn) {
+        if (chipColumn == null) return 0;
+        Object tagged = chipColumn.getTag(com.anyNews.anynews.R.id.tag_dual_chip_base_margin_end);
+        if (tagged instanceof Integer) return (Integer) tagged;
+        ViewGroup.LayoutParams lp = chipColumn.getLayoutParams();
+        if (lp instanceof ViewGroup.MarginLayoutParams) {
+            return ((ViewGroup.MarginLayoutParams) lp).getMarginEnd();
+        }
+        return 0;
+    }
+
+    /** Lift the pair together. Positive px moves up. Cleared on single-chip bind. */
+    private void applyPairShiftUp(@Nullable View chipColumn, int upPx) {
+        if (chipColumn == null) return;
+        chipColumn.setTranslationY(-Math.max(0, upPx));
+        View parent = chipColumn.getParent() instanceof View
+                ? (View) chipColumn.getParent()
+                : null;
+        if (parent instanceof ViewGroup) {
+            ViewGroup footer = (ViewGroup) parent;
+            footer.setClipChildren(false);
+            footer.setClipToPadding(false);
+        }
+        if (chipColumn instanceof ViewGroup) {
+            ((ViewGroup) chipColumn).setClipChildren(false);
+        }
+    }
+
+    /** Extra end margin only — moves the pair left. Up is {@link #applyPairShiftUp}. */
+    private void applyPairShiftLeft(@Nullable View chipColumn, int extraEndPx) {
+        if (chipColumn == null) return;
+        if (!(chipColumn.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
+        ViewGroup.MarginLayoutParams mlp =
+                (ViewGroup.MarginLayoutParams) chipColumn.getLayoutParams();
+        int base = peekBaseMarginEnd(chipColumn);
+        if (!(chipColumn.getTag(com.anyNews.anynews.R.id.tag_dual_chip_base_margin_end)
+                instanceof Integer)) {
+            chipColumn.setTag(com.anyNews.anynews.R.id.tag_dual_chip_base_margin_end, base);
+        }
+        int next = Math.max(0, base + Math.max(0, extraEndPx));
+        if (mlp.getMarginEnd() != next) {
+            mlp.setMarginEnd(next);
+            chipColumn.setLayoutParams(mlp);
+        }
+    }
+
+    private void clearPairShiftLeft(@Nullable View chipColumn) {
+        if (chipColumn == null) return;
+        Object tagged = chipColumn.getTag(com.anyNews.anynews.R.id.tag_dual_chip_base_margin_end);
+        if (!(tagged instanceof Integer)) return;
+        if (!(chipColumn.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
+        ViewGroup.MarginLayoutParams mlp =
+                (ViewGroup.MarginLayoutParams) chipColumn.getLayoutParams();
+        int base = (Integer) tagged;
+        if (mlp.getMarginEnd() != base) {
+            mlp.setMarginEnd(base);
+            chipColumn.setLayoutParams(mlp);
+        }
     }
 
     private void applyCompactChip(
@@ -2651,7 +2822,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 } catch (Exception e) {
                     labelView.setTextColor(android.graphics.Color.parseColor("#FFFF6B00"));
                 }
-                float sp = com.anyNews.anynews.rewards.RewardsConfigHelper.chipSizeSp(context);
+                float sp = Math.max(
+                        com.anyNews.anynews.rewards.RewardsConfigHelper.chipSizeSp(context),
+                        DistrictPinVisibilityConfig.pairSizeDp(context));
                 labelView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp);
                 boolean bold =
                         com.anyNews.anynews.rewards.RewardsConfigHelper.chipBold(context);
@@ -3470,7 +3643,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                 switch (pagePostType) {
                     case "google_vasttag":
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         convertView = inflater.inflate(R.layout.activity_vast_tag, parent, false);
                         //    convertView = inflater.inflate(R.layout.activity_full_video, parent, false);
                         customConvertView = convertView;
@@ -3482,7 +3655,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     case "normal_image":
                         showLog("Check Point Adapter:: 1");
                         if (hasActiveVideoPlayer()) {
-                            pauseVideo();
+                            pauseVideoIfLeavingThisSeat(position);
                         }
                         halfImageActivity = new HalfImageActivityHolder();
                         showLog("Check Point Adapter:: 2");
@@ -3507,7 +3680,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         break;
                     case "full_image":
                         if (hasActiveVideoPlayer()) {
-                            pauseVideo();
+                            pauseVideoIfLeavingThisSeat(position);
                         }
                         showLog("Check Point FULL_IMAGE:: 1");
                         fullImageActivity = new FullImageActivityHolder();
@@ -3525,7 +3698,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         // card — notifyDataSetChanged rebinds scrap and used to seek/stop,
                         // leaving spinner then the center play button again.
                         if (!isSharedExoActiveFor(position)) {
-                            pauseVideo();
+                            pauseVideoIfLeavingThisSeat(position);
                         }
                         fullscreen = false;
                         //media_type: 5 => full normal video
@@ -3534,6 +3707,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         String mediaType = list.get(position).getMediaType();
                         if ("5".equals(mediaType)) {
                             full_videoViewHolder = new FullVideoViewHolder();
+                            // Prefer the live host tree while this seat owns shared Exo —
+                            // a neighbor scrap convertView would move setPlayer mid-play.
+                            convertView = preferPinnedLiveExoHost(convertView, position);
                             // Reuse scrap while the shared ExoPlayer is live on this card —
                             // inflate-always destroyed the video surface and flashed white/spinner.
                             if (!canReuseFlipView(convertView, "full_video_exo")) {
@@ -3557,7 +3733,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         customConvertView = convertView;
                         break;
                     case "normal_video":
-                        //pauseVideo();
+                        //pauseVideoIfLeavingThisSeat(position);
                         showLog("post type:: normal_video");
 
                        /* if (list.get(position).getMediaType().equals("3")) {
@@ -3570,6 +3746,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             halfVideoExoPlayerHolder = new HalfVideoExoPlayerHolder();
                             String halfExoKey = AppHelper.isTeluguLanguageSelected()
                                     ? "normal_video_exo_telugu" : "normal_video_exo";
+                            convertView = preferPinnedLiveExoHost(convertView, position);
                             // Reuse scrap while shared Exo is active — new inflate tears the
                             // video surface and flashes a white clear / buffering ring.
                             if (!canReuseFlipView(convertView, halfExoKey)) {
@@ -3594,7 +3771,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         }
                         break;
                     case "magazine":
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         image_magazineHolder = new ImageMagazineHolder();
                         convertView = inflater.inflate(R.layout.activity_magazine_detailes, parent, false);
                         image_magazineHolder.magzine_viewPager_data = convertView.findViewById(R.id.magzine_viewPager_data);
@@ -3746,22 +3923,41 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     case "ad":
                         showLog("AD Point Adapter:: START");
                         if (hasActiveVideoPlayer()) {
-                            pauseVideo();
+                            pauseVideoIfLeavingThisSeat(position);
                         }
-                        String TAG = "AD DATA";
                         adsScreenViewHolder = new AdsScreenViewHolder();
-                        adapterCallback.closeBottomStrip(true);
+                        // Chrome (bottom nav / mode toggle) is applied post-settle in
+                        // HomePage — never mid-getView / mid-gesture.
                         String adTypeAtPos = list.get(position).getAd_type();
                         if (adTypeAtPos == null || adTypeAtPos.trim().isEmpty()) {
                             adTypeAtPos = "google";
                         }
                         showLog("HomePage getAd_type::" + adTypeAtPos);
+                        final boolean deferHeavy = shouldDeferAdWork()
+                                || isHomeFlipAnimating()
+                                || position != currentFlipPage;
                         if (adTypeAtPos.equalsIgnoreCase("google")) {
-                            convertView = inflater.inflate(R.layout.ads_screen, parent, false);
-                            final RelativeLayout layoutParent = convertView.findViewById(R.id.layoutParent);
-                            layoutParent.getLayoutParams().height = screenHeight;
-                            final FrameLayout fl_adplaceholder = convertView.findViewById(R.id.fl_adplaceholder);
-                            fl_adplaceholder.setVisibility(VISIBLE);
+                            final boolean reuseShell =
+                                    canReuseEmptyAdShell(convertView, FLIP_TYPE_AD);
+                            if (!reuseShell) {
+                                // MediaView-attached scrap: never reuse / never clear
+                                // mid-flip — inflate a fresh empty shell instead.
+                                convertView = inflater.inflate(
+                                        R.layout.ads_screen, parent, false);
+                                markFlipViewType(convertView, FLIP_TYPE_AD);
+                                markAdShellHasMedia(convertView, false);
+                            }
+                            final RelativeLayout layoutParent =
+                                    convertView.findViewById(R.id.layoutParent);
+                            if (layoutParent != null
+                                    && layoutParent.getLayoutParams() != null) {
+                                layoutParent.getLayoutParams().height = screenHeight;
+                            }
+                            final FrameLayout fl_adplaceholder =
+                                    convertView.findViewById(R.id.fl_adplaceholder);
+                            if (fl_adplaceholder != null) {
+                                fl_adplaceholder.setVisibility(VISIBLE);
+                            }
                             int fromView = 2;
                             // Null-safe: missing ad_view_type used to NPE in getView and leave a
                             // permanent blank/white Flip page (timeout never armed).
@@ -3776,55 +3972,66 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 fromView = 2;
                             }
 
-                            // Mid-flip: never MediaView/setNativeAd or AdLoader — placeholder
-                            // only; settled path paints the creative after grace.
+                            // Mid-flip / buffer: never MediaView/setNativeAd or template
+                            // inflate — placeholder only; settled path paints after grace.
                             cancelAdShellFillTimeout(position);
                             NativeAd ad = findGoogleNativeForSlot(list.get(position));
                             if (ad != null) {
                                 nativeAd = ad;
                             }
                             final ModelClass.Datum adSlot = list.get(position);
-                            final boolean deferHeavy = shouldDeferAdWork()
-                                    || isHomeFlipAnimating();
                             // Best-effort AdLoader kick (mid-flip OK). Paint waits for settle.
-                            // Reliability: HomePage.runSettledAdWork + setCurrentFlipPage
-                            // always re-ensure on land even if this warm was capped/failed.
                             adShellHandler.post(() -> requestNativeAdLoadForSlot(adSlot));
 
-                            if (ad != null && !deferHeavy) {
+                            if (ad != null && !deferHeavy && fl_adplaceholder != null) {
                                 View myView;
                                 if (fromView == 0) {
                                     myView = LayoutInflater.from(context).inflate(
-                                            R.layout.anynews_ad_full_template_view, fl_adplaceholder, false);
+                                            R.layout.anynews_ad_full_template_view,
+                                            fl_adplaceholder, false);
                                 } else if (fromView == 1) {
                                     myView = LayoutInflater.from(context).inflate(
-                                            R.layout.anynews_ad_medium_template_view, fl_adplaceholder, false);
+                                            R.layout.anynews_ad_medium_template_view,
+                                            fl_adplaceholder, false);
                                 } else {
                                     myView = LayoutInflater.from(context).inflate(
-                                            R.layout.custom_ad_native, fl_adplaceholder, false);
+                                            R.layout.custom_ad_native,
+                                            fl_adplaceholder, false);
                                 }
                                 showLog("HomePage.nativeAdList displaying native ad fromView="
                                         + fromView + " pos=" + position
                                         + " currentFlipPage=" + currentFlipPage);
                                 paintGoogleNativeIntoSeat(
-                                        fl_adplaceholder, ad, myView, fromView, convertView, position);
-                            } else {
-                                // Default ad screen while loading / mid-fling. Idle settle
-                                // paints via tryPaintGoogleNativeInPlace / scheduleSafeAdNotify.
-                                showLog("AD shell pending/defer → default placeholder pos=" + position
+                                        fl_adplaceholder, ad, myView, fromView,
+                                        convertView, position);
+                            } else if (fl_adplaceholder != null) {
+                                // Default ad screen while loading / mid-fling / buffer.
+                                showLog("AD shell pending/defer → default placeholder pos="
+                                        + position
                                         + " reqPos=" + list.get(position).getAd_req_position()
                                         + " defer=" + deferHeavy + " hasAd=" + (ad != null));
-                                mountAdPendingEmptyShell(fl_adplaceholder, position, fromView);
+                                mountAdPendingEmptyShell(
+                                        fl_adplaceholder, position, fromView);
                             }
                         } else {
-                            convertView = inflater.inflate(R.layout.fb_ad_post, parent, false);
-                            NativeAdLayout nativeAdLayout = convertView.findViewById(R.id.native_ad_container);
+                            final boolean reuseFb =
+                                    canReuseEmptyAdShell(convertView, FLIP_TYPE_AD_FB);
+                            if (!reuseFb) {
+                                convertView = inflater.inflate(
+                                        R.layout.fb_ad_post, parent, false);
+                                markFlipViewType(convertView, FLIP_TYPE_AD_FB);
+                                markAdShellHasMedia(convertView, false);
+                            }
+                            NativeAdLayout nativeAdLayout =
+                                    convertView.findViewById(R.id.native_ad_container);
                             cancelAdShellFillTimeout(position);
                             final ModelClass.Datum fbSlot = list.get(position);
                             fbAd = findFbNativeForSlot(fbSlot);
-                            final boolean deferFbHeavy = shouldDeferAdWork()
-                                    || isHomeFlipAnimating();
-                            if (fbAd != null && !deferFbHeavy) {
+                            if (fbAd != null && !deferHeavy && nativeAdLayout != null) {
+                                try {
+                                    nativeAdLayout.removeAllViews();
+                                } catch (Exception ignored) {
+                                }
                                 LayoutInflater fbInflater = LayoutInflater.from(context);
                                 RelativeLayout adView = (RelativeLayout) fbInflater.inflate(
                                         R.layout.custom_fb_ad, nativeAdLayout, false);
@@ -3836,9 +4043,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 pendingNativeAdBinds.remove(position);
                                 markFbNativeClaimed(fbAd);
                                 displayFBNativeAd(convertView, fbAd, adView, nativeAdLayout);
-                            } else {
+                                markAdShellHasMedia(convertView, true);
+                                rememberAdShellWithMedia(position, convertView);
+                            } else if (nativeAdLayout != null) {
                                 showLog("fb ad shell pending/defer → default placeholder pos="
-                                        + position + " defer=" + deferFbHeavy);
+                                        + position + " defer=" + deferHeavy);
                                 // Load mid-flip; paint waits for settle (same as Google).
                                 adShellHandler.post(() -> requestNativeAdLoadForSlot(fbSlot));
                                 mountFbAdPendingDefaultShell(nativeAdLayout, position);
@@ -3848,7 +4057,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         break;
                     case "ratings":
                         // Copy + CTA only — no in-app stars (Play forbids pre-selecting them).
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         ratingScreenViewHolder = new RatingScreenViewHolder();
                         convertView = inflater.inflate(R.layout.rating_screen_layout, parent, false);
                         Button buttonRateOnPlay = convertView.findViewById(R.id.buttonAppSubmit);
@@ -3920,7 +4129,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         showShareScreen(convertView);
                         break;
                     case "image_gallery":
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         ArrayList<String> image_gallary = new ArrayList<>();
                         showLog("image_gallery:::");
                         // Magazines specials (cat 15) + Special-tab galleries get on-post blink Share.
@@ -4073,7 +4282,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     case "image_slider":
                         break;
                     case "video_slider":
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         videoViewHolder = new VideosliderHolder();
                         convertView = inflater.inflate(R.layout.activity_video_slider_detailes, parent, false);
                         break;
@@ -4082,7 +4291,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         convertView = inflater.inflate(R.layout.activity_video_gallery_detailes, parent, false);
                         break;
                     case "web_ads":
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         webViewHolderAD = new WebViewHolderAD();
                         String eventLink = "" + list.get(position).getSource_link();
                         showLog("LINK:::"+list.get(position).getSource_link());
@@ -4101,7 +4310,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                         break;
                     case "web":
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         webViewHolder = new WebViewHolder();
                       //   eventLink = "" + list.get(position).getSource_link();
                         convertView = inflater.inflate(R.layout.activity_webview_detailes, parent, false);
@@ -4118,14 +4327,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         break;
 
                     case "survey":
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         surveyViewHolder = new SurveyViewHolder();
                         convertView = inflater.inflate(R.layout.activity_survey_page_flip, parent, false);
                         bindSurveyPollTwoOption(surveyViewHolder, convertView, position);
                         break;
 
                     case "survey_poll":
-                        pauseVideo();
+                        pauseVideoIfLeavingThisSeat(position);
                         pollingViewHolder = new PollingViewHolder();
                         convertView = inflater.inflate(R.layout.activity_polling_page_flip, parent, false);
                         bindSurveyPollMultiOption(pollingViewHolder, convertView, position);
@@ -4189,7 +4398,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * FlipView scrap reuse: only keep convertView when it was inflated for the same
-     * post layout key. Ads/gallery/YouTube stay inflate-always (heavier stateful WebViews).
+     * post layout key. Gallery/YouTube stay inflate-always (heavier stateful WebViews).
+     * Empty ad shells reuse {@link #FLIP_TYPE_AD}; MediaView-attached ads never reuse.
      * Half/full Exo cards reuse scrap so an active video surface is not torn on notify.
      */
     private static boolean canReuseFlipView(View convertView, String typeKey) {
@@ -4200,6 +4410,301 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (view != null) {
             view.setTag(typeKey);
         }
+    }
+
+    private static void markAdShellHasMedia(@Nullable View root, boolean hasMedia) {
+        if (root != null) {
+            root.setTag(R.id.tag_ad_shell_has_media, hasMedia ? Boolean.TRUE : Boolean.FALSE);
+        }
+    }
+
+    private static boolean adShellMarkedHasMedia(@Nullable View root) {
+        return root != null && Boolean.TRUE.equals(root.getTag(R.id.tag_ad_shell_has_media));
+    }
+
+    /** Walk up from placeholder to the ads_screen / fb_ad_post root. */
+    @Nullable
+    private static View findAdShellRoot(@Nullable View from) {
+        View cur = from;
+        while (cur != null) {
+            Object tag = cur.getTag();
+            if (FLIP_TYPE_AD.equals(tag) || FLIP_TYPE_AD_FB.equals(tag)) {
+                return cur;
+            }
+            Object parent = cur.getParent();
+            if (!(parent instanceof View)) {
+                break;
+            }
+            cur = (View) parent;
+        }
+        return from;
+    }
+
+    /**
+     * True when this scrap is an empty house-ad shell (safe to reuse mid-flip).
+     * Never reuse a view that already owns MediaView / NativeAdView.
+     */
+    private static boolean isAdShellPlaceholderOnly(@Nullable View convertView) {
+        if (convertView == null) {
+            return false;
+        }
+        if (adShellMarkedHasMedia(convertView)) {
+            return false;
+        }
+        FrameLayout fl = convertView.findViewById(R.id.fl_adplaceholder);
+        if (fl != null) {
+            return !adContainerHasNativeMedia(fl);
+        }
+        NativeAdLayout fb = convertView.findViewById(R.id.native_ad_container);
+        if (fb != null) {
+            return !adContainerHasNativeMedia(fb);
+        }
+        return true;
+    }
+
+    private static boolean adContainerHasNativeMedia(@Nullable ViewGroup container) {
+        if (container == null || container.getChildCount() == 0) {
+            return false;
+        }
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (child == null) {
+                continue;
+            }
+            if (child instanceof NativeAdView) {
+                return true;
+            }
+            if (child instanceof MediaView) {
+                return true;
+            }
+            if (child.findViewById(R.id.ad_media) != null
+                    || child.findViewById(R.id.media_view) != null
+                    || child.findViewById(R.id.nativefb_ad_media) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean canReuseEmptyAdShell(@Nullable View convertView, String typeKey) {
+        return canReuseFlipView(convertView, typeKey) && isAdShellPlaceholderOnly(convertView);
+    }
+
+    private void rememberAdShellWithMedia(int position, @Nullable View root) {
+        try {
+            if (root == null) {
+                adShellsWithMedia.remove(position);
+                return;
+            }
+            adShellsWithMedia.put(position, new java.lang.ref.WeakReference<>(root));
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Soft leave-ad: hide MediaView without destroy/removeAllViews so the flip
+     * gesture does not jolt when FlipView recycles the ad page.
+     */
+    public void pauseAdMediaForLeaveGesture(int adPage) {
+        try {
+            java.lang.ref.WeakReference<View> ref = adShellsWithMedia.get(adPage);
+            View root = ref != null ? ref.get() : null;
+            if (root == null) {
+                return;
+            }
+            softHideAdMedia(root);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void softHideAdMedia(@Nullable View root) {
+        if (root == null) {
+            return;
+        }
+        try {
+            MediaView google = root.findViewById(R.id.ad_media);
+            if (google == null) {
+                google = root.findViewById(R.id.media_view);
+            }
+            if (google != null) {
+                google.setVisibility(View.INVISIBLE);
+            }
+            View fbMedia = root.findViewById(R.id.nativefb_ad_media);
+            if (fbMedia != null) {
+                fbMedia.setVisibility(View.INVISIBLE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * After FlipAdWorkGate settle: strip MediaView from off-screen ad shells so
+     * scrap can be reused as empty placeholders. Never call mid-gesture.
+     */
+    public void releaseOffscreenAdMediaAfterSettle(int currentPage) {
+        try {
+            if (shouldDeferAdWork() || isHomeFlipAnimating()) {
+                long wait = Math.max(64L, FlipAdWorkGate.millisUntilAdWorkSafe());
+                adShellHandler.postDelayed(
+                        () -> releaseOffscreenAdMediaAfterSettle(currentFlipPage), wait);
+                return;
+            }
+            for (int i = adShellsWithMedia.size() - 1; i >= 0; i--) {
+                int page = adShellsWithMedia.keyAt(i);
+                if (page == currentPage) {
+                    continue;
+                }
+                java.lang.ref.WeakReference<View> ref = adShellsWithMedia.valueAt(i);
+                View root = ref != null ? ref.get() : null;
+                adShellsWithMedia.removeAt(i);
+                if (root == null) {
+                    continue;
+                }
+                stripAdCreativeToPlaceholderLight(root, page);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void stripAdCreativeToPlaceholderLight(@Nullable View root, int page) {
+        if (root == null) {
+            return;
+        }
+        try {
+            FrameLayout fl = root.findViewById(R.id.fl_adplaceholder);
+            if (fl != null) {
+                destroyNativeAdChildren(fl);
+                mountDefaultAdPlaceholder(fl);
+                markAdShellHasMedia(root, false);
+                Integer fromBoxed = adShellFromViewTypes.get(page);
+                int fromView = fromBoxed != null ? fromBoxed : 2;
+                rememberAdShellPlaceholder(page, fl, fromView);
+                adShellAwaitingCreative.put(page, true);
+                return;
+            }
+            NativeAdLayout fb = root.findViewById(R.id.native_ad_container);
+            if (fb != null) {
+                try {
+                    fb.removeAllViews();
+                } catch (Exception ignored) {
+                }
+                mountDefaultAdPlaceholder(fb);
+                markAdShellHasMedia(root, false);
+            }
+        } catch (Exception e) {
+            showLog("stripAdCreativeToPlaceholderLight: " + e.getMessage());
+        }
+    }
+
+    private static void destroyNativeAdChildren(@Nullable ViewGroup container) {
+        if (container == null) {
+            return;
+        }
+        try {
+            for (int i = container.getChildCount() - 1; i >= 0; i--) {
+                View child = container.getChildAt(i);
+                if (child instanceof NativeAdView) {
+                    try {
+                        ((NativeAdView) child).destroy();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+            container.removeAllViews();
+        } catch (Exception ignored) {
+            try {
+                container.removeAllViews();
+            } catch (Exception ignored2) {
+            }
+        }
+    }
+
+    /**
+     * While shared Exo is live on this seat, always rebind the same card root that
+     * already owns the chrome for that seat — never a different scrap of the same layout type.
+     */
+    private static View preferPinnedLiveExoHost(View convertView, int position) {
+        if (activeExoPosition != position || discardSavedPlaybackUntilNextStart) {
+            return convertView;
+        }
+        View pinned = feedExoHostRootRef != null ? feedExoHostRootRef.get() : null;
+        if (pinned != null && isPinnedLiveExoHost(pinned)) {
+            return pinned;
+        }
+        return convertView;
+    }
+
+    /** HomePage binds the dedicated overlay PlayerView once after setContentView. */
+    public static void setFeedExoOverlayHost(@Nullable FeedExoOverlayHost host) {
+        feedExoOverlayHost = host;
+    }
+
+    @Nullable
+    private static PlayerView overlayFeedPlayerView() {
+        return feedExoOverlayHost != null ? feedExoOverlayHost.getPlayerView() : null;
+    }
+
+    /**
+     * Resolve the PlayerView that may hold the live TextureView. Prefer the Home overlay
+     * host; scrap {@code normal_video_player} is only a fallback / black placeholder.
+     */
+    @Nullable
+    private static PlayerView resolveFeedSurface(@Nullable PlayerView scrapOrOverlay) {
+        PlayerView overlay = overlayFeedPlayerView();
+        if (overlay != null) {
+            return overlay;
+        }
+        return scrapOrOverlay;
+    }
+
+    /** Scrap PlayerViews never own Exo — detach and hide so recycle cannot move the surface. */
+    private static void neutralizeScrapPlayerView(@Nullable PlayerView scrap) {
+        if (scrap == null) {
+            return;
+        }
+        try {
+            if (scrap.getPlayer() != null) {
+                scrap.setPlayer(null);
+            }
+        } catch (Exception ignored) {
+        }
+        if (scrap.getVisibility() != View.GONE) {
+            scrap.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * Prepare the card's video slot and return the surface PlayerView (overlay when this
+     * seat should present). Idle scrap rebinds get the neutralized card PlayerView only —
+     * never the shared overlay — so mute/fullscreen wiring cannot steal the live controls.
+     */
+    @Nullable
+    private PlayerView bindFeedExoSurface(@Nullable View convertView, int position, boolean presentNow) {
+        PlayerView scrap = convertView != null
+                ? convertView.findViewById(R.id.normal_video_player) : null;
+        neutralizeScrapPlayerView(scrap);
+        if (presentNow) {
+            PlayerView surface = resolveFeedSurface(scrap);
+            if (feedExoOverlayHost != null && convertView != null && surface != null) {
+                View playLayout = convertView.findViewById(R.id.exo_play_layout);
+                if (playLayout == null) {
+                    playLayout = scrap;
+                }
+                feedExoOverlayHost.showOver(playLayout);
+                rememberFeedExoHost(convertView, surface);
+            }
+            return surface;
+        }
+        // Idle / neighbor: do not blank a live overlay owned by another seat, and do not
+        // hand the shared PlayerView to this scrap's mute/fullscreen listeners.
+        if (feedExoOverlayHost != null
+                && (activeExoPosition < 0 || activeExoPosition == position)
+                && !isSharedExoActiveFor(position)) {
+            View playLayout = convertView != null
+                    ? convertView.findViewById(R.id.exo_play_layout) : null;
+            feedExoOverlayHost.hideVisualIfAnchoredTo(playLayout != null ? playLayout : scrap);
+        }
+        return scrap;
     }
 
     private void showVastTagAd(View convertView, int position) {
@@ -5595,8 +6100,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     private void showFullVideoWithExoPlayer(int position, View convertView) {
         RelativeLayout layoutMain = convertView.findViewById(R.id.parent_layout);
-        PlayerView simpleExoPlayerViewFull  = convertView.findViewById(R.id.normal_video_player);
-        if (!isFeedExoSurfaceLive(simpleExoPlayerViewFull)
+        // Only this seat may claim the shared overlay — never "overlay is live somewhere".
+        boolean keepLiveFull = isSharedExoActiveFor(position) || isPinnedLiveExoHost(convertView);
+        final PlayerView simpleExoPlayerViewFull = bindFeedExoSurface(convertView, position, keepLiveFull);
+        if (simpleExoPlayerViewFull == null) {
+            return;
+        }
+        if (!keepLiveFull
                 && layoutMain.getLayoutParams().height != screenHeight) {
             layoutMain.getLayoutParams().height = screenHeight;
         }
@@ -5643,8 +6153,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         final ImageView imageViewExoVideoPlayVideo = convertView.findViewById(R.id.imageViewVideoPlayVideo);
         imageViewExoVideoPlayVideo.setImageResource(R.drawable.ic_way2_play_circle);
 
-        final ImageButton fullscreen_button = convertView.findViewById(R.id.fullscreen_button);
-        final ImageButton mute_button = convertView.findViewById(R.id.mute_button);
+        final ImageButton fullscreen_button = simpleExoPlayerViewFull.findViewById(R.id.fullscreen_button);
+        final ImageButton mute_button = simpleExoPlayerViewFull.findViewById(R.id.mute_button);
         final ProgressBar progress_bar_for_video = convertView.findViewById(R.id.progress_bar_for_video);
         if (isFeedExoSurfaceLive(simpleExoPlayerViewFull)) {
             setFeedExoPosterCover(thaumbnail_for_video, simpleExoPlayerViewFull, false);
@@ -5663,22 +6173,26 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 && !isLiveExoOnView(simpleExoPlayerViewFull, position)) {
             setFeedExoPosterCover(thaumbnail_for_video, simpleExoPlayerViewFull, true);
         }
-        fullscreen_button.setTag("force_gone");
-        fullscreen_button.setVisibility(GONE);
-        mute_button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if(exoPlayer!=null){
-                    showLog("exoplayer volume :"+exoPlayer.getVolume());
-                    exoPlayer.setVolume(exoPlayer.getVolume()==0f? 1f:0f);
-                    if(exoPlayer.getVolume()==0f){
-                        mute_button.setImageResource(R.drawable.ic_exo_volume_down);
-                    }else{
-                        mute_button.setImageResource(R.drawable.ic_volume_on);
+        if (fullscreen_button != null) {
+            fullscreen_button.setTag("force_gone");
+            fullscreen_button.setVisibility(GONE);
+        }
+        if (mute_button != null) {
+            mute_button.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    if(exoPlayer!=null){
+                        showLog("exoplayer volume :"+exoPlayer.getVolume());
+                        exoPlayer.setVolume(exoPlayer.getVolume()==0f? 1f:0f);
+                        if(exoPlayer.getVolume()==0f){
+                            mute_button.setImageResource(R.drawable.ic_exo_volume_down);
+                        }else{
+                            mute_button.setImageResource(R.drawable.ic_volume_on);
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
         full_videoViewHolder.side_menu = convertView.findViewById(R.id.video_side_menu);
         full_videoViewHolder.side_menu.setVisibility(View.VISIBLE);
         showLog("fullimageadapter "+ "click visible");
@@ -5705,10 +6219,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             // Never detach→reattach the same player — that clears the picture
             // and flashes a white hole / poster over an already-playing frame.
             hardenFeedPlayerSurface(simpleExoPlayerViewFull);
-            boolean reboundSurface = attachSharedExoToPlayerView(simpleExoPlayerViewFull);
-            if (simpleExoPlayerViewFull.getVisibility() != View.VISIBLE) {
-                simpleExoPlayerViewFull.setVisibility(View.VISIBLE);
-            }
+            boolean reboundSurface = attachSharedExoToPlayerView(simpleExoPlayerViewFull, convertView);
             if (simpleExoPlayerViewFull.getResizeMode() != AspectRatioFrameLayout.RESIZE_MODE_FIT) {
                 simpleExoPlayerViewFull.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
             }
@@ -5762,7 +6273,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
             public void onClick(View view) {
                 fullscreen = false;
-                mute_button.setImageResource(ic__volume_up);
+                if (mute_button != null) {
+                    mute_button.setImageResource(ic__volume_up);
+                }
                 String videoUrl = list.get(position).getVideoUrl();
                 if (TextUtils.isEmpty(videoUrl)) {
                     Toast.makeText(context, "Video is not available", Toast.LENGTH_SHORT).show();
@@ -5784,10 +6297,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         list.get(position),
                         list.get(position).getThumbnail());
                 hardenFeedPlayerSurface(simpleExoPlayerViewFull);
-                simpleExoPlayerViewFull.setVisibility(View.VISIBLE);
+                if (feedExoOverlayHost != null) {
+                    feedExoOverlayHost.showOver(exo_play_layout);
+                }
                 releaseSharedExoPlayerQuietly();
                 exoPlayer = createFeedExoPlayer();
-                attachSharedExoToPlayerView(simpleExoPlayerViewFull);
+                attachSharedExoToPlayerView(simpleExoPlayerViewFull, finalConvertViewFull);
                 if (simpleExoPlayerViewFull.getResizeMode() != AspectRatioFrameLayout.RESIZE_MODE_FIT) {
                     simpleExoPlayerViewFull.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 }
@@ -5939,7 +6454,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         String mInvitationUrl = list.get(position).getShareLink();
         String msg = list.get(position).getTitle() + " " + mInvitationUrl;
-        simpleExoPlayerViewFull.setVisibility(GONE);
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.hideVisual();
+        } else if (simpleExoPlayerViewFull != null) {
+            simpleExoPlayerViewFull.setVisibility(GONE);
+        }
         thaumbnail_for_video.setVisibility(VISIBLE);
         imageViewExoVideoPlayVideo.setVisibility(VISIBLE);
         countDownTimer = new CountDownTimer(2, 2) {
@@ -5958,20 +6477,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     e.printStackTrace();
                 }
                 if (imageViewExoVideoPlayVideo.getVisibility() == VISIBLE) {
-                    simpleExoPlayerViewFull.setVisibility(GONE);
+                    if (feedExoOverlayHost != null) {
+                        feedExoOverlayHost.hideVisual();
+                    } else if (simpleExoPlayerViewFull != null) {
+                        simpleExoPlayerViewFull.setVisibility(GONE);
+                    }
                     thaumbnail_for_video.setVisibility(VISIBLE);
                     imageViewExoVideoPlayVideo.setVisibility(View.VISIBLE);
 
                 } else {
                     imageViewExoVideoPlayVideo.setVisibility(View.VISIBLE);
                     thaumbnail_for_video.setVisibility(VISIBLE);
-                    if (simpleExoPlayerViewFull.getPlayer() != null) {
-                        simpleExoPlayerViewFull.getPlayer().release();
-                        simpleExoPlayerViewFull.setPlayer(null);
+                    if (simpleExoPlayerViewFull != null && simpleExoPlayerViewFull.getPlayer() != null) {
+                        if (feedExoOverlayHost != null) {
+                            feedExoOverlayHost.showOver(exo_play_layout);
+                        } else {
+                            simpleExoPlayerViewFull.setVisibility(View.VISIBLE);
+                        }
+                        try {
+                            Player p = simpleExoPlayerViewFull.getPlayer();
+                            if (p != null && p != exoPlayer) {
+                                p.release();
+                                if (simpleExoPlayerViewFull != overlayFeedPlayerView()) {
+                                    simpleExoPlayerViewFull.setPlayer(null);
+                                }
+                            }
+                        } catch (Exception ignored) {
+                        }
                     }
-                    exoPlayer = null;
-
-
                 }
                 launchScreenshotShareIntent(intent, from);
                 Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
@@ -6990,16 +7523,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         LinearLayout layoutParentReportDetails;
         LinearLayout layoutParentMiddle;
         LinearLayout layoutMain = convertView.findViewById(R.id.parent_layout);
-        PlayerView  simpleExoPlayerView = convertView.findViewById(R.id.normal_video_player);
-        if (!isFeedExoSurfaceLive(simpleExoPlayerView)
+        // Only this seat may claim the shared overlay — never "overlay is live somewhere".
+        boolean keepLiveHalfEarly = isSharedExoActiveFor(position) || isPinnedLiveExoHost(convertView);
+        final PlayerView simpleExoPlayerView = bindFeedExoSurface(convertView, position, keepLiveHalfEarly);
+        if (simpleExoPlayerView == null) {
+            return;
+        }
+        if (!keepLiveHalfEarly
                 && layoutMain.getLayoutParams().height != screenHeight) {
             layoutMain.getLayoutParams().height = screenHeight;
         }
         hardenFeedPlayerSurface(simpleExoPlayerView);
         final ImageView thaumbnail_for_video = convertView.findViewById(R.id.thaumbnail_for_video);
         final ImageView imageViewExoVideoPlayVideo = convertView.findViewById(R.id.imageViewVideoPlayVideo);
-        final ImageButton fullscreen_button = convertView.findViewById(R.id.fullscreen_button);
-        final ImageButton mute_button = convertView.findViewById(R.id.mute_button);
+        final ImageButton fullscreen_button = simpleExoPlayerView.findViewById(R.id.fullscreen_button);
+        final ImageButton mute_button = simpleExoPlayerView.findViewById(R.id.mute_button);
         final ProgressBar progress_bar_for_video = convertView.findViewById(R.id.progress_bar_for_video);
         halfVideoExoPlayerHolder.layoutParentDate = convertView.findViewById(R.id.layoutParentDate);
         TextView textViewPostDate = convertView.findViewById(R.id.textViewPostDate);
@@ -7208,19 +7746,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 //        exoPlayer=null;
         boolean resumeSharedExo = isSharedExoActiveFor(position);
         boolean keepLiveHalfSurface = resumeSharedExo || isFeedExoSurfaceLive(simpleExoPlayerView);
-        Player attachedHalfPlayer = simpleExoPlayerView.getPlayer();
-        if (attachedHalfPlayer != null && attachedHalfPlayer != exoPlayer) {
-            try {
-                attachedHalfPlayer.release();
-            } catch (Exception ignored) {
-            }
-        }
         if (resumeSharedExo || isFeedExoSurfaceLive(simpleExoPlayerView)) {
             hardenFeedPlayerSurface(simpleExoPlayerView);
-            boolean reboundSurface = attachSharedExoToPlayerView(simpleExoPlayerView);
-            if (simpleExoPlayerView.getVisibility() != View.VISIBLE) {
-                simpleExoPlayerView.setVisibility(View.VISIBLE);
-            }
+            boolean reboundSurface = attachSharedExoToPlayerView(simpleExoPlayerView, convertView);
             if (simpleExoPlayerView.getResizeMode() != AspectRatioFrameLayout.RESIZE_MODE_FIT) {
                 simpleExoPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
             }
@@ -7265,10 +7793,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             // Same video still rendering on this card — do not setPlayer(null) mid-play.
             keepLiveHalfSurface = true;
             hardenFeedPlayerSurface(simpleExoPlayerView);
-            attachSharedExoToPlayerView(simpleExoPlayerView);
-            if (simpleExoPlayerView.getVisibility() != View.VISIBLE) {
-                simpleExoPlayerView.setVisibility(View.VISIBLE);
-            }
+            attachSharedExoToPlayerView(simpleExoPlayerView, convertView);
             imageViewExoVideoPlayVideo.setVisibility(View.GONE);
             applyExoOverlayState(
                     exoPlayer.getPlaybackState(),
@@ -7279,17 +7804,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     simpleExoPlayerView);
             updateExoCenterControlIcons(simpleExoPlayerView);
         } else {
-            // Detach only when leaving the card — never release the shared static player
-            // from a recycled scrap view, and never clear a live picture.
-            if (!isFeedExoSurfaceLive(simpleExoPlayerView)) {
-                if (simpleExoPlayerView.getPlayer() != null
-                        && simpleExoPlayerView.getPlayer() != exoPlayer) {
-                    simpleExoPlayerView.setPlayer(null);
-                } else if (simpleExoPlayerView.getPlayer() != null && !isSharedExoActiveFor(position)) {
-                    simpleExoPlayerView.setPlayer(null);
+            // Idle this seat. Never detach the dedicated overlay if another seat owns Exo.
+            if (activeExoPosition < 0 || activeExoPosition == position) {
+                if (feedExoOverlayHost != null) {
+                    View idlePlayLayout = convertView.findViewById(R.id.exo_play_layout);
+                    feedExoOverlayHost.hideVisualIfAnchoredTo(idlePlayLayout);
                 }
             }
-            simpleExoPlayerView.setVisibility(View.GONE);
             if ("4".equalsIgnoreCase(list.get(position).getMediaType())) {
                 // Youtube
             } else {
@@ -7307,41 +7828,52 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             layoutParentMiddle.setVisibility(View.VISIBLE);
             layoutParentTop.getLayoutParams().height = getVideoLayoutTopHeight();
         }
-        if (!keepLiveHalfSurface && !isFeedExoSurfaceLive(simpleExoPlayerView)) {
+        if (!keepLiveHalfSurface && !isFeedExoSurfaceLive(simpleExoPlayerView)
+                && overlayFeedPlayerView() == null) {
             simpleExoPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
         }
 
-        mute_button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if(exoPlayer!=null){
-                    showLog("exoplayer volume :"+exoPlayer.getVolume());
-                    exoPlayer.setVolume(exoPlayer.getVolume()==0f? 1f:0f);
-                    if(exoPlayer.getVolume()==0f){
-                        mute_button.setImageResource(R.drawable.ic_exo_volume_down);
-                    }else{
-                        mute_button.setImageResource(R.drawable.ic_volume_on);
+        if (mute_button != null) {
+            mute_button.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    if(exoPlayer!=null){
+                        showLog("exoplayer volume :"+exoPlayer.getVolume());
+                        exoPlayer.setVolume(exoPlayer.getVolume()==0f? 1f:0f);
+                        if(exoPlayer.getVolume()==0f){
+                            mute_button.setImageResource(R.drawable.ic_exo_volume_down);
+                        }else{
+                            mute_button.setImageResource(R.drawable.ic_volume_on);
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
 
-        fullscreen_button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                showLog("fullscreen_button::"+fullscreen);
-                showExoPlayerInFullScreen(fullscreen,simpleExoPlayerView,layoutParentTop,layoutParentMiddle,layoutParentReportDetails,layoutParentTitle);
-            }
-        });
+        if (fullscreen_button != null) {
+            fullscreen_button.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    showLog("fullscreen_button::"+fullscreen);
+                    showExoPlayerInFullScreen(fullscreen,simpleExoPlayerView,layoutParentTop,layoutParentMiddle,layoutParentReportDetails,layoutParentTitle);
+                    if (feedExoOverlayHost != null) {
+                        feedExoOverlayHost.syncBoundsSoon();
+                    }
+                }
+            });
+        }
         if (!keepLiveHalfSurface) {
             progress_bar_for_video.setVisibility(View.GONE);
         }
+        final RelativeLayout halfExoPlayLayout = convertView.findViewById(R.id.exo_play_layout);
         imageViewExoVideoPlayVideo.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 fullscreen = false;
                 textViewWebUrl.setVisibility(View.GONE);
-                mute_button.setImageResource(ic__volume_up);
+                if (mute_button != null) {
+                    mute_button.setImageResource(ic__volume_up);
+                }
                 String videoUrl = list.get(position).getVideoUrl();
                 if (TextUtils.isEmpty(videoUrl)) {
                     Toast.makeText(context, "Video is not available", Toast.LENGTH_SHORT).show();
@@ -7364,10 +7896,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         list.get(position),
                         list.get(position).getThumbnail());
                 hardenFeedPlayerSurface(simpleExoPlayerView);
-                simpleExoPlayerView.setVisibility(View.VISIBLE);
+                if (feedExoOverlayHost != null) {
+                    feedExoOverlayHost.showOver(halfExoPlayLayout);
+                }
                 releaseSharedExoPlayerQuietly();
                 exoPlayer = createFeedExoPlayer();
-                attachSharedExoToPlayerView(simpleExoPlayerView);
+                attachSharedExoToPlayerView(simpleExoPlayerView, convertView);
                 if (simpleExoPlayerView.getResizeMode() != AspectRatioFrameLayout.RESIZE_MODE_FIT) {
                     simpleExoPlayerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 }
@@ -10342,6 +10876,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
     }
     /**
+     * Neighbor / buffer scrap rebinds must not pause a video still playing on another
+     * seat. Only pause when this bind is for the active Exo seat (or nothing is marked).
+     */
+    private void pauseVideoIfLeavingThisSeat(int position) {
+        if (!hasActiveVideoPlayer()) {
+            return;
+        }
+        if (activeExoPosition >= 0 && activeExoPosition != position) {
+            return;
+        }
+        pauseVideo();
+    }
+
+    /**
      * Called from getView during page turns. Must stay cheap: production 3.40.45
      * had this as a no-op. Releasing Exo / walking children here janks the 3D flip
      * on low-end (Narzo / Go). Full teardown belongs in HomePage after settle.
@@ -10368,6 +10916,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // Not released — clear active-card mark so rebind does not pretend playback is live.
         activeExoPosition = -1;
         activeExoVideoUrl = null;
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.hideVisual();
+        }
     }
 
     /**
@@ -10422,6 +10973,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         activeExoPosition = -1;
         activeExoVideoUrl = null;
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.clearPlayerBinding();
+        }
         resetFeedExoSurfaceGuards();
     }
 
@@ -10542,7 +11096,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * release and recreate it (that clears the surface mid-watch).
      */
     private boolean isLiveExoOnView(PlayerView playerView, int position) {
-        if (playerView == null || exoPlayer == null || playerView.getPlayer() != exoPlayer) {
+        PlayerView overlay = overlayFeedPlayerView();
+        PlayerView surface;
+        if (overlay != null) {
+            // Live picture is only on the Home overlay; scrap is never the surface.
+            if (playerView != null && playerView != overlay
+                    && activeExoPosition >= 0 && activeExoPosition != position) {
+                return false;
+            }
+            surface = overlay;
+        } else {
+            surface = playerView;
+        }
+        if (surface == null || exoPlayer == null || surface.getPlayer() != exoPlayer) {
             return false;
         }
         if (discardSavedPlaybackUntilNextStart) {
@@ -10572,9 +11138,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private static void resetFeedExoSurfaceGuards() {
         feedExoFrameRendered = false;
         feedExoPlayerViewRef = null;
+        feedExoHostRootRef = null;
         feedExoThumbnailOverlay = null;
         feedExoCenterPlayOverlay = null;
         hideExoSpinnerNow(pendingExoSpinner);
+        // endSession only — clearPlayerBinding is caller's job when releasing Exo
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.endSession();
+        }
     }
 
     private static PlayerView currentFeedExoPlayerView() {
@@ -10587,15 +11158,71 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
+    /** Remember the Flip card root that owns the live PlayerView (for scrap pin). */
+    private static void rememberFeedExoHost(View hostRoot, PlayerView playerView) {
+        rememberFeedExoPlayerView(playerView);
+        if (hostRoot != null) {
+            feedExoHostRootRef = new java.lang.ref.WeakReference<>(hostRoot);
+        }
+    }
+
     /**
-     * Picture is already on this PlayerView. Poster, shutter, and spinner must stay off
-     * through ready, rebuffer, and a brief idle while playWhenReady is still true.
+     * Seat index currently owning the shared feed ExoPlayer, or -1.
+     * Used by FlipView to keep that card's view tree across notify rebinds.
      */
-    private static boolean isFeedExoSurfaceLive(PlayerView playerView) {
-        if (!feedExoFrameRendered || exoPlayer == null || playerView == null) {
+    public static int getPinnedLiveExoPosition() {
+        if (discardSavedPlaybackUntilNextStart || exoPlayer == null) {
+            return -1;
+        }
+        return activeExoPosition;
+    }
+
+    /**
+     * True when {@code root} is the Flip card chrome host for the active Exo seat.
+     * The TextureView lives on {@link FeedExoOverlayHost}; FlipView still pins this
+     * tree so likes/progress rebinds do not thrash card chrome mid-play.
+     */
+    public static boolean isPinnedLiveExoHost(View root) {
+        if (root == null || exoPlayer == null || activeExoPosition < 0) {
             return false;
         }
-        if (playerView.getPlayer() != exoPlayer) {
+        if (discardSavedPlaybackUntilNextStart) {
+            return false;
+        }
+        try {
+            if (exoPlayer.getPlaybackState() == Player.STATE_ENDED) {
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        View pinnedRoot = feedExoHostRootRef != null ? feedExoHostRootRef.get() : null;
+        return pinnedRoot != null && pinnedRoot == root;
+    }
+
+    /**
+     * Picture is already on the dedicated feed surface. Poster, shutter, and spinner must stay off
+     * through ready, rebuffer, and a brief idle while playWhenReady is still true.
+     * <p>
+     * When an overlay host exists, only the overlay (or an explicit null/"current" probe) counts
+     * as live — scrap PlayerViews must not inherit liveness via {@link #resolveFeedSurface}.
+     */
+    private static boolean isFeedExoSurfaceLive(PlayerView playerView) {
+        if (!feedExoFrameRendered || exoPlayer == null) {
+            return false;
+        }
+        PlayerView overlay = overlayFeedPlayerView();
+        PlayerView surface;
+        if (overlay != null) {
+            if (playerView != null && playerView != overlay) {
+                // Scrap placeholder — never treat as the live picture.
+                return false;
+            }
+            surface = overlay;
+        } else {
+            surface = playerView;
+        }
+        if (surface == null || surface.getPlayer() != exoPlayer) {
             return false;
         }
         try {
@@ -10858,10 +11485,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (exoPlayer.getPlayWhenReady()
                         && state != Player.STATE_ENDED
                         && state != Player.STATE_IDLE) {
+                    if (feedExoOverlayHost != null) {
+                        View playLayout = convertView.findViewById(R.id.exo_play_layout);
+                        feedExoOverlayHost.showOver(playLayout);
+                    }
                     return;
                 }
                 // Light-pause from mid-flip or idle prepare — resume without rebuild.
                 if (state != Player.STATE_ENDED && !userPausedVideoAutoplay) {
+                    if (feedExoOverlayHost != null) {
+                        View playLayout = convertView.findViewById(R.id.exo_play_layout);
+                        feedExoOverlayHost.showOver(playLayout);
+                    }
+                    attachSharedExoToPlayerView(resolveFeedSurface(
+                            convertView.findViewById(R.id.normal_video_player)), convertView);
                     forceSharedExoPlay();
                     return;
                 }
@@ -10917,6 +11554,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             exoPlayer = null;
         }
         clearSharedExoTracking();
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.clearPlayerBinding();
+        }
         resetFeedExoSurfaceGuards();
     }
 
@@ -11014,24 +11654,61 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Bind the shared feed ExoPlayer to a PlayerView without tearing an already-attached
-     * surface (detach→setPlayer on the same instance clears the picture to white).
+     * Bind the shared feed ExoPlayer to the dedicated overlay PlayerView without tearing
+     * an already-attached surface. Scrap PlayerViews are never used as the live surface —
+     * moving setPlayer between Flip scraps was the mid-play blink.
      *
      * @return true if the surface binding changed (caller may need a fresh listener)
      */
     private boolean attachSharedExoToPlayerView(PlayerView playerView) {
-        if (playerView == null || exoPlayer == null) {
+        return attachSharedExoToPlayerView(playerView, null);
+    }
+
+    private boolean attachSharedExoToPlayerView(PlayerView playerView, View hostRoot) {
+        if (exoPlayer == null) {
             return false;
         }
-        rememberFeedExoPlayerView(playerView);
+        // Always attach to the Home overlay host when present.
+        PlayerView target = resolveFeedSurface(playerView);
+        if (target == null) {
+            return false;
+        }
+        if (playerView != null && playerView != target) {
+            neutralizeScrapPlayerView(playerView);
+        }
+        if (hostRoot != null && feedExoOverlayHost != null) {
+            View playLayout = hostRoot.findViewById(R.id.exo_play_layout);
+            if (playLayout == null) {
+                playLayout = hostRoot.findViewById(R.id.normal_video_player);
+            }
+            feedExoOverlayHost.showOver(playLayout);
+            rememberFeedExoHost(hostRoot, target);
+        } else {
+            rememberFeedExoPlayerView(target);
+        }
         try {
-            hardenFeedPlayerSurface(playerView);
-            Player attached = playerView.getPlayer();
+            hardenFeedPlayerSurface(target);
+            Player attached = target.getPlayer();
             if (attached == exoPlayer) {
                 if (feedExoFrameRendered) {
-                    pinFeedExoLastFrame(playerView);
+                    pinFeedExoLastFrame(target);
+                }
+                if (hostRoot != null) {
+                    rememberFeedExoHost(hostRoot, target);
+                }
+                if (feedExoOverlayHost != null) {
+                    feedExoOverlayHost.syncBoundsSoon();
                 }
                 return false;
+            }
+            // Another binding should not exist — overlay is the only host. If somehow a
+            // scrap still holds exoPlayer, detach it without blinking the overlay.
+            PlayerView live = currentFeedExoPlayerView();
+            if (live != null && live != target && live.getPlayer() == exoPlayer) {
+                try {
+                    live.setPlayer(null);
+                } catch (Exception ignored) {
+                }
             }
             if (attached != null && attached != exoPlayer) {
                 try {
@@ -11039,8 +11716,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 } catch (Exception ignored) {
                 }
             }
-            playerView.setPlayer(exoPlayer);
-            hardenFeedPlayerSurface(playerView);
+            target.setPlayer(exoPlayer);
+            hardenFeedPlayerSurface(target);
+            if (hostRoot != null) {
+                rememberFeedExoHost(hostRoot, target);
+            } else {
+                rememberFeedExoPlayerView(target);
+            }
+            if (feedExoOverlayHost != null) {
+                feedExoOverlayHost.syncBoundsSoon();
+            }
             return true;
         } catch (Exception e) {
             e.printStackTrace();
@@ -11150,21 +11835,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         try {
             showLog("resetFullExoVideoView: stopping full exo video");
-            PlayerView playerView = convertView.findViewById(R.id.normal_video_player);
-            if (playerView != null) {
-                Player attachedPlayer = playerView.getPlayer();
-                if (attachedPlayer != null) {
-                    attachedPlayer.setPlayWhenReady(false);
-                    attachedPlayer.pause();
-                    attachedPlayer.stop();
-                    if (attachedPlayer != exoPlayer) {
-                        attachedPlayer.release();
-                    }
-                }
-                playerView.setPlayer(null);
-                playerView.setVisibility(View.GONE);
-            }
-            // Do not releaseActiveExoPlayer() here — resetAllFlipChildrenVideoPlayers
+            PlayerView scrap = convertView.findViewById(R.id.normal_video_player);
+            neutralizeScrapPlayerView(scrap);
+            // Do not releaseActiveExoPlayer() / clear overlay here — resetAllFlipChildrenVideoPlayers
             // walks every flip child; releasing per child blanks the active video page.
 
             ImageView thumbnail = convertView.findViewById(R.id.thaumbnail_for_video);
@@ -12396,6 +13069,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         }
         fullscreen = !fullscreen;
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.syncBoundsSoon();
+        }
     }
 
     public void shareYoutubeVideoScreenShot(View finalConvertView2, int position, LinearLayout container, int from, ImageView imageViewItems) {
@@ -12467,7 +13143,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfVideoExoPlayerHolder.layoutParentReportDetails = finalConvertView2.findViewById(R.id.ll_footer_layout);
         halfVideoExoPlayerHolder.layoutParentDate = finalConvertView2.findViewById(R.id.layoutParentDate);
         TextView textViewWebUrl=finalConvertView2.findViewById(R.id.textViewWebUrl);
-        simpleExoPlayerView.setVisibility(View.GONE);
+        if (feedExoOverlayHost != null) {
+            feedExoOverlayHost.hideVisual();
+        } else if (simpleExoPlayerView != null) {
+            simpleExoPlayerView.setVisibility(View.GONE);
+        }
         textViewWebUrl.setVisibility(View.GONE);
         halfVideoExoPlayerHolder.layoutParentReportDetails.setVisibility(View.GONE);
         halfVideoExoPlayerHolder.layoutParentDate.setVisibility(VISIBLE);
@@ -12500,7 +13180,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 textViewWebUrl.setVisibility(VISIBLE);
                 halfVideoExoPlayerHolder.layoutParentDate.setVisibility(GONE);
                 if (imageViewExoVideoPlayVideo.getVisibility() == VISIBLE) {
-                    simpleExoPlayerView.setVisibility(GONE);
+                    if (feedExoOverlayHost != null) {
+                        feedExoOverlayHost.hideVisual();
+                    } else if (simpleExoPlayerView != null) {
+                        simpleExoPlayerView.setVisibility(GONE);
+                    }
                     thaumbnail_for_video.setVisibility(VISIBLE);
                     imageViewExoVideoPlayVideo.setVisibility(View.VISIBLE);
 
@@ -12508,13 +13192,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     imageViewExoVideoPlayVideo.setVisibility(View.VISIBLE);
                     thaumbnail_for_video.setVisibility(VISIBLE);
                     progress_bar_for_video.setVisibility(View.GONE);
-                    if (simpleExoPlayerView.getPlayer() != null) {
-                        simpleExoPlayerView.getPlayer().release();
-                        simpleExoPlayerView.setPlayer(null);
+                    View playLayout = finalConvertView2.findViewById(R.id.exo_play_layout);
+                    if (simpleExoPlayerView != null && simpleExoPlayerView.getPlayer() != null) {
+                        if (feedExoOverlayHost != null) {
+                            feedExoOverlayHost.showOver(playLayout);
+                        } else {
+                            simpleExoPlayerView.setVisibility(View.VISIBLE);
+                        }
+                        try {
+                            Player p = simpleExoPlayerView.getPlayer();
+                            if (p != null && p != exoPlayer) {
+                                p.release();
+                                simpleExoPlayerView.setPlayer(null);
+                            }
+                        } catch (Exception ignored) {
+                        }
                     }
-                    exoPlayer = null;
-
-
                 }
                 launchScreenshotShareIntent(intent, from);
                 Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());

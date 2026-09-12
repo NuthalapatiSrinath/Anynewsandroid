@@ -211,7 +211,7 @@ public final class RewardsLabels {
             case "active_day":
                 return "Active day";
             case "ads_seen":
-                return "Ads seen";
+                return "Watch ads";
             case "daily_checkin":
             case "checkin":
                 switch (languageId(c)) {
@@ -257,6 +257,26 @@ public final class RewardsLabels {
         }
     }
 
+    /** Shown when the week ended and the next window has not started. */
+    public static String weekEndedCoinsConverted(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1:
+                return "ഈ ആഴ്ച അവസാനിച്ചു. നിങ്ങളുടെ നാണയങ്ങൾ വാലറ്റിലേക്ക് മാറ്റി. അടുത്ത വാരം തുടങ്ങും വരെ പുതിയ നേട്ടം ആരംഭിക്കില്ല.";
+            case 2:
+                return "यह हफ्ता खत्म हो गया. आपके कॉइन वॉलेट में बदल दिए गए. अगला विंडो शुरू होने तक नई कमाई शुरू नहीं होगी.";
+            case 3:
+                return "ఈ వారం ముగిసింది. మీ కాయిన్లు వాలెట్‌కు మార్చబడ్డాయి. తదుపరి విండో ప్రారంభమయ్యే వరకు కొత్త సంపాదన ప్రారంభం కాదు.";
+            case 4:
+                return "இந்த வாரம் முடிந்தது. உங்கள் நாணயங்கள் வாலட்டில் மாற்றப்பட்டன. அடுத்த சாளரம் தொடங்கும் வரை புதிய சம்பாதிப்பு தொடங்காது.";
+            case 5:
+                return "ಈ ವಾರ ಮುಗಿದಿದೆ. ನಿಮ್ಮ ಕಾಯಿನ್‌ಗಳನ್ನು ವಾಲೆಟ್‌ಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ. ಮುಂದಿನ ವಿಂಡೋ ಆರಂಭವಾಗುವವರೆಗೆ ಹೊಸ ಗಳಿಕೆ ಆರಂಭವಾಗುವುದಿಲ್ಲ.";
+            case 6:
+                return "ଏହି ସପ୍ତାହ ଶେଷ ହୋଇଛି। ଆପଣଙ୍କ କଏନ୍ ୱାଲେଟକୁ ବଦଳିଛି। ପରବର୍ତ୍ତୀ ୱିଣ୍ଡୋ ଆରମ୍ଭ ନହେବା ପର୍ଯ୍ୟନ୍ତ ନୂଆ ରୋଜଗାର ଆରମ୍ଭ ହେବ ନାହିଁ।";
+            default:
+                return "This week has ended. Your coins were converted to your Rewards wallet. A new earn cycle does not start until the next window.";
+        }
+    }
+
     public static String redeemedThisWeek(@Nullable Context c, int redeemed) {
         switch (languageId(c)) {
             case 1: return "(" + redeemed + " ഈ ആഴ്ച റിഡീം ചെയ്തു)";
@@ -271,13 +291,13 @@ public final class RewardsLabels {
 
     public static String adsLimitReached(@Nullable Context c) {
         switch (languageId(c)) {
-            case 1: return "ഇന്നത്തെ പരിധി തീർന്നു";
-            case 2: return "आज की सीमा पूरी";
-            case 3: return "రోజు పరిమితి అయిపోయింది";
-            case 4: return "இன்றைய வரம்பு முடிந்தது";
-            case 5: return "ಇಂದಿನ ಮಿತಿ ಮುಗಿದಿದೆ";
-            case 6: return "ଆଜିର ସୀମା ସରିଗଲା";
-            default: return "Daily limit reached";
+            case 1: return "ലിമിറ്റ് ഓവർ";
+            case 2: return "लिमिट ओवर";
+            case 3: return "లిమిట్ ఓవర్";
+            case 4: return "லிமிட் ஓவர்";
+            case 5: return "ಲಿಮಿಟ್ ಓವರ್";
+            case 6: return "ଲିମିଟ୍ ଓଭର୍";
+            default: return "Limit over";
         }
     }
 
@@ -629,6 +649,13 @@ public final class RewardsLabels {
                 || "qualityread".equals(f)) {
             return "quality_read";
         }
+        if ("ads_seen".equals(f)
+                || "adsseen".equals(f)
+                || "ads_seen_capped".equals(f)
+                || "rewarded_video".equals(f)
+                || "rewarded_video_ads".equals(f)) {
+            return "ads_seen";
+        }
         return f;
     }
 
@@ -646,13 +673,13 @@ public final class RewardsLabels {
 
     public static String primaryEarn(@Nullable Context c) {
         switch (languageId(c)) {
-            case 1: return "പ്രധാന നേട്ടം";
-            case 2: return "मुख्य कमाई";
-            case 3: return "ప్రధాన సంపాదన";
-            case 4: return "முதன்மை சம்பாதிப்பு";
-            case 5: return "ಪ್ರಮುಖ ಗಳಿಕೆ";
-            case 6: return "ପ୍ରମୁଖ ରୋଜଗାର";
-            default: return "Primary earn";
+            case 1: return "അൺലിമിറ്റഡ് നേട്ടം";
+            case 2: return "अनलिमिटेड कमाई";
+            case 3: return "అన్‌లిమిటెడ్ సంపాదన";
+            case 4: return "அன்லிமிட்டெட் சம்பாதிப்பு";
+            case 5: return "ಅನ್‌ಲಿಮಿಟೆಡ್ ಗಳಿಕೆ";
+            case 6: return "ଅନଲିମିଟେଡ୍ ରୋଜଗାର";
+            default: return "Earn unlimited";
         }
     }
 

@@ -2,7 +2,7 @@
 <resources>
     <!-- Telugu fallbacks for Rewards club chrome. In-app language_id still wins via RewardsLabels. -->
     <string name="rewards_member_balance">సభ్యుల బ్యాలెన్స్</string>
-    <string name="rewards_primary_earn">ప్రధాన సంపాదన</string>
+    <string name="rewards_primary_earn">అన్‌లిమిటెడ్ సంపాదన</string>
     <string name="rewards_watch_title">యాడ్స్ చూడండి</string>
     <string name="rewards_also_earn">ఇంకా సంపాదించండి</string>
 </resources>

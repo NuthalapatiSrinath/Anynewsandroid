@@ -325,10 +325,31 @@ public class Constants {
      */
     public static String SHOW_FLASH_AND_REWARDS_TOGETHER = "show_flash_and_rewards_together";
     /**
-     * When true (default), reporters cannot see Rewards / rewards wallet UI.
-     * Splash: rewards_exclude_reporters.
+     * Dual-chip pair text size in dp. Default 13. Splash / session / feed poll:
+     * {@code dual_chip_size_dp}.
+     */
+    public static String DUAL_CHIP_SIZE_DP = "dual_chip_size_dp";
+    /**
+     * Extra end margin (dp) that shifts the Flash + Rewards pair left only.
+     * Default 0. Splash / session / feed poll: {@code dual_chip_shift_left_dp}.
+     */
+    public static String DUAL_CHIP_SHIFT_LEFT_DP = "dual_chip_shift_left_dp";
+    /**
+     * Extra lift (dp) that moves the Flash + Rewards pair up. Default 0.
+     * Splash / session / feed poll: {@code dual_chip_shift_up_dp}.
+     */
+    public static String DUAL_CHIP_SHIFT_UP_DP = "dual_chip_shift_up_dp";
+    /**
+     * When explicitly true, reporters cannot see Rewards / rewards wallet UI.
+     * Missing key does not hide (Allow reporters ON, or splash never delivered the gate).
+     * Splash: rewards_exclude_reporters. Settings Allow reporters writes this too.
      */
     public static String REWARDS_EXCLUDE_REPORTERS = "rewards_exclude_reporters";
+    /**
+     * In-app Settings Rewards switch. Missing or true = user wants Rewards
+     * (admin master still required). False hides Profile row + feed chip.
+     */
+    public static String USER_REWARDS_ENABLED = "user_rewards_enabled";
     /**
      * Hours of last-read articles shown under Read / చదివినవి (splash/runtime).
      * Default 24; clamped 1–168. Older reads stay out of Read but News still strips them.

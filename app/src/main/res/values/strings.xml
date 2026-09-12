@@ -398,6 +398,7 @@
     <string name="settings_notifications">నోటిఫికేషన్లు</string>
     <string name="settings_night_mode">Night Mode</string>
     <string name="settings_local_stories">Local Stories</string>
+    <string name="settings_rewards">Rewards</string>
     <string name="settings_parental_title">Parental control</string>
     <string name="settings_parental_desc">Block abusive comments across the app for a safer reading experience.</string>
     <string name="settings_bookmarks">Bookmarks</string>
@@ -430,7 +431,7 @@
 
     <!-- Rewards club chrome. In-app language packs override these via RewardsLabels. -->
     <string name="rewards_member_balance">Member balance</string>
-    <string name="rewards_primary_earn">Primary earn</string>
+    <string name="rewards_primary_earn">Earn unlimited</string>
     <string name="rewards_watch_title">Watch ads</string>
     <string name="rewards_also_earn">Also earn</string>
 </resources>

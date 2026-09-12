@@ -311,9 +311,17 @@ public class RewardsHubActivity extends AppCompatActivity {
                     return;
                 }
                 if (body.has("excluded") && body.get("excluded").getAsBoolean()) {
-                    toast("Rewards is not available for reporter accounts");
-                    finish();
-                    return;
+                    // Allow reporters ON must not close the hub. Ended period is
+                    // a banner, not a hide — do not treat scoring_open false as excluded.
+                    boolean allow =
+                            body.has("allow_reporters")
+                                    && !body.get("allow_reporters").isJsonNull()
+                                    && body.get("allow_reporters").getAsBoolean();
+                    if (!allow) {
+                        toast("Rewards is not available for reporter accounts");
+                        finish();
+                        return;
+                    }
                 }
                 applyHub(body);
             }
@@ -574,10 +582,33 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
         periodBannerText = optStr(body, "period_banner", "");
         if (TextUtils.isEmpty(periodBannerText)) {
+            periodBannerText = optStr(body, "period_ended", "");
+        }
+        if (TextUtils.isEmpty(periodBannerText)) {
             periodBannerText = RewardsConfigHelper.periodBannerText(this);
         }
+        String convertedNotice = optStr(body, "period_converted_notice", "");
+        if (!TextUtils.isEmpty(convertedNotice)
+                && (periodBannerText == null || !periodBannerText.contains(convertedNotice))) {
+            periodBannerText =
+                    TextUtils.isEmpty(periodBannerText)
+                            ? convertedNotice
+                            : periodBannerText + " " + convertedNotice;
+        }
         if (periodBanner != null) {
-            if (!periodScoringOpen && !TextUtils.isEmpty(periodBannerText)) {
+            // Gap before the next window: always show the ended/upcoming copy
+            // (and converted amount when the server has it). Do not hide this,
+            // and do not treat the gap as a new earn cycle.
+            if (!periodScoringOpen) {
+                if (TextUtils.isEmpty(periodBannerText)) {
+                    periodBannerText =
+                            "upcoming".equalsIgnoreCase(status)
+                                    ? RewardsConfigHelper.periodBannerText(this)
+                                    : RewardsLabels.weekEndedCoinsConverted(this);
+                }
+                if (TextUtils.isEmpty(periodBannerText)) {
+                    periodBannerText = RewardsLabels.weekEndedCoinsConverted(this);
+                }
                 periodBanner.setText(periodBannerText);
                 periodBanner.setVisibility(View.VISIBLE);
             } else {
@@ -688,10 +719,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         } else {
             int hubAds = watchAdsRequired;
             int hubCoins = watchAdsCoins;
-            int cap = RewardsConfigHelper.factorCapPerDay(this, "ads_seen");
-            int factorCoins = RewardsConfigHelper.factorCoinsPer(this, "ads_seen");
-            if (cap > 0) hubAds = cap;
-            if (factorCoins > 0) hubCoins = factorCoins;
+            // Earn actions only — never Rules ads_seen coins/cap for the button label.
             watchAdsBtn.setText(RewardsLabels.watchAds(this, hubAds, hubCoins));
             watchAdsBtn.setEnabled(watchAdsAvailable && joined && !guest);
             watchAdsBtn.setAlpha(watchAdsBtn.isEnabled() ? 1f : 0.45f);
@@ -761,10 +789,7 @@ public class RewardsHubActivity extends AppCompatActivity {
         }
         int adsRequired = watchAdsRequired;
         int adsCoins = watchAdsCoins;
-        int adsCap = RewardsConfigHelper.factorCapPerDay(this, "ads_seen");
-        int adsCoinsTotal = RewardsConfigHelper.factorCoinsPer(this, "ads_seen");
-        if (adsCap > 0) adsRequired = adsCap;
-        if (adsCoinsTotal > 0) adsCoins = adsCoinsTotal;
+        // Earn actions N + coins only. Rules ads_seen is daily cap, not pay.
         Intent intent = new Intent(this, RewardsWatchAdsActivity.class);
         intent.putExtra(RewardsWatchAdsActivity.EXTRA_ADS_REQUIRED, adsRequired);
         intent.putExtra(RewardsWatchAdsActivity.EXTRA_COINS, adsCoins);

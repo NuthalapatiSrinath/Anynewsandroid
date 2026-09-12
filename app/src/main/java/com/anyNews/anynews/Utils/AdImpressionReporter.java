@@ -194,11 +194,8 @@ public final class AdImpressionReporter {
             int threshold = FeedAdConfig.getFlushEveryN(appContext);
             shouldFlush = pendingTotalLocked() >= threshold;
         }
-        try {
-            com.anyNews.anynews.rewards.RewardsEngagementBatcher.get()
-                    .trackAdsSeen(appContext, 1);
-        } catch (Exception ignored) {
-        }
+        // Feed paints are not rewarded videos. Do not write ads_seen (that
+        // flooded the server and counted toward the daily watch-ad cap).
         if (shouldFlush) {
             // Never SharedPreferences + network flush on the paint / flip path.
             // Coalesce until the main queue is idle after settle grace.

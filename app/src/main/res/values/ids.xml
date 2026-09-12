@@ -10,4 +10,8 @@
     <item name="sponsored_ad_label" type="id" />
     <!-- Full-bleed sponsored creative: AD badge top-right -->
     <item name="sponsored_ad_badge" type="id" />
+    <!-- Dual-chip pair: original writers-row end margin before left shift -->
+    <item name="tag_dual_chip_base_margin_end" type="id" />
+    <!-- Flip ad shell: TRUE when NativeAd MediaView is attached (do not scrap-reuse) -->
+    <item name="tag_ad_shell_has_media" type="id" />
 </resources>

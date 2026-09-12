@@ -509,6 +509,21 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String flashNewsChipLabel;
 
+        /** Dual-chip pair text size (dp). Null on old servers. */
+        @SerializedName("dual_chip_size_dp")
+        @Expose
+        private Integer dualChipSizeDp;
+
+        /** Extra end margin (dp) shifting the pair left only. Null on old servers. */
+        @SerializedName("dual_chip_shift_left_dp")
+        @Expose
+        private Integer dualChipShiftLeftDp;
+
+        /** Extra lift (dp) moving the pair up. Null on old servers. */
+        @SerializedName("dual_chip_shift_up_dp")
+        @Expose
+        private Integer dualChipShiftUpDp;
+
         /** My Articles date filter From floor (YYYY-MM-DD IST). Empty = none. */
         @SerializedName("reporter_articles_from_date")
         @Expose
@@ -560,6 +575,11 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("rewards_exclude_reporters")
         @Expose
         private Boolean rewardsExcludeReporters;
+
+        /** Settings Allow reporters. When present, wins over exclude. */
+        @SerializedName("allow_reporters")
+        @Expose
+        private Boolean rewardsAllowReporters;
 
         @SerializedName("rewards_period_unit")
         @Expose
@@ -1034,6 +1054,18 @@ public class StartActivityReqModel implements Serializable {
             return flashNewsChipLabel;
         }
 
+        public Integer getDualChipSizeDp() {
+            return dualChipSizeDp;
+        }
+
+        public Integer getDualChipShiftLeftDp() {
+            return dualChipShiftLeftDp;
+        }
+
+        public Integer getDualChipShiftUpDp() {
+            return dualChipShiftUpDp;
+        }
+
         public String getReporterArticlesFromDate() {
             return reporterArticlesFromDate;
         }
@@ -1080,6 +1112,10 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getRewardsExcludeReporters() {
             return rewardsExcludeReporters;
+        }
+
+        public Boolean getRewardsAllowReporters() {
+            return rewardsAllowReporters;
         }
 
         public String getRewardsPeriodUnit() {

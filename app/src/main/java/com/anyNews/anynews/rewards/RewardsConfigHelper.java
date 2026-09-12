@@ -306,10 +306,11 @@ public final class RewardsConfigHelper {
     }
 
     /**
-     * Admin "Coins" for a factor. For ads_seen this is the total for cap/day,
-     * not a per-ad multiplier on the watch-ad page. -1 if unknown.
+     * Admin "Coins" for a factor. For ads_seen this is always unused for pay
+     * (Earn actions owns watch-ad coins). Returns -1 if unknown.
      */
     public static int factorCoinsPer(@Nullable Context context, @Nullable String factor) {
+        if ("ads_seen".equals(factor)) return 0;
         JsonObject row = factorRow(context, factor);
         if (row == null || !row.has("coins_per") || row.get("coins_per").isJsonNull()) return -1;
         try {
@@ -319,7 +320,7 @@ public final class RewardsConfigHelper {
         }
     }
 
-    /** Admin cap/day. For ads_seen this is the ad count. -1 if unknown. */
+    /** Admin cap/day. For ads_seen this is the daily rewarded-ad count only. -1 if unknown. */
     public static int factorCapPerDay(@Nullable Context context, @Nullable String factor) {
         JsonObject row = factorRow(context, factor);
         if (row == null || !row.has("cap_per_day") || row.get("cap_per_day").isJsonNull()) {

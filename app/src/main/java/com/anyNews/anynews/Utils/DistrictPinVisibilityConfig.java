@@ -11,7 +11,8 @@ import androidx.annotation.Nullable;
  * {@code hide_district_on_main_feed}, {@code rewards_master},
  * {@code rewards_in_main_feed_slot}, {@code keep_rewards_after_join},
  * {@code flash_news_in_main_feed_slot}, {@code show_flash_and_rewards_together},
- * {@code flash_news_chip_label}.
+ * {@code flash_news_chip_label}, {@code dual_chip_size_dp},
+ * {@code dual_chip_shift_left_dp}.
  *
  * <p>Visibility matrix:
  * <ul>
@@ -45,8 +46,35 @@ public final class DistrictPinVisibilityConfig {
      * Forced off when Rewards master is OFF.
      */
     public static final boolean DEFAULT_SHOW_FLASH_AND_REWARDS_TOGETHER = false;
-    /** Default ON: reporters excluded from rewards / rewards wallet. */
-    public static final boolean DEFAULT_EXCLUDE_REPORTERS = true;
+    /**
+     * Pair text size (dp). Old dual layout hardcoded 9; 13 stays readable
+     * without stacking. Clamped 8–24.
+     */
+    public static final int DEFAULT_PAIR_SIZE_DP = 13;
+    /**
+     * Extra end margin (dp) that shifts the pair left only. 0 keeps the
+     * layout end margin. Never negative. Clamped 0–96.
+     */
+    public static final int DEFAULT_PAIR_SHIFT_LEFT_DP = 0;
+    /**
+     * Extra lift (dp) that moves the pair up. 0 keeps the writers-row
+     * baseline. Never negative. Clamped 0–48.
+     */
+    public static final int DEFAULT_PAIR_SHIFT_UP_DP = 0;
+    /**
+     * Once both + Rewards master are ON this process, keep both chips until a
+     * fresh config explicitly turns both off (or master off). A later bind must
+     * not drop Rewards because a poll omitted the flag or a recycle took the
+     * single-slot path against a stale pref.
+     */
+    private static volatile boolean sessionBothLatched = false;
+    /** Process latch: a fresh config said Rewards master is ON. */
+    private static volatile boolean sessionMasterLatched = false;
+    /**
+     * Only hide reporters when splash/session explicitly saved exclude=true.
+     * A missing key must not hide the whole feature (Allow reporters / unset).
+     */
+    public static final boolean DEFAULT_EXCLUDE_REPORTERS = false;
 
     /** Local desk category id (server {@code categoryMap.local}). */
     public static final int LOCAL_CATEGORY_ID = 11;
@@ -134,7 +162,9 @@ public final class DistrictPinVisibilityConfig {
                     Constants.PREF_NAME);
         }
         if (rewardsMaster != null) {
-            SharedPrefsData.putString(
+            // commit() so Profile / feed gates see master before the next paint.
+            // apply() can lose the race and leave the missing-key default (OFF).
+            SharedPrefsData.putStringImmediate(
                     app,
                     Constants.REWARDS_MASTER,
                     rewardsMaster ? "true" : "false",
@@ -162,11 +192,31 @@ public final class DistrictPinVisibilityConfig {
                     Constants.PREF_NAME);
         }
         if (showFlashAndRewardsTogether != null) {
-            SharedPrefsData.putString(
+            SharedPrefsData.putStringImmediate(
                     app,
                     Constants.SHOW_FLASH_AND_REWARDS_TOGETHER,
                     showFlashAndRewardsTogether ? "true" : "false",
                     Constants.PREF_NAME);
+        }
+        // Server only serves show-both as true when Rewards master is ON.
+        // If that flag arrived and master was omitted, persist master so Profile
+        // does not keep trusting a missing key.
+        if ((Boolean.TRUE.equals(showFlashAndRewardsTogether)
+                        || Boolean.TRUE.equals(rewardsInMainFeedSlot))
+                && rewardsMaster == null) {
+            SharedPrefsData.putStringImmediate(
+                    app,
+                    Constants.REWARDS_MASTER,
+                    "true",
+                    Constants.PREF_NAME);
+            rewardsMaster = Boolean.TRUE;
+        }
+        applySessionLatch(context, rewardsMaster, showFlashAndRewardsTogether);
+        // Settings switch defaults ON. If it was never written, persist that so
+        // Profile and the feed chip read the same ON the switch shows.
+        if ((Boolean.TRUE.equals(rewardsMaster) || sessionMasterLatched)
+                && userRewardsPrefMissing(app)) {
+            setUserRewardsEnabled(app, true);
         }
         if (excludeReporters != null) {
             // commit() so Profile / feed gates see the new value immediately
@@ -184,14 +234,145 @@ public final class DistrictPinVisibilityConfig {
         saveFromServer(context, hideOnMainFeed, null, null);
     }
 
+    /**
+     * Pair size (dp) and left-only shift (dp). Null leaves the cached value.
+     * A later poll that omits these must not reset size or shift.
+     */
+    public static void savePairLayoutFromServer(
+            @Nullable Context context,
+            @Nullable Integer sizeDp,
+            @Nullable Integer shiftLeftDp) {
+        savePairLayoutFromServer(context, sizeDp, shiftLeftDp, null);
+    }
+
+    /**
+     * Pair size, left shift, and up shift. Null leaves the cached value.
+     * A later poll that omits these must not reset size or shift.
+     */
+    public static void savePairLayoutFromServer(
+            @Nullable Context context,
+            @Nullable Integer sizeDp,
+            @Nullable Integer shiftLeftDp,
+            @Nullable Integer shiftUpDp) {
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        if (sizeDp != null) {
+            SharedPrefsData.putString(
+                    app,
+                    Constants.DUAL_CHIP_SIZE_DP,
+                    String.valueOf(clampPairSizeDp(sizeDp)),
+                    Constants.PREF_NAME);
+        }
+        if (shiftLeftDp != null) {
+            SharedPrefsData.putString(
+                    app,
+                    Constants.DUAL_CHIP_SHIFT_LEFT_DP,
+                    String.valueOf(clampPairShiftLeftDp(shiftLeftDp)),
+                    Constants.PREF_NAME);
+        }
+        if (shiftUpDp != null) {
+            SharedPrefsData.putString(
+                    app,
+                    Constants.DUAL_CHIP_SHIFT_UP_DP,
+                    String.valueOf(clampPairShiftUpDp(shiftUpDp)),
+                    Constants.PREF_NAME);
+        }
+    }
+
+    /**
+     * Latch both-on for this process when a fresh config says both + master ON.
+     * Clear only when that config explicitly turns both off, or turns master off.
+     * Null fields do not clear the latch (omitted poll must not drop Rewards).
+     */
+    private static void applySessionLatch(
+            @Nullable Context context,
+            @Nullable Boolean rewardsMaster,
+            @Nullable Boolean showBoth) {
+        if (rewardsMaster != null && !rewardsMaster) {
+            sessionBothLatched = false;
+            sessionMasterLatched = false;
+            return;
+        }
+        if (Boolean.TRUE.equals(rewardsMaster) || Boolean.TRUE.equals(showBoth)) {
+            sessionMasterLatched = true;
+        }
+        if (showBoth == null) return;
+        boolean masterOn =
+                rewardsMaster != null ? rewardsMaster : rewardsMasterEnabled(context);
+        if (!masterOn) {
+            sessionBothLatched = false;
+            return;
+        }
+        if (showBoth) {
+            sessionBothLatched = true;
+        } else {
+            sessionBothLatched = false;
+        }
+    }
+
+    /**
+     * Settings “Allow reporters” and splash {@code rewards_exclude_reporters}
+     * write the same gate the hub reads. Allow ON wins if both arrive.
+     */
+    public static void saveReporterGate(
+            @Nullable Context context,
+            @Nullable Boolean excludeReporters,
+            @Nullable Boolean allowReporters) {
+        if (context == null) return;
+        Boolean resolved = excludeReporters;
+        if (allowReporters != null) {
+            resolved = !allowReporters;
+        }
+        if (resolved == null) return;
+        SharedPrefsData.putStringImmediate(
+                context.getApplicationContext(),
+                Constants.REWARDS_EXCLUDE_REPORTERS,
+                resolved ? "true" : "false",
+                Constants.PREF_NAME);
+    }
+
+    /** In-app Settings Rewards switch. Writes the flag Profile and the feed chip read. */
+    public static void setUserRewardsEnabled(@Nullable Context context, boolean on) {
+        if (context == null) return;
+        SharedPrefsData.putStringImmediate(
+                context.getApplicationContext(),
+                Constants.USER_REWARDS_ENABLED,
+                on ? "true" : "false",
+                Constants.PREF_NAME);
+    }
+
     /** True when admin wants district hidden on main News (default true). */
     public static boolean hideOnMainFeed(@Nullable Context context) {
         return readBool(context, Constants.HIDE_DISTRICT_ON_MAIN_FEED, DEFAULT_HIDE_ON_MAIN_FEED);
     }
 
-    /** Master switch for rewards UI (Profile row + optional main-feed slot). */
+    /**
+     * Master switch for rewards UI (Profile row + optional main-feed slot).
+     * Missing key is not a hard OFF when a sibling flag only the server sends
+     * with master ON is already true (show-both / feed slot). A boolean stored
+     * by the Settings switch is honored — not only the splash string.
+     */
     public static boolean rewardsMasterEnabled(@Nullable Context context) {
-        return readBool(context, Constants.REWARDS_MASTER, DEFAULT_REWARDS_MASTER);
+        if (sessionMasterLatched) return true;
+        Boolean stored = readBoolOrMissing(context, Constants.REWARDS_MASTER);
+        if (stored != null) return stored;
+        if (sessionBothLatched) return true;
+        if (readBool(context, Constants.SHOW_FLASH_AND_REWARDS_TOGETHER, false)) return true;
+        if (readBool(context, Constants.REWARDS_IN_MAIN_FEED_SLOT, false)) return true;
+        return false;
+    }
+
+    /**
+     * In-app Settings Rewards switch. Missing key means ON so the hub does not
+     * hide when the switch was never written, or only painted UI.
+     */
+    public static boolean userRewardsEnabled(@Nullable Context context) {
+        return readBool(context, Constants.USER_REWARDS_ENABLED, true);
+    }
+
+    /** True when Settings never wrote the Rewards switch (string or boolean). */
+    public static boolean userRewardsPrefMissing(@Nullable Context context) {
+        return readBoolOrMissing(context, Constants.USER_REWARDS_ENABLED) == null;
     }
 
     /** When true, logged-in reporters must not see rewards / rewards wallet. */
@@ -200,10 +381,28 @@ public final class DistrictPinVisibilityConfig {
                 context, Constants.REWARDS_EXCLUDE_REPORTERS, DEFAULT_EXCLUDE_REPORTERS);
     }
 
-    /** True when this device user may use rewards (master ON and not an excluded reporter). */
+    /**
+     * True when this device user may use rewards (master ON and not an excluded
+     * reporter). Guests are never treated as reporters — a stale
+     * {@code is_reporter} flag after logout used to hide Profile + the chip.
+     * Ended / upcoming periods do not hide the entry; scoring pause is banner-only.
+     */
     public static boolean rewardsVisibleForUser(@Nullable Context context) {
         if (!rewardsMasterEnabled(context)) return false;
+        // Default Settings switch is ON. Persist it on first read so Profile
+        // and the feed chip do not stay hidden on a missing pref.
+        if (userRewardsPrefMissing(context)) {
+            setUserRewardsEnabled(context, true);
+            return true;
+        }
+        Boolean userPref = readBoolOrMissing(context, Constants.USER_REWARDS_ENABLED);
+        // Settings switch OFF hides Profile + chip even when admin master is ON.
+        if (Boolean.FALSE.equals(userPref)) return false;
+        // Settings switch ON is the flag the hub reads — show even if a stale
+        // reporter-exclude pref is still true.
+        if (Boolean.TRUE.equals(userPref)) return true;
         if (!excludeReporters(context)) return true;
+        if (!isLoggedIn(context)) return true;
         try {
             boolean isReporter =
                     SharedPrefsData.getBool(
@@ -247,10 +446,42 @@ public final class DistrictPinVisibilityConfig {
      */
     public static boolean showFlashAndRewardsTogetherEnabled(@Nullable Context context) {
         if (!rewardsMasterEnabled(context)) return false;
+        // Session latch wins over a stale pref until a fresh config turns both off.
+        if (sessionBothLatched) return true;
         return readBool(
                 context,
                 Constants.SHOW_FLASH_AND_REWARDS_TOGETHER,
                 DEFAULT_SHOW_FLASH_AND_REWARDS_TOGETHER);
+    }
+
+    /** Text size (dp) for the Flash + Rewards pair. Default 13. */
+    public static int pairSizeDp(@Nullable Context context) {
+        return readInt(
+                context,
+                Constants.DUAL_CHIP_SIZE_DP,
+                DEFAULT_PAIR_SIZE_DP,
+                8,
+                24);
+    }
+
+    /** Extra end margin (dp) that shifts the pair left only. Default 0. */
+    public static int pairShiftLeftDp(@Nullable Context context) {
+        return readInt(
+                context,
+                Constants.DUAL_CHIP_SHIFT_LEFT_DP,
+                DEFAULT_PAIR_SHIFT_LEFT_DP,
+                0,
+                96);
+    }
+
+    /** Extra lift (dp) that moves the pair up. Default 0. */
+    public static int pairShiftUpDp(@Nullable Context context) {
+        return readInt(
+                context,
+                Constants.DUAL_CHIP_SHIFT_UP_DP,
+                DEFAULT_PAIR_SHIFT_UP_DP,
+                0,
+                48);
     }
 
     /** Local / Mana Zilla feed surface. */
@@ -322,22 +553,25 @@ public final class DistrictPinVisibilityConfig {
 
     /**
      * Show Rewards promo in the district slot (main feed only).
-     * Never on Local; never when the post keeps its district.
-     * After join: only when {@link #keepRewardsAfterJoinEnabled}.
+     * Never on Local. District posts and hide-district OFF used to hide the
+     * chip even when the Rewards chip toggle was ON — that made Rewards vanish
+     * on most cards. Slot ON keeps the chip after join; keep_after_join still
+     * forces it when the slot toggle is off. Ended period is not a gate.
      * Single-chip matrix only — show-both uses {@link #shouldShowRewardsWhenBoth}.
      */
     public static boolean shouldShowRewardsInDistrictSlot(
             @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
         if (showFlashAndRewardsTogetherEnabled(context)) return false;
         if (isLocalFeed(feedCategoryId)) return false;
-        if (isDistrictOrLocalPost(post)) return false;
-        if (!hideOnMainFeed(context)) return false;
         if (!rewardsMasterEnabled(context)) return false;
         if (!rewardsVisibleForUser(context)) return false;
-        if (!rewardsInMainFeedSlotEnabled(context)) return false;
-        if (rewardsJoined(context)) {
-            return keepRewardsAfterJoinEnabled(context);
-        }
+        boolean slotOn = rewardsInMainFeedSlotEnabled(context);
+        boolean keep = keepRewardsAfterJoinEnabled(context);
+        if (!slotOn && !keep) return false;
+        if (!slotOn && isDistrictOrLocalPost(post)) return false;
+        if (!slotOn && !hideOnMainFeed(context)) return false;
+        // Slot ON means the chip stays after join. keep_after_join no longer
+        // hides a chip the admin already turned on.
         return true;
     }
 
@@ -359,10 +593,19 @@ public final class DistrictPinVisibilityConfig {
         return true;
     }
 
-    /** Slot where a promo chip may replace district (not Local, not district posts). */
+    /**
+     * Slot where a promo chip may replace district.
+     * Local feed always keeps district. Show-both or the Rewards chip toggle
+     * wins on main feed, including district posts — otherwise Rewards never
+     * appeared on cards that carry a dist_id.
+     */
     public static boolean isPromoSlotEligible(
             @Nullable Context context, int feedCategoryId, @Nullable ModelClass.Datum post) {
         if (isLocalFeed(feedCategoryId)) return false;
+        if (showFlashAndRewardsTogetherEnabled(context)
+                || rewardsInMainFeedSlotEnabled(context)) {
+            return true;
+        }
         if (isDistrictOrLocalPost(post)) return false;
         return hideOnMainFeed(context);
     }
@@ -397,17 +640,79 @@ public final class DistrictPinVisibilityConfig {
                 || shouldShowRewardsWhenBoth(context, feedCategoryId, post);
     }
 
-    private static boolean readBool(
-            @Nullable Context context, String key, boolean defaultValue) {
+    private static int clampPairSizeDp(int raw) {
+        return Math.max(8, Math.min(24, raw));
+    }
+
+    private static int clampPairShiftLeftDp(int raw) {
+        return Math.max(0, Math.min(96, raw));
+    }
+
+    private static int clampPairShiftUpDp(int raw) {
+        return Math.max(0, Math.min(48, raw));
+    }
+
+    private static boolean isLoggedIn(@Nullable Context context) {
+        if (context == null) return false;
+        try {
+            return SharedPrefsData.getBool(
+                    context.getApplicationContext(), Constants.is_login, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static int readInt(
+            @Nullable Context context,
+            String key,
+            int defaultValue,
+            int min,
+            int max) {
         if (context == null) return defaultValue;
         try {
             String v =
                     SharedPrefsData.getString(
                             context.getApplicationContext(), key, Constants.PREF_NAME);
             if (TextUtils.isEmpty(v)) return defaultValue;
-            return "true".equalsIgnoreCase(v.trim()) || "1".equals(v.trim());
+            int n = Integer.parseInt(v.trim());
+            if (n <= 0 && min > 0) return defaultValue;
+            return Math.max(min, Math.min(max, n));
         } catch (Exception ignored) {
             return defaultValue;
+        }
+    }
+
+    private static boolean readBool(
+            @Nullable Context context, String key, boolean defaultValue) {
+        Boolean stored = readBoolOrMissing(context, key);
+        return stored != null ? stored : defaultValue;
+    }
+
+    /**
+     * null = key missing. Accepts splash strings ("true"/"1") and a boolean
+     * written by the Settings switch under the same name.
+     */
+    @Nullable
+    private static Boolean readBoolOrMissing(@Nullable Context context, String key) {
+        if (context == null || key == null) return null;
+        try {
+            android.content.SharedPreferences sp =
+                    context.getApplicationContext()
+                            .getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (!sp.contains(key)) return null;
+            try {
+                String v = sp.getString(key, null);
+                if (TextUtils.isEmpty(v)) return null;
+                return "true".equalsIgnoreCase(v.trim()) || "1".equals(v.trim());
+            } catch (ClassCastException ignored) {
+                try {
+                    return sp.getBoolean(key, false);
+                } catch (Exception inner) {
+                    return null;
+                }
+            }
+        } catch (Exception ignored) {
+            return null;
         }
     }
 }
