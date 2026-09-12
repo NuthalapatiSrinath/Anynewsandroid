@@ -431,8 +431,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
                     return;
                 }
-                // No full recycle here. A notify during a fast swipe used to reset
-                // FlipView to page 0; ad shells stay on the placeholder until settle.
+                // Idle only (gates above): creative ready but in-place miss — one
+                // settle recycle. Never mid-flip; keeps share-ad ~1s fill without
+                // hitching adjacent article transitions.
+                if (adapter != null && adapter.needsFlipSettleAdRebind()) {
+                    if (shouldDeferAdWork()) {
+                        scheduleFlipSafeAdRebind(
+                                Math.max(64L, FlipAdWorkGate.millisUntilAdWorkSafe()));
+                        return;
+                    }
+                    adapter.notifyWhenFlipSettled();
+                    return;
+                }
+                // Nothing ready — keep house placeholder; no FlipView recycle.
             } catch (Exception ignored) {
             }
         }
@@ -2241,6 +2252,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Live FlipView page currently on screen (or null). Used by ad in-place paint
+     * to re-find {@code fl_adplaceholder} after WeakReference loss.
+     */
+    @Nullable
+    public View getCurrentFlipPageView() {
+        try {
+            if (mFlipView != null) {
+                return mFlipView.getCurrentPageView();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     /**
@@ -7668,16 +7694,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
 
             int targetW = target.getWidth();
+            // Absolute X of the selected segment inside the pill (content coords).
             int targetX = target.getLeft();
-            // Segments row is sibling of thumb; offset by segments left inside pill.
             View segments = homeModePill != null
                     ? homeModePill.findViewById(R.id.home_mode_segments)
                     : findViewById(R.id.home_mode_segments);
             if (segments != null && target.getParent() == segments) {
                 targetX = segments.getLeft() + target.getLeft();
             }
-
-            float toX = targetX;
+            // Thumb is a sibling laid out at the pill's padded start — translationX
+            // must be relative to the thumb's own left. Adding segments.getLeft()
+            // on top of an already-padded thumb doubled the left gutter and pushed
+            // the right selected pill flush against the outer edge.
+            float toX = targetX - homeModeThumb.getLeft();
             float fromX = homeModeThumb.getTranslationX();
             int fromW = homeModeThumb.getWidth();
             if (fromW <= 0) {

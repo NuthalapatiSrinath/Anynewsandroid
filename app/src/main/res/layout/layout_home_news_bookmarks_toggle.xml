@@ -27,7 +27,10 @@
 
         <!-- Sliding orange selected thumb; size/X set in code.
              Vertical inset via margin (not parent padding) so clipToPadding
-             cannot slice the rounded bottom of the selected pill. -->
+             cannot slice the rounded bottom of the selected pill.
+             Horizontal seat matches pill padding (4dp) on BOTH sides — code
+             positions translationX relative to thumb.getLeft() so left/right
+             gutters stay equal. -->
         <View
             android:id="@+id/home_mode_thumb"
             android:layout_width="100dp"
@@ -53,7 +56,7 @@
                 android:minWidth="108dp"
                 android:orientation="horizontal"
                 android:paddingStart="12dp"
-                android:paddingEnd="10dp">
+                android:paddingEnd="12dp">
 
                 <TextView
                     android:id="@+id/home_mode_news"
@@ -94,7 +97,7 @@
                 android:minWidth="108dp"
                 android:orientation="horizontal"
                 android:paddingStart="12dp"
-                android:paddingEnd="10dp">
+                android:paddingEnd="12dp">
 
                 <TextView
                     android:id="@+id/home_mode_bookmarks"
