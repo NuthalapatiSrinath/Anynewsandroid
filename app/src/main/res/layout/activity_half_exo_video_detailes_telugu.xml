@@ -65,14 +65,14 @@
                                 android:id="@+id/normal_video_player"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
-                                android:background="@color/anynews_black"
+                                android:background="@android:color/transparent"
                                 app:controller_layout_id="@layout/player_custom_ui"
                                 app:use_artwork="false"
                                 app:keep_content_on_player_reset="true"
                                 app:shutter_background_color="@android:color/transparent"
                                 app:layout_constraintTop_toTopOf="parent"
                                 app:resize_mode="fit"
-                                app:surface_type="texture_view"
+                                app:surface_type="none"
                                 app:use_controller="true" />
 
                             <ImageView

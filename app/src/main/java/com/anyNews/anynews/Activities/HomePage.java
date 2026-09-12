@@ -152,6 +152,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketFooterLabel;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
+import com.anyNews.anynews.Utils.FeedExoSurfaceHost;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
@@ -969,6 +970,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         Activity=this;
         activity=this;
         context=this;
+        try {
+            FlipperAdapter.setFeedExoSurfaceHost(FeedExoSurfaceHost.bind(this));
+        } catch (Exception ignored) {
+        }
         cricketMiniPlayerManager = new com.anyNews.anynews.Utils.CricketMiniPlayerManager(HomePage.this);
         trackingEvents=new FCMTrackingEvents(this);
         fab_article = findViewById(R.id.fab_article);
@@ -14810,6 +14815,72 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
+     * YouTube immersive enter: pin FlipView seat so exit / optional rotate never snaps to
+     * first news. Does not force landscape.
+     */
+    public void checkpointFlipPositionForFullscreen() {
+        try {
+            int flipIndex = resolveCurrentFlipIndexForSave();
+            long postId = resolvePostIdForFlipIndex(flipIndex);
+            pendingRestoreFlipIndex = flipIndex;
+            pendingRestorePostId = postId;
+            pendingFlipRestore = flipIndex > 0 || postId > 0;
+            persistFlipRestoreCheckpoint(flipIndex, postId, pendingFlipRestore);
+            // Allow manual rotate during FS without Activity recreate (configChanges)
+            // and without forcing landscape.
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+            showLog("yt FS checkpoint index=" + flipIndex + " postId=" + postId);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * YouTube immersive exit: restore portrait lock and the same FlipView seat / post_id.
+     */
+    public void restoreFlipPositionAfterFullscreen() {
+        try {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } catch (Exception ignored) {
+        }
+        try {
+            if (mFlipView == null || list == null || list.isEmpty()) {
+                return;
+            }
+            int target = -1;
+            if (pendingRestorePostId > 0) {
+                target = findNearestListIndexForPostId(
+                        pendingRestorePostId, pendingRestoreFlipIndex);
+            }
+            if (target < 0 && pendingRestoreFlipIndex >= 0
+                    && pendingRestoreFlipIndex < list.size()) {
+                target = pendingRestoreFlipIndex;
+            }
+            if (target < 0) {
+                return;
+            }
+            int cur = -1;
+            try {
+                cur = mFlipView.getCurrentPage();
+            } catch (Exception ignored) {
+            }
+            if (cur == target) {
+                showLog("yt FS exit already on index=" + target);
+                return;
+            }
+            if (adapter != null) {
+                adapter.setCurrentFlipPage(target);
+            }
+            mFlipView.flipTo(target);
+            positionx = target;
+            showLog("yt FS exit restored index=" + target
+                    + " postId=" + pendingRestorePostId);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
      * After articles load (setData / append), restore the flip page that was showing
      * before a DayNight recreate (battery saver ↔ light/dark, either direction).
      * <p>
@@ -14931,6 +15002,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             playInAppUpdateHelper = null;
         }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onDestroy();
+        try {
+            FlipperAdapter.setFeedExoSurfaceHost(null);
+        } catch (Exception ignored) {
+        }
         clearNativeAdPools();
         adapter = null;
         stopMagazineShareBlink();
@@ -14971,6 +15046,14 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     @Override
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        // Orientation changes must NOT reset FlipView. HomePage opts into
+        // orientation configChanges; keep the YouTube / Exo seat pinned.
+        if (isPlayingVideoInFullScreen || FlipperAdapter.fullscreen) {
+            try {
+                checkpointFlipPositionForFullscreen();
+            } catch (Exception ignored) {
+            }
+        }
         int nightMask = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
         if (nightMask != appliedNightUiMask) {
             // Defer heavy recreate while Settings (or another activity) is on top.

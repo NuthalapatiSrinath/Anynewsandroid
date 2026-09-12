@@ -442,7 +442,7 @@
             android:noHistory="false"
             android:name=".Activities.HomePage"
             android:theme="@style/AppTheme"
-            android:configChanges="uiMode"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:screenOrientation="portrait"/>
         <activity
             android:name=".Activities.TeluguCalendarActivity"

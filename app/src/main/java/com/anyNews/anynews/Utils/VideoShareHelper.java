@@ -49,27 +49,41 @@ public class VideoShareHelper {
 
     public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
                                     String shareLink, ShareMode mode, OnShareCompleteListener listener) {
-        shareVideo(context, activity, videoUrl, title, null, shareLink, mode,
+        shareVideo(context, activity, videoUrl, null, title, null, shareLink, mode,
                 context.getString(R.string.video_status_sharing), listener);
     }
 
     public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
                                     String description, String shareLink, ShareMode mode,
                                     OnShareCompleteListener listener) {
-        shareVideo(context, activity, videoUrl, title, description, shareLink, mode,
+        shareVideo(context, activity, videoUrl, null, title, description, shareLink, mode,
                 context.getString(R.string.video_status_sharing), listener);
     }
 
     public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
                                     String shareLink, ShareMode mode, String statusMessage,
                                     OnShareCompleteListener listener) {
-        shareVideo(context, activity, videoUrl, title, null, shareLink, mode, statusMessage, listener);
+        shareVideo(context, activity, videoUrl, null, title, null, shareLink, mode, statusMessage, listener);
     }
 
-    public static void shareVideo(Context context, Activity activity, String videoUrl, String title,
-                                    String description, String shareLink, ShareMode mode,
-                                    String statusMessage, OnShareCompleteListener listener) {
-        if (videoUrl == null || videoUrl.trim().isEmpty()) {
+    /**
+     * Prefer any already-cached candidate ({@code primaryUrl} usually downloadUrl,
+     * {@code alternateUrl} the play URL) so WhatsApp opens without a second download.
+     */
+    public static void shareVideo(Context context, Activity activity, String primaryUrl,
+                                    String alternateUrl, String title, String description,
+                                    String shareLink, ShareMode mode,
+                                    OnShareCompleteListener listener) {
+        shareVideo(context, activity, primaryUrl, alternateUrl, title, description, shareLink, mode,
+                context.getString(R.string.video_status_sharing), listener);
+    }
+
+    public static void shareVideo(Context context, Activity activity, String primaryUrl,
+                                    String alternateUrl, String title, String description,
+                                    String shareLink, ShareMode mode, String statusMessage,
+                                    OnShareCompleteListener listener) {
+        final String[] candidates = uniqueUrls(primaryUrl, alternateUrl);
+        if (candidates.length == 0) {
             Toast.makeText(context, "Video is not available to share", Toast.LENGTH_SHORT).show();
             if (listener != null) {
                 listener.onShareStarted();
@@ -77,11 +91,10 @@ public class VideoShareHelper {
             return;
         }
 
-        final String sourceUrl = videoUrl.trim();
         final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-        // Instant path: local/cache already ready — skip worker thread + dialog.
-        PreparedShare ready = tryResolveReadyShare(context, sourceUrl);
+        // Instant path: any local/cache hit — skip worker thread + dialog.
+        PreparedShare ready = tryResolveReadyShare(context, candidates);
         if (ready != null) {
             launchShareIntent(context, activity, ready.uri, ready.mimeType, title, description, shareLink, mode);
             if (listener != null) {
@@ -92,7 +105,13 @@ public class VideoShareHelper {
 
         downloadThread = new Thread(() -> {
             try {
-                PreparedShare prepared = prepareShareableVideo(context, sourceUrl, statusMessage, mainHandler, true);
+                PreparedShare prepared = null;
+                for (String candidate : candidates) {
+                    prepared = prepareShareableVideo(context, candidate, statusMessage, mainHandler, true);
+                    if (prepared != null) {
+                        break;
+                    }
+                }
                 if (prepared == null) {
                     mainHandler.post(() -> {
                         dismissProgress();
@@ -102,9 +121,10 @@ public class VideoShareHelper {
                     });
                     return;
                 }
+                final PreparedShare done = prepared;
                 mainHandler.post(() -> {
                     dismissProgress();
-                    launchShareIntent(context, activity, prepared.uri, prepared.mimeType, title, description, shareLink, mode);
+                    launchShareIntent(context, activity, done.uri, done.mimeType, title, description, shareLink, mode);
                     if (listener != null) {
                         listener.onShareStarted();
                     }
@@ -125,6 +145,26 @@ public class VideoShareHelper {
 
     /** Non-blocking resolve for content/file/cache hits only (no network). */
     private static PreparedShare tryResolveReadyShare(Context context, String sourceUrl) {
+        return tryResolveReadyShare(context, new String[]{sourceUrl});
+    }
+
+    private static PreparedShare tryResolveReadyShare(Context context, String[] candidates) {
+        if (candidates == null) {
+            return null;
+        }
+        for (String sourceUrl : candidates) {
+            if (sourceUrl == null || sourceUrl.trim().isEmpty()) {
+                continue;
+            }
+            PreparedShare hit = tryResolveReadyShareOne(context, sourceUrl.trim());
+            if (hit != null) {
+                return hit;
+            }
+        }
+        return null;
+    }
+
+    private static PreparedShare tryResolveReadyShareOne(Context context, String sourceUrl) {
         try {
             Uri parsed = Uri.parse(sourceUrl);
             String scheme = parsed.getScheme();
@@ -149,35 +189,60 @@ public class VideoShareHelper {
     }
 
     /**
-     * Warm the share cache while the bottom sheet is open so Status/Contact can skip the network wait.
+     * Warm the share cache while the bottom sheet is open / video is playing so Contact is instant.
      */
     public static void prefetchVideo(Context context, String videoUrl) {
-        if (context == null || videoUrl == null || videoUrl.trim().isEmpty()) {
-            return;
-        }
-        final String sourceUrl = videoUrl.trim();
-        Uri parsed = Uri.parse(sourceUrl);
-        String scheme = parsed.getScheme();
-        if (scheme != null && (scheme.equalsIgnoreCase("content") || scheme.equalsIgnoreCase("file"))) {
-            return;
-        }
-        if (scheme == null && sourceUrl.startsWith("/")) {
-            return;
-        }
+        prefetchVideoCandidates(context, videoUrl, null);
+    }
 
+    public static void prefetchVideoCandidates(Context context, String primaryUrl, String alternateUrl) {
+        if (context == null) {
+            return;
+        }
+        final String[] candidates = uniqueUrls(primaryUrl, alternateUrl);
+        if (candidates.length == 0) {
+            return;
+        }
         final Context appContext = context.getApplicationContext();
-        File cachedFile = getCacheFile(appContext, sourceUrl);
-        if (cachedFile.exists() && cachedFile.length() > 0) {
-            return;
-        }
-
-        new Thread(() -> {
-            try {
-                prepareShareableVideo(appContext, sourceUrl, null, new Handler(Looper.getMainLooper()), false);
-            } catch (Exception ignored) {
-                // Prefetch is best-effort; share path will retry with UI if needed.
+        for (String sourceUrl : candidates) {
+            Uri parsed = Uri.parse(sourceUrl);
+            String scheme = parsed.getScheme();
+            if (scheme != null && (scheme.equalsIgnoreCase("content") || scheme.equalsIgnoreCase("file"))) {
+                continue;
             }
-        }, "video-share-prefetch").start();
+            if (scheme == null && sourceUrl.startsWith("/")) {
+                continue;
+            }
+            File cachedFile = getCacheFile(appContext, sourceUrl);
+            if (cachedFile.exists() && cachedFile.length() > 0) {
+                continue;
+            }
+            final String url = sourceUrl;
+            new Thread(() -> {
+                try {
+                    prepareShareableVideo(appContext, url, null, new Handler(Looper.getMainLooper()), false);
+                } catch (Exception ignored) {
+                    // Prefetch is best-effort; share path will retry with UI if needed.
+                }
+            }, "video-share-prefetch").start();
+        }
+    }
+
+    private static String[] uniqueUrls(String primary, String alternate) {
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+        if (primary != null) {
+            String p = primary.trim();
+            if (!p.isEmpty()) {
+                set.add(p);
+            }
+        }
+        if (alternate != null) {
+            String a = alternate.trim();
+            if (!a.isEmpty()) {
+                set.add(a);
+            }
+        }
+        return set.toArray(new String[0]);
     }
 
     /**

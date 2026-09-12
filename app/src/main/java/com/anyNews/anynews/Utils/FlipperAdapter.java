@@ -298,6 +298,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private static boolean feedExoFrameRendered = false;
     /** PlayerView currently showing {@link #exoPlayer}. Used to pin the last frame. */
     private static java.lang.ref.WeakReference<PlayerView> feedExoPlayerViewRef;
+    /**
+     * Stable TextureView host reparented under {@code exo_play_layout} (picture only).
+     * Chrome stays on the scrap PlayerView ({@code surface_type=none}).
+     */
+    @Nullable
+    private static FeedExoSurfaceHost feedExoSurfaceHost;
+    /** Flip card root that currently owns the stable surface (for FlipView pin). */
+    private static java.lang.ref.WeakReference<View> feedExoHostRootRef;
     /** Debounce the white buffering ring so a one-frame rebuffer does not strobe it. */
     private static final long EXO_SPINNER_DEBOUNCE_MS = 600L;
     private static final Handler EXO_OVERLAY_HANDLER = new Handler(Looper.getMainLooper());
@@ -5412,7 +5420,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             YouTubePlayerListener listener = new com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
                                 @Override
                                 public void onReady(@NonNull com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer youTubePlayer) {
-                                    fullVideocustomPlayerUiController = new CustomPlayerUiController(context, v, youTubePlayer, youTubePlayerView, layoutHeight, false,new CustomPlayerUiController.ShowFullScreenVideo() {
+                                    fullVideocustomPlayerUiController = new CustomPlayerUiController(context, v, youTubePlayer, youTubePlayerView, layoutHeight, true,new CustomPlayerUiController.ShowFullScreenVideo() {
                                         @Override
                                         public void showFullScreenVideo(boolean b) {
                                                 showLog("panel clicked open");
@@ -7890,25 +7898,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     customPlayerUiController = new CustomPlayerUiController(context, v, youTubePlayer, youTubePlayerView, layoutHeight,true, new CustomPlayerUiController.ShowFullScreenVideo() {
                                         @Override
                                         public void showFullScreenVideo(boolean b) {
-                                            showLog("youTubePlayerView::" + youTubePlayerView.getLayoutParams().height);
+                                            // Immersive host owns the picture; only toggle in-card chrome.
+                                            // Do not resize FlipView parents — that used to snap to page 0.
+                                            showLog("youTubePlayerView FS chrome hide=" + b);
                                             if (b) {
-                                                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-                                                layoutParentTop.setLayoutParams(params);
                                                 layoutParentTitle.setVisibility(GONE);
                                                 layoutParentReportDetails.setVisibility(GONE);
                                                 layoutParentMiddle.setVisibility(GONE);
-
                                             } else {
                                                 layoutParentTitle.setVisibility(View.VISIBLE);
                                                 layoutParentReportDetails.setVisibility(View.VISIBLE);
                                                 layoutParentMiddle.setVisibility(View.VISIBLE);
-                                                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, layoutHeight);
-                                                ConstraintLayout.LayoutParams params1 = new ConstraintLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-                                                layoutParentTop.setLayoutParams(params);
-                                                youTubePlayerView.setLayoutParams(params1);
-
                                             }
-                                            showLog("youTubePlayerView::" + youTubePlayerView.getLayoutParams().height);
                                         }
 
                                         @Override
@@ -10453,6 +10454,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         activeExoVideoUrl = videoUrl;
         // Fresh media item (play click) — mid-watch resume is allowed again until the next Reload.
         discardSavedPlaybackUntilNextStart = false;
+        // Warm WhatsApp share cache while the user watches (downloadUrl + play URL).
+        try {
+            VideoShareHelper.prefetchVideoCandidates(context,
+                    resolveVideoShareUrl(position), videoUrl);
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -10606,11 +10613,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * through ready, rebuffer, and a brief idle while playWhenReady is still true.
      */
     private static boolean isFeedExoSurfaceLive(PlayerView playerView) {
-        if (!feedExoFrameRendered || exoPlayer == null || playerView == null) {
+        if (!feedExoFrameRendered || exoPlayer == null) {
             return false;
         }
-        if (playerView.getPlayer() != exoPlayer) {
-            return false;
+        PlayerView surface = stableFeedSurfacePlayerView();
+        if (surface == null) {
+            surface = playerView;
+        }
+        if (surface == null || surface.getPlayer() != exoPlayer) {
+            // Chrome-only scrap may hold the player while picture is on the stable host.
+            if (playerView == null || playerView.getPlayer() != exoPlayer) {
+                return false;
+            }
+            surface = stableFeedSurfacePlayerView() != null
+                    ? stableFeedSurfacePlayerView() : playerView;
+            if (surface.getPlayer() != exoPlayer && playerView.getPlayer() != exoPlayer) {
+                return false;
+            }
         }
         try {
             int state = exoPlayer.getPlaybackState();
@@ -10932,6 +10951,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         clearSharedExoTracking();
         resetFeedExoSurfaceGuards();
+        try {
+            if (feedExoSurfaceHost != null) {
+                feedExoSurfaceHost.clearPlayerBinding();
+            }
+        } catch (Exception ignored) {
+        }
+        feedExoHostRootRef = null;
     }
 
     private void detachPlayerViewSafely(PlayerView playerView) {
@@ -11028,37 +11054,172 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Bind the shared feed ExoPlayer to a PlayerView without tearing an already-attached
-     * surface (detach→setPlayer on the same instance clears the picture to white).
+     * Bind the shared feed ExoPlayer to the stable surface host (picture) and the scrap
+     * PlayerView (in-card chrome only). Never hops TextureView across FlipView scrap.
      *
      * @return true if the surface binding changed (caller may need a fresh listener)
      */
-    private boolean attachSharedExoToPlayerView(PlayerView playerView) {
-        if (playerView == null || exoPlayer == null) {
+    private boolean attachSharedExoToPlayerView(PlayerView scrapPlayerView) {
+        View cardRoot = findExoCardRoot(scrapPlayerView);
+        return attachSharedExoToPlayerView(scrapPlayerView, cardRoot);
+    }
+
+    private boolean attachSharedExoToPlayerView(PlayerView scrapPlayerView, View cardRoot) {
+        if (exoPlayer == null) {
             return false;
         }
-        rememberFeedExoPlayerView(playerView);
+        PlayerView surface = scrapPlayerView;
+        ViewGroup playLayout = null;
+        if (cardRoot != null) {
+            View pl = cardRoot.findViewById(R.id.exo_play_layout);
+            if (pl instanceof ViewGroup) {
+                playLayout = (ViewGroup) pl;
+            }
+        } else if (scrapPlayerView != null && scrapPlayerView.getParent() instanceof ViewGroup) {
+            playLayout = (ViewGroup) scrapPlayerView.getParent();
+        }
+        if (feedExoSurfaceHost != null && playLayout != null) {
+            feedExoSurfaceHost.attachUnderChrome(playLayout, cardRoot != null ? cardRoot : playLayout);
+            surface = feedExoSurfaceHost.getPlayerView();
+            rememberFeedExoHost(cardRoot != null ? cardRoot : playLayout);
+            prepareScrapAsChromeOnly(scrapPlayerView);
+        }
+        if (surface == null) {
+            return false;
+        }
+        rememberFeedExoPlayerView(surface);
+        boolean changed = false;
         try {
-            hardenFeedPlayerSurface(playerView);
-            Player attached = playerView.getPlayer();
+            hardenFeedPlayerSurface(surface);
+            Player attached = surface.getPlayer();
             if (attached == exoPlayer) {
                 if (feedExoFrameRendered) {
-                    pinFeedExoLastFrame(playerView);
+                    pinFeedExoLastFrame(surface);
                 }
-                return false;
-            }
-            if (attached != null && attached != exoPlayer) {
-                try {
-                    attached.release();
-                } catch (Exception ignored) {
+            } else {
+                if (attached != null && attached != exoPlayer) {
+                    try {
+                        attached.release();
+                    } catch (Exception ignored) {
+                    }
                 }
+                surface.setPlayer(exoPlayer);
+                hardenFeedPlayerSurface(surface);
+                changed = true;
             }
-            playerView.setPlayer(exoPlayer);
-            hardenFeedPlayerSurface(playerView);
-            return true;
+            // Scrap owns Way2 mute/fs/progress — surface_type=none so setPlayer won't steal TextureView.
+            if (scrapPlayerView != null && scrapPlayerView != surface) {
+                bindScrapChromePlayer(scrapPlayerView);
+            }
+            return changed;
         } catch (Exception e) {
             e.printStackTrace();
             return false;
+        }
+    }
+
+    /** HomePage binds the stable surface PlayerView once after setContentView. */
+    public static void setFeedExoSurfaceHost(@Nullable FeedExoSurfaceHost host) {
+        feedExoSurfaceHost = host;
+    }
+
+    @Nullable
+    private static PlayerView stableFeedSurfacePlayerView() {
+        return feedExoSurfaceHost != null ? feedExoSurfaceHost.getPlayerView() : null;
+    }
+
+    private static void rememberFeedExoHost(@Nullable View root) {
+        feedExoHostRootRef = root != null ? new java.lang.ref.WeakReference<>(root) : null;
+    }
+
+    /**
+     * Seat index currently owning the shared feed ExoPlayer, or -1.
+     * Used by FlipView to keep that card's view tree across notify rebinds.
+     */
+    public static int getPinnedLiveExoPosition() {
+        if (discardSavedPlaybackUntilNextStart || exoPlayer == null) {
+            return -1;
+        }
+        return activeExoPosition;
+    }
+
+    /**
+     * True when {@code root} is the Flip card chrome host for the active Exo seat.
+     * TextureView lives on {@link FeedExoSurfaceHost}; FlipView still pins this tree so
+     * likes/progress rebinds do not thrash the card mid-play.
+     */
+    public static boolean isPinnedLiveExoHost(View root) {
+        if (root == null || exoPlayer == null || activeExoPosition < 0) {
+            return false;
+        }
+        if (discardSavedPlaybackUntilNextStart) {
+            return false;
+        }
+        try {
+            if (exoPlayer.getPlaybackState() == Player.STATE_ENDED) {
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        View pinnedRoot = feedExoHostRootRef != null ? feedExoHostRootRef.get() : null;
+        return pinnedRoot != null && pinnedRoot == root;
+    }
+
+    @Nullable
+    private static View findExoCardRoot(@Nullable View from) {
+        View cur = from;
+        while (cur != null) {
+            if (cur.findViewById(R.id.exo_play_layout) != null
+                    && cur.findViewById(R.id.normal_video_player) != null
+                    && cur != from) {
+                return cur;
+            }
+            // convertView often IS the root that contains exo_play_layout
+            if (cur.findViewById(R.id.exo_play_layout) != null
+                    && cur.findViewById(R.id.side_menu) != null) {
+                return cur;
+            }
+            Object parent = cur.getParent();
+            if (!(parent instanceof View)) {
+                break;
+            }
+            cur = (View) parent;
+        }
+        return from;
+    }
+
+    /** Scrap PlayerView: chrome only — transparent so the stable surface underneath shows. */
+    private static void prepareScrapAsChromeOnly(@Nullable PlayerView scrap) {
+        if (scrap == null) {
+            return;
+        }
+        try {
+            scrap.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            scrap.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT);
+            scrap.setUseArtwork(false);
+            scrap.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER);
+            View shutter = scrap.findViewById(androidx.media3.ui.R.id.exo_shutter);
+            if (shutter != null) {
+                shutter.setVisibility(View.GONE);
+            }
+            if (scrap.getVisibility() != View.VISIBLE) {
+                scrap.setVisibility(View.VISIBLE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void bindScrapChromePlayer(@Nullable PlayerView scrap) {
+        if (scrap == null || exoPlayer == null) {
+            return;
+        }
+        prepareScrapAsChromeOnly(scrap);
+        try {
+            if (scrap.getPlayer() != exoPlayer) {
+                scrap.setPlayer(exoPlayer);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -11548,7 +11709,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             final boolean waShare = mode == VideoShareHelper.ShareMode.WHATSAPP_CHAT
                     || mode == VideoShareHelper.ShareMode.WHATSAPP_STATUS;
-            VideoShareHelper.shareVideo(context, activity, videoUrl, item.getTitle(),
+            VideoShareHelper.shareVideo(context, activity,
+                    resolveVideoShareUrl(position),
+                    item.getVideoUrl(),
+                    item.getTitle(),
                     item.getDescription(), item.getShareLink(), mode,
                     () -> {
                         Share_Count_Value(shareCountProperty(waShare), item.getPostId());

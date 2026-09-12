@@ -395,6 +395,27 @@
 
                 </LinearLayout>
 
+                <!-- Park for the stable feed Exo surface PlayerView (reparented into
+                     card exo_play_layout while playing). Not an overlay chrome host. -->
+                <FrameLayout
+                    android:id="@+id/feed_exo_surface_park"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone">
+
+                    <androidx.media3.ui.PlayerView
+                        android:id="@+id/feed_exo_surface_player"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@color/anynews_black"
+                        app:keep_content_on_player_reset="true"
+                        app:resize_mode="fit"
+                        app:shutter_background_color="@android:color/transparent"
+                        app:surface_type="texture_view"
+                        app:use_artwork="false"
+                        app:use_controller="false" />
+                </FrameLayout>
+
                 <LinearLayout
                     android:id="@+id/layout_with_out_data"
                     android:layout_width="match_parent"
