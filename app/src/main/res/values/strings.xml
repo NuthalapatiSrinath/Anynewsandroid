@@ -308,7 +308,7 @@
     <string name="birthday_auto_hint">Create an automatic birthday banner. It publishes on your selected date at the admin publish time. Today is not allowed — earliest is tomorrow.</string>
     <string name="birthday_auto_name">Name on banner</string>
     <string name="birthday_auto_address">District / State on banner</string>
-    <string name="birthday_auto_address_note">Filled from your profile location. You can edit it.</string>
+    <string name="birthday_auto_address_note">Filled as District, State from your profile. You can edit it.</string>
     <string name="birthday_auto_name_bold">Bold name</string>
     <string name="birthday_auto_addr_bold">Bold address</string>
     <string name="birthday_auto_special">Special note (optional)</string>
@@ -317,11 +317,16 @@
     <string name="birthday_auto_pick_date">Pick date (tomorrow or later)</string>
     <string name="birthday_auto_submit">Schedule birthday post</string>
     <string name="birthday_auto_zoom">Photo zoom</string>
+    <string name="birthday_auto_pan_hint">Drag inside the photo circle to move left/right or up/down</string>
+    <string name="birthday_auto_font_style">Name font</string>
+    <string name="birthday_auto_addr_font_style">Address font</string>
+    <string name="birthday_auto_font_size">Size</string>
     <string name="birthday_auto_live_preview">Live banner preview</string>
     <string name="birthday_auto_login_required">Please login to create a Birthday Special</string>
     <string name="birthday_auto_need_date">Pick a birthday date (tomorrow or later)</string>
     <string name="birthday_auto_scheduled_ok">Birthday post scheduled</string>
     <string name="birthday_auto_schedule_info_fmt">Publishes at %1$s on the selected date. Submit before %2$s cutoff.</string>
+    <string name="birthday_auto_photo_heif_failed">Could not read this photo (HEIF/HEIC). Try another photo or save as JPEG in your gallery.</string>
     <string name="advertise_tap_play">Tap to play</string>
     <string name="contact_chooser_title">Contact us</string>
     <string name="contact_chooser_whatsapp">WhatsApp</string>

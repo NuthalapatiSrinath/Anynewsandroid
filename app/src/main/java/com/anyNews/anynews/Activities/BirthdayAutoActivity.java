@@ -2,6 +2,7 @@ package com.anyNews.anynews.Activities;
 
 import android.app.DatePickerDialog;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -10,6 +11,7 @@ import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
@@ -18,6 +20,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -30,19 +33,26 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.BirthdayPosterPreviewView;
+import com.anyNews.anynews.Utils.BirthdayFonts;
+import com.anyNews.anynews.Utils.BirthdayPhotoNormalizer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
+import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.WalletUserId;
+import com.anyNews.anynews.models.StatesModel;
 import com.anyNews.anynews.rewards.RewardsAuth;
 import com.bumptech.glide.Glide;
 import com.google.gson.JsonObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -66,36 +76,37 @@ public class BirthdayAutoActivity extends AppCompatActivity {
     private EditText titleInput;
     private CheckBox nameBold;
     private CheckBox addrBold;
+    private Spinner nameFontSpinner;
+    private Spinner nameSizeSpinner;
+    private Spinner addrFontSpinner;
+    private Spinner addrSizeSpinner;
     private SeekBar zoomBar;
     private TextView scheduleInfo;
     private Button pickDateBtn;
     private ProgressBar progress;
     private Uri photoUri;
+    private File normalizedJpegFile;
+    private Bitmap previewBitmap;
     private String uploadedPhotoUrl = "";
     private String scheduleDate = "";
     private String earliestDate = "";
     private String publishLabel = "02:00 IST";
     private String cutoffLabel = "00:00 IST";
     private boolean busy;
+    private float panX;
+    private float panY;
     private long previewSeq;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService photoExecutor = Executors.newSingleThreadExecutor();
     private final Runnable previewRunnable = this::requestServerPreview;
+    private final Runnable panPreviewRunnable = this::scheduleServerPreview;
 
     private final ActivityResultLauncher<String> pickPhoto =
             registerForActivityResult(
                     new ActivityResultContracts.GetContent(),
                     uri -> {
                         if (uri == null) return;
-                        photoUri = uri;
-                        uploadedPhotoUrl = "";
-                        if (livePreview != null) {
-                            livePreview.setPhotoUri(uri);
-                            if (serverPreview != null) {
-                                serverPreview.setVisibility(View.GONE);
-                            }
-                        }
-                        refreshLiveTexts();
-                        uploadPhotoForPreview();
+                        beginNormalizePhoto(uri);
                     });
 
     @Override
@@ -122,11 +133,16 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         titleInput = findViewById(R.id.birthday_auto_post_title);
         nameBold = findViewById(R.id.birthday_auto_name_bold);
         addrBold = findViewById(R.id.birthday_auto_addr_bold);
+        nameFontSpinner = findViewById(R.id.birthday_auto_name_font);
+        nameSizeSpinner = findViewById(R.id.birthday_auto_name_size);
+        addrFontSpinner = findViewById(R.id.birthday_auto_addr_font);
+        addrSizeSpinner = findViewById(R.id.birthday_auto_addr_size);
         zoomBar = findViewById(R.id.birthday_auto_zoom);
         scheduleInfo = findViewById(R.id.birthday_auto_schedule_info);
         pickDateBtn = findViewById(R.id.birthday_auto_pick_date);
         progress = findViewById(R.id.birthday_auto_progress);
 
+        setupFontSpinners();
         autofillAddress();
         String uname =
                 SharedPrefsData.getString(this, Constants.USER_NAME, Constants.PREF_NAME);
@@ -144,6 +160,17 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         }
         findViewById(R.id.birthday_auto_submit).setOnClickListener(v -> submit());
 
+        if (livePreview != null) {
+            livePreview.setPanListener(
+                    (px, py) -> {
+                        panX = px;
+                        panY = py;
+                        hideServerPreview();
+                        mainHandler.removeCallbacks(panPreviewRunnable);
+                        mainHandler.postDelayed(panPreviewRunnable, 500);
+                    });
+        }
+
         TextWatcher watcher =
                 new TextWatcher() {
                     @Override
@@ -154,6 +181,7 @@ public class BirthdayAutoActivity extends AppCompatActivity {
 
                     @Override
                     public void afterTextChanged(Editable s) {
+                        hideServerPreview();
                         refreshLiveTexts();
                         scheduleServerPreview();
                     }
@@ -164,6 +192,7 @@ public class BirthdayAutoActivity extends AppCompatActivity {
 
         CompoundButton.OnCheckedChangeListener boldListener =
                 (buttonView, isChecked) -> {
+                    hideServerPreview();
                     refreshLiveTexts();
                     scheduleServerPreview();
                 };
@@ -177,7 +206,10 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                         public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                             float zoom = 1f + (progress / 10f);
                             if (livePreview != null) livePreview.setZoom(zoom);
-                            if (fromUser) scheduleServerPreview();
+                            if (fromUser) {
+                                hideServerPreview();
+                                scheduleServerPreview();
+                            }
                         }
 
                         @Override
@@ -192,6 +224,89 @@ public class BirthdayAutoActivity extends AppCompatActivity {
 
         refreshLiveTexts();
         loadConfig();
+    }
+
+    private void setupFontSpinners() {
+        AdapterView.OnItemSelectedListener styleListener =
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                        hideServerPreview();
+                        refreshLiveTexts();
+                        scheduleServerPreview();
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {}
+                };
+        if (nameFontSpinner != null) {
+            nameFontSpinner.setAdapter(BirthdayFonts.fontSampleAdapter(this));
+            nameFontSpinner.setSelection(BirthdayFonts.indexOf(BirthdayFonts.DEFAULT_NAME_FONT_ID));
+            nameFontSpinner.setOnItemSelectedListener(styleListener);
+        }
+        if (addrFontSpinner != null) {
+            addrFontSpinner.setAdapter(BirthdayFonts.fontSampleAdapter(this));
+            addrFontSpinner.setSelection(BirthdayFonts.indexOf(BirthdayFonts.DEFAULT_ADDRESS_FONT_ID));
+            addrFontSpinner.setOnItemSelectedListener(styleListener);
+        }
+        if (nameSizeSpinner != null) {
+            nameSizeSpinner.setAdapter(BirthdayFonts.sizeAdapter(this));
+            nameSizeSpinner.setSelection(BirthdayFonts.defaultSizeTierIndex());
+            nameSizeSpinner.setOnItemSelectedListener(styleListener);
+        }
+        if (addrSizeSpinner != null) {
+            addrSizeSpinner.setAdapter(BirthdayFonts.sizeAdapter(this));
+            addrSizeSpinner.setSelection(BirthdayFonts.defaultSizeTierIndex());
+            addrSizeSpinner.setOnItemSelectedListener(styleListener);
+        }
+    }
+
+    private void beginNormalizePhoto(Uri uri) {
+        setBusy(true);
+        hideServerPreview();
+        uploadedPhotoUrl = "";
+        photoExecutor.execute(
+                () -> {
+                    try {
+                        BirthdayPhotoNormalizer.Result result =
+                                BirthdayPhotoNormalizer.toJpeg(BirthdayAutoActivity.this, uri);
+                        mainHandler.post(
+                                () -> {
+                                    setBusy(false);
+                                    photoUri = result.jpegUri;
+                                    normalizedJpegFile = result.jpegFile;
+                                    if (previewBitmap != null && !previewBitmap.isRecycled()) {
+                                        // previous preview owned by us
+                                    }
+                                    previewBitmap = result.previewBitmap;
+                                    panX = 0f;
+                                    panY = 0f;
+                                    if (livePreview != null) {
+                                        livePreview.setPan(0f, 0f);
+                                        livePreview.setPhotoBitmap(previewBitmap);
+                                    }
+                                    refreshLiveTexts();
+                                    uploadPhotoForPreview();
+                                });
+                    } catch (Exception e) {
+                        mainHandler.post(
+                                () -> {
+                                    setBusy(false);
+                                    Toast.makeText(
+                                                    BirthdayAutoActivity.this,
+                                                    R.string.birthday_auto_photo_heif_failed,
+                                                    Toast.LENGTH_LONG)
+                                            .show();
+                                });
+                    }
+                });
+    }
+
+    private void hideServerPreview() {
+        if (serverPreview != null) {
+            serverPreview.setVisibility(View.GONE);
+            serverPreview.setImageDrawable(null);
+        }
     }
 
     /** Same gate as Rewards / wallet: OTP login flag + resolvable user_id. */
@@ -216,23 +331,77 @@ public class BirthdayAutoActivity extends AppCompatActivity {
 
     private void autofillAddress() {
         String district = DistrictLabelHelper.resolveDisplayLabel(this);
-        String address = DistrictLabelHelper.isUsable(district) ? district.trim() : "";
+        String state = resolveStateDisplayName();
+        String address;
+        if (DistrictLabelHelper.isUsable(district) && DistrictLabelHelper.isUsable(state)) {
+            address = district.trim() + ", " + state.trim();
+        } else if (DistrictLabelHelper.isUsable(district)) {
+            address = district.trim();
+        } else if (DistrictLabelHelper.isUsable(state)) {
+            address = state.trim();
+        } else {
+            address = "";
+        }
         if (addressInput != null) {
             addressInput.setText(address);
         }
     }
 
+    @Nullable
+    private String resolveStateDisplayName() {
+        try {
+            int lang = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+            int stateId = SharedPrefsData.getInt(this, Constants.StateID, Constants.PREF_NAME);
+            if (lang <= 0 || stateId <= 0) return null;
+            List<StatesModel.Datum> states = SelectionListCache.loadStates(this, lang);
+            if (states == null) return null;
+            for (StatesModel.Datum st : states) {
+                if (st != null && st.getId() != null && st.getId() == stateId) {
+                    String name = st.getName();
+                    if (DistrictLabelHelper.isUsable(name)) return name.trim();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private String selectedNameFontId() {
+        if (nameFontSpinner == null) return BirthdayFonts.DEFAULT_NAME_FONT_ID;
+        return BirthdayFonts.idAt(nameFontSpinner.getSelectedItemPosition());
+    }
+
+    private String selectedAddrFontId() {
+        if (addrFontSpinner == null) return BirthdayFonts.DEFAULT_ADDRESS_FONT_ID;
+        return BirthdayFonts.idAt(addrFontSpinner.getSelectedItemPosition());
+    }
+
+    private int selectedNameSizePx() {
+        int tier = nameSizeSpinner != null ? nameSizeSpinner.getSelectedItemPosition() : 1;
+        return BirthdayFonts.nameSizePx(tier);
+    }
+
+    private int selectedAddrSizePx() {
+        int tier = addrSizeSpinner != null ? addrSizeSpinner.getSelectedItemPosition() : 1;
+        return BirthdayFonts.addressSizePx(tier);
+    }
+
     private void refreshLiveTexts() {
         if (livePreview == null) return;
+        boolean boldN = nameBold != null && nameBold.isChecked();
+        boolean boldA = addrBold != null && addrBold.isChecked();
         livePreview.setBannerTexts(
                 nameInput != null ? nameInput.getText().toString() : "",
                 addressInput != null ? addressInput.getText().toString() : "",
                 specialInput != null ? specialInput.getText().toString() : "",
-                nameBold != null && nameBold.isChecked(),
-                addrBold != null && addrBold.isChecked());
+                boldN,
+                boldA);
+        livePreview.setNameStyle(selectedNameFontId(), selectedNameSizePx(), boldN);
+        livePreview.setAddressStyle(selectedAddrFontId(), selectedAddrSizePx(), boldA);
         float zoom = 1f;
         if (zoomBar != null) zoom = 1f + (zoomBar.getProgress() / 10f);
         livePreview.setZoom(zoom);
+        livePreview.setPan(panX, panY);
     }
 
     private void scheduleServerPreview() {
@@ -286,9 +455,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
     }
 
     private void uploadPhotoForPreview() {
-        if (photoUri == null) return;
+        if (normalizedJpegFile == null || !normalizedJpegFile.exists()) return;
         try {
-            byte[] bytes = readUriBytes(photoUri);
+            byte[] bytes = readFileBytes(normalizedJpegFile);
             if (bytes == null || bytes.length == 0) return;
             RequestBody req = RequestBody.create(MediaType.parse("image/jpeg"), bytes);
             MultipartBody.Part part =
@@ -325,7 +494,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                     Call<JsonObject> call, Response<JsonObject> response) {
                                 try {
                                     JsonObject root = response.body();
-                                    if (root == null || !root.has("success") || !root.get("success").getAsBoolean()) {
+                                    if (root == null
+                                            || !root.has("success")
+                                            || !root.get("success").getAsBoolean()) {
                                         applyFallbackDates();
                                         return;
                                     }
@@ -431,7 +602,7 @@ public class BirthdayAutoActivity extends AppCompatActivity {
             Toast.makeText(this, R.string.birthday_auto_login_required, Toast.LENGTH_LONG).show();
             return;
         }
-        if (photoUri == null) {
+        if (photoUri == null || normalizedJpegFile == null || !normalizedJpegFile.exists()) {
             Toast.makeText(this, R.string.birthday_need_photo, Toast.LENGTH_SHORT).show();
             return;
         }
@@ -462,20 +633,25 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         }
     }
 
-    private byte[] readUriBytes(Uri uri) throws Exception {
-        InputStream is = getContentResolver().openInputStream(uri);
-        if (is == null) return null;
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
-        is.close();
-        return bos.toByteArray();
+    private byte[] readFileBytes(File file) throws Exception {
+        try (FileInputStream is = new FileInputStream(file)) {
+            byte[] buf = new byte[(int) Math.min(file.length(), Integer.MAX_VALUE)];
+            int off = 0;
+            while (off < buf.length) {
+                int n = is.read(buf, off, buf.length - off);
+                if (n < 0) break;
+                off += n;
+            }
+            if (off == buf.length) return buf;
+            byte[] exact = new byte[off];
+            System.arraycopy(buf, 0, exact, 0, off);
+            return exact;
+        }
     }
 
     private void uploadThenSchedule(String name, String address) {
         try {
-            byte[] bytes = readUriBytes(photoUri);
+            byte[] bytes = readFileBytes(normalizedJpegFile);
             if (bytes == null || bytes.length == 0) {
                 setBusy(false);
                 Toast.makeText(this, R.string.advertise_upload_failed, Toast.LENGTH_SHORT).show();
@@ -543,7 +719,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         }
         body.addProperty(
                 "title",
-                titleInput != null ? titleInput.getText().toString().trim() : ("Happy Birthday " + name));
+                titleInput != null
+                        ? titleInput.getText().toString().trim()
+                        : ("Happy Birthday " + name));
         body.addProperty(
                 "special_text",
                 specialInput != null ? specialInput.getText().toString().trim() : "");
@@ -552,23 +730,23 @@ public class BirthdayAutoActivity extends AppCompatActivity {
             zoom = 1f + (zoomBar.getProgress() / 10f);
         }
         body.addProperty("zoom", zoom);
-        body.addProperty("pan_x", 0);
-        body.addProperty("pan_y", 0);
+        body.addProperty("pan_x", panX);
+        body.addProperty("pan_y", panY);
 
         JsonObject nameStyle = new JsonObject();
-        nameStyle.addProperty("fontId", "great-vibes");
-        nameStyle.addProperty("size", 52);
+        nameStyle.addProperty("fontId", selectedNameFontId());
+        nameStyle.addProperty("size", selectedNameSizePx());
         nameStyle.addProperty("bold", nameBold != null && nameBold.isChecked());
         body.add("name_style", nameStyle);
 
         JsonObject addrStyle = new JsonObject();
-        addrStyle.addProperty("fontId", "great-vibes");
-        addrStyle.addProperty("size", 40);
+        addrStyle.addProperty("fontId", selectedAddrFontId());
+        addrStyle.addProperty("size", selectedAddrSizePx());
         addrStyle.addProperty("bold", addrBold != null && addrBold.isChecked());
         body.add("address_style", addrStyle);
 
         JsonObject specialStyle = new JsonObject();
-        specialStyle.addProperty("fontId", "merriweather");
+        specialStyle.addProperty("fontId", BirthdayFonts.DEFAULT_SPECIAL_FONT_ID);
         specialStyle.addProperty("size", 15);
         specialStyle.addProperty("bold", false);
         body.add("special_style", specialStyle);
@@ -586,6 +764,8 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                     "state_id",
                     SharedPrefsData.getInt(this, Constants.StateID, Constants.PREF_NAME));
             body.addProperty("district_name", DistrictLabelHelper.resolveDisplayLabel(this));
+            String stateName = resolveStateDisplayName();
+            if (!TextUtils.isEmpty(stateName)) body.addProperty("state_name", stateName);
             String mobile =
                     SharedPrefsData.getString(this, Constants.PhoneNumber, Constants.PREF_NAME);
             if (!TextUtils.isEmpty(mobile)) body.addProperty("mobile", mobile);
@@ -599,7 +779,6 @@ public class BirthdayAutoActivity extends AppCompatActivity {
 
     private void postSchedule(String name, String address, String photoUrl) {
         JsonObject body = buildPosterBody(photoUrl, true);
-        // Ensure name/address from submit args win if watchers lagged.
         body.addProperty("name", name);
         body.addProperty("address", address);
 
@@ -674,6 +853,8 @@ public class BirthdayAutoActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         mainHandler.removeCallbacks(previewRunnable);
+        mainHandler.removeCallbacks(panPreviewRunnable);
+        photoExecutor.shutdownNow();
         super.onDestroy();
     }
 }

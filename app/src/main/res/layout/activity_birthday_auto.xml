@@ -9,12 +9,12 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        android:elevation="2dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="12dp"
-        android:paddingVertical="10dp"
-        android:background="#FFFFFF"
-        android:elevation="2dp">
+        android:paddingVertical="10dp">
 
         <ImageButton
             android:id="@+id/birthday_auto_back"
@@ -22,8 +22,8 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/anynews"
-            android:src="@drawable/ic_profile_chevron_right"
             android:rotation="180"
+            android:src="@drawable/ic_profile_chevron_right"
             app:tint="#222222" />
 
         <TextView
@@ -92,6 +92,15 @@
             </FrameLayout>
 
             <TextView
+                android:id="@+id/birthday_auto_pan_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/birthday_auto_pan_hint"
+                android:textColor="#E63B19"
+                android:textSize="12sp" />
+
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
@@ -142,6 +151,32 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/birthday_auto_font_style"
+                android:textColor="#6B7280"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/birthday_auto_name_font"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/birthday_auto_font_size"
+                android:textColor="#6B7280"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/birthday_auto_name_size"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/birthday_auto_address"
                 android:textColor="#374151"
@@ -163,6 +198,32 @@
                 android:text="@string/birthday_auto_address_note"
                 android:textColor="#9CA3AF"
                 android:textSize="11sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/birthday_auto_addr_font_style"
+                android:textColor="#6B7280"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/birthday_auto_addr_font"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/birthday_auto_font_size"
+                android:textColor="#6B7280"
+                android:textSize="12sp" />
+
+            <Spinner
+                android:id="@+id/birthday_auto_addr_size"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
             <LinearLayout
                 android:layout_width="match_parent"
