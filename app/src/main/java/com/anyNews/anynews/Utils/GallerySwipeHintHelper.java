@@ -8,8 +8,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.view.ViewTreeObserver;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
@@ -20,23 +23,30 @@ import androidx.annotation.Nullable;
 import androidx.viewpager.widget.ViewPager;
 
 import com.anyNews.anynews.R;
+import com.anyNews.anynews.flipview.FlipView;
 
 /**
- * One-shot horizontal swipe coach for multi-image feed pages
+ * Horizontal swipe coach for multi-image feed pages
  * (image_gallery, magazine, half-image gallery).
  *
  * <p>Shows a small localized “Swipe left” label and a brief ViewPager
- * fake-drag peek toward the next image. Runs once per card bind until the
- * user starts a horizontal drag (or the hint finishes its short loop).
- * Single-image pagers are left untouched.
+ * fake-drag peek toward the next image. Limited to a few total shows per
+ * install (not unlimited). Single-image pagers are left untouched aside from
+ * the nested-swipe guard that keeps FlipView / footer from stealing horizontal
+ * gallery drags.
  */
 public final class GallerySwipeHintHelper {
 
-    private static final long START_DELAY_MS = 650L;
-    private static final long NUDGE_DURATION_MS = 560L;
-    private static final long NUDGE_GAP_MS = 1200L;
+    /** Wait so the first magazine/gallery frame is clearly visible first. */
+    private static final long START_DELAY_MS = 1600L;
+    private static final long NUDGE_DURATION_MS = 520L;
+    private static final long NUDGE_GAP_MS = 1400L;
+    /** Peeks per show session (gentle double-nudge). */
     private static final int MAX_NUDGES = 2;
-    private static final float PEEK_DP = 42f;
+    /** Total coach shows across the install lifetime. */
+    private static final int MAX_HINT_SHOWS = 4;
+    private static final float PEEK_DP = 28f;
+    private static final String PREF_HINT_SHOW_COUNT = "gallery_swipe_hint_show_count";
 
     private GallerySwipeHintHelper() {}
 
@@ -54,7 +64,16 @@ public final class GallerySwipeHintHelper {
             return;
         }
         clear(pager);
+        installNestedSwipeGuard(pager);
+
         if (pageCount < 2) {
+            if (hintView != null) {
+                hintView.setVisibility(View.GONE);
+            }
+            return;
+        }
+
+        if (hintShowsRemaining(pager.getContext()) <= 0) {
             if (hintView != null) {
                 hintView.setVisibility(View.GONE);
             }
@@ -71,7 +90,7 @@ public final class GallerySwipeHintHelper {
 
         Context ctx = pager.getContext();
         label.setText(resolveHint(ctx));
-        label.setVisibility(View.VISIBLE);
+        label.setVisibility(View.GONE);
         label.setAlpha(0f);
 
         Session session = new Session(pager, label);
@@ -131,6 +150,112 @@ public final class GallerySwipeHintHelper {
                     }
                 }
                 return "Swipe left";
+        }
+    }
+
+    private static int hintShowsRemaining(@Nullable Context context) {
+        if (context == null) {
+            return 0;
+        }
+        try {
+            int shown = SharedPrefsData.getInt(
+                    context.getApplicationContext(),
+                    PREF_HINT_SHOW_COUNT,
+                    Constants.PREF_NAME);
+            return Math.max(0, MAX_HINT_SHOWS - shown);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static void recordHintShow(@Nullable Context context) {
+        if (context == null) {
+            return;
+        }
+        try {
+            Context app = context.getApplicationContext();
+            int shown = SharedPrefsData.getInt(app, PREF_HINT_SHOW_COUNT, Constants.PREF_NAME);
+            if (shown < MAX_HINT_SHOWS) {
+                SharedPrefsData.putInt(app, PREF_HINT_SHOW_COUNT, shown + 1, Constants.PREF_NAME);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Keep parent FlipView from intercepting horizontal gallery drags so pages
+     * change instead of the gesture leaking to the footer (Profile tab).
+     */
+    private static void installNestedSwipeGuard(@NonNull ViewPager pager) {
+        Object existing = pager.getTag(R.id.tag_gallery_swipe_guard);
+        if (existing instanceof View.OnTouchListener) {
+            return;
+        }
+        View.OnTouchListener guard = new View.OnTouchListener() {
+            private float downX;
+            private float downY;
+            private boolean disallowSet;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downX = event.getX();
+                        downY = event.getY();
+                        disallowSet = false;
+                        // Stop idle FlipView peak so it cannot claim this gesture.
+                        // Do not disallow yet — vertical flips that start on the
+                        // gallery must still reach FlipView.
+                        cancelParentFlipPeak(v);
+                        break;
+                    case MotionEvent.ACTION_MOVE: {
+                        float dx = event.getX() - downX;
+                        float dy = event.getY() - downY;
+                        if (!disallowSet && Math.abs(dx) > Math.abs(dy)
+                                && Math.abs(dx) > dp(v, 6)) {
+                            disallowSet = true;
+                            requestParentsDisallow(v, true);
+                            cancelParentFlipPeak(v);
+                        } else if (!disallowSet && Math.abs(dy) > Math.abs(dx)
+                                && Math.abs(dy) > dp(v, 6)) {
+                            // Vertical — allow FlipView to flip articles.
+                            requestParentsDisallow(v, false);
+                        }
+                        break;
+                    }
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        requestParentsDisallow(v, false);
+                        disallowSet = false;
+                        break;
+                    default:
+                        break;
+                }
+                return false;
+            }
+        };
+        pager.setTag(R.id.tag_gallery_swipe_guard, guard);
+        pager.setOnTouchListener(guard);
+    }
+
+    private static void requestParentsDisallow(@NonNull View v, boolean disallow) {
+        ViewParent parent = v.getParent();
+        if (parent != null) {
+            parent.requestDisallowInterceptTouchEvent(disallow);
+        }
+    }
+
+    private static void cancelParentFlipPeak(@NonNull View v) {
+        ViewParent parent = v.getParent();
+        while (parent != null) {
+            if (parent instanceof FlipView) {
+                try {
+                    ((FlipView) parent).cancelIdlePeak();
+                } catch (Exception ignored) {
+                }
+                return;
+            }
+            parent = parent.getParent();
         }
     }
 
@@ -196,7 +321,10 @@ public final class GallerySwipeHintHelper {
         private int nudgeCount;
         private boolean dismissed;
         private boolean userSwiped;
+        private boolean countedShow;
         private float lastFakeDrag;
+        @Nullable
+        private ViewTreeObserver.OnGlobalLayoutListener layoutListener;
 
         Session(@NonNull ViewPager pager, @NonNull TextView hint) {
             this.pager = pager;
@@ -209,12 +337,52 @@ public final class GallerySwipeHintHelper {
 
         void start() {
             pager.addOnPageChangeListener(this);
-            handler.postDelayed(this::showAndNudge, START_DELAY_MS);
+            scheduleAfterFirstFrame();
+        }
+
+        private void scheduleAfterFirstFrame() {
+            if (dismissed) {
+                return;
+            }
+            if (pager.getWidth() > 0 && pager.getHeight() > 0
+                    && pager.getChildCount() > 0) {
+                handler.postDelayed(this::showAndNudge, START_DELAY_MS);
+                return;
+            }
+            layoutListener = () -> {
+                if (dismissed) {
+                    return;
+                }
+                if (pager.getWidth() > 0 && pager.getHeight() > 0) {
+                    removeLayoutListener();
+                    handler.postDelayed(this::showAndNudge, START_DELAY_MS);
+                }
+            };
+            pager.getViewTreeObserver().addOnGlobalLayoutListener(layoutListener);
+            // Fallback if layout never fires (recycled / detached).
+            handler.postDelayed(() -> {
+                if (!dismissed && nudgeCount == 0 && !countedShow) {
+                    removeLayoutListener();
+                    showAndNudge();
+                }
+            }, START_DELAY_MS + 800L);
+        }
+
+        private void removeLayoutListener() {
+            if (layoutListener == null) {
+                return;
+            }
+            try {
+                pager.getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener);
+            } catch (Exception ignored) {
+            }
+            layoutListener = null;
         }
 
         void cancel() {
             dismissed = true;
             handler.removeCallbacksAndMessages(null);
+            removeLayoutListener();
             stopNudge(false);
             try {
                 pager.removeOnPageChangeListener(this);
@@ -234,6 +402,14 @@ public final class GallerySwipeHintHelper {
                     || pager.getCurrentItem() != 0) {
                 dismiss(true);
                 return;
+            }
+            if (hintShowsRemaining(pager.getContext()) <= 0) {
+                dismiss(true);
+                return;
+            }
+            if (!countedShow) {
+                countedShow = true;
+                recordHintShow(pager.getContext());
             }
             hint.setVisibility(View.VISIBLE);
             hint.animate()
@@ -257,6 +433,7 @@ public final class GallerySwipeHintHelper {
             stopNudge(false);
             lastFakeDrag = 0f;
             try {
+                cancelParentFlipPeak(pager);
                 if (!pager.isFakeDragging()) {
                     pager.beginFakeDrag();
                 }
@@ -356,6 +533,7 @@ public final class GallerySwipeHintHelper {
             }
             dismissed = true;
             handler.removeCallbacksAndMessages(null);
+            removeLayoutListener();
             stopNudge(true);
             try {
                 pager.removeOnPageChangeListener(this);

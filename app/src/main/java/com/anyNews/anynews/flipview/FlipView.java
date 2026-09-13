@@ -1086,7 +1086,9 @@ public class FlipView extends FrameLayout {
                     // content can still scroll in that direction (raasi lucky panel).
                     if (mIsFlippingVertically && canCurrentPageScrollVertically(dy < 0 ? 1 : -1)) {
                         mIsUnableToFlip = true;
+                        endPeak();
                     } else {
+                        endPeak();
                         mIsFlipping = true;
                         rememberGestureAnchor();
                         mLastX = x;
@@ -1094,7 +1096,11 @@ public class FlipView extends FrameLayout {
                     }
                 } else if ((mIsFlippingVertically && xDiff > mTouchSlop)
                         || (!mIsFlippingVertically && yDiff > mTouchSlop)) {
+                    // Horizontal drag on a vertical FlipView: yield to nested gallery
+                    // ViewPagers (magazine / image_gallery). Idle peakNext must not keep
+                    // claiming the gesture — that stole swipes and misfired footer Profile.
                     mIsUnableToFlip = true;
+                    endPeak();
                 }
         
                 break;
@@ -1102,7 +1108,9 @@ public class FlipView extends FrameLayout {
                 mActivePointerId = MotionEventCompat.getPointerId(ev, 0);
                 mLastX = MotionEventCompat.getX(ev, 0);
                 mLastY = MotionEventCompat.getY(ev, 0);
-                mIsFlipping = !mScroller.isFinished() | mPeakAnim != null;
+                // Idle peakNext() must NOT claim DOWN — magazine ViewPagers need the
+                // gesture. Only an in-flight scroller means we are already flipping.
+                mIsFlipping = !mScroller.isFinished();
                 mIsUnableToFlip = false;
                 mLastTouchAllowed = true;
         
@@ -1135,9 +1143,12 @@ public class FlipView extends FrameLayout {
         trackVelocity(ev);
         switch (action & MotionEvent.ACTION_MASK) {
             case MotionEvent.ACTION_DOWN:
-                // start flipping immediately if interrupting some sort of animation
+                // Interrupt in-flight flip scroll, but do not treat canceling idle
+                // peakNext as "start flipping" — that blocked horizontal gallery swipes.
                 clearGestureAnchor();
-                if (endScroll() || endPeak()) {
+                boolean endedScroll = endScroll();
+                endPeak();
+                if (endedScroll) {
                     mIsFlipping = true;
                     rememberGestureAnchor();
                 }
@@ -1168,6 +1179,7 @@ public class FlipView extends FrameLayout {
                                 && canCurrentPageScrollVertically(moveDy < 0 ? 1 : -1)) {
                             // Child still scrolling — do not start page flip.
                         } else {
+                            endPeak();
                             mIsFlipping = true;
                             rememberGestureAnchor();
                             mLastX = x;
@@ -1965,6 +1977,14 @@ public class FlipView extends FrameLayout {
         final boolean wasScrolling = !mScroller.isFinished();
         mScroller.abortAnimation();
         return wasScrolling;
+    }
+
+    /**
+     * Cancel idle {@link #peakNext}/{@link #peakPrevious} bob without starting a
+     * flip. Used when a nested horizontal gallery takes the gesture.
+     */
+    public void cancelIdlePeak() {
+        endPeak();
     }
 
     /**

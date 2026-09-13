@@ -18,5 +18,6 @@
     <item name="exo_scrub_time_scrubbing" type="id" />
     <!-- Multi-image gallery: swipe-left coach session on ViewPager -->
     <item name="tag_gallery_swipe_hint_session" type="id" />
+    <item name="tag_gallery_swipe_guard" type="id" />
     <item name="gallery_swipe_left_hint" type="id" />
 </resources>
