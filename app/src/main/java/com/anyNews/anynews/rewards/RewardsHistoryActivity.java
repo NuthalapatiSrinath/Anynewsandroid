@@ -297,6 +297,15 @@ public class RewardsHistoryActivity extends AppCompatActivity {
             String when = formatWhen(row);
             String title =
                     credit ? RewardsLabels.convertCoins(this) : RewardsLabels.withdraw(this);
+            if (!credit) {
+                String status = optStr(row, "status_label", "");
+                if (!TextUtils.isEmpty(status)) title = title + " · " + status;
+                String remarks = optStr(row, "remarks", null);
+                if (TextUtils.isEmpty(remarks)) remarks = optStr(row, "reason", null);
+                if (!TextUtils.isEmpty(remarks)) {
+                    when = TextUtils.isEmpty(when) ? remarks : when + " · " + remarks;
+                }
+            }
             out.add(new Row(sign + "₹" + formatMoney(amt), title, when, parseWhenMs(row)));
         }
     }

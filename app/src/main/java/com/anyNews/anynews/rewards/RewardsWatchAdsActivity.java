@@ -475,7 +475,9 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
             return;
         }
         if (cannotScoreMore() || noRewardSlots() || dailyLimit) {
-            enterDailyLimit();
+            if (dailyLimit || noRewardSlots()) {
+                enterDailyLimit();
+            }
             return;
         }
         if (FORMAT_NATIVE.equals(adFormat)) {
@@ -627,7 +629,9 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
             paintDailyLimit();
             return;
         }
-        if (nextBtn != null) nextBtn.setVisibility(View.VISIBLE);
+        if (nextBtn != null) {
+            nextBtn.setVisibility(sessionClosed && waitSeconds > 0 ? View.GONE : View.VISIBLE);
+        }
         progressView.setText(watched + " / " + required);
 
         boolean counting = countdownLeft > 0 && !sessionClosed && !fullscreenShowing;
@@ -638,6 +642,7 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
         if (waitView != null) {
             if (waitSeconds > 0) {
                 waitView.setVisibility(View.VISIBLE);
+                // Cool wait stays inside watch-ads UI (distinct from Limit Over).
                 waitView.setText(RewardsLabels.watchAdsWait(this, waitSeconds));
             } else {
                 waitView.setVisibility(View.GONE);
@@ -645,6 +650,19 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
         }
         if (adContainer != null && isFullscreenFormat()) {
             adContainer.setVisibility(View.GONE);
+        }
+
+        if (sessionClosed && waitSeconds > 0) {
+            hintView.setText(
+                    sessionEarned > 0
+                            ? "You earned " + sessionEarned + " coins. Wait, then continue."
+                            : "Wait, then continue watching ads.");
+            if (nextBtn != null) {
+                nextBtn.setEnabled(false);
+                nextBtn.setAlpha(0.45f);
+                nextBtn.setText("Cool…");
+            }
+            return;
         }
 
         if (watched >= required && sessionEarned > 0) {
@@ -747,10 +765,12 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
             return;
         }
         if (leaving || isFinishing() || isDestroyed() || sessionClosed || dailyLimit) return;
-        if (noRewardSlots() || cannotScoreMore()) {
+        if (noRewardSlots()) {
             enterDailyLimit();
             return;
         }
+        // Streak N complete is cool/continue — not daily Limit Over.
+        if (watched >= required || cannotScoreMore()) return;
         if (RewardsConfigHelper.factorRemaining(this, "ads_seen") < 0
                 && !RewardsConfigHelper.isFactorCapped(this, "ads_seen")) {
             return;
@@ -1127,11 +1147,35 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                                                     && b.has("capped")
                                                     && !b.get("capped").isJsonNull()
                                                     && b.get("capped").getAsBoolean();
+                                    boolean coolReject =
+                                            b != null
+                                                    && b.has("cool")
+                                                    && !b.get("cool").isJsonNull()
+                                                    && b.get("cool").getAsBoolean();
+                                    int coolWait = 0;
+                                    if (b != null
+                                            && b.has("cooldown_remaining_sec")
+                                            && !b.get("cooldown_remaining_sec").isJsonNull()) {
+                                        coolWait =
+                                                Math.max(
+                                                        0,
+                                                        b.get("cooldown_remaining_sec").getAsInt());
+                                    }
                                     if (capped
                                             || noRewardSlots()
                                             || RewardsConfigHelper.isFactorCapped(
                                                     RewardsWatchAdsActivity.this, "ads_seen")) {
                                         enterDailyLimit();
+                                    } else if (coolReject || coolWait > 0) {
+                                        sessionClosed = true;
+                                        userAskedToShow = false;
+                                        invalidateLoads();
+                                        if (nextBtn != null) nextBtn.setVisibility(View.GONE);
+                                        beginWait(
+                                                coolWait > 0
+                                                        ? coolWait
+                                                        : Math.max(1, cooldownMinutes * 60));
+                                        paint();
                                     } else {
                                         String msg =
                                                 b != null && b.has("msg")
@@ -1161,12 +1205,19 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                                     sessionEarned = coinsAfter(watched, required, coins);
                                 }
                                 setResult(RESULT_OK);
-                                boolean capped =
+                                boolean dailyCapped =
                                         (b.has("capped")
                                                         && !b.get("capped").isJsonNull()
                                                         && b.get("capped").getAsBoolean())
-                                                || cannotScoreMore();
-                                if (watched >= required || capped) {
+                                                || noRewardSlots();
+                                boolean cool =
+                                        b.has("cool")
+                                                && !b.get("cool").isJsonNull()
+                                                && b.get("cool").getAsBoolean();
+                                // Earn-actions N complete ≠ Limit Over. Cap/day alone = Limit Over.
+                                if (dailyCapped) {
+                                    enterDailyLimit();
+                                } else if (watched >= required) {
                                     sessionClosed = true;
                                     int wait = 0;
                                     if (b.has("wait_until_sec")
@@ -1178,17 +1229,24 @@ public class RewardsWatchAdsActivity extends AppCompatActivity {
                                         wait =
                                                 Math.max(
                                                         wait,
-                                                        b.get("cooldown_remaining_sec").getAsInt());
+                                                        b.get("cooldown_remaining_sec")
+                                                                .getAsInt());
                                     }
-                                    if (capped || noRewardSlots()) {
-                                        enterDailyLimit();
-                                    } else {
+                                    if (cool || wait > 0) {
                                         if (wait <= 0) wait = Math.max(1, cooldownMinutes * 60);
-                                        sessionClosed = true;
                                         userAskedToShow = false;
                                         invalidateLoads();
                                         if (nextBtn != null) nextBtn.setVisibility(View.GONE);
                                         beginWait(wait);
+                                        paint();
+                                    } else {
+                                        // N finished outside cool span — continue immediately.
+                                        sessionClosed = false;
+                                        watched = 0;
+                                        sessionEarned = 0;
+                                        clearSavedProgress();
+                                        if (nextBtn != null) nextBtn.setVisibility(View.VISIBLE);
+                                        beginCountdownAndPreload();
                                     }
                                 } else if (noRewardSlots()) {
                                     enterDailyLimit();
