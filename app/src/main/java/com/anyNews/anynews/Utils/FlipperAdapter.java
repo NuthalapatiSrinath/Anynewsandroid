@@ -3350,15 +3350,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         View slot = convertView.findViewById(R.id.half_search);
         View icon = convertView.findViewById(R.id.half_search_icon);
         if (slot == null && icon == null) return;
-        int searchCircleDp = Math.max(baseCircleDp + 7, 42);
+        int searchCircleDp = Math.max(baseCircleDp + 10, 46);
         try {
             int cfg = SearchIconConfig.sizeDp(context);
             // size_dp is glyph-oriented; map to a circle that stays above siblings.
-            searchCircleDp = Math.max(searchCircleDp, cfg + 16);
+            searchCircleDp = Math.max(searchCircleDp, cfg + 18);
         } catch (Exception ignored) {
         }
-        searchCircleDp = Math.min(48, Math.max(baseCircleDp + 4, searchCircleDp));
-        int searchIconDp = Math.min(searchCircleDp - 6, Math.max(baseIconDp + 4, 26));
+        searchCircleDp = Math.min(52, Math.max(baseCircleDp + 6, searchCircleDp));
+        int searchIconDp = Math.min(searchCircleDp - 6, Math.max(baseIconDp + 6, 28));
         int circlePx = Math.round(searchCircleDp * density);
         int slotPx = Math.round((searchCircleDp + ACTION_SLOT_EXTRA_DP) * density);
         int padPx = Math.max(0, Math.round(((searchCircleDp - searchIconDp) / 2f) * density));

@@ -1653,10 +1653,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (q == null) q = "";
         q = q.trim();
         if (q.isEmpty()) return;
+        showLog("ANYNEWS_SEARCH open query=\"" + q + "\"");
         activeSearchQuery = q;
         searchFeedActive = true;
         searchOpenHandledInCreate = true;
         positionx = 0;
+        // Leave Read / Special / Flash so search is not skipped by those gates.
+        try {
+            bookmarksModeSelected = false;
+            setFeedModeFlags(false, false);
+        } catch (Exception ignored) {
+        }
         try {
             clearPendingFlipRestore();
         } catch (Exception ignored) {
@@ -1675,9 +1682,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         last_post_id = 0;
         skip = 0;
         actual_skip = 0;
-        list = new ArrayList<>();
         dummyResponse = null;
+        isApiRequested = false;
         category_id = 0;
+        // Tear down any previous News/hub FlipView immediately — never leave
+        // Continue-reading visible while Search_Stories is in flight.
+        try {
+            if (list == null) {
+                list = new ArrayList<>();
+            } else {
+                list.clear();
+            }
+            FeedEndHelper.stripAll(list);
+            if (adapter != null) {
+                adapter.setData(list);
+            }
+            if (mFlipView != null) {
+                mFlipView.setVisibility(View.VISIBLE);
+            }
+            showHomeFeedLoadingReveal();
+        } catch (Exception ignored) {
+            list = new ArrayList<>();
+        }
         try {
             inlist(0);
         } catch (Exception e) {
@@ -12395,6 +12421,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && activeSearchQuery != null
                 && !activeSearchQuery.trim().isEmpty()) {
             requestModel.setSearch_text(activeSearchQuery.trim());
+            // Keyword mode: never special/flash/push sticky — pure Search_Stories.
+            requestModel.setSpecial_posts(false);
+            requestModel.setVideo_posts(false);
+            requestModel.setPush_posts(false);
+            requestModel.setPushPostId(0L);
+            requestModel.setSharePostId(0L);
+            requestModel.setExclude_post_ids(null);
+            showLog("ANYNEWS_SEARCH request search_text=\""
+                    + activeSearchQuery.trim() + "\" skip=" + skip);
         }
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
@@ -12440,8 +12475,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("API CATEGORY REQPOS:" + reqPos);
 
         // Online Read flip is local-only (ReadArticleStore postcards). Do not fire
-        // List_All_Articles densify / top-up while the user is on Read.
-        if (isOnlineReadFlipMode()) {
+        // List_All_Articles densify / top-up while the user is on Read — except
+        // keyword search, which must always hit Search_Stories.
+        final boolean searchModeEarly = searchFeedActive
+                && activeSearchQuery != null
+                && !activeSearchQuery.trim().isEmpty();
+        if (isOnlineReadFlipMode() && !searchModeEarly) {
             showLog("ShowNews_Data_Values skipped — online Read (local only) reqPos="
                     + reqPos);
             isApiRequested = false;
@@ -12662,10 +12701,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
 
         APIService apiService = RestApiClient.getClient().create(APIService.class);
-        // Flash News: lean Redis API (no List_All_Articles push hist scan).
-        Call<EncreptionRequest> otp_generation = videoFeed
-                ? apiService.Flash_News("v3", otp)
-                : apiService.List_All_Articles("v3", otp);
+        // Keyword search must use Search_Stories — never coalesce with main OpenPath
+        // List_All_Articles (that painted Continue-reading hub / unrelated News).
+        Call<EncreptionRequest> otp_generation;
+        if (searchMode) {
+            showLog("ANYNEWS_SEARCH enqueue Search_Stories q=\""
+                    + (activeSearchQuery != null ? activeSearchQuery.trim() : "") + "\"");
+            otp_generation = apiService.Search_Stories("v3", otp);
+        } else if (videoFeed) {
+            otp_generation = apiService.Flash_News("v3", otp);
+        } else {
+            otp_generation = apiService.List_All_Articles("v3", otp);
+        }
 
         // Consume one-shot reload force now that we are committing to network.
         if (OpenPathCache.isForceFeedNetworkPending()) {
@@ -12702,6 +12749,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog("List_All_Articles mode mismatch dropped special="
                             + specialNow + " vs " + specialAtEnqueue
                             + " video=" + videoNow + " vs " + videoAtEnqueue);
+                    isApiRequested = false;
+                    return;
+                }
+                // Keyword search must not accept a main/flash response (and vice versa).
+                boolean searchNow = searchFeedActive
+                        && activeSearchQuery != null
+                        && !activeSearchQuery.trim().isEmpty();
+                if (searchNow != searchMode) {
+                    showLog("ANYNEWS_SEARCH mode mismatch dropped searchNow="
+                            + searchNow + " vs enq=" + searchMode);
                     isApiRequested = false;
                     return;
                 }
@@ -13975,13 +14032,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             } else {
                                 adapter.setData(list);
                             }
-                            if (!fromCache) {
+                            if (!fromCache && !searchFeedActive) {
                                 maybeRestoreFlipPositionAfterArticlesLoad();
                             }
                             // Keyword search: always land on the first matching post —
                             // never restore a prior News index onto the end hub.
                             if (!fromCache && searchFeedActive && page0Replace
                                     && list != null && !list.isEmpty()) {
+                                int paintables = ReadArticleStore.countPaintableArticles(list);
+                                showLog("ANYNEWS_SEARCH page0 hits paintables=" + paintables
+                                        + " listSize=" + list.size());
                                 try {
                                     positionx = 0;
                                     if (adapter != null) {
@@ -13989,8 +14049,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     }
                                     if (mFlipView != null) {
                                         mFlipView.flipTo(0);
+                                        // Cover any delayed FlipView observer / peakNext.
+                                        mFlipView.post(() -> {
+                                            try {
+                                                if (searchFeedActive && mFlipView != null) {
+                                                    positionx = 0;
+                                                    mFlipView.flipTo(0);
+                                                }
+                                            } catch (Exception ignored) {
+                                            }
+                                        });
                                     }
                                 } catch (Exception ignored) {
+                                }
+                                // Regression guard: never leave hub as the only visible
+                                // page when real hits exist.
+                                if (paintables > 0 && FeedEndHelper.hasAtEnd(list)
+                                        && list.size() == 1) {
+                                    showLog("ANYNEWS_SEARCH BUG hub-only with paintables — stripping");
+                                    FeedEndHelper.stripAll(list);
                                 }
                             }
                             // Always show flip when list has paintables — never empty white forever.
@@ -14080,7 +14157,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             // Zero hits: hub alone. Never leave hub as every scroll page
                             // while real hits should have been first.
                             if (searchFeedActive && !fromCache) {
-                                showLog("search feed empty page — hub end card");
+                                showLog("ANYNEWS_SEARCH empty page paintables="
+                                        + (list != null
+                                                ? ReadArticleStore.countPaintableArticles(list)
+                                                : -1)
+                                        + " listSize="
+                                        + (list != null ? list.size() : -1));
                                 no_article_message = FeedEndHelper.resolveMessage(this);
                                 int paintables = list != null
                                         ? ReadArticleStore.countPaintableArticles(list) : 0;
@@ -14088,6 +14170,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     if (list == null) list = new ArrayList<>();
                                     FeedEndHelper.stripAll(list);
                                     // Zero hits: single Continue-reading hub (not article).
+                                    showLog("ANYNEWS_SEARCH zero hits → hub only");
                                     ensureFeedEndCardVisible(true);
                                     try {
                                         mFlipView.setVisibility(View.VISIBLE);
@@ -14098,6 +14181,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     }
                                 } else {
                                     // Hits already on FlipView — append hub only, stay put.
+                                    showLog("ANYNEWS_SEARCH EOF → hub after last hit");
                                     ensureFeedEndCardVisible(false);
                                 }
                                 initialCall = true;

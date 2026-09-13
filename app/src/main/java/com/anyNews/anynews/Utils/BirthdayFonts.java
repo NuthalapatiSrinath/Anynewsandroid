@@ -63,7 +63,8 @@ public final class BirthdayFonts {
                 new Spec("amatic", "Amatic SC", "amatic.ttf"),
                 new Spec("permanent-marker", "Permanent Marker", "permanent-marker.ttf"),
                 new Spec("playfair", "Playfair Display", "playfair.ttf"),
-                new Spec("merriweather", "Merriweather", "merriweather.ttf"),
+                // Merriweather TTF was ~4.5MB (variable/full CJK dump) — use system serif.
+                new Spec("merriweather", "Merriweather", null),
                 new Spec("lora", "Lora", "lora.ttf"),
                 new Spec("cinzel", "Cinzel", "cinzel.ttf"),
                 new Spec("roboto", "Roboto", "roboto.ttf"),
@@ -191,7 +192,10 @@ public final class BirthdayFonts {
 
     @NonNull
     private static Typeface fallbackSystem(String id) {
-        if ("georgia".equals(id)) return Typeface.SERIF;
+        if ("georgia".equals(id) || "merriweather".equals(id) || "playfair".equals(id)
+                || "lora".equals(id) || "cinzel".equals(id)) {
+            return Typeface.SERIF;
+        }
         if ("impact".equals(id)) {
             Typeface t = Typeface.create("sans-serif-black", Typeface.BOLD);
             return t != null ? t : Typeface.DEFAULT_BOLD;
