@@ -4573,10 +4573,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                     default: {
                         // Prefer a real article layout over Continue-reading hub when the
-                        // row has a post id (Search_Stories aliases / new types).
-                        Long pid = list.get(position).getPostId();
-                        if (pid != null && pid > 0
-                                && !"feed_end".equalsIgnoreCase(pagePostType)) {
+                        // row is not explicitly a feed_end sentinel.
+                        if (!FeedEndHelper.isFeedEnd(list.get(position))) {
                             String fallback = "normal_image";
                             String media = list.get(position).getMediaType();
                             if ("5".equals(media) || "6".equals(media)) {
@@ -4596,9 +4594,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 }
                                 return getView(position, null, parent);
                             }
+                            // Last resort for non-end item: inflate normal_image
+                            convertView = inflater.inflate(R.layout.activity_full_screen, parent, false);
+                            break;
                         }
-                        showLog("getView unknown post_type=" + pagePostType
-                                + " pos=" + position + " → feed_end card");
+                        showLog("getView feed_end card pos=" + position);
                         convertView = inflateFeedEndCard(parent, convertView);
                         break;
                     }
