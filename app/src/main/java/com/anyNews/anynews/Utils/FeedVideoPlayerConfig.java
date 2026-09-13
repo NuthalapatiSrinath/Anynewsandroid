@@ -14,11 +14,15 @@ import com.anyNews.anynews.R;
  * Values arrive via splash / session / feed poll as {@code feed_video_player}.
  *
  * <ul>
- *   <li>{@link #MODE_CURRENT} — development Way2 chrome (no ±10, scrub-only time)</li>
- *   <li>{@link #MODE_PLAYSTORE} — Play Store classic (±10 / pause / mute / red bar)</li>
+ *   <li>{@link #MODE_CURRENT} — development Way2 chrome (no ±10, scrub-only time,
+ *       mute/fs bottom while playing)</li>
+ *   <li>{@link #MODE_PLAYSTORE} — Play Store classic from e87a084-era
+ *       {@code player_custom_ui} (±10 / center pause / mute / red seek)</li>
  * </ul>
  *
  * Null / omitted from server must not wipe the cached preference.
+ * Mode changes return {@code true} from {@link #saveFromServer} so HomePage can
+ * invalidate FlipView scraps (layout XML differs per mode).
  */
 public final class FeedVideoPlayerConfig {
 
@@ -31,17 +35,26 @@ public final class FeedVideoPlayerConfig {
 
     private FeedVideoPlayerConfig() {}
 
-    /** Persist when present; null = old server / omit — leave cache. */
-    public static void saveFromServer(@Nullable Context context, @Nullable String mode) {
+    /**
+     * Persist when present; null = old server / omit — leave cache.
+     *
+     * @return true when the stored mode actually changed
+     */
+    public static boolean saveFromServer(@Nullable Context context, @Nullable String mode) {
         if (context == null || mode == null) {
-            return;
+            return false;
         }
         String normalized = normalizeMode(mode);
+        String prev = getMode(context);
+        if (normalized.equals(prev)) {
+            return false;
+        }
         SharedPrefsData.putString(
                 context.getApplicationContext(),
                 Constants.FEED_VIDEO_PLAYER,
                 normalized,
                 Constants.PREF_NAME);
+        return true;
     }
 
     @NonNull

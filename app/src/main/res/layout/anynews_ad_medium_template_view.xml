@@ -45,7 +45,7 @@
                     android:id="@+id/iv_ad_view_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="@color/image_placeholder"
+                    android:background="#121212"
                     android:scaleType="fitXY" />
 
                 <com.google.android.gms.ads.nativead.MediaView
@@ -53,6 +53,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="200dp"
                     android:layout_alignParentTop="true"
+                    android:background="#121212"
                     android:layout_gravity="bottom"
                     android:layout_marginStart="@dimen/anynews_no_size"
                     android:layout_marginTop="@dimen/anynews_no_size"

@@ -58,20 +58,37 @@
                 android:textColor="#6B7280"
                 android:textSize="13sp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/birthday_auto_live_preview"
+                android:textColor="#374151"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
             <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="8dp"
                 android:background="#FFFFFF"
-                android:padding="8dp">
+                android:elevation="2dp"
+                android:padding="6dp">
+
+                <com.anyNews.anynews.Ui.BirthdayPosterPreviewView
+                    android:id="@+id/birthday_auto_live_preview"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/birthday_special" />
 
                 <ImageView
-                    android:id="@+id/birthday_auto_preview"
+                    android:id="@+id/birthday_auto_server_preview"
                     android:layout_width="match_parent"
-                    android:layout_height="360dp"
+                    android:layout_height="wrap_content"
                     android:adjustViewBounds="true"
                     android:contentDescription="@string/birthday_special"
-                    android:scaleType="centerCrop" />
+                    android:scaleType="fitCenter"
+                    android:visibility="gone" />
             </FrameLayout>
 
             <TextView

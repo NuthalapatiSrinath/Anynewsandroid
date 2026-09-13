@@ -317,6 +317,7 @@
     <string name="birthday_auto_pick_date">Pick date (tomorrow or later)</string>
     <string name="birthday_auto_submit">Schedule birthday post</string>
     <string name="birthday_auto_zoom">Photo zoom</string>
+    <string name="birthday_auto_live_preview">Live banner preview</string>
     <string name="birthday_auto_login_required">Please login to create a Birthday Special</string>
     <string name="birthday_auto_need_date">Pick a birthday date (tomorrow or later)</string>
     <string name="birthday_auto_scheduled_ok">Birthday post scheduled</string>

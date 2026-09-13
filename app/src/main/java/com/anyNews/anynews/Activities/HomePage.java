@@ -13318,8 +13318,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                     // Feed Exo chrome A/B (null = keep splash cache).
                     if (encreptionRequest.hasFeed_video_player()) {
-                        com.anyNews.anynews.Utils.FeedVideoPlayerConfig.saveFromServer(
-                                HomePage.this, encreptionRequest.getFeed_video_player());
+                        boolean playerModeChanged =
+                                com.anyNews.anynews.Utils.FeedVideoPlayerConfig.saveFromServer(
+                                        HomePage.this, encreptionRequest.getFeed_video_player());
+                        // Classic vs current use different layout XMLs — force FlipView
+                        // scraps to reinflate so toggle isn't stuck on the prior chrome.
+                        if (playerModeChanged && adapter != null) {
+                            try {
+                                adapter.pauseVideo();
+                            } catch (Exception ignored) {
+                            }
+                            adapter.notifyDataSetChanged();
+                        }
                     }
                     // Writers-row chips. Null fields are omitted and must not wipe splash.
                     if (encreptionRequest.getHide_district_on_main_feed() != null

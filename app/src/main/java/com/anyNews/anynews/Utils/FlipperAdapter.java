@@ -1034,6 +1034,65 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
+    /**
+     * Attach a prepared NativeAdView without a blank white frame.
+     * Previous path: {@code removeAllViews()} then {@code addView()} left
+     * {@code ads_screen}/{@code fl_adplaceholder} empty (white) for 1–2 frames
+     * while MediaView initialized — the on-land flash. Keep house underneath,
+     * add creative on top, then strip house after the next frame.
+     */
+    private void attachNativeAdViewWithoutFlash(@Nullable ViewGroup parent, @Nullable View adView) {
+        if (parent == null || adView == null) {
+            return;
+        }
+        try {
+            parent.setBackgroundColor(0xFF121212);
+            if (adView.getParent() instanceof ViewGroup) {
+                ((ViewGroup) adView.getParent()).removeView(adView);
+            }
+            // Dark MediaView so texture init isn't a white plate.
+            try {
+                View media = adView.findViewById(R.id.ad_media);
+                if (media == null) {
+                    media = adView.findViewById(R.id.media_view);
+                }
+                if (media != null) {
+                    media.setBackgroundColor(0xFF121212);
+                }
+            } catch (Exception ignored) {
+            }
+            ViewGroup.LayoutParams lp = adView.getLayoutParams();
+            if (lp == null) {
+                lp = new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT);
+            } else {
+                lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            }
+            parent.addView(adView, lp);
+            final View keep = adView;
+            parent.post(() -> {
+                try {
+                    for (int i = parent.getChildCount() - 1; i >= 0; i--) {
+                        View child = parent.getChildAt(i);
+                        if (child != keep) {
+                            parent.removeViewAt(i);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+        } catch (Exception e) {
+            showLog("attachNativeAdViewWithoutFlash: " + e.getMessage());
+            try {
+                parent.removeAllViews();
+                parent.addView(adView);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     /** Attach deferred native MediaView when user lands on an ad page. */
     public void bindPendingNativeAdMediaForPage(int page) {
         PendingNativeAdBind pending = pendingNativeAdBinds.get(page);
@@ -5077,9 +5136,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 loadNativeAdBlurBackground(iv_ad_view_blur, ad, listPosition);
                 showLog("AD #9");
                 adView.setNativeAd(ad);
-                parent.removeAllViews();
-                // Place the AdView into the parent.[;
-                parent.addView(adView);
+                attachNativeAdViewWithoutFlash(parent, adView);
                 showLog("AD #10");
                 try {
                     AdImpressionReporter.get().recordGoogleDisplay(ad);
@@ -5190,10 +5247,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 nativeAdView.setNativeAd(nativeAd);
                 Log.e("ADDDD","setNativeAd 9");
 
-                    // Ensure that the parent view doesn't already contain an ad view.
-                    parent.removeAllViews();
-                    // Place the AdView into the parent.[;
-                    parent.addView(nativeAdView);
+                    // Overlay on house first — never leave an empty white FrameLayout.
+                    attachNativeAdViewWithoutFlash(parent, nativeAdView);
                     showLog("AD #10");
                     try {
                         AdImpressionReporter.get().recordGoogleDisplay(nativeAd);
@@ -5260,10 +5315,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 // Call the NativeAdView's setNativeAd method to register the
                 // NativeAdObject.
                 adView.setNativeAd(ad);
-                // Ensure that the parent view doesn't already contain an ad view.
-                parent.removeAllViews();
-                // Place the AdView into the parent.[;
-                parent.addView(adView);
+                attachNativeAdViewWithoutFlash(parent, adView);
                 showLog("AD #10");
                 try {
                     AdImpressionReporter.get().recordGoogleDisplay(ad);

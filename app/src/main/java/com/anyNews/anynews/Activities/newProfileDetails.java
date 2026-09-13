@@ -4419,11 +4419,11 @@ public class newProfileDetails extends AppCompatActivity {
             layoutBirthday.setOnClickListener(
                     v -> {
                         markBirthdaySpecialBadgeSeen();
+                        // Same session gate as Rewards/wallet: is_login + resolvable user_id
+                        // (USER_ID is stored as Long — never use getString for it).
                         boolean loggedIn =
-                                SharedPrefsData.getBool(
-                                        newProfileDetails.this,
-                                        Constants.is_login,
-                                        Constants.PREF_NAME);
+                                com.anyNews.anynews.rewards.RewardsAuth.isLoggedIn(
+                                        newProfileDetails.this);
                         if (!loggedIn) {
                             Toast.makeText(
                                             newProfileDetails.this,
