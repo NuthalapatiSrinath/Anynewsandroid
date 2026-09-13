@@ -118,6 +118,46 @@ public final class BirthdayFonts {
         return base;
     }
 
+    /**
+     * Script fonts (Great Vibes, etc.) lack Telugu/Indic glyphs and draw tofu boxes.
+     * Prefer a system face with proper fallback when the label needs Indic script.
+     */
+    @NonNull
+    public static Typeface typefaceForText(
+            @Nullable Context context,
+            @Nullable String fontId,
+            boolean bold,
+            @Nullable String text) {
+        if (needsIndicFallback(text)) {
+            Typeface base = Typeface.SANS_SERIF;
+            if (bold) {
+                return Typeface.create(base, Typeface.BOLD);
+            }
+            return base != null ? base : Typeface.DEFAULT;
+        }
+        return typeface(context, fontId, bold);
+    }
+
+    /** True when text contains Indic blocks (Telugu, Devanagari, Kannada, …). */
+    public static boolean needsIndicFallback(@Nullable String text) {
+        if (text == null || text.isEmpty()) return false;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            if ((cp >= 0x0900 && cp <= 0x097F) // Devanagari
+                    || (cp >= 0x0980 && cp <= 0x09FF) // Bengali
+                    || (cp >= 0x0A80 && cp <= 0x0AFF) // Gujarati
+                    || (cp >= 0x0B00 && cp <= 0x0B7F) // Oriya
+                    || (cp >= 0x0B80 && cp <= 0x0BFF) // Tamil
+                    || (cp >= 0x0C00 && cp <= 0x0C7F) // Telugu
+                    || (cp >= 0x0C80 && cp <= 0x0CFF) // Kannada
+                    || (cp >= 0x0D00 && cp <= 0x0D7F)) { // Malayalam
+                return true;
+            }
+            i += Character.charCount(cp);
+        }
+        return false;
+    }
+
     @NonNull
     private static Typeface loadBase(@Nullable Context context, @Nullable String fontId) {
         String id = fontId == null || fontId.isEmpty() ? DEFAULT_NAME_FONT_ID : fontId;

@@ -998,6 +998,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
                         return;
                     }
+                    // Parked on house/default: keep July-style wait→fill without
+                    // unconditional every-scroll notify.
                     scheduleFlipSafeAdRebind();
                 } catch (Exception ignored) {
                 }

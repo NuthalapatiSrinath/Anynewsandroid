@@ -81,6 +81,8 @@ public class BirthdayPosterPreviewView extends View {
     private float panY = 0f;
     /** Manual clockwise degrees: 0 / 90 / 180 / 270 */
     private int photoRotation = 0;
+    /** Optional cap so compose controls (zoom/rotate) stay on-screen. */
+    private int maxHeightPx = 0;
 
     private float lastTouchX;
     private float lastTouchY;
@@ -196,6 +198,12 @@ public class BirthdayPosterPreviewView extends View {
         invalidate();
     }
 
+    /** Cap measured height (keeps zoom/rotate visible under a tall poster). */
+    public void setMaxHeightPx(int maxHeightPx) {
+        this.maxHeightPx = Math.max(0, maxHeightPx);
+        requestLayout();
+    }
+
     public float getPanX() {
         return panX;
     }
@@ -220,6 +228,10 @@ public class BirthdayPosterPreviewView extends View {
             width = (int) (getResources().getDisplayMetrics().widthPixels * 0.9f);
         }
         int height = Math.round(width * (TEMPLATE_H / TEMPLATE_W));
+        if (maxHeightPx > 0 && height > maxHeightPx) {
+            height = maxHeightPx;
+            width = Math.round(height * (TEMPLATE_W / TEMPLATE_H));
+        }
         setMeasuredDimension(width, height);
     }
 
@@ -339,8 +351,9 @@ public class BirthdayPosterPreviewView extends View {
             }
         }
 
-        Typeface nameTf = BirthdayFonts.typeface(getContext(), nameFontId, nameBold);
-        Typeface addrTf = BirthdayFonts.typeface(getContext(), addressFontId, addressBold);
+        Typeface nameTf = BirthdayFonts.typefaceForText(getContext(), nameFontId, nameBold, nameText);
+        Typeface addrTf =
+                BirthdayFonts.typefaceForText(getContext(), addressFontId, addressBold, addressText);
         namePaint.setTypeface(nameTf);
         addressPaint.setTypeface(addrTf);
         specialPaint.setTypeface(

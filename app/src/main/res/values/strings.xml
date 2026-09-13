@@ -302,6 +302,8 @@
     <string name="birthday_offer_default">Share a clear photo, name, and location. Our team will create your Local Birthday Special and reply here.</string>
     <string name="birthday_hint_location">Village / town / location</string>
     <string name="birthday_pick_photo">Tap to add birthday photo</string>
+    <string name="birthday_change_photo">Change birthday photo</string>
+    <string name="birthday_auto_controls_scroll_hint">Rotate 0°/90°/180°/270° is directly under zoom — scroll a little if needed</string>
     <string name="birthday_need_photo">Add a birthday photo</string>
     <string name="birthday_need_location">Enter village or town</string>
     <string name="birthday_start_chat">Submit &amp; chat</string>

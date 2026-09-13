@@ -367,11 +367,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * permanent {@code share_app} (WhatsApp promo thrash / flip lag).
      */
     private static final long AD_SHELL_FILL_TIMEOUT_MS = 8_000L;
+    /**
+     * July-era parked-seat fill: poll while the user waits on the house/share
+     * default so a late AdMob / AdPreloader creative paints in place (~500ms
+     * cadence matched the old postDelayed display). Never calls
+     * {@code notifyDataSetChanged} on every scroll — only seat-gated recycle
+     * after repeated in-place misses.
+     */
+    private static final long PARKED_AD_FILL_POLL_MS = 450L;
+    private static final int PARKED_AD_FILL_MAX_TICKS = 40;
     /** Decorative ad blur: smaller radius + downscale; skip on buffer pages. */
     private static final int AD_BLUR_RADIUS = 24;
     private static final int AD_BLUR_SAMPLING = 4;
     private final Handler adShellHandler = new Handler(Looper.getMainLooper());
     private final SparseArray<Runnable> adShellTimeoutRunnables = new SparseArray<>();
+    @Nullable private Runnable parkedAdFillWatchdog;
+    private int parkedAdFillPage = -1;
+    private int parkedAdFillTicks = 0;
     private boolean pendingSafeAdNotify = false;
     private boolean pendingFlipDatasetNotify = false;
             private final Runnable deferredSafeAdNotify = new Runnable() {
@@ -472,12 +484,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // Landing on an ad page still awaiting native fill: (re)arm soft demote timeout.
         try {
             if (list == null || page < 0 || page >= list.size()) {
+                cancelParkedAdFillWatchdog();
                 return;
             }
             ModelClass.Datum slot = list.get(page);
             if (slot == null || slot.getPostType() == null
                     || !slot.getPostType().equalsIgnoreCase("ad")) {
                 cancelAdShellFillTimeout(page);
+                cancelParkedAdFillWatchdog();
                 return;
             }
             // Reliability: always request on land (settle also calls ensure). Mid-flip warm
@@ -501,15 +515,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         || isDefaultAdPlaceholderShowing(page)) {
                     if (shouldDeferAdWork()) {
                         scheduleSafeAdNotify(FlipAdWorkGate.millisUntilAdWorkSafe());
+                        armParkedAdFillWatchdog(page);
                         return;
                     }
                     if (!tryPaintGoogleNativeInPlace(page)) {
                         scheduleSafeAdNotify(0L);
+                        armParkedAdFillWatchdog(page);
                     }
                 }
                 return;
             }
             scheduleAdShellFillTimeout(page);
+            armParkedAdFillWatchdog(page);
         } catch (Exception ignored) {
         }
     }
@@ -936,11 +953,100 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             // Arm demote clock only when this seat is on-screen.
             if (position == currentFlipPage) {
                 scheduleAdShellFillTimeout(position);
+                armParkedAdFillWatchdog(position);
             } else {
                 cancelAdShellFillTimeout(position);
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * While parked on a house/default ad seat, keep trying in-place paint as
+     * creatives arrive (July wait-on-seat behavior) without blinking news cards.
+     */
+    private void armParkedAdFillWatchdog(int position) {
+        try {
+            cancelParkedAdFillWatchdog();
+            if (position != currentFlipPage) {
+                return;
+            }
+            parkedAdFillPage = position;
+            parkedAdFillTicks = 0;
+            parkedAdFillWatchdog =
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                if (parkedAdFillPage != currentFlipPage
+                                        || parkedAdFillPage < 0) {
+                                    cancelParkedAdFillWatchdog();
+                                    return;
+                                }
+                                int page = parkedAdFillPage;
+                                if (list == null || page < 0 || page >= list.size()) {
+                                    cancelParkedAdFillWatchdog();
+                                    return;
+                                }
+                                ModelClass.Datum slot = list.get(page);
+                                if (slot == null
+                                        || slot.getPostType() == null
+                                        || !slot.getPostType().equalsIgnoreCase("ad")) {
+                                    cancelParkedAdFillWatchdog();
+                                    return;
+                                }
+                                if (!adShellAwaitingCreative.get(page, false)
+                                        && !isDefaultAdPlaceholderShowing(page)) {
+                                    cancelParkedAdFillWatchdog();
+                                    return;
+                                }
+                                if (shouldDeferAdWork() || isHomeFlipAnimating()) {
+                                    adShellHandler.postDelayed(this, PARKED_AD_FILL_POLL_MS);
+                                    return;
+                                }
+                                if (hasNativeCreativeForSlot(slot)) {
+                                    if (tryPaintGoogleNativeInPlace(page)) {
+                                        showLog("ANYNEWS_ADS parked watchdog painted pos=" + page);
+                                        cancelParkedAdFillWatchdog();
+                                        return;
+                                    }
+                                    // Creative ready but WeakRef miss — one seat recycle.
+                                    parkedAdFillTicks++;
+                                    if (parkedAdFillTicks >= 2) {
+                                        showLog("ANYNEWS_ADS parked watchdog seat recycle pos="
+                                                + page);
+                                        cancelParkedAdFillWatchdog();
+                                        scheduleSafeAdNotify(0L);
+                                        return;
+                                    }
+                                } else {
+                                    parkedAdFillTicks++;
+                                }
+                                if (parkedAdFillTicks >= PARKED_AD_FILL_MAX_TICKS) {
+                                    cancelParkedAdFillWatchdog();
+                                    return;
+                                }
+                                adShellHandler.postDelayed(this, PARKED_AD_FILL_POLL_MS);
+                            } catch (Exception e) {
+                                cancelParkedAdFillWatchdog();
+                            }
+                        }
+                    };
+            adShellHandler.postDelayed(parkedAdFillWatchdog, PARKED_AD_FILL_POLL_MS);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void cancelParkedAdFillWatchdog() {
+        try {
+            if (parkedAdFillWatchdog != null) {
+                adShellHandler.removeCallbacks(parkedAdFillWatchdog);
+            }
+        } catch (Exception ignored) {
+        }
+        parkedAdFillWatchdog = null;
+        parkedAdFillPage = -1;
+        parkedAdFillTicks = 0;
     }
 
     /**
@@ -1013,6 +1119,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         adShellAwaitingCreative.delete(position);
         pendingNativeAdBinds.remove(position);
         clearAdShellPlaceholder(position);
+        if (position == parkedAdFillPage) {
+            cancelParkedAdFillWatchdog();
+        }
         markGoogleNativeClaimed(ad);
         try {
             if (fromView == 0) {
@@ -1492,6 +1601,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public void resetAdBindState() {
         try {
             cancelAllAdShellFillTimeouts();
+            cancelParkedAdFillWatchdog();
             adShellHandler.removeCallbacks(deferredSafeAdNotify);
             adShellHandler.removeCallbacks(deferredFlipDatasetNotify);
             pendingSafeAdNotify = false;

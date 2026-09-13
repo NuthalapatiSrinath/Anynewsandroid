@@ -22,6 +22,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -143,6 +144,11 @@ public class BirthdayAutoActivity extends AppCompatActivity {
 
         livePreview = findViewById(R.id.birthday_auto_live_preview);
         serverPreview = findViewById(R.id.birthday_auto_server_preview);
+        // Cap preview so pick / zoom / 0°–270° stay visible under the banner.
+        if (livePreview != null) {
+            int maxH = Math.round(getResources().getDisplayMetrics().heightPixels * 0.42f);
+            livePreview.setMaxHeightPx(Math.max(220, maxH));
+        }
         nameInput = findViewById(R.id.birthday_auto_name);
         addressInput = findViewById(R.id.birthday_auto_address);
         specialInput = findViewById(R.id.birthday_auto_special);
@@ -352,12 +358,26 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                     panX = 0f;
                                     panY = 0f;
                                     setPhotoRotation(0, false);
+                                    hideServerPreview();
+                                    // Keep district/state on the plaque after upload.
+                                    if (addressInput != null
+                                            && TextUtils.isEmpty(
+                                                    addressInput.getText() != null
+                                                            ? addressInput.getText().toString().trim()
+                                                            : "")) {
+                                        autofillAddress();
+                                    }
                                     if (livePreview != null) {
                                         livePreview.setPan(0f, 0f);
                                         livePreview.setPhotoBitmap(previewBitmap);
                                     }
+                                    Button pickBtn = findViewById(R.id.birthday_auto_pick_photo);
+                                    if (pickBtn != null) {
+                                        pickBtn.setText(R.string.birthday_change_photo);
+                                    }
                                     refreshLiveTexts();
                                     uploadPhotoForPreview();
+                                    scrollPhotoControlsIntoView();
                                 });
                     } catch (Exception e) {
                         mainHandler.post(
@@ -510,11 +530,15 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                                     ? data.get("poster_url").getAsString()
                                                     : "";
                                     if (TextUtils.isEmpty(url) || serverPreview == null) return;
-                                    serverPreview.setVisibility(View.VISIBLE);
+                                    // Keep live compose preview as the editor source of truth.
+                                    // Overlaying the server raster hid rotate/pan edits and could
+                                    // drop/garble district text after upload.
+                                    serverPreview.setVisibility(View.GONE);
+                                    // Still warm Glide cache for submit confirmation if needed.
                                     Glide.with(BirthdayAutoActivity.this)
                                             .load(url)
                                             .fitCenter()
-                                            .into(serverPreview);
+                                            .preload();
                                 } catch (Exception ignored) {
                                 }
                             }
@@ -1138,12 +1162,45 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         }
         refreshLiveTexts();
         Toast.makeText(this, R.string.birthday_auto_update, Toast.LENGTH_SHORT).show();
-        View scroll = findViewById(android.R.id.content);
-        if (scroll != null) scroll.post(() -> {
-            if (livePreview != null) {
-                livePreview.getParent().requestChildFocus(livePreview, livePreview);
+        Button pickBtn = findViewById(R.id.birthday_auto_pick_photo);
+        if (pickBtn != null && photoUri != null) {
+            pickBtn.setText(R.string.birthday_change_photo);
+        }
+        scrollPhotoControlsIntoView();
+    }
+
+    /** Bring zoom + 0/90/180/270 into view after photo so rotate is never missed. */
+    private void scrollPhotoControlsIntoView() {
+        final View target = findViewById(R.id.birthday_auto_rotate_row);
+        View parent = findViewById(R.id.birthday_auto_pick_photo);
+        // Walk up to ScrollView
+        View walk = target != null ? target : parent;
+        ScrollView scrollView = null;
+        while (walk != null) {
+            if (walk instanceof ScrollView) {
+                scrollView = (ScrollView) walk;
+                break;
             }
-        });
+            Object p = walk.getParent();
+            walk = p instanceof View ? (View) p : null;
+        }
+        if (scrollView == null || target == null) return;
+        final ScrollView sv = scrollView;
+        sv.post(
+                () -> {
+                    try {
+                        int y = target.getTop();
+                        View p = (View) target.getParent();
+                        while (p != null && p != sv) {
+                            y += p.getTop();
+                            Object gp = p.getParent();
+                            p = gp instanceof View ? (View) gp : null;
+                        }
+                        // Nudge so rotate row sits just under the fold edge.
+                        sv.smoothScrollTo(0, Math.max(0, y - 48));
+                    } catch (Exception ignored) {
+                    }
+                });
     }
 
     private void applyStyleFromJson(JsonObject row, String key, boolean forName) {

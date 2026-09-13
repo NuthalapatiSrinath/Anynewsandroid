@@ -100,6 +100,7 @@
                 android:textColor="#E63B19"
                 android:textSize="12sp" />
 
+            <!-- Photo controls directly under preview so rotate is never below the fold. -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -132,6 +133,7 @@
                 android:progress="0" />
 
             <TextView
+                android:id="@+id/birthday_auto_rotate_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
@@ -141,6 +143,7 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/birthday_auto_rotate_hint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
@@ -160,54 +163,67 @@
                     android:id="@+id/birthday_auto_rot_0"
                     style="@style/Widget.AppCompat.Button.Borderless"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="44dp"
                     android:layout_marginEnd="4dp"
                     android:layout_weight="1"
                     android:backgroundTint="#FEE2E2"
                     android:minWidth="0dp"
                     android:text="0°"
                     android:textColor="#E63B19"
-                    android:textSize="13sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
                 <Button
                     android:id="@+id/birthday_auto_rot_90"
                     style="@style/Widget.AppCompat.Button.Borderless"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="44dp"
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1"
                     android:backgroundTint="#F3F4F6"
                     android:minWidth="0dp"
                     android:text="90°"
                     android:textColor="#374151"
-                    android:textSize="13sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
                 <Button
                     android:id="@+id/birthday_auto_rot_180"
                     style="@style/Widget.AppCompat.Button.Borderless"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="44dp"
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1"
                     android:backgroundTint="#F3F4F6"
                     android:minWidth="0dp"
                     android:text="180°"
                     android:textColor="#374151"
-                    android:textSize="13sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
                 <Button
                     android:id="@+id/birthday_auto_rot_270"
                     style="@style/Widget.AppCompat.Button.Borderless"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="44dp"
                     android:layout_marginStart="4dp"
                     android:layout_weight="1"
                     android:backgroundTint="#F3F4F6"
                     android:minWidth="0dp"
                     android:text="270°"
                     android:textColor="#374151"
-                    android:textSize="13sp" />
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/birthday_auto_controls_scroll_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/birthday_auto_controls_scroll_hint"
+                android:textColor="#9CA3AF"
+                android:textSize="11sp" />
 
             <TextView
                 android:layout_width="match_parent"
