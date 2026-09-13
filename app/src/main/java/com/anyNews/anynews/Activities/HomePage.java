@@ -291,6 +291,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Active keyword for Search_Stories / List_All_Articles search_text. */
     private String activeSearchQuery = "";
     private boolean searchFeedActive = false;
+    /**
+     * When true, {@link #applySearchQueryExtra} already called {@link #inlist(int)} —
+     * skip the cold-open sessionId {@code inlist} so search is not double-fetched /
+     * replaced by a main-feed OpenPath paint.
+     */
+    private boolean searchOpenHandledInCreate = false;
     /** Way2 bottom bar: back + query while keyword FlipView is active. */
     private View searchContextBar;
     private TextView searchContextQuery;
@@ -981,6 +987,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     () -> AdPreloader.get().prefetch(getApplicationContext()), 1_200L);
         } catch (Exception ignored) {
         }
+        // When early-warm completes while user is parked on Share default, paint
+        // in place — AdPreloader alone never called maybeRebind / scheduleFlipSafe.
+        try {
+            AdPreloader.get().setReadyListener(() -> {
+                try {
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
+                        return;
+                    }
+                    scheduleFlipSafeAdRebind();
+                } catch (Exception ignored) {
+                }
+            });
+        } catch (Exception ignored) {
+        }
 //        RequestConfiguration.Builder requestConfiguration=new RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("CEB66515B6C9B2ECD92786955DF252CD"));
 //        MobileAds.setRequestConfiguration(requestConfiguration.build());
 
@@ -1310,8 +1333,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (!openAsSpecial) {
                 isFromLocalArticles=false;
             }
-            showLog("inlist from oncreate 1 special=" + openAsSpecial);
-            inlist(0);
+            if (searchOpenHandledInCreate) {
+                searchOpenHandledInCreate = false;
+                showLog("inlist from oncreate skipped — search open already loaded");
+            } else {
+                showLog("inlist from oncreate 1 special=" + openAsSpecial);
+                inlist(0);
+            }
 
         } else {
             int parsedSessionId;
@@ -1324,18 +1352,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             // Do not re-cover the screen here — top-level already chose shimmer vs
             // warm OpenPath paint; inlist may paint warm disk before network.
 
-            if (!openAsSpecial) {
+            if (searchOpenHandledInCreate) {
+                searchOpenHandledInCreate = false;
+                showLog("inlist from oncreate 2 skipped — search open already loaded");
+            } else if (!openAsSpecial) {
                 last_post_id = 0;
                 skip = 0;
                 actual_skip = 0;
                 category_id = parsedSessionId;
                 isFromLocalArticles=false;
+                showLog("inlist from oncreate 2:" + category_id + " special=" + openAsSpecial);
+                inlist(parsedSessionId);
             } else {
                 // Special always category 0 page-0; session category must not override.
                 category_id = 0;
+                showLog("inlist from oncreate 2:" + category_id + " special=" + openAsSpecial);
+                inlist(0);
             }
-            showLog("inlist from oncreate 2:" + category_id + " special=" + openAsSpecial);
-            inlist(openAsSpecial ? 0 : parsedSessionId);
 
             try {
 
@@ -1604,6 +1637,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             setIntent(intent);
             handleFooterTabExtra(intent);
             applySearchQueryExtra(intent);
+            applyCategorySessionExtra(intent);
         }
     }
 
@@ -1619,6 +1653,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (q.isEmpty()) return;
         activeSearchQuery = q;
         searchFeedActive = true;
+        searchOpenHandledInCreate = true;
+        positionx = 0;
+        try {
+            clearPendingFlipRestore();
+        } catch (Exception ignored) {
+        }
+        // Drop in-flight main-feed responses that would paint over search hits.
+        feedModeEpoch++;
+        try {
+            OpenPathCache.forceNextFeedNetwork(this);
+        } catch (Exception ignored) {
+        }
         updateSearchContextBar();
         try {
             playSearchResultEnterReveal(intent);
@@ -1634,6 +1680,62 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             inlist(0);
         } catch (Exception e) {
             ShowNews_Data_Values(0, -1);
+        }
+    }
+
+    /**
+     * Profile / in-app Search category strip → open that category feed.
+     * Cold open uses EXTRA_SESSION_ID in {@code onCreate}; this handles
+     * {@link #onNewIntent} when HomePage is already SINGLE_TOP.
+     */
+    private void applyCategorySessionExtra(@Nullable Intent intent) {
+        if (intent == null || !intent.hasExtra("EXTRA_SESSION_ID")) {
+            return;
+        }
+        // Same intent also carrying a keyword search — search wins.
+        if (intent.hasExtra(EXTRA_SEARCH_QUERY)) {
+            return;
+        }
+        String raw = intent.getStringExtra("EXTRA_SESSION_ID");
+        intent.removeExtra("EXTRA_SESSION_ID");
+        if (raw == null) return;
+        raw = raw.trim();
+        if (raw.isEmpty() || "0".equals(raw) || "null".equalsIgnoreCase(raw)) {
+            return;
+        }
+        int catId;
+        try {
+            catId = Integer.parseInt(raw.replaceAll("[^0-9-]", ""));
+        } catch (Exception e) {
+            return;
+        }
+        if (catId <= 0) return;
+        if (category_id == catId && list != null && !list.isEmpty()
+                && ReadArticleStore.countPaintableArticles(list) > 0
+                && !isSearchFeedActive()) {
+            return;
+        }
+        clearSearchFeedMode();
+        try {
+            SharedPrefsData.putInt(this, Constants.CategoryID, catId, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        positionx = 0;
+        last_post_id = 0;
+        skip = 0;
+        actual_skip = 0;
+        list = new ArrayList<>();
+        dummyResponse = null;
+        category_id = catId;
+        feedModeEpoch++;
+        try {
+            OpenPathCache.forceNextFeedNetwork(this);
+        } catch (Exception ignored) {
+        }
+        try {
+            inlist(catId);
+        } catch (Exception e) {
+            ShowNews_Data_Values(catId, -1);
         }
     }
 
@@ -1750,6 +1852,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         boolean show = com.anyNews.anynews.Utils.SearchIconConfig.isOnToggle(this);
         homeModeSearchIcon.setVisibility(show ? View.VISIBLE : View.GONE);
         if (!show) return;
+        // Distinct richer glyph vs engagement-row outline magnifier.
+        try {
+            if (homeModeSearchIcon instanceof ImageView) {
+                ((ImageView) homeModeSearchIcon)
+                        .setImageResource(R.drawable.ic_search_toggle_rich);
+            }
+        } catch (Exception ignored) {
+        }
         int dp = com.anyNews.anynews.Utils.SearchIconConfig.sizeDp(this);
         float density = getResources().getDisplayMetrics().density;
         int px = Math.round(dp * density);
@@ -12343,9 +12453,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         final boolean special = isSpecialFeedMode();
         final boolean videoFeed = isVideoFeedMode();
         final boolean stickyPushOrShare = isStickyFeedOpen();
+        final boolean searchMode = searchFeedActive
+                && activeSearchQuery != null
+                && !activeSearchQuery.trim().isEmpty();
         final boolean forceUserRefresh = special
                 || videoFeed
                 || stickyPushOrShare
+                || searchMode
                 || OpenPathCache.isForceFeedNetworkPending();
 
         // Full offline: main → OfflineFeedStore; Special online-only; Flash uses push cache.
@@ -12356,6 +12470,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (flashTryNetwork) {
                 showLog("Flash: monitor offline but link up — continue push_posts network");
                 // fall through to network path below
+            } else if (searchMode) {
+                // Keyword search is network-only — never paint main OpenPath as "results".
+                hideHomeFeedLoadingReveal(true);
+                try {
+                    if (list == null) list = new ArrayList<>();
+                    ensureFeedEndCardVisible(true);
+                    if (mFlipView != null) mFlipView.setVisibility(View.VISIBLE);
+                    if (txtNoData != null) txtNoData.setVisibility(View.GONE);
+                    if (layout_with_data != null) layout_with_data.setVisibility(View.VISIBLE);
+                } catch (Exception ignored) {
+                }
+                if (OpenPathCache.isForceFeedNetworkPending()) {
+                    OpenPathCache.clearForceFeedNetwork();
+                }
+                softMergeOnNextPage0 = false;
+                return;
             } else if (special) {
                 showSpecialOfflineEmptyState();
                 if (OpenPathCache.isForceFeedNetworkPending()) {
@@ -12420,7 +12550,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         long paintedSkip = 0;
         long paintedActualSkip = 0;
         long paintedLastPostId = 0;
-        if (isFirstPage && !forceUserRefresh && category_id != -1 && !localFeedFromDailyUpdates) {
+        // Keyword search must never paint main OpenPath — that left users on unrelated
+        // News cards (or empty→hub-only) instead of matching search posts.
+        if (isFirstPage && !forceUserRefresh && !searchMode
+                && category_id != -1 && !localFeedFromDailyUpdates) {
             // Main mode only — special/video never hydrate from main page-0 disk.
             // Local (-1) and Mana-Zilla path skip warm paint — main cat=0 disk must not bleed.
             // Warm OpenPath only (≤5 min). No offline pack decoy while online.
@@ -12570,7 +12703,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     isApiRequested = false;
                     return;
                 }
-                if (response != null && response.body() != null && isFirstPage && !special && !videoFeed && !isStickyFeedOpen()) {
+                if (response != null && response.body() != null && isFirstPage && !special && !videoFeed
+                        && !isStickyFeedOpen() && !searchMode) {
                     final String openPathMode = categoryAtEnqueue == -1
                             ? OpenPathCache.FEED_MODE_LOCAL
                             : OpenPathCache.FEED_MODE_MAIN;
@@ -12692,10 +12826,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         };
 
         try {
-            // Bypass deduper on reload/special/video/sticky so coalescing never drops a forced fetch.
-            if (forceUserRefresh) {
-                showLog("OpenPath: force network (reload/special/video/sticky) cat=" + category_id
-                        + " special=" + special + " video=" + videoFeed + " sticky=" + stickyPushOrShare);
+            // Bypass deduper on reload/special/video/sticky/search so coalescing never
+            // drops a forced fetch or merges keyword search into a main-feed call.
+            if (forceUserRefresh || searchMode) {
+                showLog("OpenPath: force network (reload/special/video/sticky/search) cat="
+                        + category_id
+                        + " special=" + special + " video=" + videoFeed
+                        + " sticky=" + stickyPushOrShare + " search=" + searchMode);
                 otp_generation.enqueue(feedCallback);
             } else {
                 String dedupeKey = (videoFeed ? "flash_v3_" : "articles_v3_")
@@ -13539,7 +13676,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         final boolean softMerge = softMergeOnNextPage0 && !fromCache
                                 && listSizeBeforeAppend > 0 && isDeviceOnline()
                                 && !specialNow && !videoNow
-                                && category_id != -1;
+                                && category_id != -1
+                                && !searchFeedActive;
                         if (softMerge) {
                             softMergeOnNextPage0 = false;
                             addUniqueArticles(validateUserOtp.getData());
@@ -13838,6 +13976,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             if (!fromCache) {
                                 maybeRestoreFlipPositionAfterArticlesLoad();
                             }
+                            // Keyword search: always land on the first matching post —
+                            // never restore a prior News index onto the end hub.
+                            if (!fromCache && searchFeedActive && page0Replace
+                                    && list != null && !list.isEmpty()) {
+                                try {
+                                    positionx = 0;
+                                    if (adapter != null) {
+                                        adapter.setCurrentFlipPage(0);
+                                    }
+                                    if (mFlipView != null) {
+                                        mFlipView.flipTo(0);
+                                    }
+                                } catch (Exception ignored) {
+                                }
+                            }
                             // Always show flip when list has paintables — never empty white forever.
                             if (list != null && !list.isEmpty()) {
                                 mFlipView.setVisibility(View.VISIBLE);
@@ -13921,13 +14074,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                         if (validateUserOtp.getData() != null
                                 && validateUserOtp.getData().size() == 0) {
-                            // Keyword search: empty page = true EOF → hub (Main/Local/Flash).
+                            // Keyword search: empty page = true EOF → hub AFTER results.
+                            // Zero hits: hub alone. Never leave hub as every scroll page
+                            // while real hits should have been first.
                             if (searchFeedActive && !fromCache) {
                                 showLog("search feed empty page — hub end card");
                                 no_article_message = FeedEndHelper.resolveMessage(this);
-                                if (list == null || list.isEmpty()) {
-                                    // Zero hits: still show hub so user is not dead-ended.
+                                int paintables = list != null
+                                        ? ReadArticleStore.countPaintableArticles(list) : 0;
+                                if (paintables <= 0) {
                                     if (list == null) list = new ArrayList<>();
+                                    FeedEndHelper.stripAll(list);
+                                    // Zero hits: single Continue-reading hub (not article).
                                     ensureFeedEndCardVisible(true);
                                     try {
                                         mFlipView.setVisibility(View.VISIBLE);
@@ -13937,6 +14095,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     } catch (Exception ignored) {
                                     }
                                 } else {
+                                    // Hits already on FlipView — append hub only, stay put.
                                     ensureFeedEndCardVisible(false);
                                 }
                                 initialCall = true;
@@ -15324,6 +15483,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onDestroy();
         try {
             FlipperAdapter.setFeedExoSurfaceHost(null);
+        } catch (Exception ignored) {
+        }
+        try {
+            AdPreloader.get().setReadyListener(null);
         } catch (Exception ignored) {
         }
         clearNativeAdPools();

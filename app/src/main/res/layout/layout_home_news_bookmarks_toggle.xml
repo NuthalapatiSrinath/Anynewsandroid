@@ -136,8 +136,8 @@
             android:layout_marginStart="10dp"
             android:background="@drawable/white_oval"
             android:contentDescription="@string/search_stories"
-            android:padding="8dp"
-            android:src="@drawable/ic_action_search"
+            android:padding="7dp"
+            android:src="@drawable/ic_search_toggle_rich"
             android:visibility="gone" />
     </LinearLayout>
 </FrameLayout>

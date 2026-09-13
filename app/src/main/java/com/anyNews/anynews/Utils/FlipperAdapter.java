@@ -654,35 +654,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * True when an ad seat still shows the house/share default but a native creative
-     * is ready — only then may we allow a FlipView settle recycle. News image seats
-     * must never trigger dataset notify (every-scroll blink).
+     * True when the <b>visible</b> Flip page is an ad seat still showing house/share
+     * default while a native creative is ready — only then may we allow a FlipView
+     * settle recycle. Buffer/off-screen ad fills must use in-place paint; recycling
+     * for them rebinds the visible news card (3–4s image gone→back blink).
      */
     public boolean needsAdSeatDatasetRebind() {
         try {
             if (list == null || list.isEmpty()) {
                 return false;
             }
-            if (currentFlipPage >= 0 && currentFlipPage < list.size()) {
-                ModelClass.Datum slot = list.get(currentFlipPage);
-                if (slot != null && slot.getPostType() != null
-                        && slot.getPostType().equalsIgnoreCase("ad")
-                        && hasNativeCreativeForSlot(slot)
-                        && (adShellAwaitingCreative.get(currentFlipPage, false)
-                        || isDefaultAdPlaceholderShowing(currentFlipPage))) {
-                    return true;
-                }
+            if (currentFlipPage < 0 || currentFlipPage >= list.size()) {
+                return false;
             }
-            for (int i = 0; i < adShellAwaitingCreative.size(); i++) {
-                int page = adShellAwaitingCreative.keyAt(i);
-                if (page < 0 || page >= list.size()) {
-                    continue;
-                }
-                ModelClass.Datum slot = list.get(page);
-                if (slot != null && hasNativeCreativeForSlot(slot)) {
-                    return true;
-                }
+            ModelClass.Datum slot = list.get(currentFlipPage);
+            if (slot == null || slot.getPostType() == null
+                    || !slot.getPostType().equalsIgnoreCase("ad")) {
+                return false;
             }
+            if (!hasNativeCreativeForSlot(slot)) {
+                return false;
+            }
+            return adShellAwaitingCreative.get(currentFlipPage, false)
+                    || isDefaultAdPlaceholderShowing(currentFlipPage);
         } catch (Exception ignored) {
         }
         return false;
@@ -1723,6 +1717,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         boolean show = SearchIconConfig.isOnEngagement(context);
         slot.setVisibility(show ? View.VISIBLE : View.GONE);
         if (!show) return;
+        // Keep outline magnifier here — toggle bar uses ic_search_toggle_rich.
+        View icon = convertView.findViewById(R.id.half_search_icon);
+        if (icon instanceof ImageView) {
+            ((ImageView) icon).setImageResource(R.drawable.ic_action_search);
+        }
         View.OnClickListener open =
                 v -> {
                     try {
@@ -1739,7 +1738,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     }
                 };
         slot.setOnClickListener(open);
-        View icon = convertView.findViewById(R.id.half_search_icon);
         if (icon != null) icon.setOnClickListener(open);
     }
 
@@ -3224,6 +3222,53 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             icon.setLayoutParams(lp);
             icon.setPadding(iconPaddingPx, iconPaddingPx, iconPaddingPx, iconPaddingPx);
         }
+        // Engagement search must read larger than like/share in the 5-icon row.
+        boostEngagementSearchIconSize(context, convertView, circleDp, iconDp, density);
+    }
+
+    /**
+     * Engagement-row search circle — noticeably larger than sibling action chips,
+     * still clamped so the five-icon row fits on small phones.
+     */
+    private static void boostEngagementSearchIconSize(
+            @Nullable Context context,
+            @Nullable View convertView,
+            int baseCircleDp,
+            int baseIconDp,
+            float density) {
+        if (context == null || convertView == null) return;
+        View slot = convertView.findViewById(R.id.half_search);
+        View icon = convertView.findViewById(R.id.half_search_icon);
+        if (slot == null && icon == null) return;
+        int searchCircleDp = Math.max(baseCircleDp + 7, 42);
+        try {
+            int cfg = SearchIconConfig.sizeDp(context);
+            // size_dp is glyph-oriented; map to a circle that stays above siblings.
+            searchCircleDp = Math.max(searchCircleDp, cfg + 16);
+        } catch (Exception ignored) {
+        }
+        searchCircleDp = Math.min(48, Math.max(baseCircleDp + 4, searchCircleDp));
+        int searchIconDp = Math.min(searchCircleDp - 6, Math.max(baseIconDp + 4, 26));
+        int circlePx = Math.round(searchCircleDp * density);
+        int slotPx = Math.round((searchCircleDp + ACTION_SLOT_EXTRA_DP) * density);
+        int padPx = Math.max(0, Math.round(((searchCircleDp - searchIconDp) / 2f) * density));
+        if (slot != null) {
+            ViewGroup.LayoutParams lp = slot.getLayoutParams();
+            if (lp != null) {
+                lp.width = slotPx;
+                lp.height = slotPx;
+                slot.setLayoutParams(lp);
+            }
+        }
+        if (icon != null) {
+            ViewGroup.LayoutParams lp = icon.getLayoutParams();
+            if (lp != null) {
+                lp.width = circlePx;
+                lp.height = circlePx;
+                icon.setLayoutParams(lp);
+            }
+            icon.setPadding(padPx, padPx, padPx, padPx);
+        }
     }
 
     /**
@@ -4017,13 +4062,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             // Mid-flip: never MediaView/setNativeAd or AdLoader — placeholder
                             // only; settled path paints the creative after grace.
                             cancelAdShellFillTimeout(position);
-                            NativeAd ad = findGoogleNativeForSlot(list.get(position));
-                            if (ad != null) {
-                                nativeAd = ad;
-                            }
                             final ModelClass.Datum adSlot = list.get(position);
                             final boolean deferHeavy = shouldDeferAdWork()
                                     || isHomeFlipAnimating();
+                            // Critical: do NOT consume AdPreloader while deferring paint.
+                            // Mid-flip buffer getView used to takeReady() into an ahead seat
+                            // then show house — stranded the creative so the parked current
+                            // seat stayed on Share forever (ahead-steal was disabled).
+                            NativeAd ad = deferHeavy
+                                    ? peekExactGoogleNativeForSlot(adSlot)
+                                    : findGoogleNativeForSlot(adSlot);
+                            if (ad != null) {
+                                nativeAd = ad;
+                            }
                             // Best-effort AdLoader kick (mid-flip OK). Paint waits for settle.
                             // Reliability: HomePage.runSettledAdWork + setCurrentFlipPage
                             // always re-ensure on land even if this warm was capped/failed.
@@ -4644,11 +4695,35 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
+     * Exact pool match only — never consumes {@link AdPreloader}. Used when getView
+     * will defer MediaView paint (mid-flip / settle grace) so a buffer shell cannot
+     * strand the warm creative on an ahead reqPos.
+     */
+    @Nullable
+    private NativeAd peekExactGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
+        Integer slotPos = slot != null ? slot.getAd_req_position() : null;
+        if (slotPos == null || HomePage.nativeGoogleAdList == null) {
+            return null;
+        }
+        try {
+            for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
+                FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
+                if (packed == null || packed.getAd() == null) continue;
+                if (packed.getReqPos() == slotPos) {
+                    return packed.getAd();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
      * Exact {@code ad_req_position} match first, then ready-pool transfer:
      * orphan (reqPos not on a live ad seat) or an <b>unclaimed</b> creative from a
-     * seat further ahead. Claimed creatives stay on their painted seat (AdMob
-     * single-view). Mid-flip: exact match only (pool scan can jank) — except a
-     * ready {@link AdPreloader} creative may be injected for this seat.
+     * seat further ahead (idle only — fills parked house without FlipView recycle).
+     * Claimed creatives stay on their painted seat (AdMob single-view). Mid-flip:
+     * exact match + AdPreloader inject only (pool scan can jank).
      */
     @Nullable
     private NativeAd findGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -4679,8 +4754,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (HomePage.nativeGoogleAdList == null || HomePage.nativeGoogleAdList.isEmpty()) {
             return null;
         }
-        // Orphan reclaim only (dead reqPos). Ahead-steal / transfer was disabled —
-        // it caused donor refill storms and flip jank without enough fill benefit.
+        // Idle reclaim: orphan (dead reqPos) first, then nearest unclaimed ahead.
+        // Ahead transfer is idle-only so a creative stranded on a buffer seat after
+        // a deferred getView can still fill the parked current house placeholder.
         java.util.HashSet<Integer> liveAdPositions = new java.util.HashSet<>();
         try {
             if (list != null) {
@@ -4699,6 +4775,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } catch (Exception ignored) {
         }
         FlipGoogleNativeAds orphan = null;
+        FlipGoogleNativeAds ahead = null;
         for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
             FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
             if (packed == null || packed.getAd() == null || packed.isClaimed()) {
@@ -4709,15 +4786,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 orphan = packed;
                 break;
             }
+            if (packedPos > slotPos && ahead == null) {
+                ahead = packed;
+            }
         }
-        if (orphan == null) {
+        FlipGoogleNativeAds donor = orphan != null ? orphan : ahead;
+        if (donor == null) {
             return null;
         }
-        int fromPos = orphan.getReqPos();
+        int fromPos = donor.getReqPos();
         showLog("HomePage.nativeAdList pool claim " + fromPos + " → " + slotPos
-                + " (orphan)");
-        reassignGoogleNativeReqPos(orphan, slotPos);
-        return orphan.getAd();
+                + (orphan != null ? " (orphan)" : " (ahead-idle)"));
+        reassignGoogleNativeReqPos(donor, slotPos);
+        return donor.getAd();
     }
 
     /**
@@ -10485,15 +10566,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             target.setImageResource(IMAGE_FAIL_PLACEHOLDER);
             return;
         }
-        String tagKey =
-                String.valueOf(postId != null ? postId : 0L)
-                        + "|"
-                        + imageIndex
-                        + "|"
-                        + loadUri;
+        // Content key ignores http↔file:// swap after OfflineImageStore finishes
+        // (~3–4s). Rebinding with a new URI + showImageOnLoading made the visible
+        // hero disappear then fade back in.
+        final String contentKey =
+                String.valueOf(postId != null ? postId : 0L) + "|" + imageIndex;
+        final String tagKey = contentKey + "|" + loadUri;
         Object prev = target.getTag();
-        if (prev != null && prev.equals(tagKey)) {
-            return;
+        if (prev != null) {
+            String prevTag = String.valueOf(prev);
+            if (prevTag.equals(tagKey)) {
+                return;
+            }
+            // Same article already showing a real bitmap — skip offline file rebind flash.
+            // (Color placeholder from showImageOnLoading is not a BitmapDrawable.)
+            if ((prevTag.equals(contentKey) || prevTag.startsWith(contentKey + "|"))
+                    && hasSettledArticleBitmap(target)) {
+                target.setTag(contentKey);
+                return;
+            }
         }
         target.setTag(tagKey);
         if (imageLoader == null) {
@@ -10532,14 +10623,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     @Override
                     public void onLoadingComplete(
                             String imageUri, View view, Bitmap loadedImage) {
-                        if (view instanceof ImageView && refusePosterOverLiveVideo((ImageView) view)) {
-                            return;
+                        if (view instanceof ImageView) {
+                            view.setTag(contentKey);
+                            if (refusePosterOverLiveVideo((ImageView) view)) {
+                                return;
+                            }
                         }
                         if (animationListener != null) {
                             animationListener.onLoadingComplete(imageUri, view, loadedImage);
                         }
                     }
                 });
+    }
+
+    /** True when the ImageView already holds a decoded article bitmap (not color placeholder). */
+    private static boolean hasSettledArticleBitmap(@Nullable ImageView target) {
+        if (target == null) {
+            return false;
+        }
+        try {
+            android.graphics.drawable.Drawable d = target.getDrawable();
+            if (!(d instanceof android.graphics.drawable.BitmapDrawable)) {
+                return false;
+            }
+            Bitmap b = ((android.graphics.drawable.BitmapDrawable) d).getBitmap();
+            return b != null && !b.isRecycled() && b.getWidth() > 2 && b.getHeight() > 2;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     /** Glide bind for video thumbs / survey BG with offline file resolve. */

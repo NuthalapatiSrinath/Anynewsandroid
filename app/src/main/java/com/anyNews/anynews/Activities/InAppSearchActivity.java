@@ -336,6 +336,9 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     private void submitQuery(String q) {
         String clean = q != null ? q.trim() : "";
+        // Strip suggestion ellipsis / fancy dots so Search_Stories matches titles.
+        clean = clean.replace("\u2026", " ").replace("...", " ").replace('\u00A0', ' ');
+        clean = clean.replaceAll("\\s+", " ").trim();
         if (clean.isEmpty()) return;
         RecentSearchStore.add(this, clean);
         Intent intent = new Intent(this, HomePage.class);
@@ -375,12 +378,28 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void openCategory(int categoryId) {
+        if (categoryId <= 0) return;
+        try {
+            SharedPrefsData.putInt(this, Constants.CategoryID, categoryId, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
         Intent intent = new Intent(this, HomePage.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.putExtra("EXTRA_SESSION_ID", String.valueOf(categoryId));
         startActivity(intent);
         finish();
         overridePendingTransition(0, 0);
+    }
+
+    private static String suggestSubmitText(Row row) {
+        if (row == null) return "";
+        String title = row.title != null ? row.title : "";
+        boolean truncated =
+                title.indexOf('\u2026') >= 0 || title.contains("...");
+        if (truncated && !TextUtils.isEmpty(row.highlight)) {
+            return row.highlight;
+        }
+        return title;
     }
 
     private static final class Row {
@@ -467,7 +486,10 @@ public class InAppSearchActivity extends AppCompatActivity {
                 vh.meta.setText(String.valueOf(row.meta));
                 vh.icon.setImageResource(R.drawable.ic_action_search);
                 vh.action.setVisibility(View.GONE);
-                vh.itemView.setOnClickListener(v -> submitQuery(row.title));
+                // Prefer the typed needle when the row is a truncated snippet (…),
+                // so FlipView search_text matches what Suggestions found.
+                vh.itemView.setOnClickListener(
+                        v -> submitQuery(suggestSubmitText(row)));
             } else if (row.type == Row.TYPE_RECENT) {
                 vh.meta.setVisibility(View.GONE);
                 vh.icon.setImageResource(android.R.drawable.ic_menu_recent_history);

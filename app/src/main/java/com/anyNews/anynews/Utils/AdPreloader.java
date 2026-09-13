@@ -39,6 +39,13 @@ public final class AdPreloader {
     private String readyAdCode;
     private boolean loading;
     private long lastFailUptimeMs;
+    @Nullable
+    private volatile ReadyListener readyListener;
+
+    /** Notified on the main thread when a house-seat creative becomes claimable. */
+    public interface ReadyListener {
+        void onPreloadedNativeReady();
+    }
 
     private AdPreloader() {}
 
@@ -50,6 +57,14 @@ public final class AdPreloader {
         return Holder.INSTANCE;
     }
 
+    /**
+     * HomePage registers so a parked share/house seat can in-place paint when this
+     * warm creative arrives after land (no FlipView recycle / blink).
+     */
+    public void setReadyListener(@Nullable ReadyListener listener) {
+        readyListener = listener;
+    }
+
     /** True when a creative is waiting to be claimed by the next share/ad seat. */
     public synchronized boolean isReady() {
         return readyAd != null;
@@ -57,6 +72,19 @@ public final class AdPreloader {
 
     public synchronized boolean isLoading() {
         return loading;
+    }
+
+    private void notifyReadyListener() {
+        final ReadyListener listener = readyListener;
+        if (listener == null) {
+            return;
+        }
+        mainHandler.post(() -> {
+            try {
+                listener.onPreloadedNativeReady();
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     /**
@@ -129,6 +157,7 @@ public final class AdPreloader {
                 Log.d(TAG, "AdPreloader LOAD START unit=" + unit);
                 AdLoader adLoader = new AdLoader.Builder(appContext, unit)
                         .forNativeAd(nativeAd -> {
+                            boolean notify = false;
                             synchronized (AdPreloader.this) {
                                 loading = false;
                                 if (readyAd != null) {
@@ -141,7 +170,12 @@ public final class AdPreloader {
                                 }
                                 readyAd = nativeAd;
                                 readyAdCode = unit;
+                                notify = true;
                                 Log.d(TAG, "AdPreloader LOAD SUCCESS unit=" + unit);
+                            }
+                            if (notify) {
+                                // Parked house/share seat: paint without waiting for FlipView recycle.
+                                notifyReadyListener();
                             }
                         })
                         .withAdListener(new AdListener() {
