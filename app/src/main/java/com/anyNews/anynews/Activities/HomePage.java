@@ -368,8 +368,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private static final long FLIP_VIDEO_TEARDOWN_MS = 48L;
     private static final long FLIP_TRACKING_DEFER_MS = 72L;
     private static final long FLIP_RESTORE_DEFER_MS = 160L;
-    /** Prefetch coalescing — avoid AdLoader storms on rapid flips. */
-    private static final long AD_PREFETCH_DEBOUNCE_MS = 280L;
+    /**
+     * Prefetch coalescing — Sep-7 (3.41.6) fast-fill era used 90ms so the next
+     * seat AdLoader starts soon after settle. 280ms starved parked house seats.
+     */
+    private static final long AD_PREFETCH_DEBOUNCE_MS = 90L;
     /**
      * After flip settle, wait this long (plus {@link FlipAdWorkGate#SETTLE_GRACE_MS})
      * before AdMob load / pool refill / MediaView bind. Cancelled on the next flip.
@@ -456,8 +459,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
                     return;
                 }
-                // Creative ready but WeakRef/placeholder miss — one settle recycle
-                // only for seats that still need fill. Never notify for news image seats.
+                // Sep-3 reliability: parked current ad with a ready creative MUST
+                // paint — prefer in-place, else one FlipView settle recycle.
+                // Anti-blink gates that skipped this left Share forever.
                 if (adapter != null && adapter.needsAdSeatDatasetRebind()) {
                     if (shouldDeferAdWork()) {
                         scheduleFlipSafeAdRebind(
@@ -983,10 +987,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         AdMobInitializer.initializeFromManifestIfNeeded(this);
-        // Warm share/house-ad seat early (idle after first frames; does not show here).
+        // Warm share/house-ad seat early (Sep-7 fast-fill: 280ms, not 1.2s).
         try {
             adPrefetchHandler.postDelayed(
-                    () -> AdPreloader.get().prefetch(getApplicationContext()), 1_200L);
+                    () -> AdPreloader.get().prefetch(getApplicationContext()), 280L);
         } catch (Exception ignored) {
         }
         // When early-warm completes while user is parked on Share default, paint
@@ -1986,11 +1990,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         boolean show = com.anyNews.anynews.Utils.SearchIconConfig.isOnToggle(this);
         homeModeSearchIcon.setVisibility(show ? View.VISIBLE : View.GONE);
         if (!show) return;
-        // Distinct richer glyph vs engagement-row outline magnifier.
+        // Distinct richer glyph vs engagement-row outline magnifier — soft dark
+        // chip (not solid white key), white magnifier + orange accent.
         try {
             if (homeModeSearchIcon instanceof ImageView) {
-                ((ImageView) homeModeSearchIcon)
-                        .setImageResource(R.drawable.ic_search_toggle_rich);
+                ImageView iv = (ImageView) homeModeSearchIcon;
+                iv.setImageResource(R.drawable.ic_search_toggle_rich);
+                iv.setBackgroundResource(R.drawable.bg_search_toggle_soft);
             }
         } catch (Exception ignored) {
         }

@@ -1,20 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Premium filled search glyph for News|Read toggle — distinct from engagement ic_action_search. -->
+<!-- Distinct toggle-bar search — solid white magnifier + orange handle tip (no white key). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- Solid lens -->
-    <path
-        android:fillColor="#FF6300"
-        android:pathData="M10.5,3C6.36,3 3,6.36 3,10.5S6.36,18 10.5,18c1.71,0 3.28,-0.55 4.56,-1.48l0.19,0.19v0.79l4.75,4.75c0.39,0.39 1.02,0.39 1.41,0s0.39,-1.02 0,-1.41l-4.75,-4.75h-0.79l-0.19,-0.19C17.45,13.78 18,12.21 18,10.5 18,6.36 14.64,3 10.5,3z" />
-    <!-- Inner cutout → ring (richer than outline-only engagement icon) -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M10.5,5.75c-2.62,0 -4.75,2.13 -4.75,4.75s2.13,4.75 4.75,4.75 4.75,-2.13 4.75,-4.75S13.12,5.75 10.5,5.75z" />
-    <!-- Accent nub on handle for premium depth -->
+        android:pathData="M10.5,3.5C6.91,3.5 4,6.41 4,10s2.91,6.5 6.5,6.5c1.61,0 3.09,-0.59 4.23,-1.57l0.27,0.28v0.79l4.5,4.49L20.99,19l-4.49,-4.5h-0.79l-0.28,-0.27C16.91,13.09 17.5,11.61 17.5,10c0,-3.59 -2.91,-6.5 -7,-6.5zM10.5,5.5c2.49,0 4.5,2.01 4.5,4.5s-2.01,4.5 -4.5,4.5S6,12.49 6,10s2.01,-4.5 4.5,-4.5z" />
     <path
-        android:fillColor="#FF6300"
-        android:pathData="M16.35,15.65l0.85,0.85 2.9,2.9c0.2,0.2 0.52,0.2 0.72,0s0.2,-0.52 0,-0.72l-2.9,-2.9 -0.85,-0.85c-0.22,0.28 -0.46,0.54 -0.72,0.72z" />
+        android:fillColor="#FFFF6300"
+        android:pathData="M15.85,15.35l1.2,1.2 2.65,2.65c0.29,0.29 0.77,0.29 1.06,0s0.29,-0.77 0,-1.06l-2.65,-2.65 -1.2,-1.2c-0.3,0.38 -0.66,0.72 -1.06,1.06z" />
 </vector>

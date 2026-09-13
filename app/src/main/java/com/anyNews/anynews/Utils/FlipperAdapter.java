@@ -368,12 +368,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      */
     private static final long AD_SHELL_FILL_TIMEOUT_MS = 8_000L;
     /**
-     * July-era parked-seat fill: poll while the user waits on the house/share
-     * default so a late AdMob / AdPreloader creative paints in place (~500ms
-     * cadence matched the old postDelayed display). Never calls
+     * July/Sep-7 parked-seat fill: poll while the user waits on the house/share
+     * default so a late AdMob / AdPreloader creative paints in place. First tick
+     * matches SETTLE_GRACE (160ms); later ticks ~450ms. Never calls
      * {@code notifyDataSetChanged} on every scroll — only seat-gated recycle
      * after repeated in-place misses.
      */
+    private static final long PARKED_AD_FILL_FIRST_MS = 160L;
     private static final long PARKED_AD_FILL_POLL_MS = 450L;
     private static final int PARKED_AD_FILL_MAX_TICKS = 40;
     /** Decorative ad blur: smaller radius + downscale; skip on buffer pages. */
@@ -402,9 +403,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     scheduleSafeAdNotify(Math.max(64L, FlipAdWorkGate.millisUntilAdWorkSafe()));
                     return;
                 }
-                // In-place miss with a ready creative: ask HomePage for seat-gated
-                // settle recycle. Do NOT notify when nothing needs painting — that
-                // flashed every FlipView page on every scroll.
+                // Sep-3 / July parked-seat reliability: ready creative on the
+                // visible house ad MUST paint. Prefer HomePage seat recycle over
+                // giving up (anti-blink over-caution left Share forever).
                 if (needsAdSeatDatasetRebind()) {
                     showLog("ANYNEWS_ADS rebind deferred to flip-safe seat path");
                     if (context instanceof HomePage) {
@@ -413,6 +414,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         } catch (Exception ignored) {
                         }
                     }
+                    return;
+                }
+                // Still on house with no creative yet — nudge load only.
+                // Parked watchdog owns the poll loop (avoid infinite 160ms notify).
+                if (isParkedOnUnfilledAdSeat()) {
+                    try {
+                        if (list != null && currentFlipPage >= 0
+                                && currentFlipPage < list.size()) {
+                            requestNativeAdLoadForSlot(list.get(currentFlipPage));
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    armParkedAdFillWatchdog(currentFlipPage);
                     return;
                 }
                 showLog("ANYNEWS_ADS rebind skipped: no ready creative");
@@ -699,6 +713,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return false;
     }
 
+    /** Visible Flip page is an ad still on house/share default (fill pending). */
+    private boolean isParkedOnUnfilledAdSeat() {
+        try {
+            if (list == null || list.isEmpty()) {
+                return false;
+            }
+            if (currentFlipPage < 0 || currentFlipPage >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum slot = list.get(currentFlipPage);
+            if (slot == null || slot.getPostType() == null
+                    || !slot.getPostType().equalsIgnoreCase("ad")) {
+                return false;
+            }
+            return adShellAwaitingCreative.get(currentFlipPage, false)
+                    || isDefaultAdPlaceholderShowing(currentFlipPage);
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
     private boolean isDefaultAdPlaceholderShowing(int position) {
         try {
             FrameLayout fl = resolveAdShellFrame(position);
@@ -963,7 +998,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * While parked on a house/default ad seat, keep trying in-place paint as
-     * creatives arrive (July wait-on-seat behavior) without blinking news cards.
+     * creatives arrive (July/Sep-7 wait-on-seat behavior) without blinking news.
      */
     private void armParkedAdFillWatchdog(int position) {
         try {
@@ -1004,19 +1039,28 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     adShellHandler.postDelayed(this, PARKED_AD_FILL_POLL_MS);
                                     return;
                                 }
+                                // Always re-ensure while parked — orphan in-flight
+                                // markers / mid-flip warm caps used to leave Share forever.
+                                requestNativeAdLoadForSlot(slot);
                                 if (hasNativeCreativeForSlot(slot)) {
                                     if (tryPaintGoogleNativeInPlace(page)) {
                                         showLog("ANYNEWS_ADS parked watchdog painted pos=" + page);
                                         cancelParkedAdFillWatchdog();
                                         return;
                                     }
-                                    // Creative ready but WeakRef miss — one seat recycle.
+                                    // Creative ready but WeakRef miss — seat recycle.
                                     parkedAdFillTicks++;
-                                    if (parkedAdFillTicks >= 2) {
+                                    if (parkedAdFillTicks >= 1) {
                                         showLog("ANYNEWS_ADS parked watchdog seat recycle pos="
                                                 + page);
                                         cancelParkedAdFillWatchdog();
                                         scheduleSafeAdNotify(0L);
+                                        if (context instanceof HomePage) {
+                                            try {
+                                                ((HomePage) context).scheduleFlipSafeAdRebind();
+                                            } catch (Exception ignored) {
+                                            }
+                                        }
                                         return;
                                     }
                                 } else {
@@ -1032,7 +1076,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             }
                         }
                     };
-            adShellHandler.postDelayed(parkedAdFillWatchdog, PARKED_AD_FILL_POLL_MS);
+            adShellHandler.postDelayed(parkedAdFillWatchdog, PARKED_AD_FILL_FIRST_MS);
         } catch (Exception ignored) {
         }
     }
@@ -1252,8 +1296,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Decorative native-ad blur. Heavy Picasso+radius-150 on the flip path caused
-     * jank; skip on buffer pages / mid-flip, and use a light downscaled blur after paint.
+     * Decorative native-ad blur. Async Picasso arrival used to flash the ad
+     * background for the first ~1–3s after land. Keep a stable dark plate, skip
+     * blur for video natives (MediaView owns the surface), and never clear to
+     * transparent while loading.
      */
     private void loadNativeAdBlurBackground(@Nullable ImageView blurView,
                                             @Nullable NativeAd ad,
@@ -1261,20 +1307,37 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (blurView == null) {
             return;
         }
+        final int plate = 0xFF121212;
         try {
+            blurView.setBackgroundColor(plate);
             boolean allowHeavy = listPosition == currentFlipPage && !isHomeFlipAnimating();
             if (!allowHeavy) {
-                blurView.setImageDrawable(null);
+                // Keep solid plate — do not null the drawable (causes blink).
+                if (blurView.getDrawable() == null) {
+                    blurView.setImageDrawable(new android.graphics.drawable.ColorDrawable(plate));
+                }
                 return;
+            }
+            // Video creatives: MediaView texture is the visual — blur swap blinks.
+            try {
+                if (ad != null && ad.getMediaContent() != null
+                        && ad.getMediaContent().hasVideoContent()) {
+                    blurView.setImageDrawable(new android.graphics.drawable.ColorDrawable(plate));
+                    return;
+                }
+            } catch (Exception ignored) {
             }
             if (ad == null || ad.getImages() == null || ad.getImages().isEmpty()
                     || ad.getImages().get(0) == null
                     || ad.getImages().get(0).getUri() == null) {
-                blurView.setImageDrawable(null);
+                blurView.setImageDrawable(new android.graphics.drawable.ColorDrawable(plate));
                 return;
             }
             final Uri blurUri = ad.getImages().get(0).getUri();
-            // Defer past the current frame so MediaView/setNativeAd can settle first.
+            // Stable plate until blur arrives — no transparent→image flash.
+            if (blurView.getDrawable() == null) {
+                blurView.setImageDrawable(new android.graphics.drawable.ColorDrawable(plate));
+            }
             blurView.post(() -> {
                 try {
                     if (!blurView.isAttachedToWindow()) {
@@ -1284,19 +1347,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             .load(blurUri)
                             .resize(240, 426)
                             .centerCrop()
+                            .noFade()
+                            .placeholder(new android.graphics.drawable.ColorDrawable(plate))
+                            .error(new android.graphics.drawable.ColorDrawable(plate))
                             .transform(new BlurTransformation(
                                     context, AD_BLUR_RADIUS, AD_BLUR_SAMPLING))
                             .into(blurView);
                 } catch (Exception e) {
                     try {
-                        blurView.setImageDrawable(null);
+                        blurView.setImageDrawable(
+                                new android.graphics.drawable.ColorDrawable(plate));
                     } catch (Exception ignored) {
                     }
                 }
             });
         } catch (Exception ignored) {
             try {
-                blurView.setImageDrawable(null);
+                blurView.setImageDrawable(new android.graphics.drawable.ColorDrawable(plate));
             } catch (Exception ignored2) {
             }
         }
@@ -3332,53 +3399,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             icon.setLayoutParams(lp);
             icon.setPadding(iconPaddingPx, iconPaddingPx, iconPaddingPx, iconPaddingPx);
         }
-        // Engagement search must read larger than like/share in the 5-icon row.
-        boostEngagementSearchIconSize(context, convertView, circleDp, iconDp, density);
-    }
-
-    /**
-     * Engagement-row search circle — noticeably larger than sibling action chips,
-     * still clamped so the five-icon row fits on small phones.
-     */
-    private static void boostEngagementSearchIconSize(
-            @Nullable Context context,
-            @Nullable View convertView,
-            int baseCircleDp,
-            int baseIconDp,
-            float density) {
-        if (context == null || convertView == null) return;
-        View slot = convertView.findViewById(R.id.half_search);
-        View icon = convertView.findViewById(R.id.half_search_icon);
-        if (slot == null && icon == null) return;
-        int searchCircleDp = Math.max(baseCircleDp + 10, 46);
-        try {
-            int cfg = SearchIconConfig.sizeDp(context);
-            // size_dp is glyph-oriented; map to a circle that stays above siblings.
-            searchCircleDp = Math.max(searchCircleDp, cfg + 18);
-        } catch (Exception ignored) {
-        }
-        searchCircleDp = Math.min(52, Math.max(baseCircleDp + 6, searchCircleDp));
-        int searchIconDp = Math.min(searchCircleDp - 6, Math.max(baseIconDp + 6, 28));
-        int circlePx = Math.round(searchCircleDp * density);
-        int slotPx = Math.round((searchCircleDp + ACTION_SLOT_EXTRA_DP) * density);
-        int padPx = Math.max(0, Math.round(((searchCircleDp - searchIconDp) / 2f) * density));
-        if (slot != null) {
-            ViewGroup.LayoutParams lp = slot.getLayoutParams();
-            if (lp != null) {
-                lp.width = slotPx;
-                lp.height = slotPx;
-                slot.setLayoutParams(lp);
-            }
-        }
-        if (icon != null) {
-            ViewGroup.LayoutParams lp = icon.getLayoutParams();
-            if (lp != null) {
-                lp.width = circlePx;
-                lp.height = circlePx;
-                icon.setLayoutParams(lp);
-            }
-            icon.setPadding(padPx, padPx, padPx, padPx);
-        }
+        // Engagement search uses the same circle/glyph sizes as like/share/report
+        // (Configuration ACTION_ICON / LIKE_CIRCLE) — do not boost larger.
     }
 
     /**

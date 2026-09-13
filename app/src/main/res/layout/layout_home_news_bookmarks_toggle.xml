@@ -134,9 +134,9 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginStart="10dp"
-            android:background="@drawable/white_oval"
+            android:background="@drawable/bg_search_toggle_soft"
             android:contentDescription="@string/search_stories"
-            android:padding="7dp"
+            android:padding="8dp"
             android:src="@drawable/ic_search_toggle_rich"
             android:visibility="gone" />
     </LinearLayout>

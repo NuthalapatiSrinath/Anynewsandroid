@@ -180,12 +180,12 @@
     </LinearLayout>
 
     <!-- Search between share and three-dots (admin search_icon_on_engagement).
-         Slightly larger circle than like/share so it reads in the 5-icon row. -->
+         Same outer white circle + glyph sizing as like/share (Configuration). -->
     <LinearLayout
         android:id="@+id/half_search"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginEnd="6dp"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginEnd="8dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:gravity="center"
@@ -193,11 +193,11 @@
 
         <ImageView
             android:id="@+id/half_search_icon"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="35dp"
+            android:layout_height="35dp"
             android:background="@drawable/white_oval"
             android:contentDescription="@string/search_stories"
-            android:padding="8dp"
+            android:padding="7dp"
             android:src="@drawable/ic_action_search" />
     </LinearLayout>
 
