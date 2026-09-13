@@ -217,6 +217,12 @@ public class Constants {
     public static String ACTION_ICON_ROW_OFFSET = "action_icon_row_offset";
     public static String ACTION_ICON_SIZE_DP = "action_icon_size_dp";
     public static String LIKE_CIRCLE_SIZE_DP = "like_circle_size_dp";
+    /** In-app Search: show between share and ⋮ on half engagement row. */
+    public static String SEARCH_ICON_ON_ENGAGEMENT = "search_icon_on_engagement";
+    /** In-app Search: show beside News|Read toggle chrome. */
+    public static String SEARCH_ICON_ON_TOGGLE = "search_icon_on_toggle";
+    /** Search glyph size (dp) when on the News|Read toggle bar. */
+    public static String SEARCH_ICON_SIZE_DP = "search_icon_size_dp";
     /** Blue on-image Share overlay (Magazines / Special / Calendar) — size dp. */
     public static String MAGAZINE_SHARE_ICON_SIZE_DP = "magazine_share_icon_size_dp";
     public static String MAGAZINE_SHARE_MARGIN_END_DP = "magazine_share_margin_end_dp";

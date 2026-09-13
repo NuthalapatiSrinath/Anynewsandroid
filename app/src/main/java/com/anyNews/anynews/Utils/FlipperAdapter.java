@@ -1562,6 +1562,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_image_like));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_comment_icon));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_share_icon));
+        EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_search_icon));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.share));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.report_icon));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.video_report));
@@ -1620,9 +1621,41 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         tintHalfActionIcons(convertView);
         applyActionIconRowOffset(convertView);
         applyHalfActionIconSizes(context, convertView);
+        bindHalfSearchIcon(convertView);
         applyTitleBodyGap(context, convertView);
         applyContentBlockOffset(context, convertView);
         bindHalfBodyCollapseToggle(convertView);
+    }
+
+    /**
+     * Admin {@code search_icon_on_engagement}: search between share and ⋮.
+     * Opens {@link com.anyNews.anynews.Activities.InAppSearchActivity} with circular reveal.
+     */
+    private void bindHalfSearchIcon(@Nullable View convertView) {
+        if (convertView == null) return;
+        View slot = convertView.findViewById(R.id.half_search);
+        if (slot == null) return;
+        boolean show = SearchIconConfig.isOnEngagement(context);
+        slot.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (!show) return;
+        View.OnClickListener open =
+                v -> {
+                    try {
+                        android.app.Activity act = null;
+                        if (context instanceof android.app.Activity) {
+                            act = (android.app.Activity) context;
+                        } else if (activity instanceof android.app.Activity) {
+                            act = (android.app.Activity) activity;
+                        }
+                        if (act != null) {
+                            SearchRevealHelper.openFrom(act, v);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                };
+        slot.setOnClickListener(open);
+        View icon = convertView.findViewById(R.id.half_search_icon);
+        if (icon != null) icon.setOnClickListener(open);
     }
 
     /**
@@ -3033,13 +3066,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     // half-image and half-video layouts. Missing ids are skipped safely.
     private static final int[] HALF_ACTION_ICON_IDS = new int[] {
             R.id.half_image_like, R.id.half_comment_icon, R.id.half_share_icon,
-            R.id.share, R.id.report_icon, R.id.video_report
+            R.id.half_search_icon, R.id.share, R.id.report_icon, R.id.video_report
     };
 
     // Tappable slot containers that wrap each action icon (image + video layouts).
     private static final int[] HALF_ACTION_SLOT_IDS = new int[] {
             R.id.half_image_like_icon, R.id.half_comment, R.id.half_share,
-            R.id.half_share__, R.id.report
+            R.id.half_search, R.id.half_share__, R.id.report
     };
 
     // Defaults + clamps mirror the backend (Root_Settings / Update_Configuration).
@@ -3850,6 +3883,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 public void onPageScrollStateChanged(int state) {
                                 }
                             });
+                            TextView magSwipeHint =
+                                    convertView.findViewById(R.id.gallery_swipe_left_hint);
+                            GallerySwipeHintHelper.bind(
+                                    image_magazineHolder.magzine_viewPager_data,
+                                    magSwipeHint,
+                                    mCardAdapter != null ? mCardAdapter.getCount() : 0);
 
                         } catch (Exception e) {
                         }
@@ -4123,6 +4162,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         if (imageGallaryHolder.indicator != null) {
                             imageGallaryHolder.indicator.setViewPager(viewpager);
                         }
+                        TextView gallerySwipeHint =
+                                convertView.findViewById(R.id.gallery_swipe_left_hint);
+                        GallerySwipeHintHelper.bind(
+                                viewpager, gallerySwipeHint, image_gallary.size());
                         if (LanguageId == 4) {
                             imageGallaryHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
                             applyStripFont(imageGallaryHolder.strip_text_name);
@@ -6978,6 +7021,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (indicator != null) {
                     indicator.setViewPager(halfImageActivity.viewPager);
                 }
+                TextView halfSwipeHint =
+                        convertView.findViewById(R.id.gallery_swipe_left_hint);
+                GallerySwipeHintHelper.bind(
+                        halfImageActivity.viewPager, halfSwipeHint, listSample.size());
                 if (halfImageActivity.ll_footer_layout != null) {
                     halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
                 }
@@ -6985,12 +7032,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 halfImageActivity.galleryImageLayout.setVisibility(GONE);
                 halfImageActivity.new_half_image.setVisibility(VISIBLE);
                 new_half_image.setVisibility(VISIBLE);
+                GallerySwipeHintHelper.clear(halfImageActivity.viewPager);
             }
 
         }else{
             halfImageActivity.galleryImageLayout.setVisibility(GONE);
             halfImageActivity.new_half_image.setVisibility(VISIBLE);
             new_half_image.setVisibility(VISIBLE);
+            if (halfImageActivity.viewPager != null) {
+                GallerySwipeHintHelper.clear(halfImageActivity.viewPager);
+            }
         }
 
     }
@@ -9941,6 +9992,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         rememberCommentCountView(list.get(position).getPostId(), commentCountTv);
         tintHalfActionIcons(convertView);
         applyHalfActionIconSizes(context, convertView);
+        bindHalfSearchIcon(convertView);
 
         if (engagementRow != null) {
             engagementRow.setVisibility(View.VISIBLE);
@@ -9961,6 +10013,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         final TextView likeCountView = convertView.findViewById(R.id.half_like_count);
 
         // Force every chip visible — recycled flip pages / prior GONE must not stick.
+        // Search slot is admin-gated via bindHalfSearchIcon (do not force VISIBLE here).
         View[] slots = {likeSlot, commentSlot, shareSlot, reportSlot, likeIcon, commentIcon, shareIcon, reportIcon};
         for (View slot : slots) {
             if (slot != null) {

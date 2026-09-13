@@ -234,6 +234,16 @@
     <string name="feed_end_no_articles_te">ఇక చదవడానికి వార్తలు లేవు</string>
     <string name="feed_end_hint">You\'ve reached the end</string>
     <string name="feed_end_hint_te">మీరు చివరి వార్త చదివారు</string>
+    <!-- Multi-image / magazine / gallery horizontal swipe coach (FlipperAdapter). -->
+    <string name="gallery_swipe_left_hint">Swipe left</string>
+    <string name="gallery_swipe_left_hint_te">ఎడమవైపు స్వైప్ చేయండి</string>
+    <string name="search_stories">Search</string>
+    <string name="search_back">Back</string>
+    <string name="search_stories_hint">Search..</string>
+    <string name="search_keyword_examples">Search keyword ex : Modi, Politics, Health, Stocks, …</string>
+    <string name="recent_searches">Recent Searches</string>
+    <string name="search_categories">Categories</string>
+    <string name="no_stories_found">No Stories found</string>
     <string name="special_requires_internet">Connect to the internet to open Special</string>
     <string name="video_news">Video News</string>
     <string name="breaking_news">Flash News</string>

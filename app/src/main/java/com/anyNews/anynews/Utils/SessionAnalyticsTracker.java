@@ -1000,6 +1000,27 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    try {
+                        Boolean onEng = null;
+                        Boolean onToggle = null;
+                        Integer searchSize = null;
+                        if (resBody.has("search_icon_on_engagement")
+                                && !resBody.get("search_icon_on_engagement").isJsonNull()) {
+                            onEng = resBody.get("search_icon_on_engagement").getAsBoolean();
+                        }
+                        if (resBody.has("search_icon_on_toggle")
+                                && !resBody.get("search_icon_on_toggle").isJsonNull()) {
+                            onToggle = resBody.get("search_icon_on_toggle").getAsBoolean();
+                        }
+                        if (resBody.has("search_icon_size_dp")
+                                && !resBody.get("search_icon_size_dp").isJsonNull()) {
+                            searchSize = resBody.get("search_icon_size_dp").getAsInt();
+                        }
+                        if (onEng != null || onToggle != null || searchSize != null) {
+                            SearchIconConfig.saveFromServer(context, onEng, onToggle, searchSize);
+                        }
+                    } catch (Exception ignored) {
+                    }
                     Integer feedEveryN = null;
                     Integer adPrefetch = null;
                     Integer maxInFlight = null;

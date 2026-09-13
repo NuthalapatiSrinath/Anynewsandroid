@@ -190,6 +190,25 @@
         </LinearLayout>
 
     </LinearLayout>
+
+    <!-- Multi-image coach: shown once until first horizontal swipe -->
+    <TextView
+        android:id="@+id/gallery_swipe_left_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="56dp"
+        android:background="@drawable/bg_gallery_dots_pill"
+        android:gravity="center"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:text="@string/gallery_swipe_left_hint"
+        android:textColor="@android:color/white"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
     <!-- Magazines/Special glow galleries: blue blink Share bottom-right (above footer).
          Normal News galleries keep this GONE. Same asset as Calendar / full_image. -->
     <ImageView

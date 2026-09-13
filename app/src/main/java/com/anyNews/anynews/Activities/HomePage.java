@@ -281,10 +281,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /** Open this footer tab after CLEAR_TOP from Profile / login (menu item id). */
     public static final String EXTRA_FOOTER_TAB = "extra_footer_tab";
+    /** In-app Search → FlipView keyword mode (from InAppSearchActivity). */
+    public static final String EXTRA_SEARCH_QUERY = "extra_search_query";
 
     private static final String TAG = "HomePage :";
     private static final String ADS_TAG = "ANYNEWS_ADS";
     LinearLayout floating_action_button, search_icon;
+    /** Active keyword for Search_Stories / List_All_Articles search_text. */
+    private String activeSearchQuery = "";
+    private boolean searchFeedActive = false;
+    private View homeModeSearchIcon;
     NeomorphFrameLayout neo_profile, neo_post_artical, neo_home, neo_inner_home, neo_inner_profile;
     long mBackPressed;
     SharePostToWhatsApp sharePostToWhatsApp;
@@ -1187,6 +1193,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         SHARE_REDIRECT_ID = "" + getIntent().getStringExtra("SHARE_REDIRECT_ID");
         TITLE_REWARDS = "" + getIntent().getStringExtra("TITLE_REWARDS");
         DATAFROM2G = "" + getIntent().getStringExtra("DATAFROM2G");
+        applySearchQueryExtra(getIntent());
         // Fallback: some splash routing branches launch HomePage without the
         // SHARE_REDIRECT_ID extra. StartingActivity persists the shared post id
         // as a one-shot; consume it here (and clear it) so the exact post opens.
@@ -1591,6 +1598,69 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (intent != null) {
             setIntent(intent);
             handleFooterTabExtra(intent);
+            applySearchQueryExtra(intent);
+        }
+    }
+
+    /** Enter FlipView keyword search mode from {@link InAppSearchActivity}. */
+    private void applySearchQueryExtra(@Nullable Intent intent) {
+        if (intent == null || !intent.hasExtra(EXTRA_SEARCH_QUERY)) {
+            return;
+        }
+        String q = intent.getStringExtra(EXTRA_SEARCH_QUERY);
+        intent.removeExtra(EXTRA_SEARCH_QUERY);
+        if (q == null) q = "";
+        q = q.trim();
+        if (q.isEmpty()) return;
+        activeSearchQuery = q;
+        searchFeedActive = true;
+        try {
+            Toasty.info(this, q, Toasty.LENGTH_SHORT, true).show();
+        } catch (Exception ignored) {
+        }
+        last_post_id = 0;
+        skip = 0;
+        actual_skip = 0;
+        list = new ArrayList<>();
+        dummyResponse = null;
+        category_id = 0;
+        try {
+            inlist(0);
+        } catch (Exception e) {
+            ShowNews_Data_Values(0, -1);
+        }
+    }
+
+    /** Leave keyword search FlipView mode (footer / Special / Video). */
+    private void clearSearchFeedMode() {
+        searchFeedActive = false;
+        activeSearchQuery = "";
+    }
+
+    /** Admin search_icon_on_toggle + search_icon_size_dp on News|Read chrome. */
+    private void applyHomeModeSearchIcon() {
+        if (homeModeSearchIcon == null) return;
+        boolean show = com.anyNews.anynews.Utils.SearchIconConfig.isOnToggle(this);
+        homeModeSearchIcon.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (!show) return;
+        int dp = com.anyNews.anynews.Utils.SearchIconConfig.sizeDp(this);
+        float density = getResources().getDisplayMetrics().density;
+        int px = Math.round(dp * density);
+        int slot = Math.round((dp + 16) * density);
+        ViewGroup.LayoutParams lp = homeModeSearchIcon.getLayoutParams();
+        if (lp != null) {
+            lp.width = slot;
+            lp.height = slot;
+            homeModeSearchIcon.setLayoutParams(lp);
+        }
+        int pad = Math.max(4, (slot - px) / 2);
+        homeModeSearchIcon.setPadding(pad, pad, pad, pad);
+        try {
+            if (homeModeSearchIcon instanceof ImageView) {
+                com.anyNews.anynews.Utils.EngagementCountHelper.applyIconTint(
+                        this, (ImageView) homeModeSearchIcon);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -6091,6 +6161,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         homeModeThumb = findViewById(R.id.home_mode_thumb);
         homeModePill = findViewById(R.id.home_mode_pill);
+        homeModeSearchIcon = findViewById(R.id.home_mode_search);
+        if (homeModeSearchIcon == null && homeModeToggleRoot != null) {
+            homeModeSearchIcon = homeModeToggleRoot.findViewById(R.id.home_mode_search);
+        }
+        applyHomeModeSearchIcon();
+        if (homeModeSearchIcon != null) {
+            homeModeSearchIcon.setOnClickListener(
+                    v -> com.anyNews.anynews.Utils.SearchRevealHelper.openFrom(HomePage.this, v));
+        }
         homeModeNewsSeg = findViewById(R.id.home_mode_news_seg);
         homeModeNewsLabel = findViewById(R.id.home_mode_news);
         homeModeNewsBadge = findViewById(R.id.home_mode_news_badge);
@@ -11694,6 +11773,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performFeedReload() {
         showLog("performFeedReload initialCall=" + initialCall);
+        clearSearchFeedMode();
         // Drop mid-watch video position before the feed rebuilds. Same article often
         // comes back first; without this the shared Exo player reattaches and resumes.
         // Does not touch flip jump-to-first (prepareFreshPage0FeedCursors below).
@@ -11779,6 +11859,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performSpecialFeedOpen() {
         showLog("performSpecialFeedOpen");
+        clearSearchFeedMode();
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         hideHomeCalendarMode();
@@ -11922,6 +12003,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performVideoFeedOpen() {
         showLog("performVideoFeedOpen");
+        clearSearchFeedMode();
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         hideHomeCalendarMode();
@@ -12076,6 +12158,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         requestModel.setApp_version_number(""+BuildConfig.VERSION_CODE);
         requestModel.setSdk_version(SDK_VERSION);
         requestModel.setNotif_perm_allowed(isPermissionGranted);
+
+        if (searchFeedActive
+                && activeSearchQuery != null
+                && !activeSearchQuery.trim().isEmpty()) {
+            requestModel.setSearch_text(activeSearchQuery.trim());
+        }
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
@@ -13024,6 +13112,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     applyActionIconSizeConfig(
                             encreptionRequest.getAction_icon_size_dp(),
                             encreptionRequest.getLike_circle_size_dp()
+                    );
+                    applySearchIconConfig(
+                            encreptionRequest.getSearch_icon_on_engagement(),
+                            encreptionRequest.getSearch_icon_on_toggle(),
+                            encreptionRequest.getSearch_icon_size_dp()
                     );
                     applyMagazineShareIconConfig(
                             encreptionRequest.getMagazine_share_icon_size_dp(),
@@ -14238,6 +14331,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         flipView.requestLayout();
                     }
                 });
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Admin search icon placement — null fields leave prefs (no wipe). */
+    private void applySearchIconConfig(
+            Boolean onEngagement, Boolean onToggle, Integer sizeDp) {
+        try {
+            com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
+                    this, onEngagement, onToggle, sizeDp);
+            applyHomeModeSearchIcon();
+            if (mFlipView != null) {
+                mFlipView.post(
+                        () -> {
+                            try {
+                                if (adapter != null) {
+                                    adapter.notifyDataSetChanged();
+                                }
+                            } catch (Exception ignored) {
+                            }
+                        });
             }
         } catch (Exception ignored) {
         }

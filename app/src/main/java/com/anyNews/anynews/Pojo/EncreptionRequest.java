@@ -251,6 +251,18 @@ public class EncreptionRequest {
     @Expose
     private Integer like_circle_size_dp;
 
+    @SerializedName("search_icon_on_engagement")
+    @Expose
+    private Boolean search_icon_on_engagement;
+
+    @SerializedName("search_icon_on_toggle")
+    @Expose
+    private Boolean search_icon_on_toggle;
+
+    @SerializedName("search_icon_size_dp")
+    @Expose
+    private Integer search_icon_size_dp;
+
     @SerializedName("magazine_share_icon_size_dp")
     @Expose
     private Integer magazine_share_icon_size_dp;
@@ -533,6 +545,30 @@ public class EncreptionRequest {
 
     public void setLike_circle_size_dp(Integer like_circle_size_dp) {
         this.like_circle_size_dp = like_circle_size_dp;
+    }
+
+    public Boolean getSearch_icon_on_engagement() {
+        return search_icon_on_engagement;
+    }
+
+    public void setSearch_icon_on_engagement(Boolean search_icon_on_engagement) {
+        this.search_icon_on_engagement = search_icon_on_engagement;
+    }
+
+    public Boolean getSearch_icon_on_toggle() {
+        return search_icon_on_toggle;
+    }
+
+    public void setSearch_icon_on_toggle(Boolean search_icon_on_toggle) {
+        this.search_icon_on_toggle = search_icon_on_toggle;
+    }
+
+    public Integer getSearch_icon_size_dp() {
+        return search_icon_size_dp;
+    }
+
+    public void setSearch_icon_size_dp(Integer search_icon_size_dp) {
+        this.search_icon_size_dp = search_icon_size_dp;
     }
 
     public Integer getMagazine_share_icon_size_dp() {

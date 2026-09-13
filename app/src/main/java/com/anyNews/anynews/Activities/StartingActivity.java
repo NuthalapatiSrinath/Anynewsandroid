@@ -1543,6 +1543,13 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
+                        com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getSearchIconOnEngagement(),
+                                startActivityReqModel.getData().getSearchIconOnToggle(),
+                                startActivityReqModel.getData().getSearchIconSizeDp()
+                        );
+
                         // Admin-controlled Magazines/Special/Calendar on-image Share size + margins.
                         MagazineShareIconHelper.save(
                                 getApplicationContext(),

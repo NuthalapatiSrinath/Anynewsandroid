@@ -205,6 +205,19 @@ public class ListAllArticlesRequest implements Serializable {
     @Expose
     private int notif_perm_allowed;
 
+    /** Optional keyword → server Search_Stories path on List_All_Articles. */
+    @SerializedName("search_text")
+    @Expose
+    private String search_text;
+
+    public String getSearch_text() {
+        return search_text;
+    }
+
+    public void setSearch_text(String search_text) {
+        this.search_text = search_text;
+    }
+
     @SerializedName("sdk_version")
     @Expose
     private int sdk_version;

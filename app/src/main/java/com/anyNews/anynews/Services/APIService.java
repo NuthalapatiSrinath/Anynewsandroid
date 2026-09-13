@@ -305,6 +305,14 @@ public interface APIService {
     @POST("app/{version}/Flash_News")
     Call<EncreptionRequest> Flash_News(@Path("version") String version, @Body JsonObject body);
 
+    /** Way2-style typeahead suggestions (text + count). Debounce on client. */
+    @POST("app/{version}/Search_Suggestions")
+    Call<EncreptionRequest> Search_Suggestions(@Path("version") String version, @Body JsonObject body);
+
+    /** Full story search results (List_All_Articles-shaped). */
+    @POST("app/{version}/Search_Stories")
+    Call<EncreptionRequest> Search_Stories(@Path("version") String version, @Body JsonObject body);
+
     @POST("app/{version}/{langId}/articles")
     Call<EncreptionRequest> List_All_Articles1(@Path("version") String version,@Path("langId") String langid, @Body JsonObject newsss);
 

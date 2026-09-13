@@ -133,6 +133,30 @@ public class StartActivityReqModel implements Serializable {
             this.likeCircleSizeDp = likeCircleSizeDp;
         }
 
+        @SerializedName("search_icon_on_engagement")
+        @Expose
+        private Boolean searchIconOnEngagement;
+
+        @SerializedName("search_icon_on_toggle")
+        @Expose
+        private Boolean searchIconOnToggle;
+
+        @SerializedName("search_icon_size_dp")
+        @Expose
+        private Integer searchIconSizeDp;
+
+        public Boolean getSearchIconOnEngagement() {
+            return searchIconOnEngagement;
+        }
+
+        public Boolean getSearchIconOnToggle() {
+            return searchIconOnToggle;
+        }
+
+        public Integer getSearchIconSizeDp() {
+            return searchIconSizeDp;
+        }
+
         @SerializedName("magazine_share_icon_size_dp")
         @Expose
         private Integer magazineShareIconSizeDp = 48;

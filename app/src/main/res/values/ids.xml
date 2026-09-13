@@ -16,4 +16,7 @@
     <item name="tag_ad_shell_has_media" type="id" />
     <!-- Exo Way2 scrub: TRUE while user is dragging the red progress line -->
     <item name="exo_scrub_time_scrubbing" type="id" />
+    <!-- Multi-image gallery: swipe-left coach session on ViewPager -->
+    <item name="tag_gallery_swipe_hint_session" type="id" />
+    <item name="gallery_swipe_left_hint" type="id" />
 </resources>

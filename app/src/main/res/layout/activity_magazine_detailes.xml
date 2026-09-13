@@ -55,6 +55,25 @@
 
         </LinearLayout>
 
+        <!-- Multi-image coach above magazine dots; once until first swipe -->
+        <TextView
+            android:id="@+id/gallery_swipe_left_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_above="@+id/magzine_ll_dots"
+            android:layout_centerHorizontal="true"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/bg_gallery_dots_pill"
+            android:gravity="center"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="@string/gallery_swipe_left_hint"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
 <include layout="@layout/share_download_layout"/>
 
     </RelativeLayout>
