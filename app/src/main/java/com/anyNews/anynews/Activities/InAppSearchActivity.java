@@ -335,10 +335,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void submitQuery(String q) {
-        String clean = q != null ? q.trim() : "";
-        // Strip suggestion ellipsis / fancy dots so Search_Stories matches titles.
-        clean = clean.replace("\u2026", " ").replace("...", " ").replace('\u00A0', ' ');
-        clean = clean.replaceAll("\\s+", " ").trim();
+        String clean = softenClientQuery(q);
         if (clean.isEmpty()) return;
         RecentSearchStore.add(this, clean);
         Intent intent = new Intent(this, HomePage.class);
@@ -377,6 +374,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         overridePendingTransition(0, 0);
     }
 
+    /** Same path as Profile category chips → HomePage EXTRA_SESSION_ID. */
     private void openCategory(int categoryId) {
         if (categoryId <= 0) return;
         try {
@@ -384,11 +382,24 @@ public class InAppSearchActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
         Intent intent = new Intent(this, HomePage.class);
+        intent.putExtra("EXTRA_SESSION_ID", "" + categoryId);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.putExtra("EXTRA_SESSION_ID", String.valueOf(categoryId));
-        startActivity(intent);
+        if (getApplicationContext() != null
+                && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+            startActivity(intent);
+        }
         finish();
         overridePendingTransition(0, 0);
+    }
+
+    /** Align FlipView search_text with Suggestions / server normalizeQuery. */
+    private static String softenClientQuery(String q) {
+        String clean = q != null ? q.trim() : "";
+        clean = clean.replace("\u2026", " ").replace("...", " ").replace('\u00A0', ' ');
+        clean = clean.replaceAll("\\s+", " ").trim();
+        clean = clean.replaceAll("[\\?\\!\\.\\u2026]+$", "").trim();
+        clean = clean.replaceAll("\\.{2,}", " ").replaceAll("\\s+", " ").trim();
+        return clean;
     }
 
     private static String suggestSubmitText(Row row) {

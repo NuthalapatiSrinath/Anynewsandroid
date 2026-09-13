@@ -2303,6 +2303,32 @@ public class FlipView extends FrameLayout {
         commitExplicitPage(page);
     }
 
+    /**
+     * Keyword search / fresh deck: wipe restore anchors so the next
+     * {@code dataSetChanged} cannot clamp onto a prior News index or the
+     * Continue-reading hub at the end of the new list.
+     */
+    public void resetSeatForNewFeed() {
+        try {
+            endFlip();
+        } catch (Exception ignored) {
+        }
+        clearGestureAnchor();
+        clearFlipAnchor();
+        clearCommittedSeat();
+        mCurrentPageIndex = 0;
+        mCurrentPageId = -1;
+        mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
+        mFlipDistance = 0;
+        try {
+            if (mPageCount > 0) {
+                setFlipDistance(0, true);
+                commitExplicitPage(0);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     private void commitExplicitPage(int page) {
         if (page < 0) return;
         mCommittedPageIndex = page;

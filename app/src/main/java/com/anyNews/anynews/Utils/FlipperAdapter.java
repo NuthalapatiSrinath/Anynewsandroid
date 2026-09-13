@@ -3837,16 +3837,40 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return inflateFeedEndCard(parent, convertView);
         }
 
+        // Search Continue-reading hub is ONLY for the feed_end sentinel.
+        // Real search hits with null/unknown post_type used to fall through here
+        // and paint hub on every FlipView page (hub-first / hub-only bug).
+        if (FeedEndHelper.isFeedEndType(pagePostType)
+                || FeedEndHelper.isFeedEnd(list.get(position))) {
+            return inflateFeedEndCard(parent, convertView);
+        }
+
         if (pagePostType == null || pagePostType.trim().isEmpty()) {
-            // Avoid NPE in switch + empty scrap: unknown/null types used to return a blank page.
+            pagePostType = inferPostTypeForFlip(list.get(position));
+            if (pagePostType != null) {
+                try {
+                    list.get(position).setPostType(pagePostType);
+                } catch (Exception ignored) {
+                }
+            }
+            showLog("getView inferred post_type=" + pagePostType
+                    + " at pos=" + position
+                    + " postId=" + list.get(position).getPostId());
+        }
+        if (pagePostType == null || pagePostType.trim().isEmpty()) {
+            // Still unknown and no post id — never invent the search hub.
             showLog("getView blank page: null/empty post_type at pos=" + position
                     + " postId=" + list.get(position).getPostId());
             return inflateFeedEndCard(parent, convertView);
         }
-
-        if (FeedEndHelper.isFeedEndType(pagePostType)
-                || FeedEndHelper.isFeedEnd(list.get(position))) {
-            return inflateFeedEndCard(parent, convertView);
+        // Greetings / aliases List_All morphs server-side; Search_Stories may not.
+        if ("greetings".equalsIgnoreCase(pagePostType)
+                || "greeting".equalsIgnoreCase(pagePostType)) {
+            pagePostType = "full_image";
+            try {
+                list.get(position).setPostType(pagePostType);
+            } catch (Exception ignored) {
+            }
         }
 
         try {
@@ -4538,11 +4562,37 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         convertView = inflateFeedEndCard(parent, convertView);
                         break;
 
-                    default:
+                    default: {
+                        // Prefer a real article layout over Continue-reading hub when the
+                        // row has a post id (Search_Stories aliases / new types).
+                        Long pid = list.get(position).getPostId();
+                        if (pid != null && pid > 0
+                                && !"feed_end".equalsIgnoreCase(pagePostType)) {
+                            String fallback = "normal_image";
+                            String media = list.get(position).getMediaType();
+                            if ("5".equals(media) || "6".equals(media)) {
+                                fallback = "full_video";
+                            } else if ("3".equals(media) || "4".equals(media)) {
+                                fallback = "normal_video";
+                            } else if ("greetings".equalsIgnoreCase(pagePostType)
+                                    || "greeting".equalsIgnoreCase(pagePostType)) {
+                                fallback = "full_image";
+                            }
+                            if (!fallback.equalsIgnoreCase(pagePostType)) {
+                                showLog("getView unknown post_type=" + pagePostType
+                                        + " pos=" + position + " → retry as " + fallback);
+                                try {
+                                    list.get(position).setPostType(fallback);
+                                } catch (Exception ignored) {
+                                }
+                                return getView(position, null, parent);
+                            }
+                        }
                         showLog("getView unknown post_type=" + pagePostType
                                 + " pos=" + position + " → feed_end card");
                         convertView = inflateFeedEndCard(parent, convertView);
                         break;
+                    }
 
                 }
             }
@@ -4557,6 +4607,45 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         return convertView;
 
+    }
+
+    /**
+     * Map sparse / Search_Stories rows onto a FlipView layout key so we never
+     * paint the Continue-reading hub for a real article.
+     */
+    @Nullable
+    private static String inferPostTypeForFlip(@Nullable ModelClass.Datum d) {
+        if (d == null) return null;
+        if (FeedEndHelper.isFeedEnd(d)) return FeedEndHelper.POST_TYPE;
+        String existing = d.getPostType();
+        if (existing != null && !existing.trim().isEmpty()) {
+            String t = existing.trim();
+            if ("greetings".equalsIgnoreCase(t) || "greeting".equalsIgnoreCase(t)) {
+                return "full_image";
+            }
+            if ("polling".equalsIgnoreCase(t)) {
+                return "survey_poll";
+            }
+            return t;
+        }
+        Long id = d.getPostId();
+        if (id == null || id <= 0) {
+            return null;
+        }
+        String media = d.getMediaType();
+        if (media != null) {
+            media = media.trim();
+            if ("5".equals(media) || "6".equals(media)) {
+                return "full_video";
+            }
+            if ("3".equals(media) || "4".equals(media)) {
+                return "normal_video";
+            }
+        }
+        if (d.getVideoUrl() != null && !d.getVideoUrl().trim().isEmpty()) {
+            return "normal_video";
+        }
+        return "normal_image";
     }
 
     /**

@@ -297,6 +297,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * replaced by a main-feed OpenPath paint.
      */
     private boolean searchOpenHandledInCreate = false;
+    /** One soften+retry for empty Search_Stories before showing hub-only. */
+    private boolean searchSoftRetryUsed = false;
     /** Way2 bottom bar: back + query while keyword FlipView is active. */
     private View searchContextBar;
     private TextView searchContextQuery;
@@ -1651,12 +1653,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         String q = intent.getStringExtra(EXTRA_SEARCH_QUERY);
         intent.removeExtra(EXTRA_SEARCH_QUERY);
         if (q == null) q = "";
-        q = q.trim();
+        q = softenSearchQuery(q);
         if (q.isEmpty()) return;
         showLog("ANYNEWS_SEARCH open query=\"" + q + "\"");
         activeSearchQuery = q;
         searchFeedActive = true;
         searchOpenHandledInCreate = true;
+        searchSoftRetryUsed = false;
         positionx = 0;
         // Leave Read / Special / Flash so search is not skipped by those gates.
         try {
@@ -1698,6 +1701,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 adapter.setData(list);
             }
             if (mFlipView != null) {
+                mFlipView.resetSeatForNewFeed();
                 mFlipView.setVisibility(View.VISIBLE);
             }
             showHomeFeedLoadingReveal();
@@ -1709,6 +1713,107 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception e) {
             ShowNews_Data_Values(0, -1);
         }
+    }
+
+    /**
+     * Strip suggestion ellipsis / trailing punctuation so Search_Stories title
+     * match aligns with what Suggestions indexed.
+     */
+    @NonNull
+    private static String softenSearchQuery(@Nullable String raw) {
+        if (raw == null) return "";
+        String q = raw.trim();
+        q = q.replace("\u2026", " ").replace("...", " ").replace('\u00A0', ' ');
+        q = q.replaceAll("\\s+", " ").trim();
+        // Trailing ? ! . … and runs of periods break $text phrase / regex edges.
+        q = q.replaceAll("[\\?\\!\\.\\u2026]+$", "").trim();
+        q = q.replaceAll("\\.{2,}", " ").replaceAll("\\s+", " ").trim();
+        return q;
+    }
+
+    /** Drop last token (or last char) when page-0 Search_Stories returned empty. */
+    @Nullable
+    private static String softenSearchQueryFurther(@Nullable String raw) {
+        String q = softenSearchQuery(raw);
+        if (q.length() < 4) return null;
+        String[] parts = q.split("\\s+");
+        if (parts.length > 1) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < parts.length - 1; i++) {
+                if (i > 0) sb.append(' ');
+                sb.append(parts[i]);
+            }
+            String out = sb.toString().trim();
+            return out.isEmpty() ? null : out;
+        }
+        String out = q.substring(0, q.length() - 1).trim();
+        return out.isEmpty() ? null : out;
+    }
+
+    /**
+     * Hard land: first FlipView page must be a real hit when paintables &gt; 0.
+     * Never leave distance/index on the Continue-reading hub.
+     */
+    private void forceSearchHitsOnPage0() {
+        if (!searchFeedActive || list == null || list.isEmpty() || mFlipView == null) {
+            return;
+        }
+        int paintables = ReadArticleStore.countPaintableArticles(list);
+        if (paintables <= 0) {
+            return;
+        }
+        // Hub must never sit at index 0 when hits exist — move it to the end.
+        if (FeedEndHelper.isFeedEnd(list.get(0))) {
+            showLog("ANYNEWS_SEARCH ASSERT hub at index 0 with hits — moving to end");
+            boolean keepHub = FeedEndHelper.stripAll(list);
+            if (keepHub && ReadArticleStore.countPaintableArticles(list) > 0) {
+                FeedEndHelper.ensureAtEnd(list, this);
+            }
+        }
+        if (list.isEmpty() || FeedEndHelper.isFeedEnd(list.get(0))) {
+            showLog("ANYNEWS_SEARCH ASSERT still hub-first — abort land");
+            return;
+        }
+        positionx = 0;
+        try {
+            // Clear restore anchors BEFORE notify so dataSetChanged cannot clamp
+            // onto the hub at list.size()-1.
+            mFlipView.resetSeatForNewFeed();
+            if (adapter != null) {
+                adapter.setCurrentFlipPage(0);
+                adapter.setData(list);
+            }
+            if (mFlipView.getPageCount() > 0) {
+                mFlipView.flipTo(0);
+            }
+        } catch (Exception e) {
+            showLog("ANYNEWS_SEARCH force page0 failed: " + e.getMessage());
+        }
+        try {
+            int cur = mFlipView.getCurrentPage();
+            if (cur != 0
+                    && cur < list.size()
+                    && FeedEndHelper.isFeedEnd(list.get(cur))) {
+                showLog("ANYNEWS_SEARCH ASSERT still on hub idx=" + cur + " — flipTo(0)");
+                mFlipView.flipTo(0);
+                positionx = 0;
+            }
+        } catch (Exception ignored) {
+        }
+        mFlipView.post(() -> {
+            try {
+                if (!searchFeedActive || mFlipView == null || list == null) return;
+                if (ReadArticleStore.countPaintableArticles(list) <= 0) return;
+                if (list.isEmpty() || FeedEndHelper.isFeedEnd(list.get(0))) return;
+                int cur = mFlipView.getCurrentPage();
+                if (cur != 0) {
+                    showLog("ANYNEWS_SEARCH ASSERT post-frame seat=" + cur + " — flipTo(0)");
+                    positionx = 0;
+                    mFlipView.flipTo(0);
+                }
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     /**
@@ -1771,6 +1876,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void clearSearchFeedMode() {
         searchFeedActive = false;
         activeSearchQuery = "";
+        searchSoftRetryUsed = false;
         updateSearchContextBar();
     }
 
@@ -11023,6 +11129,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (list == null) {
                 list = new ArrayList<>();
             }
+            int paintablesBefore = ReadArticleStore.countPaintableArticles(list);
+            // Search: never jump onto Continue-reading while hits exist.
+            if (searchFeedActive && paintablesBefore > 0 && flipToEnd) {
+                showLog("ANYNEWS_SEARCH ASSERT block flipToEnd hub — paintables="
+                        + paintablesBefore);
+                flipToEnd = false;
+            }
             // Empty list + end card alone still beats a white FlipView.
             boolean mutated = FeedEndHelper.ensureAtEnd(list, this);
             no_article_message = FeedEndHelper.resolveMessage(this);
@@ -11047,6 +11160,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             if (flipToEnd && mFlipView != null && !list.isEmpty()) {
                 final int endIdx = list.size() - 1;
+                // Final guard: do not seat on hub when a prior hit is at index 0.
+                if (searchFeedActive
+                        && ReadArticleStore.countPaintableArticles(list) > 0
+                        && FeedEndHelper.isFeedEnd(list.get(endIdx))) {
+                    showLog("ANYNEWS_SEARCH ASSERT skip flipTo hub endIdx=" + endIdx);
+                    forceSearchHitsOnPage0();
+                    return;
+                }
                 positionx = endIdx;
                 try {
                     mFlipView.flipTo(endIdx);
@@ -11056,6 +11177,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     } catch (Exception ignored) {
                     }
                 }
+            } else if (searchFeedActive
+                    && ReadArticleStore.countPaintableArticles(list) > 0) {
+                forceSearchHitsOnPage0();
             }
             showLog("ensureFeedEndCardVisible flipToEnd=" + flipToEnd
                     + " size=" + list.size());
@@ -14042,32 +14166,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 int paintables = ReadArticleStore.countPaintableArticles(list);
                                 showLog("ANYNEWS_SEARCH page0 hits paintables=" + paintables
                                         + " listSize=" + list.size());
-                                try {
-                                    positionx = 0;
+                                // Strip any hub that raced into index 0 before hits bind.
+                                if (paintables > 0) {
+                                    FeedEndHelper.stripAll(list);
                                     if (adapter != null) {
-                                        adapter.setCurrentFlipPage(0);
+                                        adapter.setData(list);
                                     }
-                                    if (mFlipView != null) {
-                                        mFlipView.flipTo(0);
-                                        // Cover any delayed FlipView observer / peakNext.
-                                        mFlipView.post(() -> {
-                                            try {
-                                                if (searchFeedActive && mFlipView != null) {
-                                                    positionx = 0;
-                                                    mFlipView.flipTo(0);
-                                                }
-                                            } catch (Exception ignored) {
-                                            }
-                                        });
-                                    }
-                                } catch (Exception ignored) {
                                 }
+                                forceSearchHitsOnPage0();
                                 // Regression guard: never leave hub as the only visible
                                 // page when real hits exist.
                                 if (paintables > 0 && FeedEndHelper.hasAtEnd(list)
                                         && list.size() == 1) {
                                     showLog("ANYNEWS_SEARCH BUG hub-only with paintables — stripping");
                                     FeedEndHelper.stripAll(list);
+                                    forceSearchHitsOnPage0();
                                 }
                             }
                             // Always show flip when list has paintables — never empty white forever.
@@ -14167,6 +14280,31 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 int paintables = list != null
                                         ? ReadArticleStore.countPaintableArticles(list) : 0;
                                 if (paintables <= 0) {
+                                    // Soften once (drop last token / trailing chars) before
+                                    // hub-only — matches server softenOnce for Suggestions.
+                                    String soft = softenSearchQueryFurther(activeSearchQuery);
+                                    if (!searchSoftRetryUsed
+                                            && soft != null
+                                            && !soft.isEmpty()
+                                            && !soft.equalsIgnoreCase(
+                                                    activeSearchQuery != null
+                                                            ? activeSearchQuery.trim() : "")) {
+                                        searchSoftRetryUsed = true;
+                                        activeSearchQuery = soft;
+                                        updateSearchContextBar();
+                                        showLog("ANYNEWS_SEARCH soft-retry q=\"" + soft + "\"");
+                                        last_post_id = 0;
+                                        skip = 0;
+                                        actual_skip = 0;
+                                        isApiRequested = false;
+                                        try {
+                                            showHomeFeedLoadingReveal();
+                                        } catch (Exception ignored) {
+                                        }
+                                        ShowNews_Data_Values(0, -1);
+                                        initialCall = true;
+                                        return;
+                                    }
                                     if (list == null) list = new ArrayList<>();
                                     FeedEndHelper.stripAll(list);
                                     // Zero hits: single Continue-reading hub (not article).
@@ -14183,6 +14321,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     // Hits already on FlipView — append hub only, stay put.
                                     showLog("ANYNEWS_SEARCH EOF → hub after last hit");
                                     ensureFeedEndCardVisible(false);
+                                    forceSearchHitsOnPage0();
                                 }
                                 initialCall = true;
                                 return;
