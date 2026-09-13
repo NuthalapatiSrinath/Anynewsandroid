@@ -1307,7 +1307,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (blurView == null) {
             return;
         }
-        final int plate = 0xFF121212;
+        final int plate = 0xFFFFFFFF;
         try {
             blurView.setBackgroundColor(plate);
             boolean allowHeavy = listPosition == currentFlipPage && !isHomeFlipAnimating();
@@ -3715,7 +3715,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         int comments = item.getComments() != null ? item.getComments() : 0;
         item.setComments(comments + 1);
         applyCommentCountToRememberedView(item.getPostId(), item.getComments());
-        notifyWhenFlipSettled();
     }
 
     /** Bump comment count by post ids (preferred when Flip index may be stale). */
@@ -3732,7 +3731,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             int comments = item.getComments() != null ? item.getComments() : 0;
             item.setComments(comments + 1);
             applyCommentCountToRememberedView(postId, item.getComments());
-            notifyWhenFlipSettled();
             return;
         }
     }
@@ -3841,6 +3839,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         if (list == null || position < 0 || position >= list.size()) {
+            if (list != null && FeedEndHelper.hasAtEnd(list)) {
+                View empty = new View(context);
+                empty.setVisibility(View.GONE);
+                return empty;
+            }
             // Never return a blank white scrap past the adapter — show end card.
             return inflateFeedEndCard(parent, convertView);
         }
@@ -10790,19 +10793,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // Content key ignores http↔file:// swap after OfflineImageStore finishes
         // (~3–4s). Rebinding with a new URI + showImageOnLoading made the visible
         // hero disappear then fade back in.
-        final String contentKey =
-                String.valueOf(postId != null ? postId : 0L) + "|" + imageIndex;
+        final Long postId = item != null ? item.getPostId() : null;
+        final String contentKey;
+        if (postId != null && postId > 0) {
+            contentKey = String.valueOf(postId) + "|" + imageIndex;
+        } else if (!TextUtils.isEmpty(remote)) {
+            contentKey = remote + "|" + imageIndex;
+        } else {
+            contentKey = loadUri;
+        }
         final String tagKey = contentKey + "|" + loadUri;
         Object prev = target.getTag();
         if (prev != null) {
             String prevTag = String.valueOf(prev);
-            if (prevTag.equals(tagKey)) {
+            if (prevTag.equals(tagKey) || prevTag.equals(contentKey)) {
                 return;
             }
-            // Same article already showing a real bitmap — skip offline file rebind flash.
-            // (Color placeholder from showImageOnLoading is not a BitmapDrawable.)
+            // Same article already showing a real drawable — skip offline file rebind flash.
             if ((prevTag.equals(contentKey) || prevTag.startsWith(contentKey + "|"))
-                    && hasSettledArticleBitmap(target)) {
+                    && target.getDrawable() != null) {
                 target.setTag(contentKey);
                 return;
             }
@@ -10900,14 +10909,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             target.setImageResource(IMAGE_FAIL_PLACEHOLDER);
             return;
         }
-        Object model = loadUri;
-        if (loadUri.startsWith("file://")) {
-            try {
-                String path = Uri.parse(loadUri).getPath();
-                if (path != null) model = new File(path);
-            } catch (Exception ignored) {
+        final Long postId = item != null ? item.getPostId() : null;
+        final String contentKey;
+        if (postId != null && postId > 0) {
+            contentKey = String.valueOf(postId) + "|0";
+        } else if (!TextUtils.isEmpty(remote)) {
+            contentKey = remote;
+        } else {
+            contentKey = loadUri;
+        }
+        Object prevTag = target.getTag();
+        if (prevTag != null && target.getDrawable() != null) {
+            String pStr = String.valueOf(prevTag);
+            if (pStr.equals(contentKey) || pStr.equals(loadUri) || pStr.startsWith(contentKey + "|")) {
+                target.setTag(contentKey);
+                return;
             }
         }
+        Object model = offlineAwareGlideModel(item, remote);
+        if (model == null) {
+            target.setImageResource(IMAGE_FAIL_PLACEHOLDER);
+            return;
+        }
+        target.setTag(contentKey);
         Glide.with(gc).load(model).apply(flipGlideDecodeOptions()).into(target);
     }
 

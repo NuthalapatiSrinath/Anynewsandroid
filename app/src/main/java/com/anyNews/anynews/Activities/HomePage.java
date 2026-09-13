@@ -451,8 +451,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (pendingFullAdRebind) {
                     pendingFullAdRebind = false;
                     if (adapter != null) {
-                        // Layout-type swap (share_app ↔ ad) — settle-coalesced recycle.
-                        adapter.notifyWhenFlipSettled();
+                        adapter.tryPaintReadyGoogleNativesInPlace();
                     }
                     return;
                 }
@@ -460,8 +459,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     return;
                 }
                 // Sep-3 reliability: parked current ad with a ready creative MUST
-                // paint — prefer in-place, else one FlipView settle recycle.
-                // Anti-blink gates that skipped this left Share forever.
+                // paint — prefer in-place, else attempt in-place native paint.
                 if (adapter != null && adapter.needsAdSeatDatasetRebind()) {
                     if (shouldDeferAdWork()) {
                         scheduleFlipSafeAdRebind(
@@ -469,7 +467,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         return;
                     }
                     showLog("ANYNEWS_ADS seat-only settle recycle (in-place miss)");
-                    adapter.notifyWhenFlipSettled();
+                    adapter.tryPaintReadyGoogleNativesInPlace();
                 }
             } catch (Exception ignored) {
             }
@@ -5556,8 +5554,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     //countforshareanddownload(list.get(positionx).getPostId(), list.get(positionx).getSubPostId(), 0);
 
                 }
-                adapter.notifyWhenFlipSettled();
-
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -13687,10 +13683,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 encreptionRequest.getFlash_news_in_main_feed_slot(),
                                 encreptionRequest.getKeep_rewards_after_join(),
                                 encreptionRequest.getShow_flash_and_rewards_together());
-                        // Identical prefs → zero FlipView notify (no blink).
-                        if (chipsChanged && adapter != null) {
-                            adapter.notifyWhenFlipSettled();
-                        }
                     }
                     // Wallet flag separate so omitting it never wipes splash to OFF.
                     if (encreptionRequest.getShow_wallet_in_profile() != null) {
@@ -13707,14 +13699,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (encreptionRequest.getDual_chip_size_dp() != null
                             || encreptionRequest.getDual_chip_shift_left_dp() != null
                             || encreptionRequest.getDual_chip_shift_up_dp() != null) {
-                        boolean pairChanged = DistrictPinVisibilityConfig.savePairLayoutFromServer(
+                        DistrictPinVisibilityConfig.savePairLayoutFromServer(
                                 getApplicationContext(),
                                 encreptionRequest.getDual_chip_size_dp(),
                                 encreptionRequest.getDual_chip_shift_left_dp(),
                                 encreptionRequest.getDual_chip_shift_up_dp());
-                        if (pairChanged && adapter != null) {
-                            adapter.notifyWhenFlipSettled();
-                        }
                     }
                     // Daily Updates + Birthday hub kill switches (live; never stub on errors).
                     applyDailyUpdatesHubPollConfig(encreptionRequest);
@@ -14893,19 +14882,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             boolean changed = com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
                     this, onEngagement, onToggle, sizeDp);
             applyHomeModeSearchIcon();
-            // Identical prefs → zero FlipView notify.
-            if (!changed || mFlipView == null) {
-                return;
-            }
-            mFlipView.post(
-                    () -> {
-                        try {
-                            if (adapter != null) {
-                                adapter.notifyDataSetChanged();
-                            }
-                        } catch (Exception ignored) {
-                        }
-                    });
         } catch (Exception ignored) {
         }
     }
@@ -16029,12 +16005,6 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             type = label;
         }
         DistrictLabelHelper.applyTo(HomePage.this, local_distic_name, selelcted_local_distic_name);
-        if (adapter != null && category_id == 0) {
-            try {
-                adapter.notifyWhenFlipSettled();
-            } catch (Exception ignored) {
-            }
-        }
     }
 
     private JsonObject set_like_request(Long post_id, Long sub_post_id, int type) {

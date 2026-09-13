@@ -1,0 +1,141 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="footer_show_bookmarks">true</string>
+    <string name="profile_header_icon_size_dp">36</string>
+    <int name="like_circle_size_dp" value="26" />
+    <string name="session_heartbeat_interval_seconds">0</string>
+    <string name="ttd_hero_subtitle">శ్రీ వేంకటేశ్వర స్వామి వారి సేవలో</string>
+    <boolean name="allow_screen_capture" value="true" />
+    <string name="ttd_app_url">https://www.tirumala.org/</string>
+    <int name="Show_Animation" value="0" />
+    <string name="cricket_mini_player_idle_poll_interval_seconds">90</string>
+    <string name="custom_font_urls">{&quot;noto_sans_malayalam&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosansmalayalam/NotoSansMalayalam%5Bwdth%2Cwght%5D.ttf&quot;,&quot;manjari&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/manjari/Manjari-Regular.ttf&quot;,&quot;gayathri&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/gayathri/Gayathri-Regular.ttf&quot;,&quot;baloo_chettan_2&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/baloochettan2/BalooChettan2%5Bwght%5D.ttf&quot;,&quot;chilanka&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/chilanka/Chilanka-Regular.ttf&quot;,&quot;anek_malayalam&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/anekmalayalam/AnekMalayalam%5Bwdth%2Cwght%5D.ttf&quot;,&quot;arima&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/arima/Arima%5Bwght%5D.ttf&quot;,&quot;noto_sans_devanagari&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosansdevanagari/NotoSansDevanagari%5Bwdth%2Cwght%5D.ttf&quot;,&quot;hind&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/hind/Hind-Regular.ttf&quot;,&quot;mukta&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mukta/Mukta-Regular.ttf&quot;,&quot;tiro_devanagari_hindi&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tirodevanagarihindi/TiroDevanagariHindi-Regular.ttf&quot;,&quot;sahitya&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/sahitya/Sahitya-Regular.ttf&quot;,&quot;kalam&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/kalam/Kalam-Regular.ttf&quot;,&quot;amiko&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/amiko/Amiko-Regular.ttf&quot;,&quot;biryani&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/biryani/Biryani-Regular.ttf&quot;,&quot;dekko&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dekko/Dekko-Regular.ttf&quot;,&quot;kadwa&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/kadwa/Kadwa-Regular.ttf&quot;,&quot;khand&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/khand/Khand-Regular.ttf&quot;,&quot;modak&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/modak/Modak-Regular.ttf&quot;,&quot;rajdhani&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rajdhani/Rajdhani-Regular.ttf&quot;,&quot;yantramanav&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/yantramanav/Yantramanav-Regular.ttf&quot;,&quot;martel&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/martel/Martel-Regular.ttf&quot;,&quot;martel_sans&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/martelsans/MartelSans-Regular.ttf&quot;,&quot;palanquin&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/palanquin/Palanquin-Regular.ttf&quot;,&quot;jaldi&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/jaldi/Jaldi-Regular.ttf&quot;,&quot;ramabhadra&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ramabhadra/Ramabhadra-Regular.ttf&quot;,&quot;ntr&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ntr/NTR-Regular.ttf&quot;,&quot;gurajada&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/gurajada/Gurajada-Regular.ttf&quot;,&quot;suranna&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/suranna/Suranna-Regular.ttf&quot;,&quot;peddana&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/peddana/Peddana-Regular.ttf&quot;,&quot;timmana&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/timmana/Timmana-Regular.ttf&quot;,&quot;ramaraja&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ramaraja/Ramaraja-Regular.ttf&quot;,&quot;mandali&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/mandali/Mandali-Regular.ttf&quot;,&quot;gidugu&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/gidugu/Gidugu-Regular.ttf&quot;,&quot;lakki_reddy&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/lakkireddy/LakkiReddy-Regular.ttf&quot;,&quot;tenali_ramakrishna&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tenaliramakrishna/TenaliRamakrishna-Regular.ttf&quot;,&quot;dhurjati&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/dhurjati/Dhurjati-Regular.ttf&quot;,&quot;chathura&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/chathura/Chathura-Regular.ttf&quot;,&quot;suravaram&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/suravaram/Suravaram-Regular.ttf&quot;,&quot;tiro_telugu&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tirotelugu/TiroTelugu-Regular.ttf&quot;,&quot;hind_guntur&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/hindguntur/HindGuntur-Regular.ttf&quot;,&quot;ponnala&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ponnala/Ponnala-Regular.ttf&quot;,&quot;ravi_prakash&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/raviprakash/RaviPrakash-Regular.ttf&quot;,&quot;catamaran&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/catamaran/Catamaran%5Bwght%5D.ttf&quot;,&quot;mukta_malar&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/muktamalar/MuktaMalar-Regular.ttf&quot;,&quot;pavanam&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/pavanam/Pavanam-Regular.ttf&quot;,&quot;noto_sans_tamil&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosanstamil/NotoSansTamil%5Bwdth%2Cwght%5D.ttf&quot;,&quot;tiro_tamil&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tirotamil/TiroTamil-Regular.ttf&quot;,&quot;hind_madurai&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/hindmadurai/HindMadurai-Regular.ttf&quot;,&quot;kavivanar&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/kavivanar/Kavivanar-Regular.ttf&quot;,&quot;baloo_thambi_2&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/baloothambi2/BalooThambi2%5Bwght%5D.ttf&quot;,&quot;anek_tamil&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/anektamil/AnekTamil%5Bwdth%2Cwght%5D.ttf&quot;,&quot;noto_serif_tamil&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notoseriftamil/NotoSerifTamil%5Bwdth%2Cwght%5D.ttf&quot;,&quot;meera_inimai&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/meerainimai/MeeraInimai-Regular.ttf&quot;,&quot;noto_sans_kannada&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosanskannada/NotoSansKannada%5Bwdth%2Cwght%5D.ttf&quot;,&quot;baloo_tamma_2&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/balootamma2/BalooTamma2%5Bwght%5D.ttf&quot;,&quot;tiro_kannada&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/tirokannada/TiroKannada-Regular.ttf&quot;,&quot;hubballi&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/hubballi/Hubballi-Regular.ttf&quot;,&quot;akaya_kanadaka&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/akayakanadaka/AkayaKanadaka-Regular.ttf&quot;,&quot;anek_kannada&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/anekkannada/AnekKannada%5Bwdth%2Cwght%5D.ttf&quot;,&quot;noto_serif_kannada&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notoserifkannada/NotoSerifKannada%5Bwght%5D.ttf&quot;,&quot;noto_sans_oriya&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosansoriya/NotoSansOriya%5Bwdth%2Cwght%5D.ttf&quot;,&quot;baloo_bhaina_2&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/baloobhaina2/BalooBhaina2%5Bwght%5D.ttf&quot;,&quot;anek_odia&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/anekodia/AnekOdia%5Bwdth%2Cwght%5D.ttf&quot;,&quot;noto_serif_oriya&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notoseriforiya/NotoSerifOriya%5Bwght%5D.ttf&quot;,&quot;alkatra&quot;:&quot;https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/alkatra/Alkatra%5Bwght%5D.ttf&quot;}</string>
+    <string name="settings_show_video_autoplay">true</string>
+    <boolean name="is_login" value="false" />
+    <boolean name="event_status" value="false" />
+    <string name="read_article_meta_v1">[{&quot;id&quot;:1801936,&quot;at&quot;:1788087242727},{&quot;id&quot;:1801930,&quot;at&quot;:1788088705142}]</string>
+    <int name="default_rashi_id" value="7" />
+    <string name="ttd_booking_days"></string>
+    <string name="settings_show_night_mode">true</string>
+    <string name="session_live_enabled">false</string>
+    <string name="read_article_pending_v1">[{&quot;id&quot;:1801498,&quot;at&quot;:1788088712639}]</string>
+    <string name="Selected_Distric_Name1">అనకాపల్లి</string>
+    <int name="Selected_Distric_Name_LangId" value="3" />
+    <string name="profile_show_referral">false</string>
+    <string name="settings_show_notifications">true</string>
+    <boolean name="settings_notification_enabled" value="true" />
+    <string name="ad_impr_flush_every_n">5</string>
+    <string name="ttd_show_darshan">true</string>
+    <string name="ttd_show_sevas">true</string>
+    <boolean name="switchNotification" value="true" />
+    <int name="Selected_Distric_Id" value="1453" />
+    <string name="profile_category_icon_size_dp">48</string>
+    <string name="offline_article_open_ids_v1">[1801936,1801930,1801498]</string>
+    <string name="writer_strip_style">{&quot;designation_bold&quot;:true,&quot;designation_color&quot;:&quot;#000000&quot;,&quot;designation_font_family&quot;:&quot;&quot;,&quot;designation_size_sdp&quot;:7.0,&quot;location_color&quot;:&quot;#000000&quot;,&quot;location_font_family&quot;:&quot;&quot;,&quot;location_right_offset_dp&quot;:0.0,&quot;location_size_sdp&quot;:12.0,&quot;name_bold&quot;:true,&quot;name_color&quot;:&quot;#000000&quot;,&quot;name_font_family&quot;:&quot;&quot;,&quot;name_size_sdp&quot;:8.0,&quot;time_bold&quot;:true,&quot;time_color&quot;:&quot;#000000&quot;,&quot;time_font_family&quot;:&quot;&quot;,&quot;time_size_sdp&quot;:7.0}</string>
+    <string name="profile_menu_text_size_sp">15</string>
+    <int name="notification_runtime_ask_version_code" value="168" />
+    <boolean name="read_article_orphan_sweep_v2" value="true" />
+    <boolean name="pn_show_article_image" value="true" />
+    <string name="app_views_batch_pending_json">[]</string>
+    <long name="device_location_last_gps_sent_ms" value="1788088736868" />
+    <string name="full_video_share_card">{&quot;background_color&quot;:&quot;#F5F7FB&quot;,&quot;subtitle&quot;:&quot;Send video to a chat&quot;,&quot;subtitle_color&quot;:&quot;#A2A2A2&quot;,&quot;subtitle_size_sp&quot;:11.0,&quot;title&quot;:&quot;Send Video&quot;,&quot;title_color&quot;:&quot;#000000&quot;,&quot;title_size_sp&quot;:14.0}</string>
+    <int name="pn_thumb_size_dp" value="48" />
+    <string name="max_native_ad_loads_in_flight">2</string>
+    <int name="action_icon_size_dp" value="20" />
+    <int name="calendar_detail_title_size_sp" value="17" />
+    <string name="weather_enabled">true</string>
+    <int name="DraftID" value="2720424" />
+    <string name="update_banner_subtitle"></string>
+    <int name="staticDataApi" value="0" />
+    <string name="ttd_blessing">|| ఓం నమో వేంకటేశాయ ||</string>
+    <string name="calendar_panchang_source">prokerala_hyderabad</string>
+    <string name="session_live_window_seconds">0</string>
+    <int name="calendar_month_height_fraction" value="42" />
+    <string name="ttd_show_quick">true</string>
+    <string name="footer_show_plus">true</string>
+    <int name="pn_left_icon_size_dp" value="48" />
+    <string name="full_jatakam_whatsapp"></string>
+    <string name="theme_color">#EF4923</string>
+    <string name="show_header_profile_icon">true</string>
+    <boolean name="notification_reprompt_due" value="false" />
+    <boolean name="isLanguageSelected" value="true" />
+    <int name="content_block_offset_dp" value="0" />
+    <string name="ttd_booking_enabled">true</string>
+    <string name="offline_news_pack_max">50</string>
+    <int name="notification_reprompt_wave" value="2" />
+    <string name="ttd_edarshan_url">https://tirupatibalaji.ap.gov.in/</string>
+    <long name="open_path_static_at" value="1788086748211" />
+    <string name="pn_style_mode">compact_with_image</string>
+    <long name="open_path_splash_at" value="1788088525218" />
+    <string name="settings_show_local_stories">false</string>
+    <string name="pending_share_post_id"></string>
+    <string name="footer_show_special">true</string>
+    <boolean name="ttd_config_set" value="true" />
+    <string name="State_Name">main</string>
+    <string name="profile_show_bookmarks">true</string>
+    <string name="read_history_hours">24</string>
+    <string name="feed_ad_every_n">3</string>
+    <string name="ttd_booking_url">https://tirupatibalaji.ap.gov.in/</string>
+    <boolean name="isunreadpostsselected" value="false" />
+    <string name="ttd_enabled">true</string>
+    <boolean name="enable_video_post" value="true" />
+    <string name="pn_large_icon_url"></string>
+    <boolean name="device_location_soft_asked_v1" value="true" />
+    <string name="cricket_footer_tab_enabled">false</string>
+    <string name="footer_show_reload">true</string>
+    <boolean name="default_rashi_id_set" value="true" />
+    <boolean name="push_include_logo_default" value="false" />
+    <int name="calendar_selected_circle_radius_percent" value="60" />
+    <string name="cricket_mini_player_enabled">false</string>
+    <int name="flip_restore_index" value="0" />
+    <long name="open_path_feed_net_at" value="1788088712338" />
+    <string name="Selected_Distric_Name">అనకాపల్లి</string>
+    <string name="enable_status_videos">true</string>
+    <string name="engagement_badge_color">#FF6600</string>
+    <int name="pn_title_size_sp" value="15" />
+    <int name="calendar_detail_item_size_sp" value="15" />
+    <string name="cricket_mini_player_position">{&quot;use_default&quot;:true,&quot;x_percent&quot;:100.0,&quot;y_percent&quot;:80.0}</string>
+    <string name="ttd_show_news">true</string>
+    <string name="flip_restore_post_id">1801498</string>
+    <boolean name="notification_reprompt_enabled" value="true" />
+    <string name="app_session_analytics_id">17fde7fc-7394-4a70-952f-864811bcde02</string>
+    <string name="poll_survey_colors">{&quot;dark_fill&quot;:&quot;#42AE4D&quot;,&quot;dark_text&quot;:&quot;#FFFFFF&quot;,&quot;light_fill&quot;:&quot;#42AE4D&quot;,&quot;light_text&quot;:&quot;#FFFFFF&quot;}</string>
+    <string name="flip_restore_at">1788088737703</string>
+    <string name="REFERAL_LINK2">utm_source=google-play&amp;utm_medium=organic</string>
+    <string name="FCM_TOKEN">flchpnFgRvGBj6R_ISlvku:APA91bFai_OKr7rAGVdDkNwQRyUk9MkVG1ZmiPsxerJhqwafFoKbNHOj0tbSo5NeNlnmj3EhLxXw4aH7roqW4VYj0Iu6wKqZgnvbGGQpO9RkNDfZp5IVeOQ</string>
+    <string name="cricket_mini_player_poll_interval_seconds">10</string>
+    <boolean name="enable_article_post" value="true" />
+    <string name="contact_email">support@anynews.co.in</string>
+    <string name="ttd_hero_title">Tirumala Tirupati Devasthanams</string>
+    <string name="ad_prefetch_lookahead">4</string>
+    <boolean name="isvideopostsselected" value="false" />
+    <string name="language_font_settings">{&quot;1&quot;:{&quot;area_selection_font_size&quot;:16.0,&quot;body_font_family&quot;:&quot;mallannaregular&quot;,&quot;body_font_size&quot;:13.0,&quot;body_font_weight&quot;:400,&quot;comments_font_size&quot;:14.0,&quot;district_selection_box_height&quot;:85.0,&quot;district_selection_font_size&quot;:16.0,&quot;language_selection_font_size&quot;:16.0,&quot;line_spacing_multiplier&quot;:0.65,&quot;login_font_size&quot;:16.0,&quot;post_submit_font_size&quot;:14.0,&quot;profile_font_size&quot;:14.0,&quot;programmatic_body_size&quot;:12.0,&quot;selection_header_font_size&quot;:20.0,&quot;state_selection_font_size&quot;:21.0,&quot;strip_font_size&quot;:14.0,&quot;title_font_family&quot;:&quot;roboto_bold&quot;,&quot;title_font_size&quot;:13.0,&quot;title_font_weight&quot;:400},&quot;2&quot;:{&quot;area_selection_font_size&quot;:16.0,&quot;body_font_family&quot;:&quot;robotolighttelugu&quot;,&quot;body_font_size&quot;:14.0,&quot;body_font_weight&quot;:400,&quot;comments_font_size&quot;:14.0,&quot;district_selection_box_height&quot;:85.0,&quot;district_selection_font_size&quot;:16.0,&quot;language_selection_font_size&quot;:16.0,&quot;line_spacing_multiplier&quot;:1.0,&quot;login_font_size&quot;:16.0,&quot;post_submit_font_size&quot;:14.0,&quot;profile_font_size&quot;:14.0,&quot;programmatic_body_size&quot;:15.0,&quot;selection_header_font_size&quot;:20.0,&quot;state_selection_font_size&quot;:24.0,&quot;strip_font_size&quot;:13.0,&quot;title_font_family&quot;:&quot;robotolighttelugu&quot;,&quot;title_font_size&quot;:18.0,&quot;title_font_weight&quot;:400},&quot;3&quot;:{&quot;area_selection_font_size&quot;:13.0,&quot;body_font_family&quot;:&quot;mandali&quot;,&quot;body_font_size&quot;:19.0,&quot;body_font_weight&quot;:500,&quot;comments_font_size&quot;:12.0,&quot;district_selection_box_height&quot;:85.0,&quot;district_selection_font_size&quot;:15.0,&quot;language_selection_font_size&quot;:18.0,&quot;line_spacing_multiplier&quot;:0.96,&quot;login_font_size&quot;:13.0,&quot;post_submit_font_size&quot;:12.0,&quot;profile_font_size&quot;:12.0,&quot;selection_header_font_size&quot;:17.0,&quot;state_selection_font_size&quot;:19.0,&quot;strip_font_size&quot;:11.0,&quot;title_font_family&quot;:&quot;sreekrushnadevaraya_regular&quot;,&quot;title_font_size&quot;:18.0,&quot;title_font_weight&quot;:500},&quot;4&quot;:{&quot;area_selection_font_size&quot;:16.0,&quot;body_font_family&quot;:&quot;mallannaregular&quot;,&quot;body_font_size&quot;:13.0,&quot;body_font_weight&quot;:400,&quot;comments_font_size&quot;:14.0,&quot;district_selection_box_height&quot;:85.0,&quot;district_selection_font_size&quot;:16.0,&quot;language_selection_font_size&quot;:16.0,&quot;line_spacing_multiplier&quot;:0.8,&quot;login_font_size&quot;:16.0,&quot;post_submit_font_size&quot;:14.0,&quot;profile_font_size&quot;:14.0,&quot;programmatic_body_size&quot;:13.0,&quot;selection_header_font_size&quot;:20.0,&quot;state_selection_font_size&quot;:21.0,&quot;strip_font_size&quot;:12.0,&quot;title_font_family&quot;:&quot;roboto_bold&quot;,&quot;title_font_size&quot;:13.0,&quot;title_font_weight&quot;:400},&quot;5&quot;:{&quot;area_selection_font_size&quot;:16.0,&quot;body_font_family&quot;:&quot;robotolighttelugu&quot;,&quot;body_font_size&quot;:13.0,&quot;body_font_weight&quot;:400,&quot;comments_font_size&quot;:14.0,&quot;district_selection_box_height&quot;:85.0,&quot;district_selection_font_size&quot;:16.0,&quot;language_selection_font_size&quot;:16.0,&quot;line_spacing_multiplier&quot;:1.05,&quot;login_font_size&quot;:16.0,&quot;post_submit_font_size&quot;:14.0,&quot;profile_font_size&quot;:14.0,&quot;selection_header_font_size&quot;:20.0,&quot;state_selection_font_size&quot;:21.0,&quot;strip_font_size&quot;:13.0,&quot;title_font_family&quot;:&quot;robotolighttelugu&quot;,&quot;title_font_size&quot;:16.0,&quot;title_font_weight&quot;:400},&quot;6&quot;:{&quot;area_selection_font_size&quot;:16.0,&quot;body_font_family&quot;:&quot;robotolighttelugu&quot;,&quot;body_font_size&quot;:13.0,&quot;body_font_weight&quot;:400,&quot;comments_font_size&quot;:14.0,&quot;district_selection_box_height&quot;:85.0,&quot;district_selection_font_size&quot;:16.0,&quot;language_selection_font_size&quot;:16.0,&quot;line_spacing_multiplier&quot;:1.0,&quot;login_font_size&quot;:16.0,&quot;post_submit_font_size&quot;:14.0,&quot;profile_font_size&quot;:14.0,&quot;selection_header_font_size&quot;:20.0,&quot;state_selection_font_size&quot;:21.0,&quot;strip_font_size&quot;:13.0,&quot;title_font_family&quot;:&quot;robotolighttelugu&quot;,&quot;title_font_size&quot;:16.0,&quot;title_font_weight&quot;:400}}</string>
+    <string name="referrer_post">0</string>
+    <string name="MOVE_NEXT_SCREEN">main</string>
+    <int name="calendar_detail_card_min_height_dp" value="220" />
+    <string name="Version_ID">v3</string>
+    <string name="footer_show_profile">true</string>
+    <string name="footer_style">{&quot;fab_icon_size_dp&quot;:30.0,&quot;fab_size_dp&quot;:42.0,&quot;icon_size_dp&quot;:24.0,&quot;label_active_color&quot;:&quot;&quot;,&quot;label_active_size_sp&quot;:12.0,&quot;label_bold&quot;:true,&quot;label_color&quot;:&quot;&quot;,&quot;label_font_family&quot;:&quot;&quot;,&quot;label_size_sp&quot;:11.0}</string>
+    <string name="weather_config_json">{&quot;enabled&quot;:true,&quot;location_name&quot;:&quot;హైదరాబాద్&quot;,&quot;location_region&quot;:&quot;తెలంగాణ, భారత్&quot;,&quot;lat&quot;:17.385,&quot;lon&quot;:78.4867,&quot;temp_c&quot;:27,&quot;feels_like_c&quot;:28,&quot;high_c&quot;:29,&quot;low_c&quot;:23,&quot;condition&quot;:&quot;మేఘావృతం&quot;,&quot;condition_icon&quot;:&quot;cloudy&quot;,&quot;humidity&quot;:64,&quot;wind_kmh&quot;:15,&quot;wind_dir&quot;:&quot;NW&quot;,&quot;visibility_km&quot;:13.5,&quot;alert_text&quot;:&quot;ఈరోజు భారీ వర్షాలు లేవు. వాతావరణం సాధారణంగా ఉంటుంది.&quot;,&quot;alert_tone&quot;:&quot;ok&quot;,&quot;sunrise&quot;:&quot;06:01 AM&quot;,&quot;sunset&quot;:&quot;06:31 PM&quot;,&quot;last_updated&quot;:&quot;ఈరోజూ 04:15 PM&quot;,&quot;hero_image_url&quot;:&quot;\/weather\/weather_hero_sun.webp&quot;,&quot;forecast_3day&quot;:[{&quot;day_label&quot;:&quot;ఈరోజు&quot;,&quot;date_label&quot;:&quot;Aug 30&quot;,&quot;high_c&quot;:29,&quot;low_c&quot;:23,&quot;condition&quot;:&quot;వర్షం&quot;,&quot;icon&quot;:&quot;rainy&quot;,&quot;precip_pct&quot;:59},{&quot;day_label&quot;:&quot;రేపు&quot;,&quot;date_label&quot;:&quot;Aug 31&quot;,&quot;high_c&quot;:30,&quot;low_c&quot;:24,&quot;condition&quot;:&quot;వర్షం&quot;,&quot;icon&quot;:&quot;rainy&quot;,&quot;precip_pct&quot;:32},{&quot;day_label&quot;:&quot;ఎల్లుండి&quot;,&quot;date_label&quot;:&quot;Sep 1&quot;,&quot;high_c&quot;:31,&quot;low_c&quot;:24,&quot;condition&quot;:&quot;వర్షం&quot;,&quot;icon&quot;:&quot;rainy&quot;,&quot;precip_pct&quot;:12}],&quot;hourly&quot;:[{&quot;time_label&quot;:&quot;ఇప్పుడు&quot;,&quot;temp_c&quot;:26,&quot;icon&quot;:&quot;cloudy&quot;,&quot;is_now&quot;:true},{&quot;time_label&quot;:&quot;6 PM&quot;,&quot;temp_c&quot;:25,&quot;icon&quot;:&quot;rainy&quot;,&quot;is_now&quot;:false},{&quot;time_label&quot;:&quot;7 PM&quot;,&quot;temp_c&quot;:25,&quot;icon&quot;:&quot;night&quot;,&quot;is_now&quot;:false},{&quot;time_label&quot;:&quot;8 PM&quot;,&quot;temp_c&quot;:25,&quot;icon&quot;:&quot;night&quot;,&quot;is_now&quot;:false},{&quot;time_label&quot;:&quot;9 PM&quot;,&quot;temp_c&quot;:25,&quot;icon&quot;:&quot;night&quot;,&quot;is_now&quot;:false},{&quot;time_label&quot;:&quot;10 PM&quot;,&quot;temp_c&quot;:25,&quot;icon&quot;:&quot;night&quot;,&quot;is_now&quot;:false},{&quot;time_label&quot;:&quot;11 PM&quot;,&quot;temp_c&quot;:26,&quot;icon&quot;:&quot;night&quot;,&quot;is_now&quot;:false},{&quot;time_label&quot;:&quot;12 AM&quot;,&quot;temp_c&quot;:26,&quot;icon&quot;:&quot;night&quot;,&quot;is_now&quot;:false}],&quot;preview_scale&quot;:1,&quot;hero_padding_top&quot;:16,&quot;hero_padding_side&quot;:14,&quot;fetched_at&quot;:&quot;2026-08-30T10:45:11.653Z&quot;,&quot;fetch_source&quot;:&quot;open-meteo&quot;}</string>
+    <int name="LanguageID" value="3" />
+    <int name="title_body_gap_dp" value="-4" />
+    <string name="categories_in_footer">false</string>
+    <string name="ttd_show_links">true</string>
+    <string name="home_mode_chrome_auto_hide_seconds">3</string>
+    <string name="DeviceID">1fa7f22c9e1371cf</string>
+    <boolean name="flip_restore_pending" value="true" />
+    <boolean name="HOME_SCREEN" value="true" />
+    <boolean name="enable_full_post" value="false" />
+    <string name="app_session_pending_close_json">{&quot;action&quot;:&quot;close&quot;,&quot;session_id&quot;:&quot;17fde7fc-7394-4a70-952f-864811bcde02&quot;,&quot;draft_id&quot;:2720424,&quot;device_id&quot;:&quot;1fa7f22c9e1371cf&quot;,&quot;language_id&quot;:3,&quot;app_version&quot;:&quot;3.40.68&quot;,&quot;open_at&quot;:1788088702731,&quot;close_at&quot;:1788088736831,&quot;duration_ms&quot;:34100,&quot;activity_summary&quot;:{&quot;impressions&quot;:2,&quot;dwell_events&quot;:1,&quot;dwell_seconds_total&quot;:7,&quot;unique_posts&quot;:2},&quot;cricket_visible&quot;:false,&quot;cricket_viewing&quot;:false,&quot;latitude&quot;:&quot;37.421998333333335&quot;,&quot;longitude&quot;:&quot;-122.084&quot;}</string>
+    <string name="profile_show_settings_row">true</string>
+    <string name="footer_plus_icon_size_dp">42</string>
+    <boolean name="weather_config_set" value="true" />
+    <int name="action_icon_row_offset" value="0" />
+    <boolean name="notification_runtime_ever_asked" value="true" />
+    <string name="user_session_id">43bbccee-3b94-4243-9258-d50ad69186ca</string>
+    <int name="calendar_detail_item_pad_dp" value="5" />
+    <string name="ttd_official_url">https://www.tirumala.org/</string>
+    <string name="gold_config_json">{"enabled":true,"location_name":"భారత్","location_region":"ఆంధ్రప్రదేశ్","last_updated":"ఈరోజు 04:56 PM","header_title":"బంగారం &amp; వెండి ధరలు","header_subtitle":"ఈ రోజు తాజా బంగారం &amp; వెండి మార్కెట్ ధరలు","gold_24k_10g":159580,"gold_24k_change":1194,"gold_24k_change_pct":0.75,"gold_24k_1g":15958,"silver_10g":2438.92,"silver_change":43.92,"silver_change_pct":1.83,"silver_1g":243.89,"silver_kg":243892,"silver_kg_change":4392,"silver_kg_change_pct":1.83,"silver_100g":24389.2,"daily_change_24k":1194,"yesterday_price_24k":158386,"weekly_change":2500,"monthly_change":9317,"chart_title":"7 రోజుల ధరల ట్రెండ్ (24K బంగారం)","history_7day":[{"date_label":"Aug 20","gold_24k":157080},{"date_label":"Aug 21","gold_24k":160620},{"date_label":"Aug 24","gold_24k":162154},{"date_label":"Aug 25","gold_24k":162041},{"date_label":"Aug 26","gold_24k":161337},{"date_label":"Aug 27","gold_24k":158386},{"date_label":"Aug 28","gold_24k":159578}],"highlights_title":"ధరల ముఖ్యాంశాలు","high_month":162154,"low_month":142557,"all_time_high":162154,"all_time_low":0,"purity_title":"బంగారం ధరలు","price_unit":"10g","purity_rows":[{"karat":"24K","purity":"99.9%","price_10g":159580,"change":1194,"price_1g":15958},{"karat":"22K","purity":"91.6%","price_10g":146170,"change":1093.7,"price_1g":14617},{"karat":"18K","purity":"75.0%","price_10g":119680,"change":895.5,"price_1g":11968},{"karat":"14K","purity":"58.5%","price_10g":93350,"change":698.49,"price_1g":9335}],"silver_section_title":"వెండి ధరలు","share_title":"ధరలను షేర్ చేయండి","share_text":"ఈరోజు బంగారం &amp; వెండి ధరలను స్నేహితులతో షేర్ చేయండి","share_cta":"Share","disclaimer":"గమనిక: ఈ ధరలు మార్కెట్ పరిస్థితులకు అనుసరించి మారవచ్చు. ఖచ్చితమైన ధరల కోసం స్థానిక ఆభరణాల దుకాణాలను సంప్రదించండి.","gold_card_bg":"/gold/gold_bangles.webp","silver_card_bg":"/gold/silver_bowl.webp","hero_image_url":"/gold/bg_gold_silver_mixed.webp","page_bg_url":"","preview_scale":1,"hero_padding_top":12,"hero_padding_side":12,"fetched_at":"2026-08-30T11:26:09.386Z","fetch_source":"ibja","source_url":"https://www.ibjarates.com/","source_label":"IBJA (ibjarates.com)","rates_available":true}</string>
+    <string name="gold_config_set">true</string>
+    <string name="gold_enabled">true</string>
+</map>

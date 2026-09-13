@@ -223,23 +223,37 @@ public final class BirthdayFonts {
 
     @NonNull
     private static Typeface fallbackSystem(String id) {
-        if ("georgia".equals(id) || "merriweather".equals(id) || "playfair".equals(id)
-                || "lora".equals(id) || "cinzel".equals(id)) {
-            return Typeface.SERIF;
+        if ("great-vibes".equals(id) || "pacifico".equals(id) || "dancing-script".equals(id)
+                || "satisfy".equals(id) || "lobster".equals(id) || "cookie".equals(id)
+                || "sacramento".equals(id) || "allura".equals(id) || "alex-brush".equals(id)
+                || "courgette".equals(id) || "kaushan".equals(id)) {
+            Typeface t = Typeface.create("cursive", Typeface.NORMAL);
+            return t != null ? t : Typeface.SERIF;
+        }
+        if ("indie-flower".equals(id) || "shadows".equals(id) || "caveat".equals(id)
+                || "amatic".equals(id)) {
+            Typeface t = Typeface.create("casual", Typeface.NORMAL);
+            return t != null ? t : Typeface.SANS_SERIF;
+        }
+        if ("permanent-marker".equals(id) || "bebas".equals(id) || "anton".equals(id)
+                || "bangers".equals(id) || "russo".equals(id) || "oswald".equals(id)) {
+            Typeface t = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+            return t != null ? t : Typeface.SANS_SERIF;
         }
         if ("impact".equals(id)) {
             Typeface t = Typeface.create("sans-serif-black", Typeface.BOLD);
             return t != null ? t : Typeface.DEFAULT_BOLD;
         }
-        if ("roboto".equals(id) || "open-sans".equals(id) || "montserrat".equals(id)
-                || "poppins".equals(id) || "raleway".equals(id) || "nunito".equals(id)
-                || "josefin".equals(id) || "source-sans".equals(id) || "titillium".equals(id)
-                || "quicksand".equals(id) || "comfortaa".equals(id) || "oswald".equals(id)
-                || "bebas".equals(id) || "anton".equals(id) || "bangers".equals(id)
-                || "russo".equals(id) || "permanent-marker".equals(id)) {
-            return Typeface.SANS_SERIF;
+        if ("georgia".equals(id) || "merriweather".equals(id) || "playfair".equals(id)
+                || "lora".equals(id) || "cinzel".equals(id)) {
+            return Typeface.SERIF;
         }
-        return Typeface.SERIF;
+        if ("quicksand".equals(id) || "comfortaa".equals(id) || "josefin".equals(id)
+                || "nunito".equals(id) || "raleway".equals(id)) {
+            Typeface t = Typeface.create("sans-serif-light", Typeface.NORMAL);
+            return t != null ? t : Typeface.SANS_SERIF;
+        }
+        return Typeface.SANS_SERIF;
     }
 
     public static int nameSizePx(int tierIndex) {
@@ -279,8 +293,19 @@ public final class BirthdayFonts {
                 new String[] {"Small", "Medium", "Large"});
     }
 
+    public interface SampleTextProvider {
+        @NonNull
+        String getSampleText(@NonNull Spec spec);
+    }
+
     @NonNull
     public static ArrayAdapter<Spec> fontSampleAdapter(@NonNull Context context) {
+        return fontSampleAdapter(context, null);
+    }
+
+    @NonNull
+    public static ArrayAdapter<Spec> fontSampleAdapter(
+            @NonNull Context context, @Nullable SampleTextProvider provider) {
         List<Spec> list = new ArrayList<>();
         for (Spec s : CATALOG) list.add(s);
         return new ArrayAdapter<Spec>(context, android.R.layout.simple_spinner_dropdown_item, list) {
@@ -304,11 +329,13 @@ public final class BirthdayFonts {
             private void bindSample(Context ctx, TextView tv, @Nullable Spec spec) {
                 if (tv == null) return;
                 String id = spec != null ? spec.id : DEFAULT_NAME_FONT_ID;
-                tv.setText(SAMPLE_WORD);
-                tv.setTypeface(typeface(ctx, id, false));
-                tv.setTextSize(20f);
+                String sample = provider != null && spec != null ? provider.getSampleText(spec) : SAMPLE_WORD;
+                if (android.text.TextUtils.isEmpty(sample)) sample = SAMPLE_WORD;
+                tv.setText(sample);
+                tv.setTypeface(typefaceForText(ctx, id, false, sample));
+                tv.setTextSize(18f);
                 tv.setPadding(24, 18, 24, 18);
-                tv.setContentDescription(spec != null ? spec.label : SAMPLE_WORD);
+                tv.setContentDescription(spec != null ? spec.label : sample);
             }
         };
     }

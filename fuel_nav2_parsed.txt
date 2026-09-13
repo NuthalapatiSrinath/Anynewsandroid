@@ -1,0 +1,17 @@
+Daily Updates @ 565,121 [427,95][704,148]
+వివరాలు చూడండి → @ 832,448 [726,429][938,467]
+పెట్రోల్ &amp; డీజిల్ @ 873,628 [734,608][1012,649]
+పెట్రోల్  ₹116.62 @ 873,671 [734,649][1012,694]
+డీజిల్  ₹104.33 @ 873,760 [734,738][1012,783]
+వివరాలు → @ 797,850 [734,830][861,870]
+వివరాలు → @ 299,1141 [236,1121][363,1162]
+వివరాలు → @ 781,1157 [718,1137][845,1178]
+వివరాలు → @ 781,1451 [718,1431][845,1472]
+RID com.anyNews.anynews:id/du_card_fuel_wrap @ 797,723
+RID com.anyNews.anynews:id/du_card_fuel @ 797,723
+RID com.anyNews.anynews:id/du_fuel_title @ 873,628
+RID com.anyNews.anynews:id/du_fuel_petrol @ 873,671
+RID com.anyNews.anynews:id/du_fuel_petrol_change @ 873,712
+RID com.anyNews.anynews:id/du_fuel_diesel @ 873,760
+RID com.anyNews.anynews:id/du_fuel_diesel_change @ 873,801
+RID com.anyNews.anynews:id/du_fuel_details @ 797,850

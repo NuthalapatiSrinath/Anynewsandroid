@@ -5,7 +5,7 @@
     android:id="@+id/ad_default_placeholder_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#1A1A1A">
+    android:background="@color/white">
 
     <ImageView
         android:id="@+id/imageViewShare"
@@ -22,7 +22,7 @@
         android:layout_centerHorizontal="true"
         android:layout_marginTop="@dimen/_15sdp"
         android:text="@string/share_anynews_with_your_friends"
-        android:textColor="#F5F5F5"
+        android:textColor="@color/black"
         android:textSize="@dimen/_14sdp"
         android:textStyle="bold" />
 

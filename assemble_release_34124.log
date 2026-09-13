@@ -1,0 +1,14 @@
+warning: unknown enum constant Mode.LOCAL
+  reason: class file for com.facebook.infer.annotation.Nullsafe$Mode not found
+warning: unknown enum constant Mode.LOCAL
+  reason: class file for com.facebook.infer.annotation.Nullsafe$Mode not found
+warning: unknown enum constant Mode.LOCAL
+  reason: class file for com.facebook.infer.annotation.Nullsafe$Mode not found
+C:\Users\SRINATH\OneDrive\??\ANYNEWS\android\app\src\main\java\com\anyNews\anynews\Activities\HomePage.java:2945: warning: [dep-ann] deprecated item is not annotated with @Deprecated
+    private void convertUnfilledAdShellToShareApp(int listPosition) {
+                 ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+4 warnings

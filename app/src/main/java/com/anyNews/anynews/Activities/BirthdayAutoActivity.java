@@ -237,6 +237,15 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                         hideServerPreview();
                         refreshLiveTexts();
                         scheduleServerPreview();
+                        try {
+                            if (nameFontSpinner != null && nameFontSpinner.getAdapter() instanceof ArrayAdapter) {
+                                ((ArrayAdapter<?>) nameFontSpinner.getAdapter()).notifyDataSetChanged();
+                            }
+                            if (addrFontSpinner != null && addrFontSpinner.getAdapter() instanceof ArrayAdapter) {
+                                ((ArrayAdapter<?>) addrFontSpinner.getAdapter()).notifyDataSetChanged();
+                            }
+                        } catch (Exception ignored) {
+                        }
                     }
                 };
         if (nameInput != null) nameInput.addTextChangedListener(watcher);
@@ -342,12 +351,18 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                     public void onNothingSelected(AdapterView<?> parent) {}
                 };
         if (nameFontSpinner != null) {
-            nameFontSpinner.setAdapter(BirthdayFonts.fontSampleAdapter(this));
+            nameFontSpinner.setAdapter(BirthdayFonts.fontSampleAdapter(this, spec -> {
+                String n = nameInput != null && nameInput.getText() != null ? nameInput.getText().toString().trim() : "";
+                return !n.isEmpty() ? n : "Name";
+            }));
             nameFontSpinner.setSelection(BirthdayFonts.indexOf(BirthdayFonts.DEFAULT_NAME_FONT_ID));
             nameFontSpinner.setOnItemSelectedListener(styleListener);
         }
         if (addrFontSpinner != null) {
-            addrFontSpinner.setAdapter(BirthdayFonts.fontSampleAdapter(this));
+            addrFontSpinner.setAdapter(BirthdayFonts.fontSampleAdapter(this, spec -> {
+                String a = addressInput != null && addressInput.getText() != null ? addressInput.getText().toString().trim() : "";
+                return !a.isEmpty() ? a : "Address";
+            }));
             addrFontSpinner.setSelection(BirthdayFonts.indexOf(BirthdayFonts.DEFAULT_ADDRESS_FONT_ID));
             addrFontSpinner.setOnItemSelectedListener(styleListener);
         }
