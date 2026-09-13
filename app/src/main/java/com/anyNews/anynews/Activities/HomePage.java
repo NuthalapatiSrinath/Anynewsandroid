@@ -193,6 +193,7 @@ import com.anyNews.anynews.Utils.OfflineActionQueue;
 import com.anyNews.anynews.Utils.ServerAvailabilityMonitor;
 import com.anyNews.anynews.Utils.SelfFollowGuard;
 import com.anyNews.anynews.Utils.FeedEndHelper;
+import com.anyNews.anynews.Utils.SearchRevealHelper;
 import com.anyNews.anynews.Utils.BookmarkStore;
 import com.anyNews.anynews.Utils.NetworkCallDeduper;
 import com.anyNews.anynews.Utils.PostDwellTracker;
@@ -290,6 +291,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Active keyword for Search_Stories / List_All_Articles search_text. */
     private String activeSearchQuery = "";
     private boolean searchFeedActive = false;
+    /** Way2 bottom bar: back + query while keyword FlipView is active. */
+    private View searchContextBar;
+    private TextView searchContextQuery;
     private View homeModeSearchIcon;
     NeomorphFrameLayout neo_profile, neo_post_artical, neo_home, neo_inner_home, neo_inner_profile;
     long mBackPressed;
@@ -1029,6 +1033,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         nodatascreen = findViewById(R.id.nodatascreen);
         home_page_navigation = findViewById(R.id.home_page_navigation);
         home_page_navigation.setVisibility(View.GONE);
+        bindSearchContextBar();
         imageVIewShareWhatsapp = findViewById(R.id.imageVIewShareWhatsapp);
         layoutMagazineShareFooter = findViewById(R.id.layoutMagazineShareFooter);
         ivMagazineShareFooter = findViewById(R.id.ivMagazineShareFooter);
@@ -1614,8 +1619,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (q.isEmpty()) return;
         activeSearchQuery = q;
         searchFeedActive = true;
+        updateSearchContextBar();
         try {
-            Toasty.info(this, q, Toasty.LENGTH_SHORT, true).show();
+            playSearchResultEnterReveal(intent);
         } catch (Exception ignored) {
         }
         last_post_id = 0;
@@ -1631,10 +1637,111 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** Leave keyword search FlipView mode (footer / Special / Video). */
+    /** Leave keyword search FlipView mode (footer / Special / Video / context back). */
     private void clearSearchFeedMode() {
         searchFeedActive = false;
         activeSearchQuery = "";
+        updateSearchContextBar();
+    }
+
+    /** Public for FlipperAdapter end-hub + chrome. */
+    public boolean isSearchFeedActive() {
+        return searchFeedActive
+                && activeSearchQuery != null
+                && !activeSearchQuery.trim().isEmpty();
+    }
+
+    @Nullable
+    public String getActiveSearchQuery() {
+        return activeSearchQuery;
+    }
+
+    private void bindSearchContextBar() {
+        try {
+            View include = findViewById(R.id.include_search_context_bar);
+            searchContextBar = include != null ? include : findViewById(R.id.search_context_bar);
+            if (searchContextBar != null) {
+                searchContextQuery = searchContextBar.findViewById(R.id.search_context_query);
+                View back = searchContextBar.findViewById(R.id.search_context_back);
+                if (back != null) {
+                    back.setOnClickListener(v -> exitSearchFeedMode());
+                }
+                searchContextBar.setOnClickListener(v -> exitSearchFeedMode());
+            }
+        } catch (Exception ignored) {
+        }
+        updateSearchContextBar();
+    }
+
+    private void updateSearchContextBar() {
+        try {
+            if (searchContextBar == null) return;
+            if (isSearchFeedActive()) {
+                searchContextBar.setVisibility(View.VISIBLE);
+                if (searchContextQuery != null) {
+                    searchContextQuery.setText(activeSearchQuery.trim());
+                }
+            } else {
+                searchContextBar.setVisibility(View.GONE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Back on Way2 search bar — leave keyword mode and restore Main News. */
+    public void exitSearchFeedMode() {
+        if (!searchFeedActive && (activeSearchQuery == null || activeSearchQuery.isEmpty())) {
+            return;
+        }
+        clearSearchFeedMode();
+        try {
+            performFeedReload();
+        } catch (Exception e) {
+            try {
+                last_post_id = 0;
+                skip = 0;
+                actual_skip = 0;
+                list = new ArrayList<>();
+                inlist(0);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** Search end hub → Main News. */
+    public void openMainNewsFromSearchHub() {
+        exitSearchFeedMode();
+    }
+
+    /** Search end hub → Local News (Mana Zilla path). */
+    public void openLocalNewsFromSearchHub() {
+        clearSearchFeedMode();
+        try {
+            performLocalFeedOpenFromDailyUpdates();
+        } catch (Exception e) {
+            exitSearchFeedMode();
+        }
+    }
+
+    /** Search end hub → Flash News. */
+    public void openFlashNewsFromSearchHub() {
+        clearSearchFeedMode();
+        try {
+            performFlashNewsOpen();
+        } catch (Exception e) {
+            exitSearchFeedMode();
+        }
+    }
+
+    /** Circular reveal when opening search results into FlipView (same helper as search icon). */
+    private void playSearchResultEnterReveal(@Nullable Intent intent) {
+        if (intent == null
+                || !intent.getBooleanExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, false)) {
+            return;
+        }
+        View target = mFlipView != null ? mFlipView : findViewById(android.R.id.content);
+        if (target == null) return;
+        SearchRevealHelper.playEnterReveal(this, target, intent);
     }
 
     /** Admin search_icon_on_toggle + search_icon_size_dp on News|Read chrome. */
@@ -13786,6 +13893,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                         if (validateUserOtp.getData() != null
                                 && validateUserOtp.getData().size() == 0) {
+                            // Keyword search: empty page = true EOF → hub (Main/Local/Flash).
+                            if (searchFeedActive && !fromCache) {
+                                showLog("search feed empty page — hub end card");
+                                no_article_message = FeedEndHelper.resolveMessage(this);
+                                if (list == null || list.isEmpty()) {
+                                    // Zero hits: still show hub so user is not dead-ended.
+                                    if (list == null) list = new ArrayList<>();
+                                    ensureFeedEndCardVisible(true);
+                                    try {
+                                        mFlipView.setVisibility(View.VISIBLE);
+                                        txtNoData.setVisibility(View.GONE);
+                                        layout_with_data.setVisibility(View.VISIBLE);
+                                        hideHomeFeedLoadingReveal(false);
+                                    } catch (Exception ignored) {
+                                    }
+                                } else {
+                                    ensureFeedEndCardVisible(false);
+                                }
+                                initialCall = true;
+                                return;
+                            }
                             if ((list == null || list.size() == 0) && !fromCache) {
                                 // Soft-empty page-0: keep paging older days when possible
                                 // instead of permanent empty / premature end card.
@@ -13938,6 +14066,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("isPlayingVideoInFullScreen"+isPlayingVideoInFullScreen);
         int count = this.getSupportFragmentManager().getBackStackEntryCount();
         if (count == 0) {
+            if (isSearchFeedActive()) {
+                exitSearchFeedMode();
+                return;
+            }
             if (isLocalFeedChromeActive()) {
                 exitLocalFeedToMainNews();
                 return;

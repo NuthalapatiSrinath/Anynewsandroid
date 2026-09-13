@@ -4312,33 +4312,83 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Dedicated end-of-feed FlipView page — never a blank white View.
+     * In keyword search mode, show Main / Local / Flash hub instead of a dead-end.
      */
     @NonNull
     private View inflateFeedEndCard(@Nullable ViewGroup parent, @Nullable View convertView) {
+        final boolean searchHub = isSearchFeedEndHub();
+        final String typeKey = searchHub ? "search_hub" : FeedEndHelper.POST_TYPE;
         View root;
-        if (canReuseFlipView(convertView, FeedEndHelper.POST_TYPE)) {
+        if (canReuseFlipView(convertView, typeKey)) {
             root = convertView;
+        } else if (searchHub) {
+            root = inflater.inflate(R.layout.search_feed_hub_card,
+                    parent != null ? parent : null, false);
+            markFlipViewType(root, typeKey);
         } else {
             root = inflater.inflate(R.layout.feed_end_card,
                     parent != null ? parent : null, false);
-            markFlipViewType(root, FeedEndHelper.POST_TYPE);
+            markFlipViewType(root, typeKey);
         }
-        try {
-            TextView msg = root.findViewById(R.id.feed_end_message);
-            if (msg != null) {
-                msg.setText(FeedEndHelper.resolveMessage(context));
+        if (searchHub) {
+            bindSearchFeedHub(root);
+        } else {
+            try {
+                TextView msg = root.findViewById(R.id.feed_end_message);
+                if (msg != null) {
+                    msg.setText(FeedEndHelper.resolveMessage(context));
+                }
+                TextView hint = root.findViewById(R.id.feed_end_hint);
+                if (hint != null) {
+                    hint.setText(FeedEndHelper.resolveHint(context));
+                }
+            } catch (Exception ignored) {
             }
-            TextView hint = root.findViewById(R.id.feed_end_hint);
-            if (hint != null) {
-                hint.setText(FeedEndHelper.resolveHint(context));
-            }
-        } catch (Exception ignored) {
         }
         try {
             installOfflineChromeTaps(root);
         } catch (Exception ignored) {
         }
         return root;
+    }
+
+    private boolean isSearchFeedEndHub() {
+        try {
+            HomePage hp = resolveHomePageHost(context);
+            if (hp == null && activity instanceof HomePage) {
+                hp = (HomePage) activity;
+            }
+            return hp != null && hp.isSearchFeedActive();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void bindSearchFeedHub(@NonNull View root) {
+        try {
+            final HomePage hp = resolveHomePageHost(root.getContext()) != null
+                    ? resolveHomePageHost(root.getContext())
+                    : (activity instanceof HomePage ? (HomePage) activity : null);
+            View main = root.findViewById(R.id.search_hub_main);
+            View local = root.findViewById(R.id.search_hub_local);
+            View flash = root.findViewById(R.id.search_hub_flash);
+            if (main != null) {
+                main.setOnClickListener(v -> {
+                    if (hp != null) hp.openMainNewsFromSearchHub();
+                });
+            }
+            if (local != null) {
+                local.setOnClickListener(v -> {
+                    if (hp != null) hp.openLocalNewsFromSearchHub();
+                });
+            }
+            if (flash != null) {
+                flash.setOnClickListener(v -> {
+                    if (hp != null) hp.openFlashNewsFromSearchHub();
+                });
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     /**

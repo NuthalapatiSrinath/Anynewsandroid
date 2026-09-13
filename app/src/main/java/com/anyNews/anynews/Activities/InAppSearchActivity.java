@@ -58,7 +58,7 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     public static final String EXTRA_QUERY = "extra_search_query";
 
-    private static final long SUGGEST_DEBOUNCE_MS = 320L;
+    private static final long SUGGEST_DEBOUNCE_MS = 250L;
 
     private View root;
     private EditText searchInput;
@@ -341,6 +341,31 @@ public class InAppSearchActivity extends AppCompatActivity {
         Intent intent = new Intent(this, HomePage.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.putExtra(HomePage.EXTRA_SEARCH_QUERY, clean);
+        // Circular reveal into search results (same origin as opening search when available).
+        Intent self = getIntent();
+        if (self != null && self.getBooleanExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, false)) {
+            intent.putExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, true);
+            intent.putExtra(
+                    SearchRevealHelper.EXTRA_REVEAL_CX,
+                    self.getIntExtra(SearchRevealHelper.EXTRA_REVEAL_CX, 0));
+            intent.putExtra(
+                    SearchRevealHelper.EXTRA_REVEAL_CY,
+                    self.getIntExtra(SearchRevealHelper.EXTRA_REVEAL_CY, 0));
+        } else {
+            // Fall back to center of the tapped suggestion / screen.
+            View anchor = listView != null ? listView : root;
+            if (anchor != null) {
+                int[] loc = new int[2];
+                anchor.getLocationOnScreen(loc);
+                intent.putExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, true);
+                intent.putExtra(
+                        SearchRevealHelper.EXTRA_REVEAL_CX,
+                        loc[0] + anchor.getWidth() / 2);
+                intent.putExtra(
+                        SearchRevealHelper.EXTRA_REVEAL_CY,
+                        loc[1] + Math.min(anchor.getHeight() / 3, 200));
+            }
+        }
         if (getApplicationContext() != null
                 && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
             startActivity(intent);

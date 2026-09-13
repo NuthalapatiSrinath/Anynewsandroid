@@ -16,7 +16,7 @@ import androidx.core.app.ActivityOptionsCompat;
 
 /**
  * Circular reveal when opening {@link com.anyNews.anynews.Activities.InAppSearchActivity}
- * from a search icon (engagement row or News|Read toggle).
+ * from a search icon, and when opening search results into HomePage FlipView.
  */
 public final class SearchRevealHelper {
 
@@ -46,7 +46,10 @@ public final class SearchRevealHelper {
         }
     }
 
-    /** Run enter circular reveal on the activity root after layout. */
+    /**
+     * Run enter circular reveal on {@code root} after layout.
+     * Safe for search-icon open and search-result open into HomePage FlipView.
+     */
     public static void playEnterReveal(
             @NonNull final Activity activity,
             @NonNull final View root,
@@ -60,30 +63,43 @@ public final class SearchRevealHelper {
             return;
         }
         root.setVisibility(View.INVISIBLE);
-        final int cx = intent.getIntExtra(EXTRA_REVEAL_CX, root.getWidth() / 2);
-        final int cy = intent.getIntExtra(EXTRA_REVEAL_CY, 0);
+        final int cxExtra = intent.getIntExtra(EXTRA_REVEAL_CX, -1);
+        final int cyExtra = intent.getIntExtra(EXTRA_REVEAL_CY, -1);
+        final Runnable start =
+                () -> startCircularEnter(root, cxExtra, cyExtra);
+        if (root.isLaidOut() && root.getWidth() > 0 && root.getHeight() > 0) {
+            root.post(start);
+            return;
+        }
         root.getViewTreeObserver()
                 .addOnGlobalLayoutListener(
                         new ViewTreeObserver.OnGlobalLayoutListener() {
                             @Override
                             public void onGlobalLayout() {
                                 root.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                                int w = root.getWidth();
-                                int h = root.getHeight();
-                                float finalRadius =
-                                        (float) Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy));
-                                try {
-                                    Animator anim =
-                                            ViewAnimationUtils.createCircularReveal(
-                                                    root, cx, cy, 0f, finalRadius);
-                                    anim.setDuration(420);
-                                    root.setVisibility(View.VISIBLE);
-                                    anim.start();
-                                } catch (Exception e) {
-                                    root.setVisibility(View.VISIBLE);
-                                }
+                                start.run();
                             }
                         });
+    }
+
+    private static void startCircularEnter(@NonNull View root, int cxExtra, int cyExtra) {
+        int w = Math.max(1, root.getWidth());
+        int h = Math.max(1, root.getHeight());
+        int[] rootLoc = new int[2];
+        root.getLocationOnScreen(rootLoc);
+        int cx = cxExtra >= 0 ? Math.max(0, Math.min(w, cxExtra - rootLoc[0])) : w / 2;
+        int cy = cyExtra >= 0 ? Math.max(0, Math.min(h, cyExtra - rootLoc[1])) : h / 4;
+        float finalRadius =
+                (float) Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy));
+        try {
+            Animator anim =
+                    ViewAnimationUtils.createCircularReveal(root, cx, cy, 0f, finalRadius);
+            anim.setDuration(420);
+            root.setVisibility(View.VISIBLE);
+            anim.start();
+        } catch (Exception e) {
+            root.setVisibility(View.VISIBLE);
+        }
     }
 
     /** Reverse circular reveal then finish. */
@@ -100,14 +116,19 @@ public final class SearchRevealHelper {
         }
         int cx = intent.getIntExtra(EXTRA_REVEAL_CX, root.getWidth() / 2);
         int cy = intent.getIntExtra(EXTRA_REVEAL_CY, 0);
+        int[] rootLoc = new int[2];
+        root.getLocationOnScreen(rootLoc);
+        int localCx = Math.max(0, Math.min(root.getWidth(), cx - rootLoc[0]));
+        int localCy = Math.max(0, Math.min(root.getHeight(), cy - rootLoc[1]));
         float startRadius =
                 (float)
                         Math.hypot(
-                                Math.max(cx, root.getWidth() - cx),
-                                Math.max(cy, root.getHeight() - cy));
+                                Math.max(localCx, root.getWidth() - localCx),
+                                Math.max(localCy, root.getHeight() - localCy));
         try {
             Animator anim =
-                    ViewAnimationUtils.createCircularReveal(root, cx, cy, startRadius, 0f);
+                    ViewAnimationUtils.createCircularReveal(
+                            root, localCx, localCy, startRadius, 0f);
             anim.setDuration(320);
             anim.addListener(
                     new AnimatorListenerAdapter() {

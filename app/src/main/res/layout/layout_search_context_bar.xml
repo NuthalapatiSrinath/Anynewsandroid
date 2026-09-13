@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Way2-style bottom search context: back + active query. Shown while search feed is open. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/search_context_bar"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:background="#FF000000"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:visibility="gone"
+    tools:visibility="visible">
+
+    <ImageView
+        android:id="@+id/search_context_back"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:contentDescription="@string/search_back"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_arrowwhite_back" />
+
+    <TextView
+        android:id="@+id/search_context_query"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="48dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:textColor="#FFFFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        tools:text="tension headache" />
+</LinearLayout>
