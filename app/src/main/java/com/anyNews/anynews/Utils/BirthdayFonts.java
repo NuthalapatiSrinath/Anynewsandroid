@@ -52,48 +52,15 @@ public final class BirthdayFonts {
         }
     }
 
-    /** Default (Great Vibes) first, then rest matching admin catalog. */
+    /** Curated catalog of visually distinct font styles (no duplicate fallbacks). */
     private static final Spec[] CATALOG =
             new Spec[] {
-                // assetFile null — system approximation; server/admin render real faces.
-                new Spec("great-vibes", "Great Vibes", null),
-                new Spec("pacifico", "Pacifico", null),
-                new Spec("dancing-script", "Dancing Script", null),
-                new Spec("satisfy", "Satisfy", null),
-                new Spec("lobster", "Lobster", null),
-                new Spec("cookie", "Cookie", null),
-                new Spec("sacramento", "Sacramento", null),
-                new Spec("allura", "Allura", null),
-                new Spec("alex-brush", "Alex Brush", null),
-                new Spec("courgette", "Courgette", null),
-                new Spec("kaushan", "Kaushan Script", null),
-                new Spec("indie-flower", "Indie Flower", null),
-                new Spec("shadows", "Shadows Into Light", null),
-                new Spec("caveat", "Caveat", null),
-                new Spec("amatic", "Amatic SC", null),
-                new Spec("permanent-marker", "Permanent Marker", null),
-                new Spec("playfair", "Playfair Display", null),
-                new Spec("merriweather", "Merriweather", null),
-                new Spec("lora", "Lora", null),
-                new Spec("cinzel", "Cinzel", null),
-                new Spec("roboto", "Roboto", null),
-                new Spec("open-sans", "Open Sans", null),
-                new Spec("montserrat", "Montserrat", null),
-                new Spec("poppins", "Poppins", null),
-                new Spec("raleway", "Raleway", null),
-                new Spec("oswald", "Oswald", null),
-                new Spec("josefin", "Josefin Sans", null),
-                new Spec("nunito", "Nunito", null),
-                new Spec("quicksand", "Quicksand", null),
-                new Spec("comfortaa", "Comfortaa", null),
-                new Spec("titillium", "Titillium Web", null),
-                new Spec("source-sans", "Source Sans 3", null),
-                new Spec("bebas", "Bebas Neue", null),
-                new Spec("anton", "Anton", null),
-                new Spec("bangers", "Bangers", null),
-                new Spec("russo", "Russo One", null),
-                new Spec("georgia", "Georgia", null),
-                new Spec("impact", "Impact", null),
+                new Spec("great-vibes", "Cursive Script", null),
+                new Spec("caveat", "Casual Handwriting", null),
+                new Spec("georgia", "Classic Serif", null),
+                new Spec("roboto", "Clean Sans-Serif", null),
+                new Spec("bebas", "Bold Condensed", null),
+                new Spec("monospace", "Monospace", null),
             };
 
     private static final Map<String, Typeface> CACHE = new HashMap<>();
@@ -109,6 +76,28 @@ public final class BirthdayFonts {
         String id = fontId == null ? DEFAULT_NAME_FONT_ID : fontId;
         for (int i = 0; i < CATALOG.length; i++) {
             if (CATALOG[i].id.equals(id)) return i;
+        }
+        if ("pacifico".equals(id) || "dancing-script".equals(id) || "satisfy".equals(id)
+                || "lobster".equals(id) || "cookie".equals(id) || "sacramento".equals(id)
+                || "allura".equals(id) || "alex-brush".equals(id) || "courgette".equals(id)
+                || "kaushan".equals(id)) {
+            return 0; // Cursive Script
+        }
+        if ("indie-flower".equals(id) || "shadows".equals(id) || "amatic".equals(id)) {
+            return 1; // Casual Handwriting
+        }
+        if ("merriweather".equals(id) || "playfair".equals(id) || "lora".equals(id)
+                || "cinzel".equals(id)) {
+            return 2; // Classic Serif
+        }
+        if ("open-sans".equals(id) || "montserrat".equals(id) || "poppins".equals(id)
+                || "raleway".equals(id) || "nunito".equals(id) || "quicksand".equals(id)
+                || "comfortaa".equals(id) || "titillium".equals(id) || "source-sans".equals(id)) {
+            return 3; // Clean Sans-Serif
+        }
+        if ("permanent-marker".equals(id) || "anton".equals(id) || "bangers".equals(id)
+                || "russo".equals(id) || "oswald".equals(id) || "impact".equals(id)) {
+            return 4; // Bold Condensed
         }
         return 0;
     }

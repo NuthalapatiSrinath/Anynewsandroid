@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Way2-style bottom search context: back + active query. Shown while search feed is open. -->
+<!-- AnyNews theme search context bar: back + active query. Shown while search feed is open. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/search_context_bar"
     android:layout_width="match_parent"
     android:layout_height="48dp"
-    android:background="#FF000000"
+    android:background="@color/brand_orange"
+    android:elevation="4dp"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:visibility="gone"

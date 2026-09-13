@@ -396,8 +396,8 @@ public class InAppSearchActivity extends AppCompatActivity {
     private static String softenClientQuery(String q) {
         String clean = q != null ? q.trim() : "";
         clean = clean.replace("\u2026", " ").replace("...", " ").replace('\u00A0', ' ');
+        clean = clean.replaceAll("^[\\?\\[\\](){}:;!.,\\s\\-\\u2026]+|[\\?\\[\\](){}:;!.,\\s\\-\\u2026]+$", "");
         clean = clean.replaceAll("\\s+", " ").trim();
-        clean = clean.replaceAll("[\\?\\!\\.\\u2026]+$", "").trim();
         clean = clean.replaceAll("\\.{2,}", " ").replaceAll("\\s+", " ").trim();
         return clean;
     }
@@ -408,9 +408,9 @@ public class InAppSearchActivity extends AppCompatActivity {
         boolean truncated =
                 title.indexOf('\u2026') >= 0 || title.contains("...");
         if (truncated && !TextUtils.isEmpty(row.highlight)) {
-            return row.highlight;
+            return softenClientQuery(row.highlight);
         }
-        return title;
+        return softenClientQuery(title);
     }
 
     private static final class Row {

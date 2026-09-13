@@ -1048,24 +1048,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                         cancelParkedAdFillWatchdog();
                                         return;
                                     }
-                                    // Creative ready but WeakRef miss — seat recycle.
-                                    parkedAdFillTicks++;
-                                    if (parkedAdFillTicks >= 1) {
-                                        showLog("ANYNEWS_ADS parked watchdog seat recycle pos="
-                                                + page);
-                                        cancelParkedAdFillWatchdog();
-                                        scheduleSafeAdNotify(0L);
-                                        if (context instanceof HomePage) {
-                                            try {
-                                                ((HomePage) context).scheduleFlipSafeAdRebind();
-                                            } catch (Exception ignored) {
-                                            }
-                                        }
-                                        return;
-                                    }
-                                } else {
-                                    parkedAdFillTicks++;
                                 }
+                                parkedAdFillTicks++;
                                 if (parkedAdFillTicks >= PARKED_AD_FILL_MAX_TICKS) {
                                     cancelParkedAdFillWatchdog();
                                     return;

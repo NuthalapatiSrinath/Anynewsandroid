@@ -512,7 +512,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
     }
 
     private String selectedAddrFontId() {
-        if (addrFontSpinner == null) return BirthdayFonts.DEFAULT_ADDRESS_FONT_ID;
+        if (addrFontSpinner == null || addrFontSpinner.getVisibility() != View.VISIBLE) {
+            return selectedNameFontId();
+        }
         return BirthdayFonts.idAt(addrFontSpinner.getSelectedItemPosition());
     }
 

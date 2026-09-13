@@ -1726,9 +1726,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (raw == null) return "";
         String q = raw.trim();
         q = q.replace("\u2026", " ").replace("...", " ").replace('\u00A0', ' ');
+        q = q.replaceAll("^[\\?\\[\\](){}:;!.,\\s\\-\\u2026]+|[\\?\\[\\](){}:;!.,\\s\\-\\u2026]+$", "");
         q = q.replaceAll("\\s+", " ").trim();
-        // Trailing ? ! . … and runs of periods break $text phrase / regex edges.
-        q = q.replaceAll("[\\?\\!\\.\\u2026]+$", "").trim();
         q = q.replaceAll("\\.{2,}", " ").replaceAll("\\s+", " ").trim();
         return q;
     }
@@ -1926,7 +1925,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** Back on Way2 search bar — leave keyword mode and restore Main News. */
+    /** Back on AnyNews search bar — leave keyword mode and restore Main News. */
     public void exitSearchFeedMode() {
         if (!searchFeedActive && (activeSearchQuery == null || activeSearchQuery.isEmpty())) {
             return;
@@ -3835,7 +3834,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         String code = configuredCode == null ? "" : configuredCode.trim();
         if (!code.isEmpty()
-                && !code.startsWith("/")
                 && !code.contains("3940256099942544")
                 && !code.contains("~")) {
             Log.d(ADS_TAG, "resolved ad_code=" + code + " source=slot");

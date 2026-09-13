@@ -282,12 +282,14 @@
                 android:layout_marginTop="6dp"
                 android:text="@string/birthday_auto_addr_font_style"
                 android:textColor="#6B7280"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <Spinner
                 android:id="@+id/birthday_auto_addr_font"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
 
             <TextView
                 android:layout_width="match_parent"
