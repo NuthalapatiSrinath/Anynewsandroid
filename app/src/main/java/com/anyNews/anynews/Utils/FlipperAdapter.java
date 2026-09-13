@@ -522,20 +522,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             if (hasNativeCreativeForSlot(slot)) {
                 cancelAdShellFillTimeout(page);
-                // Fill arrived after an empty buffer shell was painted — prefer in-place
-                // paint (no FlipView recycle). Never inflate MediaView mid-fling.
-                // Keep awaiting until paint succeeds so seat-gated recycle can still run.
                 if (adShellAwaitingCreative.get(page, false)
                         || isDefaultAdPlaceholderShowing(page)) {
-                    if (shouldDeferAdWork()) {
-                        scheduleSafeAdNotify(FlipAdWorkGate.millisUntilAdWorkSafe());
-                        armParkedAdFillWatchdog(page);
-                        return;
-                    }
-                    if (!tryPaintGoogleNativeInPlace(page)) {
-                        scheduleSafeAdNotify(0L);
-                        armParkedAdFillWatchdog(page);
-                    }
+                    tryPaintGoogleNativeInPlace(page);
                 }
                 return;
             }
@@ -4212,18 +4201,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             // Mid-flip buffer getView used to takeReady() into an ahead seat
                             // then show house — stranded the creative so the parked current
                             // seat stayed on Share forever (ahead-steal was disabled).
-                            NativeAd ad = deferHeavy
-                                    ? peekExactGoogleNativeForSlot(adSlot)
-                                    : findGoogleNativeForSlot(adSlot);
+                            NativeAd ad = findGoogleNativeForSlot(adSlot);
                             if (ad != null) {
                                 nativeAd = ad;
                             }
-                            // Best-effort AdLoader kick (mid-flip OK). Paint waits for settle.
-                            // Reliability: HomePage.runSettledAdWork + setCurrentFlipPage
-                            // always re-ensure on land even if this warm was capped/failed.
+                            // Best-effort AdLoader kick for upcoming seats
                             adShellHandler.post(() -> requestNativeAdLoadForSlot(adSlot));
 
-                            if (ad != null && !deferHeavy) {
+                            if (ad != null) {
                                 View myView;
                                 if (fromView == 0) {
                                     myView = LayoutInflater.from(context).inflate(
@@ -4241,11 +4226,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 paintGoogleNativeIntoSeat(
                                         fl_adplaceholder, ad, myView, fromView, convertView, position);
                             } else {
-                                // Default ad screen while loading / mid-fling. Idle settle
-                                // paints via tryPaintGoogleNativeInPlace / scheduleSafeAdNotify.
-                                showLog("AD shell pending/defer → default placeholder pos=" + position
-                                        + " reqPos=" + list.get(position).getAd_req_position()
-                                        + " defer=" + deferHeavy + " hasAd=" + (ad != null));
+                                showLog("AD shell pending → default placeholder pos=" + position
+                                        + " reqPos=" + list.get(position).getAd_req_position());
                                 mountAdPendingEmptyShell(fl_adplaceholder, position, fromView);
                             }
                         } else {
