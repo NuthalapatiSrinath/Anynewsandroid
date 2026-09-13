@@ -10793,7 +10793,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // Content key ignores http↔file:// swap after OfflineImageStore finishes
         // (~3–4s). Rebinding with a new URI + showImageOnLoading made the visible
         // hero disappear then fade back in.
-        final Long postId = item != null ? item.getPostId() : null;
         final String contentKey;
         if (postId != null && postId > 0) {
             contentKey = String.valueOf(postId) + "|" + imageIndex;
