@@ -228,6 +228,8 @@ public final class RewardsLabels {
                 return "Share";
             case "follow":
                 return "Follow";
+            case "admin_adjust":
+                return "Admin adjust";
             default:
                 return raw;
         }
@@ -460,6 +462,42 @@ public final class RewardsLabels {
             case 5: return "ಇತಿಹಾಸ";
             case 6: return "ଇତିହାସ";
             default: return "History";
+        }
+    }
+
+    public static String withdrawals(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "പിൻവലിക്കലുകൾ";
+            case 2: return "निकासी";
+            case 3: return "విత్‌డ్రాళ్లు";
+            case 4: return "எடுப்புகள்";
+            case 5: return "ಹಿಂಪಡೆಯುವಿಕೆಗಳು";
+            case 6: return "ଉଠାଣ";
+            default: return "Withdrawals";
+        }
+    }
+
+    public static String viewProof(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "തെളിവ് കാണുക";
+            case 2: return "प्रूफ़ देखें";
+            case 3: return "ప్రూఫ్ చూడండి";
+            case 4: return "ஆதாரம் பார்க்க";
+            case 5: return "ಪುರಾವೆ ನೋಡಿ";
+            case 6: return "ପ୍ରମାଣ ଦେଖନ୍ତୁ";
+            default: return "View proof";
+        }
+    }
+
+    public static String noWithdrawals(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "ഇതുവരെ പിൻവലിക്കലുകളില്ല";
+            case 2: return "अभी तक कोई निकासी नहीं";
+            case 3: return "ఇంకా విత్‌డ్రాలు లేవు";
+            case 4: return "இன்னும் எடுப்புகள் இல்லை";
+            case 5: return "ಇನ್ನೂ ಹಿಂಪಡೆಯುವಿಕೆಗಳಿಲ್ಲ";
+            case 6: return "ଏପର୍ଯ୍ୟନ୍ତ କୌଣସି ଉଠାଣ ନାହିଁ";
+            default: return "No withdrawals yet";
         }
     }
 

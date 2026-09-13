@@ -160,6 +160,20 @@
                     android:textColorHint="@color/rewards_cream_muted"
                     android:textSize="14sp" />
 
+                <EditText
+                    android:id="@+id/wallet_upi_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_rewards_input"
+                    android:hint="Account holder name"
+                    android:inputType="textPersonName"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:textColor="@color/rewards_cream"
+                    android:textColorHint="@color/rewards_cream_muted"
+                    android:textSize="14sp" />
+
                 <TextView
                     android:id="@+id/wallet_save_upi"
                     android:layout_width="match_parent"
@@ -212,6 +226,31 @@
 
             <LinearLayout
                 android:id="@+id/wallet_history"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="18dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="18dp"
+                android:background="@drawable/bg_rewards_card"
+                android:orientation="vertical"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
+
+            <TextView
+                android:id="@+id/wallet_withdrawals_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="22dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginEnd="18dp"
+                android:letterSpacing="0.04"
+                android:text="Withdrawals"
+                android:textAllCaps="true"
+                android:textColor="@color/rewards_gold"
+                android:textSize="11sp" />
+
+            <LinearLayout
+                android:id="@+id/wallet_withdrawals"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="18dp"
