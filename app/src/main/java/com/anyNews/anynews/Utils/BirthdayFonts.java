@@ -184,6 +184,18 @@ public final class BirthdayFonts {
         return 1;
     }
 
+    /** Map a pixel size back to Small/Medium/Large spinner index. */
+    public static int tierIndexForSize(boolean forName, int sizePx) {
+        if (forName) {
+            if (sizePx <= (NAME_SIZE_SMALL + NAME_SIZE_MEDIUM) / 2) return 0;
+            if (sizePx >= (NAME_SIZE_MEDIUM + NAME_SIZE_LARGE) / 2) return 2;
+            return 1;
+        }
+        if (sizePx <= (ADDR_SIZE_SMALL + ADDR_SIZE_MEDIUM) / 2) return 0;
+        if (sizePx >= (ADDR_SIZE_MEDIUM + ADDR_SIZE_LARGE) / 2) return 2;
+        return 1;
+    }
+
     @NonNull
     public static ArrayAdapter<CharSequence> sizeAdapter(@NonNull Context context) {
         return new ArrayAdapter<>(

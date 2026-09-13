@@ -79,6 +79,8 @@ public class BirthdayPosterPreviewView extends View {
     private float zoom = 1f;
     private float panX = 0f;
     private float panY = 0f;
+    /** Manual clockwise degrees: 0 / 90 / 180 / 270 */
+    private int photoRotation = 0;
 
     private float lastTouchX;
     private float lastTouchY;
@@ -172,6 +174,20 @@ public class BirthdayPosterPreviewView extends View {
     public void setZoom(float zoom) {
         this.zoom = Math.max(1f, Math.min(3f, zoom));
         invalidate();
+    }
+
+    /** Clockwise 0 / 90 / 180 / 270 — applied after EXIF-normalized bitmap. */
+    public void setPhotoRotation(int degrees) {
+        int r = ((degrees % 360) + 360) % 360;
+        r = (Math.round(r / 90f) * 90) % 360;
+        if (r != 0 && r != 90 && r != 180 && r != 270) r = 0;
+        if (this.photoRotation == r) return;
+        this.photoRotation = r;
+        invalidate();
+    }
+
+    public int getPhotoRotation() {
+        return photoRotation;
     }
 
     public void setPan(float panX, float panY) {
@@ -290,15 +306,25 @@ public class BirthdayPosterPreviewView extends View {
             canvas.clipPath(clipPath);
             canvas.drawRect(cx - box / 2f, cy - box / 2f, cx + box / 2f, cy + box / 2f, circlePaint);
 
-            float base = Math.max(box / photo.getWidth(), box / photo.getHeight());
+            float srcW = photo.getWidth();
+            float srcH = photo.getHeight();
+            // After 90/270 the cover-fit uses swapped visual bounds.
+            float orientW = (photoRotation == 90 || photoRotation == 270) ? srcH : srcW;
+            float orientH = (photoRotation == 90 || photoRotation == 270) ? srcW : srcH;
+            float base = Math.max(box / orientW, box / orientH);
             float scale = base * zoom;
-            float drawW = photo.getWidth() * scale;
-            float drawH = photo.getHeight() * scale;
+            float drawW = orientW * scale;
+            float drawH = orientH * scale;
             float left = cx - box / 2f + (box - drawW) / 2f + panX * box;
             float top = cy - box / 2f + (box - drawH) / 2f + panY * box;
             photoMatrix.reset();
+            // Rotate about photo center, then scale + translate into cover box.
+            photoMatrix.postTranslate(-srcW / 2f, -srcH / 2f);
+            if (photoRotation != 0) {
+                photoMatrix.postRotate(photoRotation);
+            }
             photoMatrix.postScale(scale, scale);
-            photoMatrix.postTranslate(left, top);
+            photoMatrix.postTranslate(left + drawW / 2f, top + drawH / 2f);
             canvas.drawBitmap(photo, photoMatrix, bitmapPaint);
             canvas.restoreToCount(save);
 

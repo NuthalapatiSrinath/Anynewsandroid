@@ -535,6 +535,9 @@ public interface APIService {
     @POST("app/{version}/birthday_my")
     Call<JsonObject> birthday_my(@Path("version") String version, @Body JsonObject body);
 
+    @POST("app/{version}/birthday_update")
+    Call<JsonObject> birthday_update(@Path("version") String version, @Body JsonObject body);
+
     @POST("app/{version}/birthday_cancel")
     Call<JsonObject> birthday_cancel(@Path("version") String version, @Body JsonObject body);
 
