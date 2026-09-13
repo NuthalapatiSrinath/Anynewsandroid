@@ -386,25 +386,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (tryPaintReadyGoogleNativesInPlace()) {
                     return;
                 }
-                // Never MediaView / FlipView recycle on the flip critical path.
-                if (shouldDeferAdWork() || isHomeFlipAnimating() || isUserDrivingFlip()) {
+                if (isHomeFlipAnimating() || isUserDrivingFlip()) {
                     scheduleSafeAdNotify(Math.max(64L, FlipAdWorkGate.millisUntilAdWorkSafe()));
                     return;
                 }
-                // Idle only: creative ready but WeakRef missed — re-resolve live
-                // fl_adplaceholder and paint in place (no dataset thrash).
-                if (needsFlipSettleAdRebind()) {
-                    if (currentFlipPage >= 0 && tryPaintGoogleNativeInPlace(currentFlipPage)) {
-                        return;
+                // In-place miss with a ready creative: ask HomePage for seat-gated
+                // settle recycle. Do NOT notify when nothing needs painting — that
+                // flashed every FlipView page on every scroll.
+                if (needsAdSeatDatasetRebind()) {
+                    showLog("ANYNEWS_ADS rebind deferred to flip-safe seat path");
+                    if (context instanceof HomePage) {
+                        try {
+                            ((HomePage) context).scheduleFlipSafeAdRebind();
+                        } catch (Exception ignored) {
+                        }
                     }
-                    // Last resort after settle: one coalesced recycle. notifyWhenFlipSettled
-                    // itself no-ops while the user is driving so article flips stay smooth.
-                    showLog("ANYNEWS_ADS idle settle recycle — creative ready, in-place miss");
-                    notifyWhenFlipSettled();
                     return;
                 }
-                // No ready creative: leave the house placeholder; a later fill
-                // schedules another paint.
                 showLog("ANYNEWS_ADS rebind skipped: no ready creative");
             } catch (Exception e) {
                 showLog("ANYNEWS_ADS rebind skipped: " + e.getMessage());
@@ -498,8 +496,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 cancelAdShellFillTimeout(page);
                 // Fill arrived after an empty buffer shell was painted — prefer in-place
                 // paint (no FlipView recycle). Never inflate MediaView mid-fling.
-                // Keep awaiting=true until paint succeeds; clearing it on a failed
-                // tryPaint stranded the default share-ad screen forever.
+                // Keep awaiting until paint succeeds so seat-gated recycle can still run.
                 if (adShellAwaitingCreative.get(page, false)
                         || isDefaultAdPlaceholderShowing(page)) {
                     if (shouldDeferAdWork()) {
@@ -644,9 +641,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     painted = true;
                 }
             }
-            // Also try the landed page even if awaiting was cleared by a prior miss.
+            // Landed house placeholder even if awaiting was cleared by a prior miss.
             if (!painted && currentFlipPage >= 0
-                    && !adShellAwaitingCreative.get(currentFlipPage, false)
                     && isDefaultAdPlaceholderShowing(currentFlipPage)) {
                 if (tryPaintGoogleNativeInPlace(currentFlipPage)) {
                     painted = true;
@@ -658,10 +654,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * True when the visible (or tracked) ad seat still shows the house/share default
-     * shell but a native creative is already ready — needs paint or settle recycle.
+     * True when an ad seat still shows the house/share default but a native creative
+     * is ready — only then may we allow a FlipView settle recycle. News image seats
+     * must never trigger dataset notify (every-scroll blink).
      */
-    public boolean needsFlipSettleAdRebind() {
+    public boolean needsAdSeatDatasetRebind() {
         try {
             if (list == null || list.isEmpty()) {
                 return false;
@@ -711,8 +708,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (fl != null && fl.isAttachedToWindow()) {
                 return fl;
             }
-            // Weak ref lost after FlipView same-seat pin / scrap shuffle — re-find
-            // the live fl_adplaceholder on the current page and re-remember it.
+            // Weak ref lost — re-find live fl_adplaceholder without full notify.
             if (position == currentFlipPage && context instanceof HomePage) {
                 View page = ((HomePage) context).getCurrentFlipPageView();
                 if (page != null) {

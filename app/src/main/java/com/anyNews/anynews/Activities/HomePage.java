@@ -408,6 +408,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean pendingFlipSafeAdRebind = false;
     /** Demoted share_app → ad needs layout swap; cannot use in-place shell paint. */
     private boolean pendingFullAdRebind = false;
+    /**
+     * Ad fill rebind after load/timeout. Prefer in-place MediaView paint.
+     * Never {@code notifyDataSetChanged()} unless an ad seat still needs a layout
+     * swap — unconditional notify (cbec52a restore) recycled every FlipView page
+     * and caused one blink on every scroll for images and ads.
+     */
     private final Runnable flipSafeAdRebindRunnable = new Runnable() {
         @Override
         public void run() {
@@ -424,6 +430,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (pendingFullAdRebind) {
                     pendingFullAdRebind = false;
                     if (adapter != null) {
+                        // Layout-type swap (share_app ↔ ad) — settle-coalesced recycle.
                         adapter.notifyWhenFlipSettled();
                     }
                     return;
@@ -431,19 +438,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
                     return;
                 }
-                // Idle only (gates above): creative ready but in-place miss — one
-                // settle recycle. Never mid-flip; keeps share-ad ~1s fill without
-                // hitching adjacent article transitions.
-                if (adapter != null && adapter.needsFlipSettleAdRebind()) {
+                // Creative ready but WeakRef/placeholder miss — one settle recycle
+                // only for seats that still need fill. Never notify for news image seats.
+                if (adapter != null && adapter.needsAdSeatDatasetRebind()) {
                     if (shouldDeferAdWork()) {
                         scheduleFlipSafeAdRebind(
                                 Math.max(64L, FlipAdWorkGate.millisUntilAdWorkSafe()));
                         return;
                     }
+                    showLog("ANYNEWS_ADS seat-only settle recycle (in-place miss)");
                     adapter.notifyWhenFlipSettled();
-                    return;
                 }
-                // Nothing ready — keep house placeholder; no FlipView recycle.
             } catch (Exception ignored) {
             }
         }
@@ -2256,7 +2261,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Live FlipView page currently on screen (or null). Used by ad in-place paint
-     * to re-find {@code fl_adplaceholder} after WeakReference loss.
+     * to re-find {@code fl_adplaceholder} after WeakReference loss without a full
+     * adapter notify (avoids every-scroll blink).
      */
     @Nullable
     public View getCurrentFlipPageView() {
@@ -3312,6 +3318,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
+                    // Prefer in-place paint only — scheduleFlipSafeAdRebind no longer
+                    // notifies the whole FlipView unless an ad seat still needs it.
+                    try {
+                        if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
+                            return;
+                        }
+                    } catch (Exception ignored) {
+                    }
                     scheduleFlipSafeAdRebind();
                 }
             });
