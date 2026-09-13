@@ -4577,7 +4577,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 return getView(position, null, parent);
                             }
                             // Last resort for non-end item: inflate normal_image
-                            convertView = inflater.inflate(R.layout.activity_full_screen, parent, false);
+                            convertView = inflater.inflate(R.layout.activity_half_image_new, parent, false);
                             break;
                         }
                         showLog("getView feed_end card pos=" + position);
