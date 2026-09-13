@@ -24,6 +24,10 @@ import java.io.InputStream;
 /**
  * Decode birthday photos (including WhatsApp HEIC/HEIF) to oriented JPEG for
  * preview + upload so server sharp never sees unsupported HEIF.
+ *
+ * <p>EXIF orientation is applied <strong>exactly once</strong>. ImageDecoder and
+ * Glide already bake orientation into pixels; applying EXIF again made 0° look
+ * sideways while the rotate UI still showed 0°.
  */
 public final class BirthdayPhotoNormalizer {
 
@@ -39,6 +43,17 @@ public final class BirthdayPhotoNormalizer {
         }
     }
 
+    private static final class Decoded {
+        @NonNull final Bitmap bitmap;
+        /** True when decoder already applied EXIF into pixel data. */
+        final boolean alreadyOriented;
+
+        Decoded(@NonNull Bitmap bitmap, boolean alreadyOriented) {
+            this.bitmap = bitmap;
+            this.alreadyOriented = alreadyOriented;
+        }
+    }
+
     private BirthdayPhotoNormalizer() {}
 
     /**
@@ -48,13 +63,16 @@ public final class BirthdayPhotoNormalizer {
     @NonNull
     public static Result toJpeg(@NonNull Context context, @NonNull Uri sourceUri) throws Exception {
         Context app = context.getApplicationContext();
-        Bitmap decoded = decodeBitmap(app, sourceUri);
-        if (decoded == null) {
+        Decoded decoded = decodeBitmap(app, sourceUri);
+        if (decoded == null || decoded.bitmap == null) {
             throw new IllegalStateException("Could not decode photo (HEIF/HEIC unsupported on device)");
         }
-        Bitmap oriented = applyExifOrientation(app, sourceUri, decoded);
-        if (oriented != decoded && !decoded.isRecycled()) {
-            decoded.recycle();
+        Bitmap oriented =
+                decoded.alreadyOriented
+                        ? decoded.bitmap
+                        : applyExifOrientation(app, sourceUri, decoded.bitmap);
+        if (oriented != decoded.bitmap && !decoded.bitmap.isRecycled()) {
+            decoded.bitmap.recycle();
         }
         // Cap memory for preview/upload
         Bitmap scaled = downscaleIfNeeded(oriented, 2048);
@@ -73,26 +91,30 @@ public final class BirthdayPhotoNormalizer {
             }
             fos.flush();
         }
+        // Compressed JPEG has no EXIF Orientation tag — pixels are upright at 0°.
         return new Result(Uri.fromFile(out), out, scaled);
     }
 
     @Nullable
-    private static Bitmap decodeBitmap(@NonNull Context context, @NonNull Uri uri) {
-        // 1) ImageDecoder (API 28+) — handles many HEIF variants
+    private static Decoded decodeBitmap(@NonNull Context context, @NonNull Uri uri) {
+        // 1) ImageDecoder (API 28+) — handles many HEIF variants; applies EXIF itself.
         if (Build.VERSION.SDK_INT >= 28) {
             try {
                 android.graphics.ImageDecoder.Source src =
                         android.graphics.ImageDecoder.createSource(context.getContentResolver(), uri);
-                return android.graphics.ImageDecoder.decodeBitmap(
-                        src,
-                        (decoder, info, source) -> {
-                            decoder.setAllocator(android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);
-                        });
+                Bitmap bmp =
+                        android.graphics.ImageDecoder.decodeBitmap(
+                                src,
+                                (decoder, info, source) -> {
+                                    decoder.setAllocator(
+                                            android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE);
+                                });
+                if (bmp != null) return new Decoded(bmp, true);
             } catch (Exception ignored) {
             }
         }
 
-        // 2) Byte-buffer BitmapFactory (some providers stream poorly)
+        // 2) Byte-buffer BitmapFactory — does NOT apply EXIF; we apply once below.
         try {
             byte[] bytes = readAll(context.getContentResolver(), uri);
             if (bytes != null && bytes.length > 0) {
@@ -103,18 +125,20 @@ public final class BirthdayPhotoNormalizer {
                 opts.inSampleSize = sampleForMax(bounds.outWidth, bounds.outHeight, 2048);
                 opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
                 Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, opts);
-                if (bmp != null) return bmp;
+                if (bmp != null) return new Decoded(bmp, false);
             }
         } catch (Exception ignored) {
         }
 
-        // 3) Glide — often succeeds where BitmapFactory fails on WhatsApp HEIC
+        // 3) Glide — often succeeds where BitmapFactory fails on WhatsApp HEIC; applies EXIF.
         try {
-            return Glide.with(context)
-                    .asBitmap()
-                    .load(uri)
-                    .submit(2048, 2048)
-                    .get();
+            Bitmap bmp =
+                    Glide.with(context)
+                            .asBitmap()
+                            .load(uri)
+                            .submit(2048, 2048)
+                            .get();
+            if (bmp != null) return new Decoded(bmp, true);
         } catch (Exception ignored) {
         }
         return null;
@@ -152,7 +176,6 @@ public final class BirthdayPhotoNormalizer {
             }
         } catch (Exception ignored) {
         }
-        // Also try from JPEG bytes already oriented via ImageDecoder (often already applied)
         Matrix matrix = new Matrix();
         switch (orientation) {
             case ExifInterface.ORIENTATION_ROTATE_90:
@@ -175,7 +198,8 @@ public final class BirthdayPhotoNormalizer {
         }
         try {
             Bitmap rotated =
-                    Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+                    Bitmap.createBitmap(
+                            bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
             return rotated != null ? rotated : bitmap;
         } catch (Exception e) {
             return bitmap;

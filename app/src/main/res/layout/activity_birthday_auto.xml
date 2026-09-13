@@ -50,27 +50,10 @@
             android:orientation="vertical"
             android:padding="14dp">
 
-            <TextView
-                android:id="@+id/birthday_auto_hint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/birthday_auto_hint"
-                android:textColor="#6B7280"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="@string/birthday_auto_live_preview"
-                android:textColor="#374151"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
+            <!-- Screen starts at live banner preview (no instructional copy above). -->
             <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
                 android:background="#FFFFFF"
                 android:elevation="2dp"
                 android:padding="6dp">

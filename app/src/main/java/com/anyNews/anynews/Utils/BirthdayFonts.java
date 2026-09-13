@@ -7,6 +7,9 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.res.ResourcesCompat;
+
+import com.anyNews.anynews.R;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,6 +19,11 @@ import java.util.Map;
 /**
  * Birthday Special poster fonts — ids match admin {@code birthdayComposite.js}.
  * Dropdown rows render the sample word in each typeface (not plain family names).
+ *
+ * <p>APK size: decorative TTFs are <strong>not</strong> bundled (~5.5MB removed).
+ * Live preview uses system faces; final poster uses server-side composite fonts.
+ * Indic (Telugu etc.) uses the existing bundled Telugu UI font so place text
+ * never paints tofu boxes.
  */
 public final class BirthdayFonts {
 
@@ -34,7 +42,8 @@ public final class BirthdayFonts {
     public static final class Spec {
         public final String id;
         public final String label;
-        public final String assetFile; // under assets/birthday/fonts/, nullable
+        /** Formerly assets/birthday/fonts — kept null to avoid fat APK. */
+        public final String assetFile;
 
         Spec(String id, String label, @Nullable String assetFile) {
             this.id = id;
@@ -46,43 +55,43 @@ public final class BirthdayFonts {
     /** Default (Great Vibes) first, then rest matching admin catalog. */
     private static final Spec[] CATALOG =
             new Spec[] {
-                new Spec("great-vibes", "Great Vibes", "great-vibes.ttf"),
-                new Spec("pacifico", "Pacifico", "pacifico.ttf"),
-                new Spec("dancing-script", "Dancing Script", "dancing-script.ttf"),
-                new Spec("satisfy", "Satisfy", "satisfy.ttf"),
-                new Spec("lobster", "Lobster", "lobster.ttf"),
-                new Spec("cookie", "Cookie", "cookie.ttf"),
-                new Spec("sacramento", "Sacramento", "sacramento.ttf"),
-                new Spec("allura", "Allura", "allura.ttf"),
-                new Spec("alex-brush", "Alex Brush", "alex-brush.ttf"),
-                new Spec("courgette", "Courgette", "courgette.ttf"),
-                new Spec("kaushan", "Kaushan Script", "kaushan.ttf"),
-                new Spec("indie-flower", "Indie Flower", "indie-flower.ttf"),
-                new Spec("shadows", "Shadows Into Light", "shadows.ttf"),
-                new Spec("caveat", "Caveat", "caveat.ttf"),
-                new Spec("amatic", "Amatic SC", "amatic.ttf"),
-                new Spec("permanent-marker", "Permanent Marker", "permanent-marker.ttf"),
-                new Spec("playfair", "Playfair Display", "playfair.ttf"),
-                // Merriweather TTF was ~4.5MB (variable/full CJK dump) — use system serif.
+                // assetFile null — system approximation; server/admin render real faces.
+                new Spec("great-vibes", "Great Vibes", null),
+                new Spec("pacifico", "Pacifico", null),
+                new Spec("dancing-script", "Dancing Script", null),
+                new Spec("satisfy", "Satisfy", null),
+                new Spec("lobster", "Lobster", null),
+                new Spec("cookie", "Cookie", null),
+                new Spec("sacramento", "Sacramento", null),
+                new Spec("allura", "Allura", null),
+                new Spec("alex-brush", "Alex Brush", null),
+                new Spec("courgette", "Courgette", null),
+                new Spec("kaushan", "Kaushan Script", null),
+                new Spec("indie-flower", "Indie Flower", null),
+                new Spec("shadows", "Shadows Into Light", null),
+                new Spec("caveat", "Caveat", null),
+                new Spec("amatic", "Amatic SC", null),
+                new Spec("permanent-marker", "Permanent Marker", null),
+                new Spec("playfair", "Playfair Display", null),
                 new Spec("merriweather", "Merriweather", null),
-                new Spec("lora", "Lora", "lora.ttf"),
-                new Spec("cinzel", "Cinzel", "cinzel.ttf"),
-                new Spec("roboto", "Roboto", "roboto.ttf"),
-                new Spec("open-sans", "Open Sans", "open-sans.ttf"),
-                new Spec("montserrat", "Montserrat", "montserrat.ttf"),
-                new Spec("poppins", "Poppins", "poppins.ttf"),
-                new Spec("raleway", "Raleway", "raleway.ttf"),
-                new Spec("oswald", "Oswald", "oswald.ttf"),
-                new Spec("josefin", "Josefin Sans", "josefin.ttf"),
-                new Spec("nunito", "Nunito", "nunito.ttf"),
-                new Spec("quicksand", "Quicksand", "quicksand.ttf"),
-                new Spec("comfortaa", "Comfortaa", "comfortaa.ttf"),
-                new Spec("titillium", "Titillium Web", "titillium.ttf"),
-                new Spec("source-sans", "Source Sans 3", "source-sans.ttf"),
-                new Spec("bebas", "Bebas Neue", "bebas.ttf"),
-                new Spec("anton", "Anton", "anton.ttf"),
-                new Spec("bangers", "Bangers", "bangers.ttf"),
-                new Spec("russo", "Russo One", "russo.ttf"),
+                new Spec("lora", "Lora", null),
+                new Spec("cinzel", "Cinzel", null),
+                new Spec("roboto", "Roboto", null),
+                new Spec("open-sans", "Open Sans", null),
+                new Spec("montserrat", "Montserrat", null),
+                new Spec("poppins", "Poppins", null),
+                new Spec("raleway", "Raleway", null),
+                new Spec("oswald", "Oswald", null),
+                new Spec("josefin", "Josefin Sans", null),
+                new Spec("nunito", "Nunito", null),
+                new Spec("quicksand", "Quicksand", null),
+                new Spec("comfortaa", "Comfortaa", null),
+                new Spec("titillium", "Titillium Web", null),
+                new Spec("source-sans", "Source Sans 3", null),
+                new Spec("bebas", "Bebas Neue", null),
+                new Spec("anton", "Anton", null),
+                new Spec("bangers", "Bangers", null),
+                new Spec("russo", "Russo One", null),
                 new Spec("georgia", "Georgia", null),
                 new Spec("impact", "Impact", null),
             };
@@ -121,7 +130,9 @@ public final class BirthdayFonts {
 
     /**
      * Script fonts (Great Vibes, etc.) lack Telugu/Indic glyphs and draw tofu boxes.
-     * Prefer a system face with proper fallback when the label needs Indic script.
+     * Use the app's bundled Telugu UI font (already in res/font) so Canvas paints
+     * real glyphs — {@link Typeface#SANS_SERIF} alone often still tofus on OEM builds
+     * when a Latin face was previously selected.
      */
     @NonNull
     public static Typeface typefaceForText(
@@ -130,13 +141,33 @@ public final class BirthdayFonts {
             boolean bold,
             @Nullable String text) {
         if (needsIndicFallback(text)) {
-            Typeface base = Typeface.SANS_SERIF;
+            Typeface base = indicTypeface(context);
             if (bold) {
-                return Typeface.create(base, Typeface.BOLD);
+                Typeface b = Typeface.create(base, Typeface.BOLD);
+                return b != null ? b : base;
             }
-            return base != null ? base : Typeface.DEFAULT;
+            return base;
         }
         return typeface(context, fontId, bold);
+    }
+
+    @NonNull
+    private static Typeface indicTypeface(@Nullable Context context) {
+        if (context != null) {
+            try {
+                Typeface tf = ResourcesCompat.getFont(context, R.font.robotolighttelugu);
+                if (tf != null) return tf;
+            } catch (Exception ignored) {
+            }
+            try {
+                Typeface tf = ResourcesCompat.getFont(context, R.font.sreekrushnadevaraya_regular);
+                if (tf != null) return tf;
+            } catch (Exception ignored) {
+            }
+        }
+        // Preserve fallback chain (create by family name > SANS_SERIF constant).
+        Typeface named = Typeface.create("sans-serif", Typeface.NORMAL);
+        return named != null ? named : Typeface.DEFAULT;
     }
 
     /** True when text contains Indic blocks (Telugu, Devanagari, Kannada, …). */

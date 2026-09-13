@@ -357,7 +357,8 @@ public class BirthdayPosterPreviewView extends View {
         namePaint.setTypeface(nameTf);
         addressPaint.setTypeface(addrTf);
         specialPaint.setTypeface(
-                BirthdayFonts.typeface(getContext(), BirthdayFonts.DEFAULT_SPECIAL_FONT_ID, false));
+                BirthdayFonts.typefaceForText(
+                        getContext(), BirthdayFonts.DEFAULT_SPECIAL_FONT_ID, false, specialText));
 
         float nameStart = nameSizePx * sy;
         namePaint.setTextSize(fitTextSize(namePaint, nameText, NAME_MAX_WIDTH * sx, nameStart, 16f * sy));

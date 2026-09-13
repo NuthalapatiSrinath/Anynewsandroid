@@ -144,6 +144,12 @@ public class BirthdayAutoActivity extends AppCompatActivity {
 
         livePreview = findViewById(R.id.birthday_auto_live_preview);
         serverPreview = findViewById(R.id.birthday_auto_server_preview);
+        // Never let server raster sit above the live view (blocks pan + garbles place).
+        if (serverPreview != null) {
+            serverPreview.setVisibility(View.GONE);
+            serverPreview.setClickable(false);
+            serverPreview.setFocusable(false);
+        }
         // Cap preview so pick / zoom / 0°–270° stay visible under the banner.
         if (livePreview != null) {
             int maxH = Math.round(getResources().getDisplayMetrics().heightPixels * 0.42f);
@@ -174,6 +180,21 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         setupFontSpinners();
         setupRotationButtons();
         autofillAddress();
+        // Address field must also paint Telugu (not Latin script face).
+        if (addressInput != null) {
+            try {
+                android.graphics.Typeface tf =
+                        BirthdayFonts.typefaceForText(
+                                this,
+                                BirthdayFonts.DEFAULT_ADDRESS_FONT_ID,
+                                false,
+                                addressInput.getText() != null
+                                        ? addressInput.getText().toString()
+                                        : "");
+                addressInput.setTypeface(tf);
+            } catch (Exception ignored) {
+            }
+        }
         String uname =
                 SharedPrefsData.getString(this, Constants.USER_NAME, Constants.PREF_NAME);
         if (nameInput != null && !TextUtils.isEmpty(uname)) {
@@ -280,6 +301,11 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         int r = ((degrees % 360) + 360) % 360;
         r = (Math.round(r / 90f) * 90) % 360;
         if (r != 0 && r != 90 && r != 180 && r != 270) r = 0;
+        // Rotate must not reset pan/zoom — only update orientation.
+        if (photoRotation == r && fromUser) {
+            highlightRotationButtons();
+            return;
+        }
         photoRotation = r;
         if (livePreview != null) livePreview.setPhotoRotation(r);
         highlightRotationButtons();
@@ -355,9 +381,12 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                         // previous preview owned by us
                                     }
                                     previewBitmap = result.previewBitmap;
+                                    // New photo only: reset compose to upright EXIF baseline.
+                                    // Do NOT touch these again on upload-complete / preview refresh.
                                     panX = 0f;
                                     panY = 0f;
-                                    setPhotoRotation(0, false);
+                                    photoRotation = 0;
+                                    if (zoomBar != null) zoomBar.setProgress(0);
                                     hideServerPreview();
                                     // Keep district/state on the plaque after upload.
                                     if (addressInput != null
@@ -369,8 +398,12 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                     }
                                     if (livePreview != null) {
                                         livePreview.setPan(0f, 0f);
+                                        livePreview.setPhotoRotation(0);
+                                        livePreview.setZoom(1f);
+                                        // Bitmap after EXIF-once normalize — 0° == upright.
                                         livePreview.setPhotoBitmap(previewBitmap);
                                     }
+                                    highlightRotationButtons();
                                     Button pickBtn = findViewById(R.id.birthday_auto_pick_photo);
                                     if (pickBtn != null) {
                                         pickBtn.setText(R.string.birthday_change_photo);
@@ -481,14 +514,24 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         if (livePreview == null) return;
         boolean boldN = nameBold != null && nameBold.isChecked();
         boolean boldA = addrBold != null && addrBold.isChecked();
+        String address =
+                addressInput != null ? addressInput.getText().toString() : "";
         livePreview.setBannerTexts(
                 nameInput != null ? nameInput.getText().toString() : "",
-                addressInput != null ? addressInput.getText().toString() : "",
+                address,
                 specialInput != null ? specialInput.getText().toString() : "",
                 boldN,
                 boldA);
         livePreview.setNameStyle(selectedNameFontId(), selectedNameSizePx(), boldN);
         livePreview.setAddressStyle(selectedAddrFontId(), selectedAddrSizePx(), boldA);
+        if (addressInput != null) {
+            try {
+                addressInput.setTypeface(
+                        BirthdayFonts.typefaceForText(
+                                this, selectedAddrFontId(), boldA, address));
+            } catch (Exception ignored) {
+            }
+        }
         float zoom = 1f;
         if (zoomBar != null) zoom = 1f + (zoomBar.getProgress() / 10f);
         livePreview.setZoom(zoom);
