@@ -2479,6 +2479,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    /**
+     * Feed append / soft-merge: update FlipView page count without recycling the
+     * visible card ({@code dataSetChanged} → forceRebind blink).
+     */
+    public void notifyFlipPageCountGrewQuietly() {
+        try {
+            if (mFlipView != null) {
+                mFlipView.pageCountGrewQuietly();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     /** True while flip gesture / settle-grace says AdMob work must wait. */
     public boolean shouldDeferAdWork() {
         try {
@@ -13339,7 +13352,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             || encreptionRequest.getFlash_news_in_main_feed_slot() != null
                             || encreptionRequest.getShow_flash_and_rewards_together() != null
                             || encreptionRequest.getRewards_exclude_reporters() != null) {
-                        DistrictPinVisibilityConfig.saveFromServer(
+                        boolean chipsChanged = DistrictPinVisibilityConfig.saveFromServer(
                                 getApplicationContext(),
                                 encreptionRequest.getHide_district_on_main_feed(),
                                 encreptionRequest.getRewards_master(),
@@ -13348,7 +13361,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 encreptionRequest.getFlash_news_in_main_feed_slot(),
                                 encreptionRequest.getKeep_rewards_after_join(),
                                 encreptionRequest.getShow_flash_and_rewards_together());
-                        if (adapter != null) {
+                        // Identical prefs → zero FlipView notify (no blink).
+                        if (chipsChanged && adapter != null) {
                             adapter.notifyWhenFlipSettled();
                         }
                     }
@@ -13367,12 +13381,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (encreptionRequest.getDual_chip_size_dp() != null
                             || encreptionRequest.getDual_chip_shift_left_dp() != null
                             || encreptionRequest.getDual_chip_shift_up_dp() != null) {
-                        DistrictPinVisibilityConfig.savePairLayoutFromServer(
+                        boolean pairChanged = DistrictPinVisibilityConfig.savePairLayoutFromServer(
                                 getApplicationContext(),
                                 encreptionRequest.getDual_chip_size_dp(),
                                 encreptionRequest.getDual_chip_shift_left_dp(),
                                 encreptionRequest.getDual_chip_shift_up_dp());
-                        if (adapter != null) {
+                        if (pairChanged && adapter != null) {
                             adapter.notifyWhenFlipSettled();
                         }
                     }
@@ -13534,8 +13548,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 filterListStripHalfPosts(list);
                             }
                             try {
+                                // Shared list already mutated — grow FlipView quietly
+                                // (no notifyDataSetChanged / forceRebind blink).
                                 if (adapter != null) {
-                                    adapter.notifyWhenFlipSettled();
+                                    adapter.notifyFeedAppendedQuietly();
                                 }
                             } catch (Exception ignored) {
                             }
@@ -13557,10 +13573,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             try {
                                 if (!bookmarksModeSelected) {
                                     rememberFeedStickiesFrom(list);
-                                    // Full chronological News — do not strip read articles.
-                                    if (adapter != null) {
-                                        adapter.notifyWhenFlipSettled();
-                                    }
+                                    // Count already updated via quiet grow above.
                                     if (list != null && !list.isEmpty()) {
                                         try {
                                             if (mFlipView != null) {
@@ -14487,20 +14500,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void applySearchIconConfig(
             Boolean onEngagement, Boolean onToggle, Integer sizeDp) {
         try {
-            com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
+            boolean changed = com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
                     this, onEngagement, onToggle, sizeDp);
             applyHomeModeSearchIcon();
-            if (mFlipView != null) {
-                mFlipView.post(
-                        () -> {
-                            try {
-                                if (adapter != null) {
-                                    adapter.notifyDataSetChanged();
-                                }
-                            } catch (Exception ignored) {
-                            }
-                        });
+            // Identical prefs → zero FlipView notify.
+            if (!changed || mFlipView == null) {
+                return;
             }
+            mFlipView.post(
+                    () -> {
+                        try {
+                            if (adapter != null) {
+                                adapter.notifyDataSetChanged();
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    });
         } catch (Exception ignored) {
         }
     }

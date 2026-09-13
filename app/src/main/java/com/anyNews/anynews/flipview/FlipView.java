@@ -360,6 +360,69 @@ public class FlipView extends FrameLayout {
     }
 
     /**
+     * Feed append / soft-merge grow only. Updates {@link #mPageCount} and may bind
+     * a newly available off-screen next page — never recycles the current visible
+     * card. {@link #dataSetChanged()} → {@code setFlipDistance(..., forceRebind=true)}
+     * is the blink path; callers must use this for normal pagination append.
+     */
+    public void pageCountGrewQuietly() {
+        if (mAdapter == null) {
+            return;
+        }
+        final int oldCount = mPageCount;
+        int newCount;
+        try {
+            newCount = mAdapter.getCount();
+        } catch (Exception e) {
+            return;
+        }
+        if (newCount < 0) {
+            newCount = 0;
+        }
+        mPageCount = newCount;
+        rememberFlipAnchor();
+        if (isUserDrivingFlip()) {
+            // Count is already live for the next settle; do not recycle mid-gesture.
+            invalidate();
+            updateEmptyStatus();
+            return;
+        }
+        if (newCount <= oldCount) {
+            // In-place soft-merge refresh with no new pages — keep painted card.
+            invalidate();
+            updateEmptyStatus();
+            return;
+        }
+        try {
+            final int cur = bestKnownPageIndex();
+            if (cur >= 0 && cur < mPageCount - 1) {
+                // First time a next page exists after being on the former last card,
+                // or next buffer was never filled — bind off-screen only.
+                if (!mNextPage.valid
+                        || mNextPage.position != cur + 1) {
+                    if (!isSamePaintedArticle(cur + 1, cur)) {
+                        if (mNextPage.valid && mNextPage.v != null) {
+                            try {
+                                removeView(mNextPage.v);
+                                mRecycler.addScrapView(mNextPage.v, mNextPage.position,
+                                        mNextPage.viewType, mNextPage.boundItemId,
+                                        mNextPage.boundGeneration);
+                            } catch (Exception ignored) {
+                            }
+                            mNextPage.valid = false;
+                        }
+                        fillPageForIndex(mNextPage, cur + 1, (cur + 1) % 3);
+                        addFlipChild(mNextPage.v);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        invalidate();
+        updateEmptyStatus();
+    }
+
+    /**
      * Page to show after a dataset change. Never defaults to 0 when the user was
      * further into the feed. Duplicate post_ids (sticky + chrono) use the match
      * nearest the flip seat, not the first list occurrence.

@@ -90,22 +90,22 @@ public final class DistrictPinVisibilityConfig {
     private DistrictPinVisibilityConfig() {}
 
     /** Persist splash/session values when present (null = old server; leave cache). */
-    public static void saveFromServer(
+    public static boolean saveFromServer(
             @Nullable Context context,
             @Nullable Boolean hideOnMainFeed,
             @Nullable Boolean rewardsMaster,
             @Nullable Boolean rewardsInMainFeedSlot) {
-        saveFromServer(
+        return saveFromServer(
                 context, hideOnMainFeed, rewardsMaster, rewardsInMainFeedSlot, null, null, null);
     }
 
-    public static void saveFromServer(
+    public static boolean saveFromServer(
             @Nullable Context context,
             @Nullable Boolean hideOnMainFeed,
             @Nullable Boolean rewardsMaster,
             @Nullable Boolean rewardsInMainFeedSlot,
             @Nullable Boolean excludeReporters) {
-        saveFromServer(
+        return saveFromServer(
                 context,
                 hideOnMainFeed,
                 rewardsMaster,
@@ -115,14 +115,14 @@ public final class DistrictPinVisibilityConfig {
                 null);
     }
 
-    public static void saveFromServer(
+    public static boolean saveFromServer(
             @Nullable Context context,
             @Nullable Boolean hideOnMainFeed,
             @Nullable Boolean rewardsMaster,
             @Nullable Boolean rewardsInMainFeedSlot,
             @Nullable Boolean excludeReporters,
             @Nullable Boolean flashInMainFeedSlot) {
-        saveFromServer(
+        return saveFromServer(
                 context,
                 hideOnMainFeed,
                 rewardsMaster,
@@ -132,7 +132,7 @@ public final class DistrictPinVisibilityConfig {
                 null);
     }
 
-    public static void saveFromServer(
+    public static boolean saveFromServer(
             @Nullable Context context,
             @Nullable Boolean hideOnMainFeed,
             @Nullable Boolean rewardsMaster,
@@ -140,7 +140,7 @@ public final class DistrictPinVisibilityConfig {
             @Nullable Boolean excludeReporters,
             @Nullable Boolean flashInMainFeedSlot,
             @Nullable Boolean keepRewardsAfterJoin) {
-        saveFromServer(
+        return saveFromServer(
                 context,
                 hideOnMainFeed,
                 rewardsMaster,
@@ -151,7 +151,11 @@ public final class DistrictPinVisibilityConfig {
                 null);
     }
 
-    public static void saveFromServer(
+    /**
+     * @return true only when at least one persisted value actually changed.
+     *         Callers must not FlipView-notify when this returns false.
+     */
+    public static boolean saveFromServer(
             @Nullable Context context,
             @Nullable Boolean hideOnMainFeed,
             @Nullable Boolean rewardsMaster,
@@ -160,51 +164,83 @@ public final class DistrictPinVisibilityConfig {
             @Nullable Boolean flashInMainFeedSlot,
             @Nullable Boolean keepRewardsAfterJoin,
             @Nullable Boolean showFlashAndRewardsTogether) {
-        if (context == null) return;
+        if (context == null) return false;
         Context app = context.getApplicationContext();
+        boolean changed = false;
         if (hideOnMainFeed != null) {
-            SharedPrefsData.putString(
-                    app,
-                    Constants.HIDE_DISTRICT_ON_MAIN_FEED,
-                    hideOnMainFeed ? "true" : "false",
-                    Constants.PREF_NAME);
+            boolean prev = hideOnMainFeed(app);
+            if (prev != hideOnMainFeed) {
+                SharedPrefsData.putString(
+                        app,
+                        Constants.HIDE_DISTRICT_ON_MAIN_FEED,
+                        hideOnMainFeed ? "true" : "false",
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (rewardsMaster != null) {
-            // commit() so Profile / feed gates see master before the next paint.
-            // apply() can lose the race and leave the missing-key default (OFF).
-            SharedPrefsData.putStringImmediate(
-                    app,
-                    Constants.REWARDS_MASTER,
-                    rewardsMaster ? "true" : "false",
-                    Constants.PREF_NAME);
+            boolean prev = rewardsMasterEnabled(app);
+            // Compare against stored string when present so session latch does not
+            // hide a real pref flip that still needs a writers-row rebind.
+            Boolean stored = readBoolOrMissing(app, Constants.REWARDS_MASTER);
+            boolean same = stored != null ? stored == rewardsMaster : prev == rewardsMaster;
+            if (!same) {
+                // commit() so Profile / feed gates see master before the next paint.
+                // apply() can lose the race and leave the missing-key default (OFF).
+                SharedPrefsData.putStringImmediate(
+                        app,
+                        Constants.REWARDS_MASTER,
+                        rewardsMaster ? "true" : "false",
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (rewardsInMainFeedSlot != null) {
-            SharedPrefsData.putString(
-                    app,
-                    Constants.REWARDS_IN_MAIN_FEED_SLOT,
-                    rewardsInMainFeedSlot ? "true" : "false",
-                    Constants.PREF_NAME);
+            boolean prev = rewardsInMainFeedSlotEnabled(app);
+            if (prev != rewardsInMainFeedSlot) {
+                SharedPrefsData.putString(
+                        app,
+                        Constants.REWARDS_IN_MAIN_FEED_SLOT,
+                        rewardsInMainFeedSlot ? "true" : "false",
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (keepRewardsAfterJoin != null) {
-            SharedPrefsData.putString(
-                    app,
-                    Constants.KEEP_REWARDS_AFTER_JOIN,
-                    keepRewardsAfterJoin ? "true" : "false",
-                    Constants.PREF_NAME);
+            boolean prev = keepRewardsAfterJoinEnabled(app);
+            if (prev != keepRewardsAfterJoin) {
+                SharedPrefsData.putString(
+                        app,
+                        Constants.KEEP_REWARDS_AFTER_JOIN,
+                        keepRewardsAfterJoin ? "true" : "false",
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (flashInMainFeedSlot != null) {
-            SharedPrefsData.putString(
-                    app,
-                    Constants.FLASH_NEWS_IN_MAIN_FEED_SLOT,
-                    flashInMainFeedSlot ? "true" : "false",
-                    Constants.PREF_NAME);
+            boolean prev = flashInMainFeedSlotEnabled(app);
+            if (prev != flashInMainFeedSlot) {
+                SharedPrefsData.putString(
+                        app,
+                        Constants.FLASH_NEWS_IN_MAIN_FEED_SLOT,
+                        flashInMainFeedSlot ? "true" : "false",
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (showFlashAndRewardsTogether != null) {
-            SharedPrefsData.putStringImmediate(
-                    app,
-                    Constants.SHOW_FLASH_AND_REWARDS_TOGETHER,
-                    showFlashAndRewardsTogether ? "true" : "false",
-                    Constants.PREF_NAME);
+            Boolean stored = readBoolOrMissing(app, Constants.SHOW_FLASH_AND_REWARDS_TOGETHER);
+            boolean prev = stored != null
+                    ? stored
+                    : DEFAULT_SHOW_FLASH_AND_REWARDS_TOGETHER;
+            if (prev != showFlashAndRewardsTogether) {
+                SharedPrefsData.putStringImmediate(
+                        app,
+                        Constants.SHOW_FLASH_AND_REWARDS_TOGETHER,
+                        showFlashAndRewardsTogether ? "true" : "false",
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         // Server only serves show-both as true when Rewards master is ON.
         // If that flag arrived and master was omitted, persist master so Profile
@@ -212,12 +248,18 @@ public final class DistrictPinVisibilityConfig {
         if ((Boolean.TRUE.equals(showFlashAndRewardsTogether)
                         || Boolean.TRUE.equals(rewardsInMainFeedSlot))
                 && rewardsMaster == null) {
-            SharedPrefsData.putStringImmediate(
-                    app,
-                    Constants.REWARDS_MASTER,
-                    "true",
-                    Constants.PREF_NAME);
-            rewardsMaster = Boolean.TRUE;
+            Boolean storedMaster = readBoolOrMissing(app, Constants.REWARDS_MASTER);
+            if (!Boolean.TRUE.equals(storedMaster)) {
+                SharedPrefsData.putStringImmediate(
+                        app,
+                        Constants.REWARDS_MASTER,
+                        "true",
+                        Constants.PREF_NAME);
+                rewardsMaster = Boolean.TRUE;
+                changed = true;
+            } else {
+                rewardsMaster = Boolean.TRUE;
+            }
         }
         applySessionLatch(context, rewardsMaster, showFlashAndRewardsTogether);
         // Settings switch defaults ON. If it was never written, persist that so
@@ -227,14 +269,19 @@ public final class DistrictPinVisibilityConfig {
             setUserRewardsEnabled(app, true);
         }
         if (excludeReporters != null) {
-            // commit() so Profile / feed gates see the new value immediately
-            // (apply() can race with onResume after session heartbeat).
-            SharedPrefsData.putStringImmediate(
-                    app,
-                    Constants.REWARDS_EXCLUDE_REPORTERS,
-                    excludeReporters ? "true" : "false",
-                    Constants.PREF_NAME);
+            boolean prev = excludeReporters(app);
+            if (prev != excludeReporters) {
+                // commit() so Profile / feed gates see the new value immediately
+                // (apply() can race with onResume after session heartbeat).
+                SharedPrefsData.putStringImmediate(
+                        app,
+                        Constants.REWARDS_EXCLUDE_REPORTERS,
+                        excludeReporters ? "true" : "false",
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
+        return changed;
     }
 
     /**
@@ -252,53 +299,68 @@ public final class DistrictPinVisibilityConfig {
     }
 
     /** Backward-compatible overload used by older call sites. */
-    public static void saveFromServer(@Nullable Context context, @Nullable Boolean hideOnMainFeed) {
-        saveFromServer(context, hideOnMainFeed, null, null);
+    public static boolean saveFromServer(@Nullable Context context, @Nullable Boolean hideOnMainFeed) {
+        return saveFromServer(context, hideOnMainFeed, null, null);
     }
 
     /**
      * Pair size (dp) and left-only shift (dp). Null leaves the cached value.
      * A later poll that omits these must not reset size or shift.
      */
-    public static void savePairLayoutFromServer(
+    public static boolean savePairLayoutFromServer(
             @Nullable Context context,
             @Nullable Integer sizeDp,
             @Nullable Integer shiftLeftDp) {
-        savePairLayoutFromServer(context, sizeDp, shiftLeftDp, null);
+        return savePairLayoutFromServer(context, sizeDp, shiftLeftDp, null);
     }
 
     /**
      * Pair size, left shift, and up shift. Null leaves the cached value.
      * A later poll that omits these must not reset size or shift.
+     * @return true only when at least one layout pref actually changed.
      */
-    public static void savePairLayoutFromServer(
+    public static boolean savePairLayoutFromServer(
             @Nullable Context context,
             @Nullable Integer sizeDp,
             @Nullable Integer shiftLeftDp,
             @Nullable Integer shiftUpDp) {
-        if (context == null) return;
+        if (context == null) return false;
         Context app = context.getApplicationContext();
+        boolean changed = false;
         if (sizeDp != null) {
-            SharedPrefsData.putString(
-                    app,
-                    Constants.DUAL_CHIP_SIZE_DP,
-                    String.valueOf(clampPairSizeDp(sizeDp)),
-                    Constants.PREF_NAME);
+            int next = clampPairSizeDp(sizeDp);
+            if (pairSizeDp(app) != next) {
+                SharedPrefsData.putString(
+                        app,
+                        Constants.DUAL_CHIP_SIZE_DP,
+                        String.valueOf(next),
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (shiftLeftDp != null) {
-            SharedPrefsData.putString(
-                    app,
-                    Constants.DUAL_CHIP_SHIFT_LEFT_DP,
-                    String.valueOf(clampPairShiftLeftDp(shiftLeftDp)),
-                    Constants.PREF_NAME);
+            int next = clampPairShiftLeftDp(shiftLeftDp);
+            if (pairShiftLeftDp(app) != next) {
+                SharedPrefsData.putString(
+                        app,
+                        Constants.DUAL_CHIP_SHIFT_LEFT_DP,
+                        String.valueOf(next),
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (shiftUpDp != null) {
-            SharedPrefsData.putString(
-                    app,
-                    Constants.DUAL_CHIP_SHIFT_UP_DP,
-                    String.valueOf(clampPairShiftUpDp(shiftUpDp)),
-                    Constants.PREF_NAME);
+            int next = clampPairShiftUpDp(shiftUpDp);
+            if (pairShiftUpDp(app) != next) {
+                SharedPrefsData.putString(
+                        app,
+                        Constants.DUAL_CHIP_SHIFT_UP_DP,
+                        String.valueOf(next),
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
+        return changed;
     }
 
     /**

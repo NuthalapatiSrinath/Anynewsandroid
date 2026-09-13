@@ -1454,14 +1454,40 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         notifyWhenFlipSettled();
     }
 
-    /** Pagination append: same notify as setData but keeps call site explicit. */
+    /**
+     * Pagination append: mutate the list and grow FlipView page count without
+     * {@code notifyDataSetChanged} / force-rebinding the visible card (blink).
+     */
     public void appendData(ArrayList<ModelClass.Datum> list__, int previousSize) {
         // Keep pending binds for unchanged indices; drop timeouts so new ad seats re-arm.
         cancelAllAdShellFillTimeouts();
         stripHalfPostsIfSpecialMode(list__);
         list = list__;
         normalizeEngagementCounts(list);
-        notifyWhenFlipSettled();
+        notifyPageCountGrewQuietly();
+    }
+
+    /**
+     * Soft-merge / held-page apply when HomePage already mutated the shared list.
+     * Grows FlipView quietly — never force-rebinds the current index.
+     */
+    public void notifyFeedAppendedQuietly() {
+        notifyPageCountGrewQuietly();
+    }
+
+    private void notifyPageCountGrewQuietly() {
+        try {
+            if (context instanceof HomePage) {
+                ((HomePage) context).notifyFlipPageCountGrewQuietly();
+                return;
+            }
+        } catch (Exception ignored) {
+        }
+        // No FlipView host — last resort (may blink). Prefer quiet path above.
+        try {
+            notifyWhenFlipSettled();
+        } catch (Exception ignored) {
+        }
     }
 
     /**

@@ -22,34 +22,49 @@ public final class SearchIconConfig {
 
     private SearchIconConfig() {}
 
-    public static void saveFromServer(
+    public static boolean saveFromServer(
             @Nullable Context context,
             @Nullable Boolean onEngagement,
             @Nullable Boolean onToggle,
             @Nullable Integer sizeDp) {
-        if (context == null) return;
+        if (context == null) return false;
         Context app = context.getApplicationContext();
+        boolean changed = false;
         if (onEngagement != null) {
-            SharedPrefsData.putBool(
-                    app,
-                    Constants.SEARCH_ICON_ON_ENGAGEMENT,
-                    onEngagement,
-                    Constants.PREF_NAME);
+            boolean prev = isOnEngagement(app);
+            if (prev != onEngagement) {
+                SharedPrefsData.putBool(
+                        app,
+                        Constants.SEARCH_ICON_ON_ENGAGEMENT,
+                        onEngagement,
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (onToggle != null) {
-            SharedPrefsData.putBool(
-                    app,
-                    Constants.SEARCH_ICON_ON_TOGGLE,
-                    onToggle,
-                    Constants.PREF_NAME);
+            boolean prev = isOnToggle(app);
+            if (prev != onToggle) {
+                SharedPrefsData.putBool(
+                        app,
+                        Constants.SEARCH_ICON_ON_TOGGLE,
+                        onToggle,
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (sizeDp != null) {
-            SharedPrefsData.putInt(
-                    app,
-                    Constants.SEARCH_ICON_SIZE_DP,
-                    clampSize(sizeDp),
-                    Constants.PREF_NAME);
+            int next = clampSize(sizeDp);
+            int prev = sizeDp(app);
+            if (prev != next) {
+                SharedPrefsData.putInt(
+                        app,
+                        Constants.SEARCH_ICON_SIZE_DP,
+                        next,
+                        Constants.PREF_NAME);
+                changed = true;
+            }
         }
+        return changed;
     }
 
     public static boolean isOnEngagement(@Nullable Context context) {
