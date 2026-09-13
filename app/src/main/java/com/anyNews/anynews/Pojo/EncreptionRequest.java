@@ -161,6 +161,11 @@ public class EncreptionRequest {
     @Expose
     private Boolean video_autoplay_enabled;
 
+    /** Feed Exo chrome A/B. Null when omitted — do not wipe splash. */
+    @SerializedName("feed_video_player")
+    @Expose
+    private String feed_video_player;
+
     @SerializedName("enable_birthday_special")
     @Expose
     private Boolean enable_birthday_special;
@@ -449,6 +454,19 @@ public class EncreptionRequest {
 
     public void setVideo_autoplay_enabled(Boolean video_autoplay_enabled) {
         this.video_autoplay_enabled = video_autoplay_enabled;
+    }
+
+    public String getFeed_video_player() {
+        return feed_video_player;
+    }
+
+    /** Null / blank when omitted — do not overwrite splash prefs. */
+    public boolean hasFeed_video_player() {
+        return feed_video_player != null && feed_video_player.trim().length() > 0;
+    }
+
+    public void setFeed_video_player(String feed_video_player) {
+        this.feed_video_player = feed_video_player;
     }
 
     public Boolean getHide_district_on_main_feed() {

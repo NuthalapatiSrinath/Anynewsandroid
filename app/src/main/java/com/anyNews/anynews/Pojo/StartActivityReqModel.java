@@ -839,6 +839,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean videoAutoplayEnabled;
 
+        /**
+         * Admin feed Exo chrome A/B: {@code current} | {@code playstore}.
+         * Null = old server / keep cache. Default {@code current}.
+         */
+        @SerializedName("feed_video_player")
+        @Expose
+        private String feedVideoPlayer;
+
         /** Contact Us mailto from admin Root_Settings. Null = keep cache / compile default. */
         @SerializedName("contact_email")
         @Expose
@@ -1348,6 +1356,18 @@ public class StartActivityReqModel implements Serializable {
 
         public boolean hasVideoAutoplayEnabled() {
             return videoAutoplayEnabled != null;
+        }
+
+        /**
+         * Admin feed Exo chrome: {@code current} | {@code playstore}.
+         * Null when omitted — do not wipe prefs.
+         */
+        public String getFeedVideoPlayer() {
+            return feedVideoPlayer;
+        }
+
+        public boolean hasFeedVideoPlayer() {
+            return feedVideoPlayer != null && feedVideoPlayer.trim().length() > 0;
         }
 
         public String getContactEmail() {

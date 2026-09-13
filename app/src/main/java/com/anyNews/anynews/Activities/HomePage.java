@@ -13316,6 +13316,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 Boolean.TRUE.equals(encreptionRequest.getVideo_autoplay_enabled()),
                                 Constants.PREF_NAME);
                     }
+                    // Feed Exo chrome A/B (null = keep splash cache).
+                    if (encreptionRequest.hasFeed_video_player()) {
+                        com.anyNews.anynews.Utils.FeedVideoPlayerConfig.saveFromServer(
+                                HomePage.this, encreptionRequest.getFeed_video_player());
+                    }
                     // Writers-row chips. Null fields are omitted and must not wipe splash.
                     if (encreptionRequest.getHide_district_on_main_feed() != null
                             || encreptionRequest.getRewards_master() != null

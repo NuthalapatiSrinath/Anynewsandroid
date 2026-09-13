@@ -1591,6 +1591,13 @@ public class StartingActivity extends AppCompatActivity {
                             );
                         }
 
+                        // Feed Exo chrome A/B (null = keep cache).
+                        if (startActivityReqModel.getData().hasFeedVideoPlayer()) {
+                            com.anyNews.anynews.Utils.FeedVideoPlayerConfig.saveFromServer(
+                                    getApplicationContext(),
+                                    startActivityReqModel.getData().getFeedVideoPlayer());
+                        }
+
                         ReporterPostGateHelper.saveFromSplash(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().hasRequireFullProfileToPost()

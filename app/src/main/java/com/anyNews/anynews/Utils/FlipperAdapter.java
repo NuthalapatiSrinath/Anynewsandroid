@@ -3680,9 +3680,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             full_videoViewHolder = new FullVideoViewHolder();
                             // Reuse scrap while the shared ExoPlayer is live on this card —
                             // inflate-always destroyed the video surface and flashed white/spinner.
-                            if (!canReuseFlipView(convertView, "full_video_exo")) {
-                                convertView = inflater.inflate(R.layout.activity_full_video, parent, false);
-                                markFlipViewType(convertView, "full_video_exo");
+                            String fullExoKey =
+                                    "full_video_exo_" + FeedVideoPlayerConfig.layoutModeKey(context);
+                            if (!canReuseFlipView(convertView, fullExoKey)) {
+                                convertView = inflater.inflate(
+                                        FeedVideoPlayerConfig.fullVideoLayout(context), parent, false);
+                                markFlipViewType(convertView, fullExoKey);
                             }
                             showFullVideoWithExoPlayer(position, convertView);
                         }
@@ -3712,18 +3715,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         String halfMediaType = list.get(position).getMediaType();
                         if ("3".equals(halfMediaType)) {
                             halfVideoExoPlayerHolder = new HalfVideoExoPlayerHolder();
-                            String halfExoKey = AppHelper.isTeluguLanguageSelected()
-                                    ? "normal_video_exo_telugu" : "normal_video_exo";
+                            boolean teluguHalf = AppHelper.isTeluguLanguageSelected();
+                            String halfExoKey = (teluguHalf
+                                    ? "normal_video_exo_telugu_"
+                                    : "normal_video_exo_")
+                                    + FeedVideoPlayerConfig.layoutModeKey(context);
                             // Reuse scrap while shared Exo is active — new inflate tears the
                             // video surface and flashes a white clear / buffering ring.
                             if (!canReuseFlipView(convertView, halfExoKey)) {
-                                if (AppHelper.isTeluguLanguageSelected()) {
-                                    convertView = inflater.inflate(
-                                            R.layout.activity_half_exo_video_detailes_telugu, parent, false);
-                                } else {
-                                    convertView = inflater.inflate(
-                                            R.layout.activity_half_exo_video_detailes, parent, false);
-                                }
+                                convertView = inflater.inflate(
+                                        FeedVideoPlayerConfig.halfExoLayout(context, teluguHalf),
+                                        parent,
+                                        false);
                                 markFlipViewType(convertView, halfExoKey);
                             }
                             showHalfPostExoPlayerVideo(convertView, position);
@@ -11566,9 +11569,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Way2News chrome: play circle when idle/paused; mute + fullscreen + thin red line when
      * playing; no center pause, no ±10, no timestamp. Media3 1.1.0 does not drive legacy
      * {@code exo_play}/{@code exo_pause}, so we manage visibility from player state.
+     * Play Store classic uses Media3 default controller visibility instead.
      */
     private void updateExoCenterControlIcons(PlayerView playerView) {
         if (playerView == null) {
+            return;
+        }
+        if (FeedVideoPlayerConfig.isPlayStoreClassic(context)) {
             return;
         }
         View playBtn = playerView.findViewById(R.id.exo_play);
@@ -11666,6 +11673,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
+    /** Play Store classic: auto-hide controller after idle (Media3 default UX). */
+    private void applyClassicControllerPolicy(PlayerView playerView) {
+        if (playerView == null) {
+            return;
+        }
+        playerView.setControllerShowTimeoutMs(3500);
+        playerView.setControllerHideOnTouch(true);
+        playerView.setControllerAutoShow(true);
+        try {
+            playerView.showController();
+        } catch (Exception ignored) {
+        }
+    }
+
     /** Keep Way2 chrome always available (no auto-hide strip / dark overlay flash). */
     private void applyWay2ControllerPolicy(PlayerView playerView) {
         if (playerView == null) {
@@ -11682,6 +11703,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         }
         wireWay2ScrubTime(playerView);
+    }
+
+    private void applyFeedPlayerControllerPolicy(PlayerView playerView) {
+        if (FeedVideoPlayerConfig.isPlayStoreClassic(context)) {
+            applyClassicControllerPolicy(playerView);
+        } else {
+            applyWay2ControllerPolicy(playerView);
+        }
     }
 
     /**
@@ -11735,12 +11764,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Attaches a listener so the center icons re-sync whenever the player state changes
      * (auto-play start, buffering, pause, end). Used by both half and full video.
+     * Classic/Play Store path relies on Media3 controller; skip Way2 icon sync.
      */
     private void attachExoCenterIconSync(PlayerView playerView) {
         if (playerView == null || exoPlayer == null) {
             return;
         }
-        applyWay2ControllerPolicy(playerView);
+        applyFeedPlayerControllerPolicy(playerView);
+        if (FeedVideoPlayerConfig.isPlayStoreClassic(context)) {
+            return;
+        }
         exoPlayer.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
@@ -11761,14 +11794,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Wires half (inline feed) Way2 chrome: play button starts; tap empty video area pauses;
-     * playing shows mute + fullscreen + thin progress.
+     * Wires half (inline feed) chrome for the selected feed player mode.
      */
     private void wireHalfVideoExoPauseControl(PlayerView playerView) {
         if (playerView == null) {
             return;
         }
-        applyWay2ControllerPolicy(playerView);
+        applyFeedPlayerControllerPolicy(playerView);
+        if (FeedVideoPlayerConfig.isPlayStoreClassic(context)) {
+            wireClassicPlayPauseControls(playerView, null);
+            return;
+        }
         wireWay2PlayPauseControls(playerView, null);
         updateExoCenterControlIcons(playerView);
     }
@@ -11777,15 +11813,59 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (playerView == null || convertView == null) {
             return;
         }
-        applyWay2ControllerPolicy(playerView);
+        applyFeedPlayerControllerPolicy(playerView);
         // Full-card layout historically hides the fullscreen control (already full bleed).
         View fullscreenBtn = playerView.findViewById(R.id.fullscreen_button);
         if (fullscreenBtn != null) {
             fullscreenBtn.setTag("force_gone");
             fullscreenBtn.setVisibility(GONE);
         }
+        if (FeedVideoPlayerConfig.isPlayStoreClassic(context)) {
+            wireClassicPlayPauseControls(playerView, convertView);
+            return;
+        }
         wireWay2PlayPauseControls(playerView, convertView);
         updateExoCenterControlIcons(playerView);
+    }
+
+    /** Play Store classic: explicit play/pause buttons (±10 handled by Media3). */
+    private void wireClassicPlayPauseControls(PlayerView playerView, View convertView) {
+        View pauseBtn = playerView.findViewById(R.id.exo_pause);
+        View playBtn = playerView.findViewById(R.id.exo_play);
+        if (pauseBtn != null) {
+            pauseBtn.setOnClickListener(v -> {
+                if (exoPlayer != null) {
+                    markUserPausedVideoAutoplay();
+                    exoPlayer.setPlayWhenReady(false);
+                    exoPlayer.pause();
+                }
+                pauseBtn.setVisibility(GONE);
+                if (playBtn != null) {
+                    playBtn.setVisibility(VISIBLE);
+                }
+                if (convertView != null) {
+                    LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
+                    if (sideMenu != null) {
+                        sideMenu.setVisibility(View.VISIBLE);
+                        sideMenu.bringToFront();
+                    }
+                }
+            });
+        }
+        if (playBtn != null) {
+            playBtn.setOnClickListener(v -> {
+                if (exoPlayer != null) {
+                    if (exoPlayer.getPlaybackState() == Player.STATE_ENDED) {
+                        exoPlayer.seekTo(0);
+                    }
+                    forceSharedExoPlay();
+                }
+                playBtn.setVisibility(GONE);
+                if (pauseBtn != null) {
+                    pauseBtn.setVisibility(VISIBLE);
+                }
+            });
+        }
     }
 
     private void wireWay2PlayPauseControls(PlayerView playerView, View convertView) {
@@ -11831,19 +11911,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Sync Like/Comment/Share (video_side_menu) with ExoPlayer controller visibility.
-     * Way2 keeps mute/fs/progress always on while playing; engagement row still toggles
-     * with controller show/hide when applicable.
+     * Current/Way2 keeps mute/fs/progress always on while playing; classic shows engagement
+     * with the auto-hiding controller (Play Store behavior).
      */
     private void wireFullVideoExoSideMenuWithController(PlayerView playerView, View convertView) {
         if (playerView == null || convertView == null) {
             return;
         }
         final LinearLayout sideMenu = convertView.findViewById(R.id.video_side_menu);
-        applyWay2ControllerPolicy(playerView);
+        final boolean classic = FeedVideoPlayerConfig.isPlayStoreClassic(context);
+        applyFeedPlayerControllerPolicy(playerView);
         // Explicit type — Media3 PlayerView overloads VisibilityListener + ControllerVisibilityListener
         playerView.setControllerVisibilityListener(
                 (PlayerView.ControllerVisibilityListener) visibility -> {
             if (sideMenu == null) {
+                return;
+            }
+            if (classic) {
+                if (visibility == View.VISIBLE) {
+                    sideMenu.setVisibility(View.VISIBLE);
+                    sideMenu.bringToFront();
+                    sideMenu.setClickable(true);
+                } else {
+                    boolean playing = exoPlayer != null && exoPlayer.isPlaying();
+                    sideMenu.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
+                    if (!playing) {
+                        sideMenu.bringToFront();
+                    }
+                }
                 return;
             }
             if (visibility == View.VISIBLE) {

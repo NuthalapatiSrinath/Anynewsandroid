@@ -83,6 +83,11 @@ public class Constants {
      * Splash + feed poll. Default ON when unset. OFF → never autoplay (tap to play).
      */
     public static String VIDEO_AUTOPLAY_ENABLED = "video_autoplay_enabled";
+    /**
+     * Admin feed Exo chrome A/B ({@code feed_video_player}): {@code current} | {@code playstore}.
+     * Splash + session + feed poll. Null omit must not wipe cache. Default {@code current}.
+     */
+    public static String FEED_VIDEO_PLAYER = "feed_video_player";
     public static String NIGHT_MODE = "settings_night_mode";
     public static String LOCAL_STORIES = "settings_local_stories";
     public static String PARENTAL_CONTROL = "settings_parental_control";

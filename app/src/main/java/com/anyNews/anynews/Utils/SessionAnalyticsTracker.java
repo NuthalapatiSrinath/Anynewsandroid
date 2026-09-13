@@ -839,6 +839,14 @@ public final class SessionAnalyticsTracker {
                     } catch (Exception ignored) {
                     }
                     try {
+                        if (resBody.has("feed_video_player")
+                                && !resBody.get("feed_video_player").isJsonNull()) {
+                            FeedVideoPlayerConfig.saveFromServer(
+                                    context, resBody.get("feed_video_player").getAsString());
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    try {
                         Boolean hideDistrict = null;
                         Boolean rewardsMaster = null;
                         Boolean showWalletInProfile = null;
