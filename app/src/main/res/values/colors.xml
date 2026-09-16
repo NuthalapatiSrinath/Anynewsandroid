@@ -60,6 +60,16 @@
     <color name="profile_shortcut_stat">#111114</color>
     <color name="profile_header_globe_tint">#80EF4923</color>
 
+    <!-- In-app search chrome (mist + teal rail — not Way2 light strip, not orange bar) -->
+    <color name="search_chrome_bg">#EEF2F6</color>
+    <color name="search_chrome_accent">#0F766E</color>
+    <color name="search_chrome_title">#0F172A</color>
+    <color name="search_chrome_muted">#64748B</color>
+    <color name="search_chrome_field_bg">#FFFFFF</color>
+    <color name="search_chrome_field_stroke">#99F0FDFA</color>
+    <color name="search_chrome_back_fill">#CCF0FDFA</color>
+    <color name="search_chrome_back_icon">#0F766E</color>
+
     <!-- color page -->
     <color name="colorGray">#FDCCCCCC</color>
 

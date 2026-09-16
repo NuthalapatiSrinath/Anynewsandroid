@@ -51,7 +51,7 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 /**
- * Way2-inspired in-app Search: no hour pills, recent + categories idle state,
+ * In-app Search: mist + teal chrome, recent + categories idle state,
  * debounced suggestions with counts while typing, submit opens HomePage search mode.
  */
 public class InAppSearchActivity extends AppCompatActivity {
@@ -407,7 +407,13 @@ public class InAppSearchActivity extends AppCompatActivity {
         String title = row.title != null ? row.title : "";
         boolean truncated =
                 title.indexOf('\u2026') >= 0 || title.contains("...");
+        // Truncated phrase → search the typed keyword (highlight), not the snippet.
         if (truncated && !TextUtils.isEmpty(row.highlight)) {
+            return softenClientQuery(row.highlight);
+        }
+        // Keyword bucket row (text == typed query) → use typed query.
+        if (!TextUtils.isEmpty(row.highlight)
+                && title.trim().equalsIgnoreCase(row.highlight.trim())) {
             return softenClientQuery(row.highlight);
         }
         return softenClientQuery(title);

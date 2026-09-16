@@ -41,6 +41,15 @@
     <color name="profile_way2_icon_circle_stroke">#00000000</color>
     <color name="profile_way2_login_text">#FFFFFF</color>
     <color name="profile_header_globe_tint">#CCFF6B00</color>
+    <!-- In-app search chrome (night: deep slate + teal rail) -->
+    <color name="search_chrome_bg">#12181F</color>
+    <color name="search_chrome_accent">#2DD4BF</color>
+    <color name="search_chrome_title">#F1F5F9</color>
+    <color name="search_chrome_muted">#94A3B8</color>
+    <color name="search_chrome_field_bg">#1E293B</color>
+    <color name="search_chrome_field_stroke">#332DD4BF</color>
+    <color name="search_chrome_back_fill">#1A2DD4BF</color>
+    <color name="search_chrome_back_icon">#5EEAD4</color>
     <color name="profile_way2_icon_cradle">#2A2A32</color>
     <color name="profile_way2_progress_track">#2A2A32</color>
     <color name="profile_verified_green">#22C55E</color>

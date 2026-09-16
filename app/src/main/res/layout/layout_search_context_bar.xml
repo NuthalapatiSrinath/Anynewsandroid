@@ -1,37 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AnyNews theme search context bar: back + active query. Shown while search feed is open. -->
+<!-- Mist + teal-rail context bar while keyword FlipView is active. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/search_context_bar"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
-    android:background="@color/brand_orange"
-    android:elevation="4dp"
+    android:layout_height="52dp"
+    android:background="@drawable/bg_search_chrome_header"
+    android:elevation="3dp"
     android:gravity="center_vertical"
     android:orientation="horizontal"
+    android:paddingStart="8dp"
+    android:paddingEnd="14dp"
     android:visibility="gone"
     tools:visibility="visible">
 
-    <ImageView
+    <FrameLayout
         android:id="@+id/search_context_back"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_search_back_chip"
         android:contentDescription="@string/search_back"
-        android:padding="12dp"
-        android:scaleType="fitCenter"
-        android:src="@drawable/ic_arrowwhite_back" />
+        android:clickable="true"
+        android:focusable="true">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_search_chrome_back" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/search_context_query"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="48dp"
+        android:layout_marginStart="10dp"
         android:layout_weight="1"
         android:ellipsize="end"
-        android:gravity="center"
+        android:gravity="start|center_vertical"
         android:maxLines="1"
-        android:textColor="#FFFFFFFF"
-        android:textSize="15sp"
+        android:textColor="@color/search_chrome_title"
+        android:textSize="16sp"
         android:textStyle="bold"
+        android:letterSpacing="0.01"
         tools:text="tension headache" />
 </LinearLayout>

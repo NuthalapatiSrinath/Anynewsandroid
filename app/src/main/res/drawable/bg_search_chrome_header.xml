@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mist header with a thin teal accent rail (not Way2 gray bar, not orange strip). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/search_chrome_bg" />
+        </shape>
+    </item>
+    <item
+        android:gravity="bottom"
+        android:height="2dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/search_chrome_accent" />
+        </shape>
+    </item>
+</layer-list>

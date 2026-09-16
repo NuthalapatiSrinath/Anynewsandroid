@@ -25,13 +25,18 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Explicit offline disk files for article hero images (keyed by post_id).
+ * Explicit offline disk files for article hero images (keyed by post_id + remote URL).
  *
  * <p>JSON offline pack ({@link OfflineFeedStore}) only stores post payloads. Universal Image
  * Loader / Glide HTTP disk caches are best-effort and do not cover posts never scrolled into
  * view or that were evicted — which is why offline often falls through to the ANYNEWS splash
  * logo. This store downloads primary (and first gallery) images while online with a small
  * fixed concurrency so the CDN is not stormed.
+ *
+ * <p>Files are named by post_id slot ({@code p123.img}) but a sidecar {@code .url} records the
+ * remote URL that was downloaded. If the article's image URL changes (or a scrap/bind race
+ * would otherwise reuse a stale birthday poster for a rain story), the local file is ignored
+ * and re-fetched.
  */
 public final class OfflineImageStore {
 
@@ -114,8 +119,9 @@ public final class OfflineImageStore {
 
     /**
      * Preferred display URI for UIL / Glide.
-     * Prefers explicit offline file; when online falls back to remote; when offline
-     * never returns a remote URL (avoids failed HTTP → ANYNEWS logo placeholder).
+     * Prefers explicit offline file only when it matches {@code remoteUrl}; when online falls
+     * back to remote; when offline never returns a remote URL (avoids failed HTTP → ANYNEWS
+     * logo placeholder).
      */
     @Nullable
     public static String resolveDisplayUri(
@@ -129,19 +135,24 @@ public final class OfflineImageStore {
             @Nullable Long postId,
             int index,
             @Nullable String remoteUrl) {
-        File local = fileIfReady(context, postId, index);
+        File local = fileIfReady(context, postId, index, remoteUrl);
         if (local != null) {
             return UriFile.asFileUri(local);
         }
-        // Secondary index miss: try primary slot (half-image style).
+        // Secondary index miss: try primary slot (half-image style) only if URL matches.
         if (index > 0) {
-            File primary = fileIfReady(context, postId, 0);
+            File primary = fileIfReady(context, postId, 0, remoteUrl);
             if (primary != null) return UriFile.asFileUri(primary);
         }
         final boolean online =
                 context != null && BookmarkStore.isNetworkAvailable(context);
         if (!online) {
             // Offline: remote would fail and show ANYNEWS branding placeholder.
+            // Legacy files without a sidecar may still be usable when remote is unknown.
+            File legacy = fileIfReadyLegacy(context, postId, index);
+            if (legacy != null && TextUtils.isEmpty(remoteUrl)) {
+                return UriFile.asFileUri(legacy);
+            }
             return null;
         }
         if (!TextUtils.isEmpty(remoteUrl)) {
@@ -176,6 +187,50 @@ public final class OfflineImageStore {
 
     @Nullable
     public static File fileIfReady(
+            @Nullable Context context, @Nullable Long postId, int index) {
+        return fileIfReady(context, postId, index, null);
+    }
+
+    /**
+     * Ready local file for this post/slot. When {@code remoteUrl} is non-empty, the sidecar
+     * must match (or the file is deleted and treated as a miss).
+     */
+    @Nullable
+    public static File fileIfReady(
+            @Nullable Context context,
+            @Nullable Long postId,
+            int index,
+            @Nullable String remoteUrl) {
+        if (context == null || postId == null || postId <= 0) return null;
+        File f = fileFor(context, postId, index);
+        if (!f.exists() || f.length() < MIN_BYTES) return null;
+        if (!TextUtils.isEmpty(remoteUrl)) {
+            String want = remoteUrl.trim();
+            String have = readUrlSidecar(f);
+            if (have == null) {
+                // Legacy offline file without sidecar: online callers with a known URL must
+                // re-validate — prefer remote so a URL change cannot keep a birthday poster.
+                final boolean online = BookmarkStore.isNetworkAvailable(context);
+                if (online) {
+                    deleteQuiet(f);
+                    deleteQuiet(urlSidecar(f));
+                    return null;
+                }
+                // Offline + no sidecar: last resort keep the bytes.
+                return f;
+            }
+            if (!urlsMatch(have, want)) {
+                deleteQuiet(f);
+                deleteQuiet(urlSidecar(f));
+                return null;
+            }
+        }
+        return f;
+    }
+
+    /** Exists on disk with bytes; ignores URL sidecar (offline fallback only). */
+    @Nullable
+    private static File fileIfReadyLegacy(
             @Nullable Context context, @Nullable Long postId, int index) {
         if (context == null || postId == null || postId <= 0) return null;
         File f = fileFor(context, postId, index);
@@ -229,7 +284,15 @@ public final class OfflineImageStore {
     private static void enqueue(
             @NonNull Context app, long postId, int index, @NonNull String url) {
         File dest = fileFor(app, postId, index);
-        if (dest.exists() && dest.length() >= MIN_BYTES) return;
+        if (dest.exists() && dest.length() >= MIN_BYTES) {
+            String have = readUrlSidecar(dest);
+            if (have != null && urlsMatch(have, url)) {
+                return; // already have the correct bytes
+            }
+            // Stale or legacy file for a different URL — replace.
+            deleteQuiet(dest);
+            deleteQuiet(urlSidecar(dest));
+        }
         String key = postId + "#" + index + "#" + url;
         if (!IN_FLIGHT_OR_QUEUED.add(key)) return;
         QUEUE.offer(new Job(app, postId, index, url, key));
@@ -259,10 +322,15 @@ public final class OfflineImageStore {
     private static void download(@NonNull Job job) {
         File dest = fileFor(job.app, job.postId, job.index);
         if (dest.exists() && dest.length() >= MIN_BYTES) {
-            if (job.index == 0) {
-                OfflineFeedStore.notifyPackChanged();
+            String have = readUrlSidecar(dest);
+            if (have != null && urlsMatch(have, job.url)) {
+                if (job.index == 0) {
+                    OfflineFeedStore.notifyPackChanged();
+                }
+                return;
             }
-            return;
+            deleteQuiet(dest);
+            deleteQuiet(urlSidecar(dest));
         }
         if (!BookmarkStore.isNetworkAvailable(job.app)) return;
         File tmp = new File(dest.getAbsolutePath() + ".tmp");
@@ -318,6 +386,7 @@ public final class OfflineImageStore {
                 //noinspection ResultOfMethodCallIgnored
                 tmp.delete();
             }
+            writeUrlSidecar(dest, job.url);
             Logone.v(TAG, "saved post=" + job.postId + " i=" + job.index + " bytes=" + dest.length());
             try {
                 MediaAccessReporter.get().recordUrl(job.url);
@@ -345,15 +414,26 @@ public final class OfflineImageStore {
             for (File f : files) {
                 if (f == null || !f.isFile()) continue;
                 String name = f.getName();
-                if (name.endsWith(".tmp")) {
-                    //noinspection ResultOfMethodCallIgnored
-                    f.delete();
+                if (name.endsWith(".tmp") || name.endsWith(".url")) {
+                    if (name.endsWith(".tmp")) {
+                        //noinspection ResultOfMethodCallIgnored
+                        f.delete();
+                    } else {
+                        // Drop orphan sidecars whose image was already pruned.
+                        String imgName = name.substring(0, name.length() - 4);
+                        File img = new File(dir, imgName);
+                        if (!img.exists()) {
+                            //noinspection ResultOfMethodCallIgnored
+                            f.delete();
+                        }
+                    }
                     continue;
                 }
                 long id = parsePostId(name);
                 if (id > 0 && !keepIds.contains(id)) {
                     //noinspection ResultOfMethodCallIgnored
                     f.delete();
+                    deleteQuiet(urlSidecar(f));
                 }
             }
         } catch (Exception e) {
@@ -388,6 +468,55 @@ public final class OfflineImageStore {
     private static File fileFor(@NonNull Context context, long postId, int index) {
         String name = index <= 0 ? ("p" + postId + ".img") : ("p" + postId + "_i" + index + ".img");
         return new File(dir(context), name);
+    }
+
+    @NonNull
+    private static File urlSidecar(@NonNull File imageFile) {
+        return new File(imageFile.getAbsolutePath() + ".url");
+    }
+
+    @Nullable
+    private static String readUrlSidecar(@NonNull File imageFile) {
+        File side = urlSidecar(imageFile);
+        if (!side.exists() || side.length() <= 0) return null;
+        try {
+            byte[] raw = new byte[(int) Math.min(side.length(), 4096)];
+            try (InputStream in = new java.io.FileInputStream(side)) {
+                int n = in.read(raw);
+                if (n <= 0) return null;
+                return new String(raw, 0, n, java.nio.charset.StandardCharsets.UTF_8).trim();
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static void writeUrlSidecar(@NonNull File imageFile, @NonNull String url) {
+        try {
+            File side = urlSidecar(imageFile);
+            try (FileOutputStream out = new FileOutputStream(side, false)) {
+                out.write(url.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                out.flush();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean urlsMatch(@Nullable String a, @Nullable String b) {
+        if (a == null || b == null) return false;
+        String x = a.trim();
+        String y = b.trim();
+        if (x.isEmpty() || y.isEmpty()) return false;
+        return x.equals(y);
+    }
+
+    private static void deleteQuiet(@Nullable File f) {
+        if (f == null) return;
+        try {
+            //noinspection ResultOfMethodCallIgnored
+            f.delete();
+        } catch (Exception ignored) {
+        }
     }
 
     private static final class Job {

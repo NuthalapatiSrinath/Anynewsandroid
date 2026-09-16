@@ -39,14 +39,16 @@ public interface LoaderCommonOption {
             .cacheInMemory(true)
             .cacheOnDisk(true)
             .bitmapConfig(Bitmap.Config.RGB_565)
-//            .resetViewBeforeLoading()
+            // Must clear scrap FlipView heroes before the next URL paints — otherwise a
+            // prior birthday poster can stick on an unrelated rain/news card mid-bind.
+            .resetViewBeforeLoading()
             .imageScaleType(ImageScaleType.EXACTLY)
             .build();
     DisplayImageOptions optionsAds = new DisplayImageOptions.Builder()
             .cacheInMemory(true)
             .cacheOnDisk(true)
             .bitmapConfig(Bitmap.Config.RGB_565)
-//            .resetViewBeforeLoading()
+            .resetViewBeforeLoading()
             .imageScaleType(ImageScaleType.EXACTLY)
             .build();
 
@@ -120,7 +122,7 @@ public interface LoaderCommonOption {
             .cacheInMemory(false)
             .cacheOnDisk(false)
             .bitmapConfig(Bitmap.Config.RGB_565)
-//            .resetViewBeforeLoading()
+            .resetViewBeforeLoading()
             .imageScaleType(ImageScaleType.EXACTLY)
             .build();
 

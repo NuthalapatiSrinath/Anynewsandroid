@@ -29,6 +29,7 @@ import com.google.android.gms.ads.nativead.NativeAdOptions;
  */
 public final class AdPreloader {
     private static final String TAG = "ANYNEWS_ADS";
+    /** July-era backoff — avoid thrashing AdLoader after no-fill. */
     private static final long FAIL_BACKOFF_MS = 12_000L;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -112,6 +113,15 @@ public final class AdPreloader {
         readyAdCode = null;
         if (ad != null) {
             Log.d(TAG, "AdPreloader TAKE ready unit=" + safe(code));
+        }
+        return ad;
+    }
+
+    @Nullable
+    public synchronized NativeAd takeReadyAndReplenish(@Nullable Context context) {
+        NativeAd ad = takeReady();
+        if (context != null) {
+            prefetch(context);
         }
         return ad;
     }

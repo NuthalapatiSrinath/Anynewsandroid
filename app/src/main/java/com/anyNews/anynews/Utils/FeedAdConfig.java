@@ -30,12 +30,12 @@ public final class FeedAdConfig {
     public static final int MIN_EVERY_N = 2;
     public static final int MAX_EVERY_N = 10;
 
-    /** Match admin Performance range (3–12). Default 6. */
+    /** Match admin Performance range (3–12). Default 6 (July-era). */
     public static final int DEFAULT_PREFETCH_LOOKAHEAD = 6;
     public static final int MIN_PREFETCH_LOOKAHEAD = 3;
     public static final int MAX_PREFETCH_LOOKAHEAD = 12;
 
-    /** Match admin Performance range (1–5). Default 3. */
+    /** Match admin Performance range (1–5). Default 3 (July-era). */
     public static final int DEFAULT_MAX_IN_FLIGHT = 3;
     public static final int MIN_MAX_IN_FLIGHT = 1;
     public static final int MAX_MAX_IN_FLIGHT = 5;

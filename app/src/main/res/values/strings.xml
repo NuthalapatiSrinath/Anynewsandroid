@@ -245,9 +245,10 @@
     <string name="search_categories">Categories</string>
     <string name="search_hub_title">Continue reading</string>
     <string name="search_hub_subtitle">Pick a section to keep exploring</string>
-    <string name="search_hub_main_news">Main News</string>
+    <string name="search_hub_main_news">News</string>
     <string name="search_hub_local_news">Local News</string>
     <string name="search_hub_flash_news">Flash News</string>
+    <string name="search_hub_daily_updates">Daily Updates</string>
     <string name="no_stories_found">No Stories found</string>
     <string name="special_requires_internet">Connect to the internet to open Special</string>
     <string name="video_news">Video News</string>

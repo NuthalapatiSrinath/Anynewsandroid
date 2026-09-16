@@ -299,7 +299,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean searchOpenHandledInCreate = false;
     /** One soften+retry for empty Search_Stories before showing hub-only. */
     private boolean searchSoftRetryUsed = false;
-    /** Way2 bottom bar: back + query while keyword FlipView is active. */
+    /** Mist + teal top bar: back + query while keyword FlipView is active. */
     private View searchContextBar;
     private TextView searchContextQuery;
     private View homeModeSearchIcon;
@@ -372,7 +372,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Prefetch coalescing — Sep-7 (3.41.6) fast-fill era used 90ms so the next
      * seat AdLoader starts soon after settle. 280ms starved parked house seats.
      */
-    private static final long AD_PREFETCH_DEBOUNCE_MS = 90L;
+    private static final long AD_PREFETCH_DEBOUNCE_MS = 10L;
     /**
      * After flip settle, wait this long (plus {@link FlipAdWorkGate#SETTLE_GRACE_MS})
      * before AdMob load / pool refill / MediaView bind. Cancelled on the next flip.
@@ -413,7 +413,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // While the user is still flipping, only keep the immediate next seat warm.
         // Aggressive mid-flip lookahead competed with settle loads and starved fill.
         if (FlipAdWorkGate.shouldDeferAdWork() || isNewsFlipAnimating()) {
-            return Math.min(look, 2);
+            return Math.min(look, 4);
         }
         return look;
     }
@@ -448,26 +448,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     scheduleFlipSafeAdRebind(64L);
                     return;
                 }
-                if (pendingFullAdRebind) {
-                    pendingFullAdRebind = false;
-                    if (adapter != null) {
-                        adapter.tryPaintReadyGoogleNativesInPlace();
-                    }
-                    return;
-                }
-                if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
-                    return;
-                }
-                // Sep-3 reliability: parked current ad with a ready creative MUST
-                // paint — prefer in-place, else attempt in-place native paint.
-                if (adapter != null && adapter.needsAdSeatDatasetRebind()) {
-                    if (shouldDeferAdWork()) {
-                        scheduleFlipSafeAdRebind(
-                                Math.max(64L, FlipAdWorkGate.millisUntilAdWorkSafe()));
-                        return;
-                    }
-                    showLog("ANYNEWS_ADS seat-only settle recycle (in-place miss)");
-                    adapter.tryPaintReadyGoogleNativesInPlace();
+                // July-era: recycle FlipView so getView uses exact-match bind /
+                // share_app — no in-place paint thrash.
+                pendingFullAdRebind = false;
+                if (adapter != null) {
+                    showLog("ANYNEWS_ADS July-style notifyDataSetChanged after ad fill");
+                    adapter.notifyDataSetChanged();
                 }
             } catch (Exception ignored) {
             }
@@ -985,25 +971,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         AdMobInitializer.initializeFromManifestIfNeeded(this);
-        // Warm share/house-ad seat early (Sep-7 fast-fill: 280ms, not 1.2s).
+        // Warm share/house-ad seat early (best-effort only; July bind does not
+        // consume AdPreloader from getView).
         try {
             adPrefetchHandler.postDelayed(
-                    () -> AdPreloader.get().prefetch(getApplicationContext()), 280L);
+                    () -> AdPreloader.get().prefetch(getApplicationContext()), 0L);
         } catch (Exception ignored) {
         }
-        // When early-warm completes while user is parked on Share default, paint
-        // in place — AdPreloader alone never called maybeRebind / scheduleFlipSafe.
+        // July-era: when a warm creative arrives, recycle FlipView so case "ad"
+        // can exact-match — do not instant-paint over share/house shells.
         try {
             AdPreloader.get().setReadyListener(() -> {
                 try {
                     if (isFinishing() || isDestroyed()) {
                         return;
                     }
-                    if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
-                        return;
-                    }
-                    // Parked on house/default: keep July-style wait→fill without
-                    // unconditional every-scroll notify.
                     scheduleFlipSafeAdRebind();
                 } catch (Exception ignored) {
                 }
@@ -1970,6 +1952,48 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    /** Search end hub → Daily Updates footer section. */
+    public void openDailyUpdatesFromSearchHub() {
+        clearSearchFeedMode();
+        try {
+            performDailyUpdatesOpen();
+        } catch (Exception e) {
+            exitSearchFeedMode();
+        }
+    }
+
+    /** Hub row: Local News (Mana Zilla) always offered when online. */
+    public boolean isSearchHubLocalAvailable() {
+        try {
+            return isDeviceOnline();
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /** Hub row: Flash News when Video/Flash slot is enabled in footer config. */
+    public boolean isSearchHubFlashAvailable() {
+        try {
+            if (bottomNavigationView == null) return true;
+            MenuItem item = bottomNavigationView.getMenu().findItem(R.id.navigation_status);
+            // Flash opens from Daily Updates path; show when DU or online.
+            return isDeviceOnline() && (item == null || item.isVisible());
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /** Hub row: Daily Updates when that footer tab is visible. */
+    public boolean isSearchHubDailyUpdatesAvailable() {
+        try {
+            if (bottomNavigationView == null) return true;
+            MenuItem item = bottomNavigationView.getMenu().findItem(R.id.navigation_status);
+            return item != null && item.isVisible();
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
     /** Circular reveal when opening search results into FlipView (same helper as search icon). */
     private void playSearchResultEnterReveal(@Nullable Intent intent) {
         if (intent == null
@@ -2901,8 +2925,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             if (adapter != null) {
+                // July-era: attach deferred buffer MediaView when user lands.
                 adapter.bindPendingNativeAdMediaForPage(position);
-                adapter.tryPaintReadyGoogleNativesInPlace();
             }
         } catch (Exception ignored) {
         }
@@ -3084,6 +3108,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     return;
                 }
             }
+            NativeAdCacheCoordinator.get().resetSlotFailure(type, adCode, adReqPosition);
             loadAds(adCode, adReqPosition, type);
         } catch (Exception e) {
             showLog("ensureFeedNativeAdLoaded: " + e.getMessage());
@@ -3755,14 +3780,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    // Prefer in-place paint only — scheduleFlipSafeAdRebind no longer
-                    // notifies the whole FlipView unless an ad seat still needs it.
-                    try {
-                        if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
-                            return;
-                        }
-                    } catch (Exception ignored) {
-                    }
+                    // July-era: FlipView recycle → getView exact-match bind path.
+                    // No tryPaintReadyGoogleNativesInPlace / house-shell thrash.
                     scheduleFlipSafeAdRebind();
                 }
             });

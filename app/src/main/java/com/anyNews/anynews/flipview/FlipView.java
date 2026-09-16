@@ -388,7 +388,24 @@ public class FlipView extends FrameLayout {
             return;
         }
         if (newCount <= oldCount) {
-            // In-place soft-merge refresh with no new pages — keep painted card.
+            // In-place soft-merge refresh with no new pages. Keep the painted card only
+            // when its bound post_id still matches the adapter at that index — otherwise
+            // a replaced row can show a prior birthday hero on unrelated news text.
+            try {
+                if (mCurrentPage.valid
+                        && mCurrentPage.position >= 0
+                        && mCurrentPage.position < mPageCount) {
+                    long want = itemIdAt(mCurrentPage.position);
+                    if (want != 0L && want != -1L
+                            && mCurrentPage.boundItemId != 0L
+                            && mCurrentPage.boundItemId != want) {
+                        setFlipDistance(mCurrentPage.position * (float) FLIP_DISTANCE_PER_PAGE, true);
+                        updateEmptyStatus();
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
             invalidate();
             updateEmptyStatus();
             return;
