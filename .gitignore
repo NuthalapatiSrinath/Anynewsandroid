@@ -10,6 +10,11 @@ build/
 local.properties
 keystore.properties
 
+# Signing keys (never commit)
+*.jks
+*.keystore
+anyNews.jks
+
 # Build outputs
 *.apk
 *.aab
@@ -18,6 +23,36 @@ keystore.properties
 
 # ProGuard
 mapping.txt
+
+# Assemble / Gradle log dumps
+assemble_*.log
+*.log
+
+# Local QA / emulator captures and asset peeks (repo root)
+downloads/
+tmp_*/
+tmp_*
+_asset_bak/
+_peek*
+
+# UIAutomator / layout dumps and screenshot peeks at repo root
+/ui_*.xml
+/uidu*.xml
+/ui2.xml
+/ui5.xml
+/fuel_*.xml
+/fuel_*.txt
+/fuel_*.png
+/home_ui*.xml
+/emu_*.png
+/crop_*.png
+/corner_*.png
+/du_bg_*.png
+/mana_*.png
+/*_inspect.png
+/*_preview.png
+/*_verify.png
+/*_verify.xml
 
 # OS
 .DS_Store
