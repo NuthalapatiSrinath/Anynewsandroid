@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Mist + teal-rail context bar while keyword FlipView is active. -->
+<!-- Mist + teal-rail context bar while keyword FlipView is active (bottom, above tabs). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/search_context_bar"

@@ -69,6 +69,7 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -172,6 +173,7 @@ import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.MovementMethodTV;
 import com.anyNews.anynews.Utils.MyUtils;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.Utils.SpecialGalleryFlipHelper;
 import com.anyNews.anynews.Utils.ReporterPhotoReminderHelper;
 import com.anyNews.anynews.Utils.ReporterPostGateHelper;
 import com.anyNews.anynews.Utils.OpenPathCache;
@@ -299,7 +301,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean searchOpenHandledInCreate = false;
     /** One soften+retry for empty Search_Stories before showing hub-only. */
     private boolean searchSoftRetryUsed = false;
-    /** Mist + teal top bar: back + query while keyword FlipView is active. */
+    /** Mist + teal bottom bar: back + query while keyword FlipView is active. */
     private View searchContextBar;
     private TextView searchContextQuery;
     private View homeModeSearchIcon;
@@ -309,6 +311,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private float x1, x2;
     static final int MIN_DISTANCE = 0;
+    /** Special gallery FlipView swipe: block footer tab clicks mid-gesture. */
+    private boolean suppressFooterClickFromGallerySwipe = false;
+    private float galleryNavGuardDownX;
+    private float galleryNavGuardDownY;
+    private int galleryNavTouchSlop = -1;
 
     // FloatingActionButton fab1,fab2,fab4;
     ImageView fab1, fab2, fab4;
@@ -380,14 +387,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private static final long AD_WORK_AFTER_SETTLE_MS = FlipAdWorkGate.SETTLE_GRACE_MS;
     /**
      * Cap simultaneous native loads so AdMob SDK work does not jank flip frames.
-     * Admin override: {@code max_native_ad_loads_in_flight} (default 2).
+     * Admin override: {@code max_native_ad_loads_in_flight} (default 4).
      */
     private static final int DEFAULT_MAX_NATIVE_AD_LOADS_IN_FLIGHT =
             FeedAdConfig.DEFAULT_MAX_IN_FLIGHT;
     /**
      * How many flips ahead of the current page may start AdMob/FB loads.
-     * Must cover the next ad seat (gap ≈ every_n + 1). Admin:
-     * {@code ad_prefetch_lookahead} (default 3).
+     * Must cover the next 2+ ad seats (gap ≈ every_n + 1). Admin:
+     * {@code ad_prefetch_lookahead} (default 10).
      */
     private static final int DEFAULT_AD_PREFETCH_LOOKAHEAD =
             FeedAdConfig.DEFAULT_PREFETCH_LOOKAHEAD;
@@ -410,10 +417,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private int getAdPrefetchLookahead() {
         int look = FeedAdConfig.getPrefetchLookahead(this);
-        // While the user is still flipping, only keep the immediate next seat warm.
-        // Aggressive mid-flip lookahead competed with settle loads and starved fill.
+        // Mid-flip: still look far enough for ~2 upcoming ad seats, but do not run
+        // the full idle window (that competed with settle ensure and starved fill).
         if (FlipAdWorkGate.shouldDeferAdWork() || isNewsFlipAnimating()) {
-            return Math.min(look, 4);
+            return Math.min(look, 8);
         }
         return look;
     }
@@ -432,8 +439,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Ad fill rebind after load/timeout. Prefer in-place MediaView paint.
      * Never {@code notifyDataSetChanged()} unless an ad seat still needs a layout
-     * swap — unconditional notify (cbec52a restore) recycled every FlipView page
-     * and caused one blink on every scroll for images and ads.
+     * swap — unconditional notify recycled FlipView onto black {@code ads_screen}
+     * then painted the creative, then refill/AdPreloader ready fired again →
+     * continuous black↔ad loop while parked on the ad page.
      */
     private final Runnable flipSafeAdRebindRunnable = new Runnable() {
         @Override
@@ -448,12 +456,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     scheduleFlipSafeAdRebind(64L);
                     return;
                 }
-                // July-era: recycle FlipView so getView uses exact-match bind /
-                // share_app — no in-place paint thrash.
-                pendingFullAdRebind = false;
-                if (adapter != null) {
-                    showLog("ANYNEWS_ADS July-style notifyDataSetChanged after ad fill");
-                    adapter.notifyDataSetChanged();
+                if (pendingFullAdRebind) {
+                    pendingFullAdRebind = false;
+                    if (adapter != null) {
+                        // share_app ↔ ad layout swap — one settle-coalesced recycle.
+                        showLog("ANYNEWS_ADS full layout swap notify (share↔ad)");
+                        adapter.notifyWhenFlipSettled();
+                    }
+                    return;
+                }
+                if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
+                    return;
+                }
+                // Creative ready but seat still on share/empty black shell — one recycle.
+                if (adapter != null && adapter.needsAdSeatDatasetRebind()) {
+                    if (shouldDeferAdWork()) {
+                        scheduleFlipSafeAdRebind(
+                                Math.max(64L, FlipAdWorkGate.millisUntilAdWorkSafe()));
+                        return;
+                    }
+                    showLog("ANYNEWS_ADS seat-only settle recycle (in-place miss)");
+                    adapter.notifyWhenFlipSettled();
                 }
             } catch (Exception ignored) {
             }
@@ -2048,6 +2071,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * in-shell News/Special flips instead of a cold Activity inflate.
      */
     private void openProfileInstant() {
+        // Never open Profile while a Special nested gallery FlipView owns the swipe —
+        // leaked footer clicks used to jump here mid page-turn.
+        if (SpecialGalleryFlipHelper.isNestedGalleryDriving()
+                || suppressFooterClickFromGallerySwipe) {
+            showLog("openProfileInstant blocked — gallery swipe in progress");
+            return;
+        }
         if (getApplicationContext() == null
                 || !getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
             return;
@@ -2825,9 +2855,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Best-effort mid-flip warm for the nearest upcoming ad seat. Never mutates
+     * Best-effort mid-flip warm for the next 2+ upcoming ad seats. Never mutates
      * {@code ad_req_position}, never marks a seat permanently failed, and never
      * replaces {@link #runSettledAdWork} — on-land ensure always runs after settle.
+     * Also tops the shared {@link AdPreloader} warm pool (no FlipView bind).
      */
     private void warmNextAdSeatDuringFlip() {
         if (list == null || list.isEmpty()) {
@@ -2835,6 +2866,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         if (FeedAdConfig.isInterstitial(this)) {
             return;
+        }
+        try {
+            AdPreloader.get().prefetch(getApplicationContext());
+        } catch (Exception ignored) {
         }
         int from = Math.max(0, positionx);
         try {
@@ -2844,11 +2879,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception ignored) {
         }
-        // Soft lookahead only — settle path covers the landed seat for sure.
-        int look = Math.min(2, getAdPrefetchLookahead());
+        // Cover enough flips for ~2 ad seats; settle path still owns landed reliability.
+        int look = getAdPrefetchLookahead();
         int end = Math.min(list.size() - 1, from + look);
+        int warmed = 0;
+        final int maxWarmSeats = 2;
         try {
-            for (int i = from; i <= end; i++) {
+            for (int i = from; i <= end && warmed < maxWarmSeats; i++) {
                 ModelClass.Datum d = list.get(i);
                 if (d == null || !ReadArticleStore.isAdFeedSlot(d)) {
                     continue;
@@ -2865,9 +2902,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (code == null || code.isEmpty()) {
                     code = d.getNext_req_ad_code();
                 }
-                showLog("warmNextAdSeatDuringFlip best-effort flip=" + i + " reqPos=" + pos);
+                showLog("warmNextAdSeatDuringFlip best-effort flip=" + i
+                        + " reqPos=" + pos + " seat=" + (warmed + 1));
                 ensureFeedNativeAdLoaded(code, pos, d.getAd_type());
-                break; // nearest unfilled seat only while flipping
+                warmed++;
             }
         } catch (Exception e) {
             showLog("warmNextAdSeatDuringFlip: " + e.getMessage());
@@ -2988,7 +3026,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
-        // Home idle: keep one early-warm creative for the next share/house seat.
+        // Home idle: keep shared warm pool topped (target AdPreloader.maxReady()).
         try {
             AdPreloader.get().prefetch(getApplicationContext());
         } catch (Exception ignored) {
@@ -3238,7 +3276,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (nativeGoogleAdList != null) {
                 for (int i = 0; i < nativeGoogleAdList.size(); i++) {
                     FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
-                    if (packed != null && packed.getAd() != null && !packed.isClaimed()) {
+                    if (packed != null && packed.getAd() != null
+                            && !packed.isClaimed() && !packed.isImpressed()) {
                         n++;
                     }
                 }
@@ -3246,7 +3285,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (nativeFBAdList != null) {
                 for (int i = 0; i < nativeFBAdList.size(); i++) {
                     FlipGoogleNativeAds packed = nativeFBAdList.get(i);
-                    if (packed != null && packed.getFbAd() != null && !packed.isClaimed()) {
+                    if (packed != null && packed.getFbAd() != null
+                            && !packed.isClaimed() && !packed.isImpressed()) {
                         n++;
                     }
                 }
@@ -3269,28 +3309,41 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * After a creative is shown/claimed, top up only within the normal lookahead.
-     * No stretch-beyond-lookahead walks — those doubled AdLoader work and janked flip.
+     * After a creative is claimed/impressed/destroyed, immediately top the shared
+     * warm pool and seat prefetch within lookahead. No stretch-beyond-lookahead
+     * walks — those doubled AdLoader work and janked flip.
      */
     public void refillNativeAdPoolAfterConsume() {
-        if (isFinishing() || isDestroyed() || list == null || list.isEmpty()) {
+        if (isFinishing() || isDestroyed()) {
             return;
         }
         try {
-            // Keep one early-warm creative for the next share/house-ad seat.
+            // Always replenish shared warm unimpressed pool first (survives mode switch).
             AdPreloader.get().prefetch(getApplicationContext());
         } catch (Exception ignored) {
         }
+        if (list == null || list.isEmpty()) {
+            return;
+        }
         try {
             if (shouldDeferAdWork()) {
+                // Mid-flip: soft seat warm only; full lookahead resumes on settle.
+                try {
+                    warmNextAdSeatDuringFlip();
+                } catch (Exception ignored) {
+                }
                 return;
             }
             int ready = countReadyUnclaimedNatives();
             int inFlight = countInFlightNativeAdLoads();
-            int target = getMaxNativeAdLoadsInFlight();
+            int preloaderReady = AdPreloader.get().readyCount();
+            int target = Math.max(getMaxNativeAdLoadsInFlight(), AdPreloader.maxReady());
             showLog("refillNativeAdPool ready=" + ready + " inFlight=" + inFlight
-                    + " target=" + target);
-            if (ready + inFlight >= target) {
+                    + " preloader=" + preloaderReady + " target=" + target);
+            // Seat pool may look full while shared warm is thin — still prefetch seats
+            // when under lookahead capacity; AdPreloader.prefetch above already kicked.
+            if (ready + inFlight >= getMaxNativeAdLoadsInFlight()
+                    && preloaderReady >= AdPreloader.maxReady()) {
                 return;
             }
             int from = Math.max(0, positionx);
@@ -3308,14 +3361,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Destroy and clear Google/FB native pools + in-flight position set.
-     * Used on footer tab / feed-mode switches so returning to News does not keep
-     * destroyed creatives or orphaned loading state.
+     * Hard wipe of Google/FB seat pools + AdPreloader. Use only on Activity destroy /
+     * offline reload teardown — not on ordinary News↔Local↔Flash↔Special switches
+     * (those must keep the shared warm unimpressed pool via
+     * {@link #pruneImpressedNativeAdsKeepWarm()}).
      */
     private void clearNativeAdPools() {
         try {
-            // This is a genuine feed replacement/destruction boundary. Queued starts for the
-            // previous list are obsolete; ordinary flips deliberately do not reach here.
+            // Genuine destruction boundary. Queued starts for the previous list are obsolete;
+            // ordinary flips deliberately do not reach here.
             adLoaderGeneration++;
             pendingNativeLoadStarts.clear();
             NativeAdCacheCoordinator.get().clearAll();
@@ -3330,6 +3384,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (packed == null) continue;
                     try {
                         packed.setClaimed(false);
+                        packed.setImpressed(false);
                         if (packed.getAd() != null) {
                             packed.getAd().destroy();
                             packed.setAd(null);
@@ -3352,6 +3407,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (packed == null) continue;
                     try {
                         packed.setClaimed(false);
+                        packed.setImpressed(false);
                         if (packed.getFbAd() != null) {
                             packed.getFbAd().destroy();
                             packed.setFbAd(null);
@@ -3378,6 +3434,305 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (nativeFBAdList != null) nativeFBAdList.clear();
                 if (nativeGoogleAdArray != null) nativeGoogleAdArray.clear();
                 if (nativeFBAdArray != null) nativeFBAdArray.clear();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /**
+     * Feed-mode switch (News / Local / Flash / Special / search): destroy only
+     * claimed or impressed creatives, keep warm unimpressed seat-pool + AdPreloader
+     * inventory so the next feed can claim immediately. Cancels in-flight start
+     * markers for the previous list without wiping the shared warm preloader.
+     */
+    private void pruneImpressedNativeAdsKeepWarm() {
+        try {
+            adLoaderGeneration++;
+            pendingNativeLoadStarts.clear();
+            NativeAdCacheCoordinator.get().clearAll();
+            // Intentionally do NOT AdPreloader.clear() — shared warm pool survives mode switch.
+            adShellPoolGraceUsed.clear();
+            feedInterstitialShownPos.clear();
+            pruneGoogleListKeepUnimpressed();
+            pruneFbListKeepUnimpressed();
+            if (nativeGoogleAdArray != null) {
+                nativeGoogleAdArray.clear();
+            }
+            if (nativeFBAdArray != null) {
+                nativeFBAdArray.clear();
+            }
+            // Re-register remaining unclaimed Google reqPos so ensure/dedupe stays coherent.
+            if (nativeGoogleAdList != null && nativeGoogleAdArray != null) {
+                for (int i = 0; i < nativeGoogleAdList.size(); i++) {
+                    FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
+                    if (packed == null || packed.getAd() == null || packed.isClaimed()
+                            || packed.isImpressed()) {
+                        continue;
+                    }
+                    int pos = packed.getReqPos();
+                    if (!nativeGoogleAdArray.contains(pos)) {
+                        nativeGoogleAdArray.add(pos);
+                    }
+                }
+            }
+            if (nativeFBAdList != null && nativeFBAdArray != null) {
+                for (int i = 0; i < nativeFBAdList.size(); i++) {
+                    FlipGoogleNativeAds packed = nativeFBAdList.get(i);
+                    if (packed == null || packed.getFbAd() == null || packed.isClaimed()
+                            || packed.isImpressed()) {
+                        continue;
+                    }
+                    int pos = packed.getReqPos();
+                    if (!nativeFBAdArray.contains(pos)) {
+                        nativeFBAdArray.add(pos);
+                    }
+                }
+            }
+            if (adapter != null) {
+                adapter.resetAdBindState();
+            }
+            try {
+                AdPreloader.get().prefetch(getApplicationContext());
+            } catch (Exception ignored) {
+            }
+            showLog("pruneImpressedNativeAdsKeepWarm googleWarm="
+                    + (nativeGoogleAdList != null ? nativeGoogleAdList.size() : 0)
+                    + " preloader=" + AdPreloader.get().readyCount());
+        } catch (Exception e) {
+            showLog("pruneImpressedNativeAdsKeepWarm: " + e.getMessage());
+        }
+    }
+
+    private void pruneGoogleListKeepUnimpressed() {
+        if (nativeGoogleAdList == null || nativeGoogleAdList.isEmpty()) {
+            return;
+        }
+        final boolean destroyAfter = FeedAdConfig.isDestroyAfterImpression(this);
+        for (int i = nativeGoogleAdList.size() - 1; i >= 0; i--) {
+            FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
+            if (packed == null) {
+                nativeGoogleAdList.remove(i);
+                continue;
+            }
+            boolean used = packed.isClaimed() || packed.isImpressed();
+            boolean empty = packed.getAd() == null && packed.getInterstitialAd() == null
+                    && packed.getFbAd() == null;
+            if (!used && !empty) {
+                continue;
+            }
+            // OFF: keep claimed/impressed creatives (softer retention / fill debug).
+            // Still skip re-showing via FlipperAdapter impressed/claimed checks.
+            if (used && !destroyAfter) {
+                continue;
+            }
+            try {
+                if (packed.getAd() != null) {
+                    packed.getAd().destroy();
+                    packed.setAd(null);
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                if (packed.getFbAd() != null) {
+                    packed.getFbAd().destroy();
+                    packed.setFbAd(null);
+                }
+            } catch (Exception ignored) {
+            }
+            packed.setInterstitialAd(null);
+            packed.setClaimed(false);
+            packed.setImpressed(false);
+            nativeGoogleAdList.remove(i);
+        }
+    }
+
+    private void pruneFbListKeepUnimpressed() {
+        if (nativeFBAdList == null || nativeFBAdList.isEmpty()) {
+            return;
+        }
+        final boolean destroyAfter = FeedAdConfig.isDestroyAfterImpression(this);
+        for (int i = nativeFBAdList.size() - 1; i >= 0; i--) {
+            FlipGoogleNativeAds packed = nativeFBAdList.get(i);
+            if (packed == null) {
+                nativeFBAdList.remove(i);
+                continue;
+            }
+            boolean used = packed.isClaimed() || packed.isImpressed();
+            boolean empty = packed.getFbAd() == null;
+            if (!used && !empty) {
+                continue;
+            }
+            if (used && !destroyAfter) {
+                continue;
+            }
+            try {
+                if (packed.getFbAd() != null) {
+                    packed.getFbAd().destroy();
+                    packed.setFbAd(null);
+                }
+            } catch (Exception ignored) {
+            }
+            packed.setClaimed(false);
+            packed.setImpressed(false);
+            nativeFBAdList.remove(i);
+        }
+    }
+
+    /**
+     * Mark the packed Google native for {@code reqPos} as impressed (one paid show).
+     * Sticky on this seat for flip return; destroyed only when the seat/feed is gone
+     * ({@link #destroyOffscreenImpressedNatives(int)}) or pools cleared. Kick a
+     * replacement into the shared warm pool for upcoming empty seats.
+     */
+    public void markGoogleNativeImpressed(@Nullable Integer reqPos) {
+        if (reqPos == null || nativeGoogleAdList == null) {
+            return;
+        }
+        try {
+            for (int i = 0; i < nativeGoogleAdList.size(); i++) {
+                FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
+                if (packed != null && packed.getReqPos() == reqPos && packed.getAd() != null) {
+                    packed.setImpressed(true);
+                    packed.setClaimed(true);
+                    showLog("native impressed reqPos=" + reqPos);
+                    try {
+                        refillNativeAdPoolAfterConsume();
+                    } catch (Exception ignored) {
+                    }
+                    return;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Mark the packed FB native for {@code reqPos} as impressed. */
+    public void markFbNativeImpressed(@Nullable Integer reqPos) {
+        if (reqPos == null || nativeFBAdList == null) {
+            return;
+        }
+        try {
+            for (int i = 0; i < nativeFBAdList.size(); i++) {
+                FlipGoogleNativeAds packed = nativeFBAdList.get(i);
+                if (packed != null && packed.getReqPos() == reqPos && packed.getFbAd() != null) {
+                    packed.setImpressed(true);
+                    packed.setClaimed(true);
+                    showLog("fb native impressed reqPos=" + reqPos);
+                    try {
+                        refillNativeAdPoolAfterConsume();
+                    } catch (Exception ignored) {
+                    }
+                    return;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * After settle: destroy claimed/impressed natives whose {@code ad_req_position}
+     * seat is no longer in the adapter list (item removed, feed rebuild, mode wipe).
+     * Normal flip away from an ad page does <b>not</b> destroy — seat-sticky return
+     * shows the same NativeAd. Unimpressed warm pool + AdPreloader stay intact.
+     * Gated by admin {@code destroy_native_ads_after_impression} (default ON).
+     * When OFF: even softer retention until {@link #clearNativeAdPools()} /
+     * activity destroy. {@code currentPage} unused (API kept for call sites).
+     */
+    public void destroyOffscreenImpressedNatives(int currentPage) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        if (!FeedAdConfig.isDestroyAfterImpression(this)) {
+            return;
+        }
+        java.util.HashSet<Integer> liveSeats = new java.util.HashSet<>();
+        try {
+            if (list != null) {
+                for (int i = 0; i < list.size(); i++) {
+                    ModelClass.Datum slot = list.get(i);
+                    if (slot == null || slot.getPostType() == null
+                            || !slot.getPostType().equalsIgnoreCase("ad")) {
+                        continue;
+                    }
+                    Integer p = slot.getAd_req_position();
+                    if (p != null) {
+                        liveSeats.add(p);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        boolean destroyedAny = false;
+        try {
+            if (nativeGoogleAdList != null) {
+                for (int i = nativeGoogleAdList.size() - 1; i >= 0; i--) {
+                    FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
+                    if (packed == null || packed.getAd() == null) {
+                        continue;
+                    }
+                    if (!packed.isClaimed() && !packed.isImpressed()) {
+                        continue;
+                    }
+                    int oldPos = packed.getReqPos();
+                    // Seat still in the feed — sticky; keep for flip return.
+                    if (liveSeats.contains(oldPos)) {
+                        continue;
+                    }
+                    try {
+                        packed.getAd().destroy();
+                    } catch (Exception ignored) {
+                    }
+                    packed.setAd(null);
+                    packed.setClaimed(false);
+                    packed.setImpressed(false);
+                    nativeGoogleAdList.remove(i);
+                    try {
+                        if (nativeGoogleAdArray != null) {
+                            nativeGoogleAdArray.remove(Integer.valueOf(oldPos));
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    destroyedAny = true;
+                    showLog("destroy orphaned impressed google reqPos=" + oldPos);
+                }
+            }
+            if (nativeFBAdList != null) {
+                for (int i = nativeFBAdList.size() - 1; i >= 0; i--) {
+                    FlipGoogleNativeAds packed = nativeFBAdList.get(i);
+                    if (packed == null || packed.getFbAd() == null) {
+                        continue;
+                    }
+                    if (!packed.isClaimed() && !packed.isImpressed()) {
+                        continue;
+                    }
+                    int oldPos = packed.getReqPos();
+                    if (liveSeats.contains(oldPos)) {
+                        continue;
+                    }
+                    try {
+                        packed.getFbAd().destroy();
+                    } catch (Exception ignored) {
+                    }
+                    packed.setFbAd(null);
+                    packed.setClaimed(false);
+                    packed.setImpressed(false);
+                    nativeFBAdList.remove(i);
+                    try {
+                        if (nativeFBAdArray != null) {
+                            nativeFBAdArray.remove(Integer.valueOf(oldPos));
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    destroyedAny = true;
+                    showLog("destroy orphaned impressed fb reqPos=" + oldPos);
+                }
+            }
+        } catch (Exception e) {
+            showLog("destroyOffscreenImpressedNatives: " + e.getMessage());
+        }
+        if (destroyedAny) {
+            try {
+                refillNativeAdPoolAfterConsume();
             } catch (Exception ignored) {
             }
         }
@@ -3780,8 +4135,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    // July-era: FlipView recycle → getView exact-match bind path.
-                    // No tryPaintReadyGoogleNativesInPlace / house-shell thrash.
+                    // Prefer in-place paint; only schedule a FlipView recycle when the
+                    // seated ad still needs share/empty → creative layout swap.
+                    try {
+                        if (adapter != null && adapter.tryPaintReadyGoogleNativesInPlace()) {
+                            return;
+                        }
+                    } catch (Exception ignored) {
+                    }
                     scheduleFlipSafeAdRebind();
                 }
             });
@@ -4115,6 +4476,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 + " reqPos=" + ad_req_position);
                         NativeAdCacheCoordinator.get().onPaidShown(
                                 "google", adCode, ad_req_position);
+                        // One impression = one creative — exclude from shared pool forever.
+                        markGoogleNativeImpressed(ad_req_position);
                     }
 
                     @Override
@@ -4146,6 +4509,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 FlipGoogleNativeAds flipGoogleNativeAds = new FlipGoogleNativeAds();
                                 flipGoogleNativeAds.setAd(nativeAd);
                                 flipGoogleNativeAds.setAdCode(adCode);
+                                flipGoogleNativeAds.setClaimed(false);
+                                flipGoogleNativeAds.setImpressed(false);
                                 // Null-safe: unboxing NPE used to drop the creative entirely.
                                 if (ad_req_position != null) {
                                     flipGoogleNativeAds.setReqPos(ad_req_position);
@@ -4367,6 +4732,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 FlipGoogleNativeAds flipGoogleNativeAds=new FlipGoogleNativeAds();
                 flipGoogleNativeAds.setFbAd(nativeAd);
                 flipGoogleNativeAds.setAdCode(adCode != null ? adCode : "");
+                flipGoogleNativeAds.setClaimed(false);
+                flipGoogleNativeAds.setImpressed(false);
                 // Use the requested slot position (not current flip index) so prefetch
                 // for upcoming ad seats matches correctly.
                 Integer reqPos = ad_req_position;
@@ -4398,6 +4765,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (ad_req_position != null) {
                     NativeAdCacheCoordinator.get().onPaidShown(
                             "facebook", adCode, ad_req_position);
+                    markFbNativeImpressed(ad_req_position);
                 }
             }
         };
@@ -4741,6 +5109,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         if(v.getPageCount()==list.size() && (list.size()-1)==positionx && loadingOnOverFlip && overFlipDistance>0){
             loadingOnOverFlip = false;
+            // Keyword search: last page is Continue-reading hub — never invent a
+            // second "no more news" sentinel on overflip.
+            if (searchFeedActive
+                    && activeSearchQuery != null
+                    && !activeSearchQuery.trim().isEmpty()) {
+                if (list != null && !list.isEmpty()
+                        && FeedEndHelper.isFeedEnd(list.get(list.size() - 1))) {
+                    // Already on hub — nothing more to append.
+                    showLog("ANYNEWS_SEARCH overflip on hub — no extra end card");
+                } else {
+                    ensureFeedEndCardVisible(false);
+                }
+            } else {
             boolean paginationInFlight = isApiRequested && dummyResponse == null;
             if (!isDataParsed) {
                 if (dummyResponse != null) {
@@ -4768,6 +5149,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     refreshDetails();
                 } catch (Exception ignored) {
                 }
+            }
             }
         }
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
@@ -7808,11 +8190,44 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (home_page_navigation == null) return;
         if (!isDeviceOnline() || offlineChromeMode) return;
         try {
+            // July-stable: never force footer VISIBLE while seated on ad/share/web
+            // interstitials — refreshHomeModeToggleUi used to undo closeBottomStrip.
+            if (isCurrentFlipInterstitialForFooter()) {
+                setHomePageNavigationVisibility(View.GONE);
+                return;
+            }
             if (home_page_navigation.getVisibility() != View.VISIBLE) {
                 home_page_navigation.setVisibility(View.VISIBLE);
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /** True when the visible Flip card should keep bottom tabs hidden (July ads). */
+    private boolean isCurrentFlipInterstitialForFooter() {
+        String type = post_type;
+        try {
+            if (list != null && !list.isEmpty()) {
+                int pos = positionx;
+                if (mFlipView != null) {
+                    int cur = mFlipView.getCurrentPage();
+                    if (cur >= 0 && cur < list.size()) {
+                        pos = cur;
+                    }
+                }
+                if (pos >= 0 && pos < list.size() && list.get(pos) != null) {
+                    type = list.get(pos).getPostType();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // Match July closeBottomStrip: ad / share_app / ratings only (not web).
+        if (type == null || type.isEmpty()) {
+            return false;
+        }
+        return type.equalsIgnoreCase("ad")
+                || type.equalsIgnoreCase("share_app")
+                || type.equalsIgnoreCase("ratings");
     }
 
     /**
@@ -9482,11 +9897,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void closeBottomStrip(boolean closeStrip) {
         showLog("closeBottomStrip:"+closeStrip);
-        // Online: never collapse the bottom tabs (ads/share used to GONE it → white bar).
-        if (isDeviceOnline() && !offlineChromeMode) {
-            ensureOnlineBottomNavVisible();
-            return;
-        }
+        // July-stable: hide bottom tabs on ad/share/ratings. Do not leave footer
+        // VISIBLE on ads (online bypass) — FlipperAdapter case "ad" calls this on
+        // every bind; thrashing GONE↔VISIBLE is avoided by set-if-changed below.
         if (list == null || positionx < 0 || positionx >= list.size()) {
             return;
         }
@@ -9494,11 +9907,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (postType != null && (postType.equalsIgnoreCase("ad")
                 || postType.equalsIgnoreCase("share_app")
                 || postType.equalsIgnoreCase("ratings"))) {
-            home_page_navigation.setVisibility(View.GONE);
+            setHomePageNavigationVisibility(View.GONE);
+        } else if (isDeviceOnline() && !offlineChromeMode) {
+            ensureOnlineBottomNavVisible();
         } else {
-            home_page_navigation.setVisibility(View.VISIBLE);
+            setHomePageNavigationVisibility(View.VISIBLE);
         }
+    }
 
+    /** Idempotent footer chrome — skip no-op setVisibility (avoids layout thrash). */
+    private void setHomePageNavigationVisibility(int visibility) {
+        if (home_page_navigation == null) {
+            return;
+        }
+        try {
+            if (home_page_navigation.getVisibility() != visibility) {
+                home_page_navigation.setVisibility(visibility);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void openReportPage(int pos) {
@@ -11037,6 +11464,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void clearSpuriousFeedExhaustedState() {
         no_article_message = FEED_LOADING_MESSAGE;
+        // Keyword search Continue-reading hub is intentional — never strip it as a
+        // Chadivindi / stale EOF leftover (that removed the hub on flip-settle).
+        if (searchFeedActive
+                && activeSearchQuery != null
+                && !activeSearchQuery.trim().isEmpty()) {
+            return;
+        }
         stripFeedEndSentinelQuietly();
     }
 
@@ -11140,6 +11574,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Append (or re-seat) the FlipView end card and optionally flip onto it.
+     * Search: end card is the Continue-reading hub (never "no more news").
      * Used when pagination is exhausted, offline/read finite decks, or overflip
      * past the last real article — never leave a blank white FlipView page.
      */
@@ -11670,7 +12105,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         this.category_id = category_id;
         list = new ArrayList<>();
         dummyResponse=null;
-        clearNativeAdPools();
+        pruneImpressedNativeAdsKeepWarm();
         showLog("inlist called:"+category_id);
         initialCall=false;
         ShowNews_Data_Values(category_id,-1);
@@ -11886,7 +12321,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         onlineNewsAllReadSkipStreak = 0;
         no_article_message = FEED_LOADING_MESSAGE;
         hardClearFlipFeedImmediate();
-        clearNativeAdPools();
+        pruneImpressedNativeAdsKeepWarm();
+        // Warm next feed's house-seat creative while network page-0 is in flight.
+        try {
+            AdPreloader.get().prefetch(getApplicationContext());
+        } catch (Exception ignored) {
+        }
         OpenPathCache.forceNextFeedNetwork(this);
         category_id = -1;
         localFeedFromDailyUpdates = fromDailyUpdates;
@@ -11923,7 +12363,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Sync-clear FlipView adapter data BEFORE nulling HomePage.adapter (prior bug:
         // adapter=null skipped setData clear, so FlipView kept News half posts).
         hardClearFlipFeedImmediate();
-        clearNativeAdPools();
+        pruneImpressedNativeAdsKeepWarm();
+        // Keep shared warm pool; top up while page-0 is in flight.
+        try {
+            AdPreloader.get().prefetch(getApplicationContext());
+        } catch (Exception ignored) {
+        }
         OpenPathCache.forceNextFeedNetwork(this);
         category_id = 0;
         try {
@@ -11983,6 +12428,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 HomePage.this, Constants.isUnreadPostsSelected, special, Constants.PREF_NAME);
         SharedPrefsData.putBoolImmediate(
                 HomePage.this, Constants.isVideoPostsSelected, video, Constants.PREF_NAME);
+        // Drop nested Special gallery swipe latch whenever feed mode changes.
+        try {
+            SpecialGalleryFlipHelper.clearNestedGalleryDriving();
+            suppressFooterClickFromGallerySwipe = false;
+        } catch (Exception ignored) {
+        }
         // Online News|Read pill only on main News — hide for Special/Video.
         try {
             if (special || video) {
@@ -13617,13 +14068,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getPn_thumb_size_dp(),
                             encreptionRequest.getPn_title_size_sp()
                     );
-                    // Performance → Ad every N / prefetch / concurrency / flush / format.
-                    // Must land BEFORE unread-strip rebalance so client cadence matches
-                    // server seats (otherwise default every-4 overwrites every-2).
+                    // Performance → Ad every N / prefetch / concurrency / flush / format /
+                    // destroy-when-seat-gone (seat-sticky flip). Must land BEFORE unread-strip
+                    // rebalance so client cadence matches server seats.
                     if (encreptionRequest.getFeed_ad_every_n() != null
                             || encreptionRequest.getAd_prefetch_lookahead() != null
                             || encreptionRequest.getMax_native_ad_loads_in_flight() != null
                             || encreptionRequest.getAd_impr_flush_every_n() != null
+                            || encreptionRequest.getDestroy_native_ads_after_impression() != null
                             || encreptionRequest.getFeed_ad_format() != null
                             || (encreptionRequest.getAd_code() != null
                                     && !encreptionRequest.getAd_code().trim().isEmpty())) {
@@ -13634,7 +14086,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 encreptionRequest.getMax_native_ad_loads_in_flight(),
                                 encreptionRequest.getAd_impr_flush_every_n(),
                                 encreptionRequest.getFeed_ad_format(),
-                                encreptionRequest.getAd_code());
+                                encreptionRequest.getAd_code(),
+                                encreptionRequest.getDestroy_native_ads_after_impression());
                         FeedAdConfig.warmFromPrefs(getApplicationContext());
                     }
                     if (encreptionRequest.getViews_batch_flush_interval_seconds() != null
@@ -13981,10 +14434,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 onlineNewsAllReadSkipStreak = 0;
                             }
                         }
-                        // Main News: seed template from ads_data when response had codes
-                        // but no post_type=ad row (short page / strip), then rebalance.
-                        // Always ensure ratings even when no ad template yet.
-                        if (!fromCache && !isVideoFeedMode() && !isSpecialFeedMode()) {
+                        // Main / Local / Special: seed template from ads_data when response
+                        // had codes but no post_type=ad row, then rebalance.
+                        // Flash/Video uses rebalanceVideoFeedAdsIfNeeded above.
+                        if (!fromCache && !isVideoFeedMode()) {
                             try {
                                 if (onlineNewsAdTemplate == null && encreptionRequest != null) {
                                     ModelClass.Datum fromAds =
@@ -14178,9 +14631,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 int paintables = ReadArticleStore.countPaintableArticles(list);
                                 showLog("ANYNEWS_SEARCH page0 hits paintables=" + paintables
                                         + " listSize=" + list.size());
-                                // Strip any hub that raced into index 0 before hits bind.
                                 if (paintables > 0) {
-                                    FeedEndHelper.stripAll(list);
+                                    // Seat: [hits...] + one Continue-reading hub. Never
+                                    // leave hub-only, never append "no more news".
+                                    FeedEndHelper.ensureAtEnd(list, this);
                                     if (adapter != null) {
                                         adapter.setData(list);
                                     }
@@ -14193,6 +14647,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     showLog("ANYNEWS_SEARCH BUG hub-only with paintables — stripping");
                                     FeedEndHelper.stripAll(list);
                                     forceSearchHitsOnPage0();
+                                }
+                            } else if (!fromCache && searchFeedActive
+                                    && list != null && !list.isEmpty()) {
+                                // Pagination append: keep exactly one hub after last hit.
+                                int paintables = ReadArticleStore.countPaintableArticles(list);
+                                if (paintables > 0) {
+                                    showLog("ANYNEWS_SEARCH append → hub after hits size="
+                                            + list.size());
+                                    ensureFeedEndCardVisible(false);
                                 }
                             }
                             // Always show flip when list has paintables — never empty white forever.
@@ -14330,10 +14793,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     } catch (Exception ignored) {
                                     }
                                 } else {
-                                    // Hits already on FlipView — append hub only, stay put.
+                                    // Hits already on FlipView — exactly one hub after last hit.
+                                    // Do not yank the user back to page 0 if they already scrolled.
                                     showLog("ANYNEWS_SEARCH EOF → hub after last hit");
                                     ensureFeedEndCardVisible(false);
-                                    forceSearchHitsOnPage0();
+                                    try {
+                                        if (mFlipView != null && list != null
+                                                && !list.isEmpty()) {
+                                            int cur = mFlipView.getCurrentPage();
+                                            if (cur < 0 || cur >= list.size()
+                                                    || FeedEndHelper.isFeedEnd(
+                                                            list.get(Math.max(0, cur)))) {
+                                                forceSearchHitsOnPage0();
+                                            }
+                                        }
+                                    } catch (Exception ignored) {
+                                    }
                                 }
                                 initialCall = true;
                                 return;
@@ -14488,6 +14963,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onBackPressed() {
         showLog("isPlayingVideoInFullScreen"+FlipperAdapter.fullscreen);
         showLog("isPlayingVideoInFullScreen"+isPlayingVideoInFullScreen);
+        // Special multi-image FlipView: back = previous gallery page (not exit / Profile).
+        if (isSpecialFeedMode() && mFlipView != null) {
+            try {
+                View page = mFlipView.getCurrentPageView();
+                if (SpecialGalleryFlipHelper.tryConsumeBack(page != null ? page : mFlipView)) {
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
+        }
         int count = this.getSupportFragmentManager().getBackStackEntryCount();
         if (count == 0) {
             if (isSearchFeedActive()) {
@@ -14602,6 +15087,69 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
         return new Gson().toJsonTree(dilogeResest).getAsJsonObject();
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        // Special full-image galleries: horizontal page-turn must not land on the
+        // footer as a Profile / tab click, and must not race system-back edge.
+        if (isSpecialFeedMode() && bottomNavigationView != null && mFlipView != null
+                && mFlipView.getVisibility() == View.VISIBLE) {
+            if (galleryNavTouchSlop < 0) {
+                galleryNavTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
+            }
+            final int action = ev.getActionMasked();
+            switch (action) {
+                case MotionEvent.ACTION_DOWN:
+                    galleryNavGuardDownX = ev.getRawX();
+                    galleryNavGuardDownY = ev.getRawY();
+                    suppressFooterClickFromGallerySwipe = false;
+                    break;
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = Math.abs(ev.getRawX() - galleryNavGuardDownX);
+                    float dy = Math.abs(ev.getRawY() - galleryNavGuardDownY);
+                    if (!suppressFooterClickFromGallerySwipe
+                            && dx > galleryNavTouchSlop
+                            && dx > dy
+                            && isRawTouchInsideView(mFlipView, galleryNavGuardDownX,
+                            galleryNavGuardDownY)
+                            && !isRawTouchInsideView(bottomNavigationView,
+                            galleryNavGuardDownX, galleryNavGuardDownY)) {
+                        suppressFooterClickFromGallerySwipe = true;
+                    }
+                    break;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (suppressFooterClickFromGallerySwipe
+                            || SpecialGalleryFlipHelper.isNestedGalleryDriving()) {
+                        if (isRawTouchInsideView(bottomNavigationView, ev.getRawX(),
+                                ev.getRawY())) {
+                            suppressFooterClickFromGallerySwipe = false;
+                            return true; // swallow footer click
+                        }
+                    }
+                    suppressFooterClickFromGallerySwipe = false;
+                    break;
+                default:
+                    break;
+            }
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    private static boolean isRawTouchInsideView(@Nullable View v, float rawX, float rawY) {
+        if (v == null || v.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+        int[] loc = new int[2];
+        try {
+            v.getLocationOnScreen(loc);
+        } catch (Exception e) {
+            return false;
+        }
+        return rawX >= loc[0] && rawX <= loc[0] + v.getWidth()
+                && rawY >= loc[1] && rawY <= loc[1] + v.getHeight();
     }
 
     @Override
@@ -15021,6 +15569,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // inserted spuriously (stale Chadivindi marker) while News can still page.
         if (list != null && positionx >= 0 && positionx < list.size()
                 && FeedEndHelper.isFeedEnd(list.get(positionx))) {
+            // Search Continue-reading hub must stay last — flip-settle must not
+            // treat it as a spurious News EOF card and strip it.
+            if (searchFeedActive
+                    && activeSearchQuery != null
+                    && !activeSearchQuery.trim().isEmpty()) {
+                showLog("refreshDetails skip — search Continue-reading hub");
+                isApiRequested = false;
+                return;
+            }
             if (canPageActiveOnlineFlipFeed() && !bookmarksModeSelected
                     && !isOnlinePageableFeedTrulyExhausted()) {
                 showLog("refreshDetails — strip spurious feed_end and page");
@@ -15185,8 +15742,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (adapter != null) {
             adapter.setCurrentFlipPage(position);
         }
-        // Leave-ad: soft-hide MediaView now; destroy/strip only after settle so detach
-        // cannot jolt the next article mid-gesture.
+        // Leave-ad: soft-hide MediaView now; orphan seat destroy only after settle
+        // (seat-sticky: flip away keeps the same NativeAd while the shell remains).
         final boolean leftAdShell = isFlipChromeInterstitialType(previousPostType)
                 && !isFlipChromeInterstitialType(post_type);
         final boolean enteredAdShell = !isFlipChromeInterstitialType(previousPostType)
@@ -15202,15 +15759,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         deferFlipChromeUntilSettle = leftAdShell || enteredAdShell
                 || isFlipChromeInterstitialType(post_type);
         if (!deferFlipChromeUntilSettle) {
-            // Online: always keep bottom tabs. Offline/ads may still hide (legacy).
-            if (isDeviceOnline() && !offlineChromeMode) {
+            // July-stable: hide bottom tabs on ad/share/ratings (online or offline).
+            if (isCurrentFlipInterstitialForFooter()) {
+                setHomePageNavigationVisibility(View.GONE);
+            } else if (isDeviceOnline() && !offlineChromeMode) {
                 ensureOnlineBottomNavVisible();
-            } else if (post_type.equalsIgnoreCase("ad")
-                    || post_type.equalsIgnoreCase("share_app")
-                    || post_type.equalsIgnoreCase("ratings")) {
-                home_page_navigation.setVisibility(View.INVISIBLE);
             } else {
-                home_page_navigation.setVisibility(View.VISIBLE);
+                setHomePageNavigationVisibility(View.VISIBLE);
             }
             try {
                 refreshHomeModeToggleUi();
@@ -15320,7 +15875,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // AdMob load / MediaView bind / pool refill — never on the settle frame.
         // Wait settle-grace; cancel if the user flips again before then.
         scheduleSettledAdWork(position);
-        // Leave-ad chrome + MediaView hard strip — only after settle (no mid-gesture jolt).
+        // Leave-ad chrome + orphan seat prune — only after settle (no mid-gesture jolt).
         applyDeferredFlipChromeAfterSettle();
         try {
             if (adapter != null) {
@@ -15353,14 +15908,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         deferFlipChromeUntilSettle = false;
         try {
             String type = post_type != null ? post_type : "";
-            if (isDeviceOnline() && !offlineChromeMode) {
-                ensureOnlineBottomNavVisible();
-            } else if (type.equalsIgnoreCase("ad")
+            if (type.equalsIgnoreCase("ad")
                     || type.equalsIgnoreCase("share_app")
                     || type.equalsIgnoreCase("ratings")) {
-                home_page_navigation.setVisibility(View.INVISIBLE);
+                setHomePageNavigationVisibility(View.GONE);
+            } else if (isDeviceOnline() && !offlineChromeMode) {
+                ensureOnlineBottomNavVisible();
             } else {
-                home_page_navigation.setVisibility(View.VISIBLE);
+                setHomePageNavigationVisibility(View.VISIBLE);
             }
             refreshHomeModeToggleUi();
         } catch (Exception ignored) {
@@ -16344,6 +16899,11 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             if (suppressBottomNavCallbacks) {
                 return true;
             }
+            if (suppressFooterClickFromGallerySwipe
+                    || SpecialGalleryFlipHelper.isNestedGalleryDriving()) {
+                showLog("bottom nav ignored — gallery swipe item=" + item.getItemId());
+                return false;
+            }
             Intent intent;
             switch (item.getItemId()) {
                 // ... implement code here
@@ -16403,6 +16963,11 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     // Profile is online-only (hidden offline with Special / Video / Calendar).
                     if (!ProfileHubConfigHelper.isFooterShowProfile(HomePage.this)
                             || !isDeviceOnline()) {
+                        return false;
+                    }
+                    if (suppressFooterClickFromGallerySwipe
+                            || SpecialGalleryFlipHelper.isNestedGalleryDriving()) {
+                        showLog("navigation_profile ignored — gallery swipe");
                         return false;
                     }
                     // Keep the selected tab painted under Profile. Tearing down Calendar,
@@ -16791,8 +17356,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
 
     /**
      * Cache first synthetic ad shell from a feed page for later client rebalance.
-     * Used by online News and Video News (same native ad template).
-     * Special never rebalances/strips on read cadence — skip here.
+     * Used by online News, Local, Flash/Video, and Special (same native template).
      */
     private void rememberOnlineNewsAdTemplate(
             @androidx.annotation.Nullable java.util.List<ModelClass.Datum> items) {
@@ -16802,7 +17366,6 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     private void rememberFeedAdTemplate(
             @androidx.annotation.Nullable java.util.List<ModelClass.Datum> items) {
         if (items == null || items.isEmpty()) return;
-        if (isSpecialFeedMode()) return;
         try {
             ModelClass.Datum t = ReadArticleStore.firstAdTemplate(items);
             if (t != null) {
@@ -16813,30 +17376,26 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /**
-     * Re-insert ads every {@link ReadArticleStore#getAdEveryNReal()} real cards and
-     * throttle share_app after unread strip. Online News + Video News.
-     * No-op for Special / offline / active Read flip.
+     * Re-insert ads every {@link ReadArticleStore#getAdEveryNReal()} real cards.
+     * Online News / Local / Flash / Special. No-op offline / active Read flip.
      * Snapshot absorption may call while Read is selected (list is not the Read flip).
      */
     private void rebalanceOnlineNewsAdsIfNeeded(
             @androidx.annotation.Nullable java.util.List<ModelClass.Datum> items) {
         if (items == null || items.isEmpty()) return;
         if (!isDeviceOnline() || offlineChromeMode) return;
-        if (isSpecialFeedMode()) return;
         // Never rebalance the active Read flip list here — paintOnlineReadNewsFlip does that.
         if (bookmarksModeSelected && items == list) return;
         try {
-            // When skip-ahead / short pages stripped all ad rows, seed from last ads_data shell.
-            if (onlineNewsAdTemplate == null) {
-                // nothing cached yet — callers with EncreptionRequest use remember + ads_data path
-            }
             boolean changed =
                     ReadArticleStore.rebalanceFeedSlots(
                             HomePage.this, items, onlineNewsAdTemplate);
             boolean ratingsChanged =
                     ReadArticleStore.ensureRatingsSlot(HomePage.this, items);
             if (changed || ratingsChanged) {
-                showLog((isVideoFeedMode() ? "video feed" : "online News")
+                showLog((isVideoFeedMode() ? "flash/video"
+                        : isSpecialFeedMode() ? "special"
+                        : (category_id == -1 ? "local" : "online News"))
                         + ": rebalanced ad/share/ratings listSize=" + items.size()
                         + " reals=" + ReadArticleStore.countRealArticles(items)
                         + " ratings=" + ratingsChanged);

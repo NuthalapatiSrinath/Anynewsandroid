@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nested Special-tab gallery / magazine pages: horizontal FlipView book turn. -->
+<com.anyNews.anynews.flipview.FlipView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/gallery_horizontal_flip"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    app:orientation="horizontal"
+    app:overFlipMode="rubber_band" />

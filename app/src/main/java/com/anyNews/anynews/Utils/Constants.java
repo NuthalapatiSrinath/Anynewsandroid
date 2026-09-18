@@ -380,15 +380,22 @@ public class Constants {
     public static String FEED_AD_FORMAT = "feed_ad_format";
     /** Between-news AdMob unit ID (splash/session; Root_Settings.ad_code). */
     public static String FEED_AD_UNIT_ID = "feed_ad_unit_id";
-    /** Flip positions ahead to prefetch next native ad (default 6, 3–12). */
+    /** Flip positions ahead to prefetch next native ad (default 10, 3–12). */
     public static String AD_PREFETCH_LOOKAHEAD = "ad_prefetch_lookahead";
-    /** Max simultaneous native ad loads (default 3, 1–5). */
+    /** Max simultaneous native ad loads (default 4, 1–5). */
     public static String MAX_NATIVE_AD_LOADS_IN_FLIGHT = "max_native_ad_loads_in_flight";
     /**
      * Flush batched real-ad impressions after every N painted ads (default 3, 1–50).
      * Admin: Configuration → Performance Tuning → Ad impression flush every N.
      */
     public static String AD_IMPR_FLUSH_EVERY_N = "ad_impr_flush_every_n";
+    /**
+     * Destroy native creatives after impression when leaving the seat (default ON).
+     * Admin: Configuration → Performance Tuning → Destroy native ads after impression.
+     * Impression is counted when shown — destroy only frees the object.
+     */
+    public static String DESTROY_NATIVE_ADS_AFTER_IMPRESSION =
+            "destroy_native_ads_after_impression";
     /**
      * ViewsBatchTracker flush interval seconds (splash/session; default 60, 15–300).
      */

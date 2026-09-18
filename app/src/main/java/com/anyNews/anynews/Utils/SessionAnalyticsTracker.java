@@ -1033,6 +1033,7 @@ public final class SessionAnalyticsTracker {
                     Integer adPrefetch = null;
                     Integer maxInFlight = null;
                     Integer flushEveryN = null;
+                    Boolean destroyAfterImpression = null;
                     String feedAdFormat = null;
                     String feedAdUnit = null;
                     if (resBody.has("feed_ad_every_n")
@@ -1063,6 +1064,15 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    if (resBody.has("destroy_native_ads_after_impression")
+                            && !resBody.get("destroy_native_ads_after_impression").isJsonNull()) {
+                        try {
+                            destroyAfterImpression =
+                                    resBody.get("destroy_native_ads_after_impression")
+                                            .getAsBoolean();
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (resBody.has("feed_ad_format")
                             && !resBody.get("feed_ad_format").isJsonNull()) {
                         try {
@@ -1080,6 +1090,7 @@ public final class SessionAnalyticsTracker {
                             || adPrefetch != null
                             || maxInFlight != null
                             || flushEveryN != null
+                            || destroyAfterImpression != null
                             || feedAdFormat != null
                             || feedAdUnit != null) {
                         FeedAdConfig.saveFromServer(
@@ -1089,7 +1100,8 @@ public final class SessionAnalyticsTracker {
                                 maxInFlight,
                                 flushEveryN,
                                 feedAdFormat,
-                                feedAdUnit);
+                                feedAdUnit,
+                                destroyAfterImpression);
                     }
                     Integer viewsFlushSec = null;
                     Integer viewsFlushAt = null;

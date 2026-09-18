@@ -120,6 +120,7 @@ import com.anyNews.anynews.Activities.newProfileDetails;
 import com.anyNews.anynews.Adapters.CardPagerAdapter;
 import com.anyNews.anynews.Adapters.SamplePagerAdapter;
 import com.anyNews.anynews.Adapters.VastTagAdVideoAdPlayerAdapter;
+import com.anyNews.anynews.flipview.FlipView;
 import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.CardItem;
 import com.anyNews.anynews.Pojo.DailogSendRespouse;
@@ -335,6 +336,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public int customPosition;
     Callbacks callbacks;
    public NativeAd nativeAd=null;
+    /**
+     * Response id of the last Google native painted into a feed seat. Used only to
+     * prefer a different ready creative for the next seat when the pool has one —
+     * never as a fallback to re-show a prior seat's ad (that was the same-ad bug).
+     */
+    @Nullable
+    private String lastPaintedGoogleResponseId;
     /** Visible flip page — used to decide whether a buffer ad seat needs rebind. */
     private int currentFlipPage = 0;
     private final SparseArray<PendingNativeAdBind> pendingNativeAdBinds = new SparseArray<>();
@@ -396,10 +404,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     scheduleSafeAdNotify(Math.max(64L, FlipAdWorkGate.millisUntilAdWorkSafe()));
                     return;
                 }
-                // July-era between-article ads: recycle so getView uses exact pool
-                // match + 500ms bind / share_app — not parked-fill / in-place paint.
-                showLog("ANYNEWS_ADS July-style deferred notifyDataSetChanged");
-                notifyDataSetChanged();
+                // Prefer in-place paint. Unconditional notifyDataSetChanged while
+                // seated on an ad recycled onto black ads_screen → creative → loop.
+                if (tryPaintReadyGoogleNativesInPlace()) {
+                    return;
+                }
+                if (needsAdSeatDatasetRebind()) {
+                    showLog("ANYNEWS_ADS seat-only deferred notifyDataSetChanged");
+                    notifyWhenFlipSettled();
+                }
             } catch (Exception e) {
                 showLog("ANYNEWS_ADS rebind skipped: " + e.getMessage());
             }
@@ -465,8 +478,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     public void setCurrentFlipPage(int page) {
         currentFlipPage = page;
-        // July-era land: attach deferred buffer MediaView only. No parked-fill
-        // watchdog / in-place paint / ad_default_placeholder shell thrash.
+        // Land: attach deferred buffer MediaView; if still on house shell, arm
+        // parked in-place fill (no FlipView recycle / black loop).
         try {
             cancelParkedAdFillWatchdog();
             if (list == null || page < 0 || page >= list.size()) {
@@ -479,26 +492,45 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return;
             }
             cancelAdShellFillTimeout(page);
-            adShellAwaitingCreative.delete(page);
             if (pendingNativeAdBinds.get(page) != null && !shouldDeferAdWork()) {
+                adShellAwaitingCreative.delete(page);
                 bindPendingNativeAdMediaForPage(page);
+                return;
             }
+            if (isCurrentAdSeatShowingNativeCreative()) {
+                adShellAwaitingCreative.delete(page);
+                return;
+            }
+            // House / empty shell — keep awaiting + poll warm shared pool in place.
+            adShellAwaitingCreative.put(page, true);
+            scheduleAdShellFillTimeout(page);
+            armParkedAdFillWatchdog(page);
+            requestNativeAdLoadForSlot(slot);
+            tryPaintGoogleNativeInPlace(page);
         } catch (Exception ignored) {
         }
     }
 
     /**
-     * No-op: leave-ad soft-hide lived only on the 3.41.31+ overlay-era adapter.
-     * Restored in-card Exo path (pre-overlay) does not track ad MediaView shells.
-     * HomePage still calls these; keep signatures so settle/leave compile cleanly.
+     * Soft-hide lived only on the overlay-era adapter. Seat-sticky path: normal
+     * flip leave does not destroy; settle only prunes claimed/impressed natives
+     * whose ad seat was removed from the list (admin destroy toggle ON).
      */
     public void pauseAdMediaForLeaveGesture(int adPage) {
-        // intentionally empty — pre-overlay FlipperAdapter behavior
+        // intentionally empty during gesture — orphan prune happens on settle
     }
 
-    /** @see #pauseAdMediaForLeaveGesture(int) */
+    /**
+     * After settle: destroy claimed/impressed creatives whose seat is gone from
+     * the adapter list. Flip away from a still-present seat keeps the sticky ad.
+     */
     public void releaseOffscreenAdMediaAfterSettle(int currentPage) {
-        // intentionally empty — pre-overlay FlipperAdapter behavior
+        try {
+            if (context instanceof HomePage) {
+                ((HomePage) context).destroyOffscreenImpressedNatives(currentPage);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean isUserDrivingFlip() {
@@ -627,10 +659,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * True when the <b>visible</b> Flip page is an ad seat still showing house/share
-     * default while a native creative is ready — only then may we allow a FlipView
-     * settle recycle. Buffer/off-screen ad fills must use in-place paint; recycling
-     * for them rebinds the visible news card (3–4s image gone→back blink).
+     * True when the <b>visible</b> Flip page is an ad seat that still needs a
+     * creative paint (house/default, share_app fallback, or empty black
+     * {@code ads_screen}) while a native is ready. Only then may we allow one
+     * FlipView settle recycle. Already-painted seats must return false so
+     * AdPreloader / pool refill cannot black↔ad loop.
      */
     public boolean needsAdSeatDatasetRebind() {
         try {
@@ -648,8 +681,89 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (!hasNativeCreativeForSlot(slot)) {
                 return false;
             }
+            if (isCurrentAdSeatShowingNativeCreative()) {
+                return false;
+            }
             return adShellAwaitingCreative.get(currentFlipPage, false)
-                    || isDefaultAdPlaceholderShowing(currentFlipPage);
+                    || isDefaultAdPlaceholderShowing(currentFlipPage)
+                    || isCurrentAdSeatShowingShareFallback()
+                    || isCurrentAdSeatEmptyBlackShell();
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Visible page already has a bound Google NativeAdView — do not recycle. */
+    private boolean isCurrentAdSeatShowingNativeCreative() {
+        try {
+            if (!(context instanceof HomePage)) {
+                return false;
+            }
+            View page = ((HomePage) context).getCurrentFlipPageView();
+            if (page == null) {
+                return false;
+            }
+            View fl = page.findViewById(R.id.fl_adplaceholder);
+            if (!(fl instanceof ViewGroup)) {
+                return false;
+            }
+            ViewGroup group = (ViewGroup) fl;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (group.getChildAt(i) instanceof NativeAdView) {
+                    return true;
+                }
+            }
+            return page.findViewById(R.id.native_ad_view) instanceof NativeAdView
+                    && ((NativeAdView) page.findViewById(R.id.native_ad_view))
+                    .getParent() != null;
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** July getView miss path: seat stayed {@code ad} but UI is share_app_layout. */
+    private boolean isCurrentAdSeatShowingShareFallback() {
+        try {
+            if (!(context instanceof HomePage)) {
+                return false;
+            }
+            View page = ((HomePage) context).getCurrentFlipPageView();
+            if (page == null) {
+                return false;
+            }
+            return page.findViewById(R.id.imageViewWhatsapp) != null
+                    && page.findViewById(R.id.fl_adplaceholder) == null;
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /**
+     * Inflated {@code ads_screen} with empty placeholder (legacy ProgressBar-only
+     * or zero children) — house shell should already be mounted; treat as needs paint.
+     */
+    private boolean isCurrentAdSeatEmptyBlackShell() {
+        try {
+            if (!(context instanceof HomePage)) {
+                return false;
+            }
+            View page = ((HomePage) context).getCurrentFlipPageView();
+            if (page == null) {
+                return false;
+            }
+            View fl = page.findViewById(R.id.fl_adplaceholder);
+            if (!(fl instanceof ViewGroup)) {
+                return false;
+            }
+            ViewGroup group = (ViewGroup) fl;
+            if (group.getChildCount() == 0) {
+                return true;
+            }
+            // Legacy path only — never mount a ProgressBar on ad seats anymore.
+            if (group.getChildCount() == 1 && group.getChildAt(0) instanceof ProgressBar) {
+                return true;
+            }
+            return false;
         } catch (Exception ignored) {
         }
         return false;
@@ -1093,6 +1207,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             cancelParkedAdFillWatchdog();
         }
         markGoogleNativeClaimed(ad);
+        notePaintedGoogleNative(ad);
         try {
             if (fromView == 0) {
                 displayGoogleFullNativeAd(fl_adplaceholder, ad, myView, convertView, position);
@@ -1179,7 +1294,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (pending.facebook) {
                 if (pending.fbAd != null && pending.convertView != null
                         && pending.fbAdView != null && pending.fbNativeAdLayout != null) {
-                    // Share shell may have replaced children while buffered — restore ad view.
+                    // House shell may have replaced children while buffered — restore ad view.
                     try {
                         pending.fbNativeAdLayout.removeAllViews();
                         if (pending.fbAdView.getParent() instanceof ViewGroup) {
@@ -1190,18 +1305,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     }
                     displayFBNativeAd(pending.convertView, pending.fbAd,
                             pending.fbAdView, pending.fbNativeAdLayout);
+                    markFbNativeClaimed(pending.fbAd);
                 }
-            } else if (pending.ad != null && pending.placeholder != null) {
-                if (pending.fromView == 0) {
-                    displayGoogleFullNativeAd(pending.placeholder, pending.ad,
-                            pending.myView, pending.convertView, currentFlipPage);
-                } else if (pending.fromView == 1) {
-                    displayGoogleMediumNativeAd(pending.placeholder, pending.ad,
-                            pending.myView, pending.convertView, currentFlipPage);
-                } else {
-                    displayGoogleNativeAd(pending.placeholder, pending.ad,
-                            pending.myView, pending.convertView, currentFlipPage);
-                }
+            } else if (pending.ad != null && pending.placeholder != null
+                    && pending.myView != null && pending.convertView != null) {
+                paintGoogleNativeIntoSeat(
+                        pending.placeholder,
+                        pending.ad,
+                        pending.myView,
+                        pending.fromView,
+                        pending.convertView,
+                        page);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -1606,6 +1720,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             adShellPlaceholders.clear();
             adShellFromViewTypes.clear();
             nativeAd = null;
+            lastPaintedGoogleResponseId = null;
             fbAd = null;
         } catch (Exception ignored) {
         }
@@ -3777,13 +3892,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         if (list == null || position < 0 || position >= list.size()) {
+            // Past adapter range: never invent a "no more news" page in search —
+            // reuse the Continue-reading hub (or a gone scrap if hub already last).
+            if (isSearchFeedEndHub()) {
+                return inflateFeedEndCard(parent, convertView, true);
+            }
             if (list != null && FeedEndHelper.hasAtEnd(list)) {
                 View empty = new View(context);
                 empty.setVisibility(View.GONE);
                 return empty;
             }
-            // Never return a blank white scrap past the adapter — show end card
-            // (not the search Continue-reading hub — that is sentinel-only).
+            // Never return a blank white scrap past the adapter — show end card.
             return inflateFeedEndCard(parent, convertView, false);
         }
         String pagePostType = list.get(position).getPostType();
@@ -3821,7 +3940,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     + " postId=" + list.get(position).getPostId());
         }
         if (pagePostType == null || pagePostType.trim().isEmpty()) {
-            // Still unknown — plain end card, never the search section hub.
+            // Still unknown — in search never paint "no more news"; prefer article
+            // layout when a post id exists, else the redirect hub.
+            if (isSearchFeedEndHub()) {
+                Long pid = list.get(position).getPostId();
+                if (pid != null && pid > 0) {
+                    try {
+                        list.get(position).setPostType("normal_image");
+                    } catch (Exception ignored) {
+                    }
+                    return getView(position, null, parent);
+                }
+                showLog("getView search blank → hub pos=" + position);
+                return inflateFeedEndCard(parent, convertView, true);
+            }
             showLog("getView blank page: null/empty post_type at pos=" + position
                     + " postId=" + list.get(position).getPostId());
             return inflateFeedEndCard(parent, convertView, false);
@@ -4047,6 +4179,32 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     }
                                 });
                             }
+                            ArrayList<String> magImages =
+                                    OfflineImageStore.resolveGalleryUris(
+                                            context,
+                                            list.get(position).getPostId(),
+                                            list.get(position).getImages());
+                            TextView magSwipeHint =
+                                    convertView.findViewById(R.id.gallery_swipe_left_hint);
+                            // Special: book FlipView page-turn (not ViewPager carousel).
+                            if (isSpecialModeNow() && magzine_relative_slider != null) {
+                                FlipView magFlip = SpecialGalleryFlipHelper.bind(
+                                        magzine_relative_slider,
+                                        image_magazineHolder.magzine_viewPager_data,
+                                        magImages,
+                                        magSwipeHint,
+                                        image_magazineHolder.magzine_ll_dots,
+                                        null);
+                                if (magFlip != null) {
+                                    // Remove carousel padding so pages are full-bleed.
+                                    try {
+                                        image_magazineHolder.magzine_viewPager_data
+                                                .setPadding(0, 0, 0, 0);
+                                    } catch (Exception ignored) {
+                                    }
+                                    break;
+                                }
+                            }
                             mCardAdapter = new CardPagerAdapter(context, list.get(position).getStrip_content(), new CardPagerAdapter.shareMagazine() {
                                 @Override
                                 public void onClickShareMagzine(CardView cardView, ImageView imageView1) {
@@ -4057,16 +4215,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                                 }
                             });
-                            ArrayList<String> magImages =
-                                    OfflineImageStore.resolveGalleryUris(
-                                            context,
-                                            list.get(position).getPostId(),
-                                            list.get(position).getImages());
                             for (int i = 0; i < magImages.size(); i++) {
                                 mCardAdapter.addCardItem(new CardItem("" + magImages.get(i), "" + "" + magImages.get(i), list.get(position).getShareLink(), "" + list.get(position).getTitle(), list.get(position).getPostId()));
                             }
                             mCardShadowTransformer = new ShadowTransformer(image_magazineHolder.magzine_viewPager_data, mCardAdapter);
                             mCardShadowTransformer.enableScaling(true);
+                            image_magazineHolder.magzine_viewPager_data.setVisibility(VISIBLE);
                             image_magazineHolder.magzine_viewPager_data.setAdapter(mCardAdapter);
                             image_magazineHolder.magzine_ll_dots.removeAllViews();
                             dots = new TextView[mCardAdapter.getCount()];
@@ -4113,8 +4267,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 public void onPageScrollStateChanged(int state) {
                                 }
                             });
-                            TextView magSwipeHint =
-                                    convertView.findViewById(R.id.gallery_swipe_left_hint);
                             GallerySwipeHintHelper.bind(
                                     image_magazineHolder.magzine_viewPager_data,
                                     magSwipeHint,
@@ -4124,10 +4276,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         }
                         break;
                     case "ad":
-                        // July 27 (8354f37) feed-ad path: exact pool match → bind (buffer
-                        // ProgressBar / current 500ms delay) or full share_app fallback.
-                        // No ad_default_placeholder shell, AdPreloader steal, parked fill,
-                        // or instant in-place paint thrash on this seat.
+                        // Keep ads_screen / fb shell so late fills paint in place.
+                        // Never swap the whole page to share_app_layout on a miss —
+                        // that caused Share lag and forced FlipView recycle (blink risk).
+                        // Pool: exact reqPos → shared AdPreloader → idle orphan/ahead
+                        // (distinct creative only). Never reuse last seat via nativeAd field
+                        // or same responseId. No ProgressBar — house shell until ready.
                         showLog("AD Point Adapter:: START");
                         if (hasActiveVideoPlayer()) {
                             pauseVideo();
@@ -4143,7 +4297,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         cancelParkedAdFillWatchdog();
                         adShellAwaitingCreative.delete(position);
                         clearAdShellPlaceholder(position);
-                        if (adTypeAtPos.equalsIgnoreCase("google")) {
+                        if (adTypeAtPos.equalsIgnoreCase("google")
+                                || adTypeAtPos.equalsIgnoreCase("admanager")) {
                             convertView = inflater.inflate(R.layout.ads_screen, parent, false);
                             final RelativeLayout layoutParent = convertView.findViewById(R.id.layoutParent);
                             layoutParent.getLayoutParams().height = screenHeight;
@@ -4168,84 +4323,40 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                         R.layout.custom_ad_native, null);
                             }
 
-                            NativeAd ad = null;
-                            Integer slotPos = list.get(position).getAd_req_position();
-                            if (HomePage.nativeGoogleAdList != null
-                                    && HomePage.nativeGoogleAdList.size() > 0) {
-                                showLog("HomePage.nativeAdList is not empty");
-                                for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
-                                    if (slotPos != null
-                                            && HomePage.nativeGoogleAdList.get(i).getReqPos()
-                                            == slotPos.intValue()) {
-                                        showLog("HomePage.nativeAdList displaying native ad:");
-                                        ad = HomePage.nativeGoogleAdList.get(i).getAd();
-                                        nativeAd = ad;
-                                        break;
-                                    }
-                                }
-                                if (ad == null) {
-                                    showLog("AD ERORRRRRRRRRRRR@@@");
-                                    if (list.get(position).getAds_from() != null) {
-                                        String from = list.get(position).getAds_from();
-                                        if (from.equalsIgnoreCase("admanager")
-                                                || from.equalsIgnoreCase("admob")) {
-                                            ad = nativeAd;
-                                        }
-                                    }
-                                }
+                            ModelClass.Datum googleSlot = list.get(position);
+                            // Buffer binds: exact match only — do not steal AdPreloader /
+                            // ahead pool from the seat the user is about to land on.
+                            NativeAd ad = (position == currentFlipPage)
+                                    ? findGoogleNativeForSlot(googleSlot)
+                                    : peekExactGoogleNativeForSlot(googleSlot);
+                            requestNativeAdLoadForSlot(googleSlot);
 
-                                if (ad != null) {
-                                    View finalConvertView2 = convertView;
-                                    View finalMyView = myView;
-                                    int finalFromView = fromView;
-                                    NativeAd finalAd = ad;
-                                    if (position != currentFlipPage) {
-                                        showLog("Defer native MediaView bind for buffer ad page="
-                                                + position);
-                                        pendingNativeAdBinds.put(position, new PendingNativeAdBind(
-                                                fl_adplaceholder, finalAd, finalMyView,
-                                                finalFromView, finalConvertView2));
-                                        fl_adplaceholder.removeAllViews();
-                                        ProgressBar adPlaceholder = new ProgressBar(context);
-                                        fl_adplaceholder.addView(adPlaceholder,
-                                                new FrameLayout.LayoutParams(
-                                                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                                                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                                                        android.view.Gravity.CENTER));
-                                    } else {
-                                        new Handler(Looper.getMainLooper()).postDelayed(
-                                                new Runnable() {
-                                                    @Override
-                                                    public void run() {
-                                                        showLog("HomePage.nativeAdList 222 displaying native ad:");
-                                                        showLog("fromView:;" + finalFromView);
-                                                        if (finalFromView == 0) {
-                                                            displayGoogleFullNativeAd(
-                                                                    fl_adplaceholder, finalAd,
-                                                                    finalMyView, finalConvertView2);
-                                                        } else if (finalFromView == 1) {
-                                                            displayGoogleMediumNativeAd(
-                                                                    fl_adplaceholder, finalAd,
-                                                                    finalMyView, finalConvertView2);
-                                                        } else {
-                                                            displayGoogleNativeAd(
-                                                                    fl_adplaceholder, finalAd,
-                                                                    finalMyView, finalConvertView2);
-                                                        }
-                                                    }
-                                                }, 500);
-                                    }
+                            if (ad != null) {
+                                View finalConvertView2 = convertView;
+                                View finalMyView = myView;
+                                int finalFromView = fromView;
+                                NativeAd finalAd = ad;
+                                if (position != currentFlipPage) {
+                                    showLog("Defer native MediaView bind for buffer ad page="
+                                            + position);
+                                    pendingNativeAdBinds.put(position, new PendingNativeAdBind(
+                                            fl_adplaceholder, finalAd, finalMyView,
+                                            finalFromView, finalConvertView2));
+                                    // Dark empty shell (not Share page) — in-place paint on land.
+                                    mountAdPendingEmptyShell(
+                                            fl_adplaceholder, position, finalFromView);
                                 } else {
-                                    showLog("SHARE #1");
-                                    convertView = inflater.inflate(
-                                            R.layout.share_app_layout, parent, false);
-                                    showShareScreen(convertView);
+                                    showLog("HomePage.nativeAdList displaying native ad (landed):");
+                                    showLog("fromView:;" + finalFromView);
+                                    paintGoogleNativeIntoSeat(
+                                            fl_adplaceholder, finalAd, finalMyView,
+                                            finalFromView, finalConvertView2, position);
                                 }
                             } else {
-                                showLog("SHARE #2");
-                                convertView = inflater.inflate(
-                                        R.layout.share_app_layout, parent, false);
-                                showShareScreen(convertView);
+                                showLog("AD seat pending fill (house shell) pos=" + position
+                                        + " reqPos=" + googleSlot.getAd_req_position());
+                                mountAdPendingEmptyShell(
+                                        fl_adplaceholder, position, fromView);
                             }
                         } else {
                             convertView = inflater.inflate(R.layout.fb_ad_post, parent, false);
@@ -4255,55 +4366,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             RelativeLayout adView = (RelativeLayout) fbInflater.inflate(
                                     R.layout.custom_fb_ad, nativeAdLayout, false);
                             nativeAdLayout.addView(adView);
-                            fbAd = null;
-                            Integer fbSlotPos = list.get(position).getAd_req_position();
-                            String fbAdCode = list.get(position).getAd_code();
-                            if (HomePage.nativeFBAdList != null
-                                    && HomePage.nativeFBAdList.size() > 0) {
-                                showLog("HomePage.nativeAdList is not empty");
-                                for (int i = 0; i < HomePage.nativeFBAdList.size(); i++) {
-                                    FlipGoogleNativeAds packed = HomePage.nativeFBAdList.get(i);
-                                    if (packed == null || packed.getFbAd() == null) continue;
-                                    String packedCode = packed.getAdCode();
-                                    if (fbAdCode != null && packedCode != null
-                                            && packedCode.equalsIgnoreCase(fbAdCode)
-                                            && fbSlotPos != null
-                                            && packed.getReqPos() == fbSlotPos.intValue()) {
-                                        showLog("HomePage.nativeAdList AD MATCHED");
-                                        fbAd = packed.getFbAd();
-                                        break;
-                                    }
-                                }
-                                View finalConvertView1 = convertView;
-                                if (fbAd != null) {
-                                    showLog(" fb ad :");
-                                    if (position != currentFlipPage) {
-                                        showLog("Defer FB native MediaView bind for buffer ad page="
-                                                + position);
-                                        pendingNativeAdBinds.put(position, new PendingNativeAdBind(
-                                                finalConvertView1, fbAd, adView, nativeAdLayout));
-                                    } else {
-                                        final com.facebook.ads.NativeAd finalFbAd = fbAd;
-                                        new Handler(Looper.getMainLooper()).postDelayed(
-                                                new Runnable() {
-                                                    @Override
-                                                    public void run() {
-                                                        displayFBNativeAd(finalConvertView1,
-                                                                finalFbAd, adView, nativeAdLayout);
-                                                    }
-                                                }, 500);
-                                    }
+                            ModelClass.Datum fbSlot = list.get(position);
+                            fbAd = findFbNativeForSlot(fbSlot);
+                            requestNativeAdLoadForSlot(fbSlot);
+                            View finalConvertView1 = convertView;
+                            if (fbAd != null) {
+                                showLog(" fb ad :");
+                                if (position != currentFlipPage) {
+                                    showLog("Defer FB native MediaView bind for buffer ad page="
+                                            + position);
+                                    pendingNativeAdBinds.put(position, new PendingNativeAdBind(
+                                            finalConvertView1, fbAd, adView, nativeAdLayout));
+                                    mountFbAdPendingDefaultShell(nativeAdLayout, position);
                                 } else {
-                                    showLog(" fb ad with share:");
-                                    convertView = inflater.inflate(
-                                            R.layout.share_app_layout, parent, false);
-                                    showShareScreen(convertView);
+                                    final com.facebook.ads.NativeAd finalFbAd = fbAd;
+                                    displayFBNativeAd(finalConvertView1,
+                                            finalFbAd, adView, nativeAdLayout);
+                                    markFbNativeClaimed(finalFbAd);
                                 }
                             } else {
-                                showLog(" fb ad with share:");
-                                convertView = inflater.inflate(
-                                        R.layout.share_app_layout, parent, false);
-                                showShareScreen(convertView);
+                                showLog(" fb ad pending fill (house shell) pos=" + position);
+                                mountFbAdPendingDefaultShell(nativeAdLayout, position);
                             }
                         }
                         showLog("AD Point Adapter:: END");
@@ -4471,13 +4554,52 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         viewpager.setAdapter(new SamplePagerAdapter(context, image_gallary, 0, false));
                         // added to increase speed in view pager
                         viewpager.setOffscreenPageLimit(Math.max(1, Math.min(2, image_gallary.size() - 1)));
-                        if (imageGallaryHolder.indicator != null) {
-                            imageGallaryHolder.indicator.setViewPager(viewpager);
-                        }
                         TextView gallerySwipeHint =
                                 convertView.findViewById(R.id.gallery_swipe_left_hint);
-                        GallerySwipeHintHelper.bind(
-                                viewpager, gallerySwipeHint, image_gallary.size());
+                        // Special: FlipView book page-turn instead of ViewPager slide.
+                        // Host must be scrren_icon (ViewPager parent) so single-page share
+                        // screenshots include the flipped image — not the FrameLayout root
+                        // behind a transparent overlay.
+                        boolean usedSpecialGalleryFlip = false;
+                        ViewGroup galleryFlipHost = null;
+                        if (viewpager.getParent() instanceof ViewGroup) {
+                            galleryFlipHost = (ViewGroup) viewpager.getParent();
+                        } else if (imageGallaryHolder.galleryLayout != null) {
+                            galleryFlipHost = imageGallaryHolder.galleryLayout;
+                        }
+                        if (isSpecialModeNow() && galleryFlipHost != null) {
+                            LinearLayout flipDotsHost =
+                                    convertView.findViewById(R.id.video_side_menu);
+                            if (flipDotsHost == null) {
+                                flipDotsHost = imageGallaryHolder.dotIndicatior;
+                            }
+                            if (flipDotsHost != null) {
+                                flipDotsHost.setOrientation(LinearLayout.HORIZONTAL);
+                                flipDotsHost.setGravity(android.view.Gravity.CENTER);
+                            }
+                            if (imageGallaryHolder.indicator != null) {
+                                imageGallaryHolder.indicator.setVisibility(GONE);
+                            }
+                            FlipView galFlip = SpecialGalleryFlipHelper.bind(
+                                    galleryFlipHost,
+                                    viewpager,
+                                    image_gallary,
+                                    gallerySwipeHint,
+                                    flipDotsHost,
+                                    null);
+                            if (galFlip != null) {
+                                usedSpecialGalleryFlip = true;
+                            } else if (imageGallaryHolder.indicator != null) {
+                                imageGallaryHolder.indicator.setVisibility(VISIBLE);
+                            }
+                        }
+                        if (!usedSpecialGalleryFlip) {
+                            if (imageGallaryHolder.indicator != null) {
+                                imageGallaryHolder.indicator.setViewPager(viewpager);
+                            }
+                            GallerySwipeHintHelper.bind(
+                                    viewpager, gallerySwipeHint, image_gallary.size());
+                        }
                         if (LanguageId == 4) {
                             imageGallaryHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
                             applyStripFont(imageGallaryHolder.strip_text_name);
@@ -4640,7 +4762,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             // Inflate / ClassCast / NPE on survey-poll bind must not kill the feed.
             e.printStackTrace();
             if (parent != null) {
-                convertView = inflateFeedEndCard(parent, convertView);
+                // Search mode: never fall back to "no more news" empty card.
+                convertView = inflateFeedEndCard(parent, convertView, isSearchFeedEndHub());
             }
         }
 
@@ -4689,8 +4812,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Dedicated end-of-feed FlipView page — never a blank white View.
-     * Search Continue-reading hub only when {@code allowSearchHub} and this is the
-     * real feed_end sentinel (not blank/fallback pages).
+     * In keyword search, ALWAYS paint the Continue-reading hub — never the
+     * "no more news" / ఇక చదవడానికి empty card (that was a double-sentinel bug).
+     * {@code allowSearchHub} is kept for call-site clarity; search mode overrides it.
      */
     @NonNull
     private View inflateFeedEndCard(@Nullable ViewGroup parent, @Nullable View convertView) {
@@ -4700,7 +4824,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     @NonNull
     private View inflateFeedEndCard(@Nullable ViewGroup parent, @Nullable View convertView,
             boolean allowSearchHub) {
-        final boolean searchHub = allowSearchHub && isSearchFeedEndHub();
+        // Search: hub only. Non-search: classic feed_end_card. Never mix both.
+        final boolean searchHub = isSearchFeedEndHub();
+        if (searchHub && !allowSearchHub && BuildConfig.DEBUG) {
+            showLog("inflateFeedEndCard: search forces hub (skip no-more-news card)");
+        }
         final String typeKey = searchHub ? "search_hub" : FeedEndHelper.POST_TYPE;
         View root;
         if (canReuseFlipView(convertView, typeKey)) {
@@ -4969,7 +5097,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Exact pool match only — never consumes {@link AdPreloader}. Used when getView
      * will defer MediaView paint (mid-flip / settle grace) so a buffer shell cannot
-     * strand the warm creative on an ahead reqPos.
+     * strand the warm creative on an ahead reqPos. Includes impressed sticky seats.
      */
     @Nullable
     private NativeAd peekExactGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -4991,11 +5119,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Exact {@code ad_req_position} match first, then ready-pool transfer:
-     * orphan (reqPos not on a live ad seat) or an <b>unclaimed</b> creative from a
-     * seat further ahead (idle only — fills parked house without FlipView recycle).
-     * Claimed creatives stay on their painted seat (AdMob single-view). Mid-flip:
-     * exact match + AdPreloader inject only (pool scan can jank).
+     * Exact {@code ad_req_position} match first (seat-sticky, including impressed
+     * return visits), then ready-pool transfer: orphan (reqPos not on a live ad
+     * seat) or an <b>unclaimed</b> creative from a seat further ahead (idle only).
+     * Claimed/impressed creatives stay on their painted seat until that seat is
+     * removed from the list and are never handed to another seat. Prefer a
+     * different responseId when reclaiming; same responseId on a <b>new</b>
+     * unimpressed object is OK (paid).
      */
     @Nullable
     private NativeAd findGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -5007,13 +5137,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
                 FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
                 if (packed == null || packed.getAd() == null) continue;
-                if (packed.getReqPos() == slotPos) {
-                    showLog("HomePage.nativeAdList exact pos match reqPos=" + slotPos);
-                    return packed.getAd();
-                }
+                if (packed.getReqPos() != slotPos) continue;
+                // Exact seat match — sticky including after impression / flip return.
+                showLog("HomePage.nativeAdList exact pos match reqPos=" + slotPos
+                        + (packed.isImpressed() ? " (impressed sticky)"
+                        : (packed.isClaimed() ? " (claimed same-seat)" : "")));
+                return packed.getAd();
             }
         }
-        // Early-warmed share-screen creative: inject into the seat pool so settle
+        // Early-warmed shared-pool creative: inject into the seat pool so settle
         // paint / exact match can show immediately without waiting for AdLoader.
         NativeAd preloaded = takeAdPreloaderIntoPool(slotPos);
         if (preloaded != null) {
@@ -5027,8 +5159,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return null;
         }
         // Idle reclaim: orphan (dead reqPos) first, then nearest unclaimed ahead.
-        // Ahead transfer is idle-only so a creative stranded on a buffer seat after
-        // a deferred getView can still fill the parked current house placeholder.
+        // Prefer different responseId; allow same-responseId new object if needed.
         java.util.HashSet<Integer> liveAdPositions = new java.util.HashSet<>();
         try {
             if (list != null) {
@@ -5046,37 +5177,89 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         } catch (Exception ignored) {
         }
-        FlipGoogleNativeAds orphan = null;
-        FlipGoogleNativeAds ahead = null;
+        FlipGoogleNativeAds orphanPreferred = null;
+        FlipGoogleNativeAds orphanAny = null;
+        FlipGoogleNativeAds aheadPreferred = null;
+        FlipGoogleNativeAds aheadAny = null;
         for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
             FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
-            if (packed == null || packed.getAd() == null || packed.isClaimed()) {
+            if (packed == null || packed.getAd() == null
+                    || packed.isClaimed() || packed.isImpressed()) {
                 continue;
             }
+            boolean sameCreative = isSamePaintedGoogleCreative(packed.getAd());
             int packedPos = packed.getReqPos();
             if (!liveAdPositions.contains(packedPos)) {
-                orphan = packed;
-                break;
+                if (orphanAny == null) {
+                    orphanAny = packed;
+                }
+                if (!sameCreative && orphanPreferred == null) {
+                    orphanPreferred = packed;
+                }
+                continue;
             }
-            if (packedPos > slotPos && ahead == null) {
-                ahead = packed;
+            if (packedPos > slotPos) {
+                if (aheadAny == null) {
+                    aheadAny = packed;
+                }
+                if (!sameCreative && aheadPreferred == null) {
+                    aheadPreferred = packed;
+                }
             }
         }
-        FlipGoogleNativeAds donor = orphan != null ? orphan : ahead;
+        FlipGoogleNativeAds donor = orphanPreferred != null ? orphanPreferred
+                : (orphanAny != null ? orphanAny
+                : (aheadPreferred != null ? aheadPreferred : aheadAny));
         if (donor == null) {
             return null;
         }
         int fromPos = donor.getReqPos();
         showLog("HomePage.nativeAdList pool claim " + fromPos + " → " + slotPos
-                + (orphan != null ? " (orphan)" : " (ahead-idle)"));
+                + (!liveAdPositions.contains(fromPos) ? " (orphan)" : " (ahead-idle)")
+                + (isSamePaintedGoogleCreative(donor.getAd())
+                ? " (same-respId ok — new object)" : ""));
         reassignGoogleNativeReqPos(donor, slotPos);
         return donor.getAd();
     }
 
+    /** AdMob response id for back-to-back creative preference (best-effort). */
+    @Nullable
+    private static String googleNativeResponseId(@Nullable NativeAd ad) {
+        if (ad == null) {
+            return null;
+        }
+        try {
+            if (ad.getResponseInfo() != null) {
+                return ad.getResponseInfo().getResponseId();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private boolean isSamePaintedGoogleCreative(@Nullable NativeAd ad) {
+        if (ad == null || lastPaintedGoogleResponseId == null
+                || lastPaintedGoogleResponseId.isEmpty()) {
+            return false;
+        }
+        String rid = googleNativeResponseId(ad);
+        return rid != null && rid.equals(lastPaintedGoogleResponseId);
+    }
+
+    private void notePaintedGoogleNative(@Nullable NativeAd ad) {
+        // Track responseId only — never reuse this field as a claimable NativeAd fallback.
+        nativeAd = null;
+        String rid = googleNativeResponseId(ad);
+        if (rid != null && !rid.isEmpty()) {
+            lastPaintedGoogleResponseId = rid;
+        }
+    }
+
     /**
      * Move a ready {@link AdPreloader} native into {@link HomePage#nativeGoogleAdList}
-     * for {@code slotPos}. Returns the creative, or null when none was ready.
-     * Kicks another prefetch so the next share/ad seat can warm again.
+     * for {@code slotPos}. Prefer a different responseId than the last painted seat;
+     * same responseId on a new unimpressed object is still claimable (new impression).
+     * Immediately replenishes the shared warm pool after take.
      */
     @Nullable
     private NativeAd takeAdPreloaderIntoPool(int slotPos) {
@@ -5088,8 +5271,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return null;
             }
             String code = AdPreloader.get().peekAdCode();
-            NativeAd ad = AdPreloader.get().takeReady();
+            NativeAd ad = AdPreloader.get().takeReadyAndReplenish(
+                    context, lastPaintedGoogleResponseId);
             if (ad == null) {
+                try {
+                    AdPreloader.get().prefetch(context);
+                } catch (Exception ignored) {
+                }
                 return null;
             }
             FlipGoogleNativeAds packed = new FlipGoogleNativeAds();
@@ -5098,6 +5286,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             packed.setReqPos(slotPos);
             packed.setAd_type("google");
             packed.setClaimed(false);
+            packed.setImpressed(false);
             HomePage.nativeGoogleAdList.add(packed);
             try {
                 if (HomePage.nativeGoogleAdArray != null
@@ -5106,11 +5295,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
             } catch (Exception ignored) {
             }
-            showLog("AdPreloader → seat reqPos=" + slotPos);
-            try {
-                AdPreloader.get().prefetch(context);
-            } catch (Exception ignored) {
-            }
+            showLog("AdPreloader → seat reqPos=" + slotPos
+                    + " poolLeft=" + AdPreloader.get().readyCount());
             return ad;
         } catch (Exception e) {
             showLog("takeAdPreloaderIntoPool: " + e.getMessage());
@@ -5190,7 +5376,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * FB: exact match, then unclaimed ready pool (same rules as Google).
+     * FB: exact match only (ahead-steal disabled for flip lag). Includes impressed
+     * sticky seats for flip return; never transfers impressed to another seat.
      */
     @Nullable
     private com.facebook.ads.NativeAd findFbNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -5208,13 +5395,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return packed.getFbAd();
             }
         }
-        // Exact match only — ahead-steal disabled (flip lag).
         return null;
     }
 
     /**
      * True when Google/FB has an exact creative <b>or</b> an unclaimed ready-pool
      * ad that can be transferred (orphan / ahead). Peek only — does not mutate.
+     * Exact-seat impressed creatives count (sticky); they are not transferable.
      */
     private boolean hasNativeCreativeForSlot(@Nullable ModelClass.Datum slot) {
         if (slot == null) {
@@ -5246,7 +5433,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     if (packed.getReqPos() == slotPos) {
                         return true;
                     }
-                    if (!packed.isClaimed() && !isHomeFlipAnimating()) {
+                    if (!packed.isClaimed() && !packed.isImpressed()
+                            && !isHomeFlipAnimating()) {
                         int packedPos = packed.getReqPos();
                         if (!liveAdPositions.contains(packedPos) || packedPos > slotPos) {
                             return true;
@@ -5261,7 +5449,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     if (packed.getReqPos() == slotPos) {
                         return true;
                     }
-                    if (!packed.isClaimed() && !isHomeFlipAnimating()
+                    if (!packed.isClaimed() && !packed.isImpressed()
+                            && !isHomeFlipAnimating()
                             && packed.getReqPos() > slotPos) {
                         return true;
                     }

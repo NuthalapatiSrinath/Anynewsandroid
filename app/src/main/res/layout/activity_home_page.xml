@@ -183,13 +183,6 @@
                     android:layout_height="match_parent"
                     android:orientation="vertical">
 
-                    <!-- Mist + teal-rail search chrome while keyword FlipView is active. -->
-                    <include
-                        android:id="@+id/include_search_context_bar"
-                        layout="@layout/layout_search_context_bar"
-                        android:layout_width="match_parent"
-                        android:layout_height="52dp" />
-
                     <LinearLayout
                         android:id="@+id/data_finding_value"
                         android:layout_width="match_parent"
@@ -563,6 +556,13 @@
                     layout="@layout/layout_app_update_banner"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />
+
+                <!-- Mist + teal-rail search chrome: bottom, just above the main tab bar. -->
+                <include
+                    android:id="@+id/include_search_context_bar"
+                    layout="@layout/layout_search_context_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
 
                 <!--  Bottom Menu — fixed 50dp so magazine Share overlay cannot grow the bar -->
                 <androidx.coordinatorlayout.widget.CoordinatorLayout

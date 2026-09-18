@@ -696,6 +696,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Integer adImprFlushEveryN;
 
+        /**
+         * Destroy impressed natives on leave (admin; default true / money-safe).
+         * Null on old servers → Android keeps cached / default ON.
+         */
+        @SerializedName("destroy_native_ads_after_impression")
+        @Expose
+        private Boolean destroyNativeAdsAfterImpression;
+
         /** ViewsBatchTracker flush interval seconds (admin; default 60). */
         @SerializedName("views_batch_flush_interval_seconds")
         @Expose
@@ -1226,6 +1234,11 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / default 3. */
         public Integer getAdImprFlushEveryN() {
             return adImprFlushEveryN;
+        }
+
+        /** Null → old server; caller keeps cached / default ON (money-safe). */
+        public Boolean getDestroyNativeAdsAfterImpression() {
+            return destroyNativeAdsAfterImpression;
         }
 
         public Integer getViewsBatchFlushIntervalSeconds() {

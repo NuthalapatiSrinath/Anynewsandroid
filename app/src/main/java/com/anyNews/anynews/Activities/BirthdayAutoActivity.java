@@ -33,6 +33,9 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
@@ -140,6 +143,7 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         }
 
         setContentView(R.layout.activity_birthday_auto);
+        applySystemBarInsets();
         ImageButton back = findViewById(R.id.birthday_auto_back);
         if (back != null) back.setOnClickListener(v -> finish());
 
@@ -338,7 +342,48 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         btn.setTextColor(selected ? 0xFFE63B19 : 0xFF374151);
     }
 
+    private void applySystemBarInsets() {
+        final View root = findViewById(R.id.birthday_auto_root);
+        final View header = findViewById(R.id.birthday_auto_header);
+        if (root == null || header == null) return;
+        final int headerPadL = header.getPaddingLeft();
+        final int headerPadT = header.getPaddingTop();
+        final int headerPadR = header.getPaddingRight();
+        final int headerPadB = header.getPaddingBottom();
+        final int rootPadBottom = root.getPaddingBottom();
+        ViewCompat.setOnApplyWindowInsetsListener(
+                root,
+                (v, windowInsets) -> {
+                    Insets status = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars());
+                    Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+                    header.setPadding(
+                            headerPadL + bars.left,
+                            headerPadT + status.top,
+                            headerPadR + bars.right,
+                            headerPadB);
+                    v.setPadding(
+                            v.getPaddingLeft(),
+                            v.getPaddingTop(),
+                            v.getPaddingRight(),
+                            rootPadBottom + bars.bottom);
+                    return WindowInsetsCompat.CONSUMED;
+                });
+        ViewCompat.requestApplyInsets(root);
+    }
+
     private void setupFontSpinners() {
+        BirthdayFonts.ensureFontsDownloaded(this, () -> {
+            refreshLiveTexts();
+            try {
+                if (nameFontSpinner != null && nameFontSpinner.getAdapter() instanceof ArrayAdapter) {
+                    ((ArrayAdapter<?>) nameFontSpinner.getAdapter()).notifyDataSetChanged();
+                }
+                if (addrFontSpinner != null && addrFontSpinner.getAdapter() instanceof ArrayAdapter) {
+                    ((ArrayAdapter<?>) addrFontSpinner.getAdapter()).notifyDataSetChanged();
+                }
+            } catch (Exception ignored) {
+            }
+        });
         AdapterView.OnItemSelectedListener styleListener =
                 new AdapterView.OnItemSelectedListener() {
                     @Override
@@ -677,6 +722,58 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                         }
                                     }
                                     updateScheduleInfo();
+                                    if (data.has("fonts") && data.get("fonts").isJsonArray()) {
+                                        try {
+                                            org.json.JSONArray fonts =
+                                                    new org.json.JSONArray(
+                                                            data.getAsJsonArray("fonts").toString());
+                                            BirthdayFonts.applyServerFonts(
+                                                    BirthdayAutoActivity.this, fonts);
+                                            runOnUiThread(
+                                                    () -> {
+                                                        String nameId = selectedNameFontId();
+                                                        String addrId = selectedAddrFontId();
+                                                        setupFontSpinners();
+                                                        if (nameFontSpinner != null) {
+                                                            nameFontSpinner.setSelection(
+                                                                    BirthdayFonts.indexOf(nameId));
+                                                        }
+                                                        if (addrFontSpinner != null) {
+                                                            addrFontSpinner.setSelection(
+                                                                    BirthdayFonts.indexOf(addrId));
+                                                        }
+                                                        BirthdayFonts.ensureFontsDownloaded(
+                                                                BirthdayAutoActivity.this,
+                                                                () -> {
+                                                                    refreshLiveTexts();
+                                                                    try {
+                                                                        if (nameFontSpinner != null
+                                                                                && nameFontSpinner
+                                                                                                .getAdapter()
+                                                                                        instanceof
+                                                                                        ArrayAdapter) {
+                                                                            ((ArrayAdapter<?>)
+                                                                                            nameFontSpinner
+                                                                                                    .getAdapter())
+                                                                                    .notifyDataSetChanged();
+                                                                        }
+                                                                        if (addrFontSpinner != null
+                                                                                && addrFontSpinner
+                                                                                                .getAdapter()
+                                                                                        instanceof
+                                                                                        ArrayAdapter) {
+                                                                            ((ArrayAdapter<?>)
+                                                                                            addrFontSpinner
+                                                                                                    .getAdapter())
+                                                                                    .notifyDataSetChanged();
+                                                                        }
+                                                                    } catch (Exception ignored) {
+                                                                    }
+                                                                });
+                                                    });
+                                        } catch (Exception ignored) {
+                                        }
+                                    }
                                 } catch (Exception e) {
                                     applyFallbackDates();
                                 }

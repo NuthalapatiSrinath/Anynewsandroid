@@ -361,6 +361,14 @@ public class EncreptionRequest {
     @Expose
     private Integer ad_impr_flush_every_n;
 
+    /**
+     * When true (default): destroy impressed natives on leave (money-safe).
+     * Null on old servers → Android keeps cached / default ON.
+     */
+    @SerializedName("destroy_native_ads_after_impression")
+    @Expose
+    private Boolean destroy_native_ads_after_impression;
+
     @SerializedName("feed_ad_format")
     @Expose
     private String feed_ad_format;
@@ -399,6 +407,10 @@ public class EncreptionRequest {
 
     public Integer getAd_impr_flush_every_n() {
         return ad_impr_flush_every_n;
+    }
+
+    public Boolean getDestroy_native_ads_after_impression() {
+        return destroy_native_ads_after_impression;
     }
 
     public String getFeed_ad_format() {

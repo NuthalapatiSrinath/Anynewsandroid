@@ -11,7 +11,7 @@ import androidx.annotation.Nullable;
  * Values arrive via splash / session ({@code feed_ad_every_n},
  * {@code feed_ad_format}, {@code ad_code},
  * {@code ad_prefetch_lookahead}, {@code max_native_ad_loads_in_flight},
- * {@code ad_impr_flush_every_n}).
+ * {@code ad_impr_flush_every_n}, {@code destroy_native_ads_after_impression}).
  *
  * <p>After a multi-format APK, admin alone switches native ↔ interstitial + unit;
  * no rebuild for format/unit changes. Cadence ({@link #getEveryN}) remains the
@@ -30,13 +30,19 @@ public final class FeedAdConfig {
     public static final int MIN_EVERY_N = 2;
     public static final int MAX_EVERY_N = 10;
 
-    /** Match admin Performance range (3–12). Default 6 (July-era). */
-    public static final int DEFAULT_PREFETCH_LOOKAHEAD = 6;
+    /**
+     * Match admin Performance range (3–12). Default 10 covers the next ~2 ad seats
+     * at {@link #DEFAULT_EVERY_N}=4 (≈5 flips between seats) without mid-flip storms.
+     */
+    public static final int DEFAULT_PREFETCH_LOOKAHEAD = 10;
     public static final int MIN_PREFETCH_LOOKAHEAD = 3;
     public static final int MAX_PREFETCH_LOOKAHEAD = 12;
 
-    /** Match admin Performance range (1–5). Default 3 (July-era). */
-    public static final int DEFAULT_MAX_IN_FLIGHT = 3;
+    /**
+     * Match admin Performance range (1–5). Default 4 so seat prefetch + shared warm
+     * pool can top up in parallel for near-always fill.
+     */
+    public static final int DEFAULT_MAX_IN_FLIGHT = 4;
     public static final int MIN_MAX_IN_FLIGHT = 1;
     public static final int MAX_MAX_IN_FLIGHT = 5;
 
@@ -45,10 +51,19 @@ public final class FeedAdConfig {
     public static final int MIN_FLUSH_EVERY_N = 1;
     public static final int MAX_FLUSH_EVERY_N = 50;
 
+    /**
+     * Default ON: destroy claimed/impressed natives when their seat leaves the
+     * feed (item removed / rebuild / mode wipe). Flip away keeps seat-sticky.
+     * OFF = softer retention until pool clear / activity destroy.
+     */
+    public static final boolean DEFAULT_DESTROY_AFTER_IMPRESSION = true;
+
     private static volatile int cachedEveryN = DEFAULT_EVERY_N;
     private static volatile int cachedPrefetchLookahead = DEFAULT_PREFETCH_LOOKAHEAD;
     private static volatile int cachedMaxInFlight = DEFAULT_MAX_IN_FLIGHT;
     private static volatile int cachedFlushEveryN = DEFAULT_FLUSH_EVERY_N;
+    private static volatile boolean cachedDestroyAfterImpression =
+            DEFAULT_DESTROY_AFTER_IMPRESSION;
     private static volatile String cachedFormat = FORMAT_NATIVE;
     private static volatile String cachedUnitId = DEFAULT_UNIT_ID;
 
@@ -61,6 +76,7 @@ public final class FeedAdConfig {
         getPrefetchLookahead(context);
         getMaxInFlight(context);
         getFlushEveryN(context);
+        isDestroyAfterImpression(context);
         getFormat(context);
         getUnitId(context);
     }
@@ -71,7 +87,7 @@ public final class FeedAdConfig {
             @Nullable Integer everyN,
             @Nullable Integer prefetchLookahead,
             @Nullable Integer maxInFlight) {
-        saveFromServer(context, everyN, prefetchLookahead, maxInFlight, null, null, null);
+        saveFromServer(context, everyN, prefetchLookahead, maxInFlight, null, null, null, null);
     }
 
     public static void saveFromServer(
@@ -81,7 +97,7 @@ public final class FeedAdConfig {
             @Nullable Integer maxInFlight,
             @Nullable Integer flushEveryN) {
         saveFromServer(
-                context, everyN, prefetchLookahead, maxInFlight, flushEveryN, null, null);
+                context, everyN, prefetchLookahead, maxInFlight, flushEveryN, null, null, null);
     }
 
     public static void saveFromServer(
@@ -92,6 +108,26 @@ public final class FeedAdConfig {
             @Nullable Integer flushEveryN,
             @Nullable String feedAdFormat,
             @Nullable String feedAdUnitId) {
+        saveFromServer(
+                context,
+                everyN,
+                prefetchLookahead,
+                maxInFlight,
+                flushEveryN,
+                feedAdFormat,
+                feedAdUnitId,
+                null);
+    }
+
+    public static void saveFromServer(
+            @Nullable Context context,
+            @Nullable Integer everyN,
+            @Nullable Integer prefetchLookahead,
+            @Nullable Integer maxInFlight,
+            @Nullable Integer flushEveryN,
+            @Nullable String feedAdFormat,
+            @Nullable String feedAdUnitId,
+            @Nullable Boolean destroyAfterImpression) {
         if (everyN != null) {
             saveEveryNFromServer(context, everyN);
         }
@@ -109,6 +145,9 @@ public final class FeedAdConfig {
         }
         if (feedAdUnitId != null) {
             saveUnitIdFromServer(context, feedAdUnitId);
+        }
+        if (destroyAfterImpression != null) {
+            saveDestroyAfterImpressionFromServer(context, destroyAfterImpression);
         }
     }
 
@@ -161,6 +200,19 @@ public final class FeedAdConfig {
                 context.getApplicationContext(),
                 Constants.AD_IMPR_FLUSH_EVERY_N,
                 String.valueOf(safe),
+                Constants.PREF_NAME);
+    }
+
+    public static void saveDestroyAfterImpressionFromServer(
+            @Nullable Context context, @Nullable Boolean destroyAfter) {
+        if (destroyAfter == null) return;
+        boolean safe = Boolean.TRUE.equals(destroyAfter);
+        cachedDestroyAfterImpression = safe;
+        if (context == null) return;
+        SharedPrefsData.putBool(
+                context.getApplicationContext(),
+                Constants.DESTROY_NATIVE_ADS_AFTER_IMPRESSION,
+                safe,
                 Constants.PREF_NAME);
     }
 
@@ -288,6 +340,33 @@ public final class FeedAdConfig {
         return clampFlushEveryN(cachedFlushEveryN);
     }
 
+    /**
+     * When true (default): destroy claimed/impressed natives when their seat is
+     * gone from the list or on mode prune. Flip leave keeps sticky. When false:
+     * softer retention until clearNativeAdPools / activity destroy; impressed
+     * still never transfer to another seat.
+     */
+    public static boolean isDestroyAfterImpression(@Nullable Context context) {
+        if (context != null) {
+            try {
+                boolean v =
+                        SharedPrefsData.getBool(
+                                context.getApplicationContext(),
+                                Constants.DESTROY_NATIVE_ADS_AFTER_IMPRESSION,
+                                Constants.PREF_NAME,
+                                DEFAULT_DESTROY_AFTER_IMPRESSION);
+                cachedDestroyAfterImpression = v;
+                return v;
+            } catch (Exception ignored) {
+            }
+        }
+        return cachedDestroyAfterImpression;
+    }
+
+    public static boolean isDestroyAfterImpression() {
+        return cachedDestroyAfterImpression;
+    }
+
     @NonNull
     public static String getFormat(@Nullable Context context) {
         if (context != null) {
@@ -393,3 +472,4 @@ public final class FeedAdConfig {
         return n;
     }
 }
+

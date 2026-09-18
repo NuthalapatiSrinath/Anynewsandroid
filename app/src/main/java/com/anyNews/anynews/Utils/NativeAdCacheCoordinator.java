@@ -11,16 +11,22 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * Small process-local coordinator for native inventory. It deliberately has no network or
- * backend dependency: HomePage remains the sole owner of GMA/Facebook SDK calls and views.
+ * Small process-local coordinator for native request dedupe / backoff / counters.
+ * It deliberately has no network or backend dependency: HomePage owns GMA/Facebook
+ * SDK calls and views; {@link AdPreloader} holds the shared warm unimpressed pool.
  *
- * <p>A slot is valid while its configured unit/type remains in the current feed. Flip changes do
- * not invalidate it. A real feed replacement or Activity destroy calls {@link #clearAll()}.
+ * <p>A slot key is valid while its configured unit/type remains useful. Flip changes do
+ * not invalidate it. Activity destroy (or a hard pool wipe) calls {@link #clearAll()}.
+ * Ordinary News/Local/Flash/Special switches should prefer pruning impressed creatives
+ * only — clearing this map alone is fine; do not destroy warm {@link AdPreloader} ads.
  */
 public final class NativeAdCacheCoordinator {
     private static final String TAG = "ANYNEWS_ADS";
-    /** July-era / pre-aggressive-retry caps — avoid instant paint thrash. */
-    private static final int MAX_READY = 4;
+    /**
+     * Seat-level ready markers (not the AdPreloader object pool). Sized above the
+     * shared warm depth so ahead-of-seat prefetch is not blocked by CACHE_FULL.
+     */
+    private static final int MAX_READY = 6;
     private static final int MAX_RETRIES = 2;
     private static final long RETRY_BASE_MS = 1_000L;
     private static final long NO_FILL_RETRY_MS = 8_000L;

@@ -25,6 +25,7 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
@@ -1171,16 +1172,18 @@ public class FlipView extends FrameLayout {
                         endPeak();
                         mIsFlipping = true;
                         rememberGestureAnchor();
+                        claimParentDisallowIfNestedHorizontal();
                         mLastX = x;
                         mLastY = y;
                     }
                 } else if ((mIsFlippingVertically && xDiff > mTouchSlop)
                         || (!mIsFlippingVertically && yDiff > mTouchSlop)) {
-                    // Horizontal drag on a vertical FlipView: yield to nested gallery
-                    // ViewPagers (magazine / image_gallery). Idle peakNext must not keep
+                    // Cross-axis drag: yield to nested gallery FlipView / ViewPager
+                    // (Special magazine / image_gallery). Idle peakNext must not keep
                     // claiming the gesture — that stole swipes and misfired footer Profile.
                     mIsUnableToFlip = true;
                     endPeak();
+                    releaseParentDisallow();
                 }
         
                 break;
@@ -1262,6 +1265,7 @@ public class FlipView extends FrameLayout {
                             endPeak();
                             mIsFlipping = true;
                             rememberGestureAnchor();
+                            claimParentDisallowIfNestedHorizontal();
                             mLastX = x;
                             mLastY = y;
                         }
@@ -1401,6 +1405,7 @@ public class FlipView extends FrameLayout {
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 // str=true;
+                releaseParentDisallow();
                 if (mIsFlipping) {
                     final VelocityTracker velocityTracker = mVelocityTracker;
                     velocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
@@ -2065,6 +2070,30 @@ public class FlipView extends FrameLayout {
      */
     public void cancelIdlePeak() {
         endPeak();
+    }
+
+    /**
+     * Nested horizontal gallery FlipView: keep the parent (article) FlipView from
+     * intercepting mid-swipe. No-op for the main vertical feed FlipView.
+     */
+    private void claimParentDisallowIfNestedHorizontal() {
+        if (mIsFlippingVertically) {
+            return;
+        }
+        ViewParent parent = getParent();
+        if (parent != null) {
+            parent.requestDisallowInterceptTouchEvent(true);
+        }
+    }
+
+    private void releaseParentDisallow() {
+        if (mIsFlippingVertically) {
+            return;
+        }
+        ViewParent parent = getParent();
+        if (parent != null) {
+            parent.requestDisallowInterceptTouchEvent(false);
+        }
     }
 
     /**

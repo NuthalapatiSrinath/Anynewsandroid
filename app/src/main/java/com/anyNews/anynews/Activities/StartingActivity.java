@@ -2046,7 +2046,8 @@ public class StartingActivity extends AppCompatActivity {
                         ReadHistoryConfig.saveHoursFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getReadHistoryHours());
-                        // Feed ad cadence + format/unit + Android prefetch/concurrency + impression flush.
+                        // Feed ad cadence + format/unit + Android prefetch/concurrency + impression flush
+                        // + destroy-when-seat-gone (seat-sticky on flip; default ON).
                         FeedAdConfig.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getFeedAdEveryN(),
@@ -2054,7 +2055,9 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getMaxNativeAdLoadsInFlight(),
                                 startActivityReqModel.getData().getAdImprFlushEveryN(),
                                 startActivityReqModel.getData().getFeedAdFormat(),
-                                startActivityReqModel.getData().getAdCode());
+                                startActivityReqModel.getData().getAdCode(),
+                                startActivityReqModel.getData()
+                                        .getDestroyNativeAdsAfterImpression());
                         FeedAdConfig.warmFromPrefs(getApplicationContext());
                         AnalyticsBatchConfig.saveFromServer(
                                 getApplicationContext(),

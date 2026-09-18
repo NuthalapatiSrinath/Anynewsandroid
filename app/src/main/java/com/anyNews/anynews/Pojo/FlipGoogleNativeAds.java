@@ -87,8 +87,8 @@ public class FlipGoogleNativeAds {
 
     /**
      * True after this creative is painted into a flip seat. Claimed ads must not be
-     * rebound onto a second screen (AdMob NativeAd single-view rule). Unclaimed
-     * ready creatives form the transferable pool for failed / empty seats.
+     * transferred onto a second seat (AdMob NativeAd single-view rule). Unclaimed
+     * ready creatives form the transferable shared pool for failed / empty seats.
      */
     public boolean isClaimed() {
         return claimed;
@@ -99,6 +99,21 @@ public class FlipGoogleNativeAds {
     }
 
     boolean claimed;
+
+    /**
+     * True after the network reports a paid impression. Impressed objects must not
+     * transfer to another seat; they stay sticky on this seat for flip return until
+     * the seat/feed is gone or pools are cleared.
+     */
+    public boolean isImpressed() {
+        return impressed;
+    }
+
+    public void setImpressed(boolean impressed) {
+        this.impressed = impressed;
+    }
+
+    boolean impressed;
 }
 
 
