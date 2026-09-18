@@ -61,97 +61,6 @@
 
         </LinearLayout>
 
-        <RelativeLayout
-            android:id="@+id/relativeLayoutShareOpt"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:background="@drawable/reactangle_top_radius"
-            android:padding="@dimen/_10sdp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintRight_toRightOf="parent">
-
-            <TextView
-                android:id="@+id/textViewShare"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentStart="true"
-                android:layout_marginTop="@dimen/_10sdp"
-                android:text="@string/share"
-                android:textColor="@color/black"
-                android:textSize="@dimen/_16sdp"
-                android:textStyle="bold" />
-
-            <ImageView
-                android:id="@+id/imageViewShareClose"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:layout_marginTop="@dimen/_10sdp"
-                android:src="@drawable/ic_black_close_icon" />
-
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_below="@+id/textViewShare"
-                android:layout_marginTop="@dimen/_20sdp">
-
-                <ImageView
-                    android:id="@+id/imageViewShareSingle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_alignParentStart="true"
-                    android:layout_centerVertical="true"
-                    android:src="@drawable/ic_share_credit_card" />
-
-                <TextView
-                    android:id="@+id/textViewSinglePage"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_centerHorizontal="true"
-                    android:layout_centerVertical="true"
-                    android:layout_toEndOf="@+id/imageViewShareSingle"
-                    android:paddingStart="@dimen/_5sdp"
-                    android:text="@string/single_page"
-                    android:textColor="@color/black"
-                    android:textSize="@dimen/_12sdp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_centerInParent="true"
-                    android:layout_centerHorizontal="true"
-                    android:layout_centerVertical="true"
-                    android:gravity="center"
-                    android:text="@string/or"
-                    android:textColor="@color/black"
-                    android:textSize="@dimen/_12sdp" />
-
-                <ImageView
-                    android:id="@+id/imageViewShareAll"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_centerInParent="true"
-                    android:layout_toStartOf="@+id/textViewAllPage"
-                    android:paddingRight="@dimen/_5sdp"
-                    android:src="@drawable/ic_share_all" />
-
-                <TextView
-                    android:id="@+id/textViewAllPage"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_alignParentEnd="true"
-                    android:layout_centerHorizontal="true"
-                    android:layout_centerVertical="true"
-                    android:text="@string/total_magazine"
-                    android:textColor="@color/black"
-                    android:textSize="@dimen/_12sdp" />
-
-
-            </RelativeLayout>
-        </RelativeLayout>
-
     </RelativeLayout>
 
     <LinearLayout
@@ -210,7 +119,8 @@
         android:visibility="gone" />
 
     <!-- Magazines/Special glow galleries: blue blink Share bottom-right (above footer).
-         Normal News galleries keep this GONE. Same asset as Calendar / full_image. -->
+         Normal News galleries keep this GONE. Same asset as Calendar / full_image.
+         Declared before Share sheet so the sheet always wins z-order / touch. -->
     <ImageView
         android:id="@+id/image_gallary_share"
         android:layout_width="48dp"
@@ -224,5 +134,97 @@
         android:scaleType="centerInside"
         android:src="@drawable/ic_share_full"/>
 
+    <!-- Share All/Single sheet last in FrameLayout so Close stays above the blue FAB. -->
+    <RelativeLayout
+        android:id="@+id/relativeLayoutShareOpt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/reactangle_top_radius"
+        android:clickable="true"
+        android:elevation="16dp"
+        android:focusable="true"
+        android:padding="@dimen/_10sdp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/textViewShare"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_marginTop="@dimen/_10sdp"
+            android:text="@string/share"
+            android:textColor="@color/black"
+            android:textSize="@dimen/_16sdp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/imageViewShareClose"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_marginTop="@dimen/_10sdp"
+            android:src="@drawable/ic_black_close_icon" />
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/textViewShare"
+            android:layout_marginTop="@dimen/_20sdp">
+
+            <ImageView
+                android:id="@+id/imageViewShareSingle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_share_credit_card" />
+
+            <TextView
+                android:id="@+id/textViewSinglePage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerHorizontal="true"
+                android:layout_centerVertical="true"
+                android:layout_toEndOf="@+id/imageViewShareSingle"
+                android:paddingStart="@dimen/_5sdp"
+                android:text="@string/single_page"
+                android:textColor="@color/black"
+                android:textSize="@dimen/_12sdp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:layout_centerHorizontal="true"
+                android:layout_centerVertical="true"
+                android:gravity="center"
+                android:text="@string/or"
+                android:textColor="@color/black"
+                android:textSize="@dimen/_12sdp" />
+
+            <ImageView
+                android:id="@+id/imageViewShareAll"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:layout_toStartOf="@+id/textViewAllPage"
+                android:paddingRight="@dimen/_5sdp"
+                android:src="@drawable/ic_share_all" />
+
+            <TextView
+                android:id="@+id/textViewAllPage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerHorizontal="true"
+                android:layout_centerVertical="true"
+                android:text="@string/total_magazine"
+                android:textColor="@color/black"
+                android:textSize="@dimen/_12sdp" />
+
+
+        </RelativeLayout>
+    </RelativeLayout>
 
 </FrameLayout>

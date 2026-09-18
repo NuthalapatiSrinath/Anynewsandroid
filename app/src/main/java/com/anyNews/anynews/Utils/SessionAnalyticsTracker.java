@@ -1034,8 +1034,10 @@ public final class SessionAnalyticsTracker {
                     Integer maxInFlight = null;
                     Integer flushEveryN = null;
                     Boolean destroyAfterImpression = null;
+                    Boolean useSecondNative = null;
                     String feedAdFormat = null;
                     String feedAdUnit = null;
+                    String feedAdUnitSecondary = null;
                     if (resBody.has("feed_ad_every_n")
                             && !resBody.get("feed_ad_every_n").isJsonNull()) {
                         try {
@@ -1073,6 +1075,14 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    if (resBody.has("use_second_native_ad_unit")
+                            && !resBody.get("use_second_native_ad_unit").isJsonNull()) {
+                        try {
+                            useSecondNative =
+                                    resBody.get("use_second_native_ad_unit").getAsBoolean();
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (resBody.has("feed_ad_format")
                             && !resBody.get("feed_ad_format").isJsonNull()) {
                         try {
@@ -1086,13 +1096,23 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    if (resBody.has("ad_code_secondary")
+                            && !resBody.get("ad_code_secondary").isJsonNull()) {
+                        try {
+                            feedAdUnitSecondary =
+                                    resBody.get("ad_code_secondary").getAsString();
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (feedEveryN != null
                             || adPrefetch != null
                             || maxInFlight != null
                             || flushEveryN != null
                             || destroyAfterImpression != null
+                            || useSecondNative != null
                             || feedAdFormat != null
-                            || feedAdUnit != null) {
+                            || feedAdUnit != null
+                            || feedAdUnitSecondary != null) {
                         FeedAdConfig.saveFromServer(
                                 context,
                                 feedEveryN,
@@ -1101,7 +1121,9 @@ public final class SessionAnalyticsTracker {
                                 flushEveryN,
                                 feedAdFormat,
                                 feedAdUnit,
-                                destroyAfterImpression);
+                                destroyAfterImpression,
+                                useSecondNative,
+                                feedAdUnitSecondary);
                     }
                     Integer viewsFlushSec = null;
                     Integer viewsFlushAt = null;

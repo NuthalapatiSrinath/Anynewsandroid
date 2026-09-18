@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Default house-ad / share promo shown while native creative loads or fails.
-     Keeps FlipView from painting a blank white ad seat. -->
+<!-- Default Share-with-friends plate while native creative loads or fails.
+     Dark plate matches MediaView / ads_screen so Share→creative never flashes
+     through empty black or white. Seat stays type "ad"; fill overlays on top. -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/ad_default_placeholder_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/white">
+    android:background="#121212">
 
     <ImageView
         android:id="@+id/imageViewShare"
@@ -22,7 +23,7 @@
         android:layout_centerHorizontal="true"
         android:layout_marginTop="@dimen/_15sdp"
         android:text="@string/share_anynews_with_your_friends"
-        android:textColor="@color/black"
+        android:textColor="@color/anynews_white"
         android:textSize="@dimen/_14sdp"
         android:textStyle="bold" />
 

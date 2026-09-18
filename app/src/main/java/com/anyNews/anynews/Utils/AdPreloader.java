@@ -37,17 +37,21 @@ import java.util.List;
  */
 public final class AdPreloader {
     private static final String TAG = "ANYNEWS_ADS";
-    /** Backoff after no-fill — keep short enough to recover before the next seat. */
-    private static final long FAIL_BACKOFF_MS = 8_000L;
+    /**
+     * Backoff after no-fill. Short enough to recover mid-session, long enough to
+     * avoid hammering AdMob when inventory is thin (hurts match rate).
+     */
+    private static final long FAIL_BACKOFF_MS = 18_000L;
     /**
      * Shared warm depth across all non-reward feeds (not one-per-mode).
-     * Target 3–4 ready unimpressed natives for near-always seat fill.
+     * Target next 1–2 seats only — deeper pools request ads that never impress.
      */
-    private static final int MAX_READY = 4;
-    /** Parallel AdLoader starts while topping up toward {@link #MAX_READY}. */
-    private static final int MAX_PARALLEL_LOADS = 2;
+    private static final int MAX_READY = 2;
+    /** At most one AdLoader while topping up toward {@link #MAX_READY}. */
+    private static final int MAX_PARALLEL_LOADS = 1;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    @Nullable private Runnable delayedRecoverPrefetch;
 
     private static final class ReadySlot {
         final NativeAd ad;
@@ -133,8 +137,7 @@ public final class AdPreloader {
         }
         final Context app = context.getApplicationContext();
         AdMobInitializer.runWhenInitialized(app, () -> {
-            // Kick up to MAX_PARALLEL_LOADS while below capacity.
-            startLoadIfNeeded(app);
+            // One start per call; MAX_PARALLEL_LOADS gates concurrency.
             startLoadIfNeeded(app);
         });
     }
@@ -224,23 +227,41 @@ public final class AdPreloader {
         }
         readySlots.clear();
         loadsInFlight = 0;
+        if (delayedRecoverPrefetch != null) {
+            mainHandler.removeCallbacks(delayedRecoverPrefetch);
+            delayedRecoverPrefetch = null;
+        }
     }
 
     private void startLoadIfNeeded(@Nullable Context appContext) {
+        startLoadIfNeeded(appContext, null);
+    }
+
+    private void startLoadIfNeeded(
+            @Nullable Context appContext, @Nullable String unitOverride) {
         if (appContext == null) {
             return;
         }
         final String unit;
+        final boolean isSecondaryAttempt;
         synchronized (this) {
             int room = MAX_READY - readySlots.size() - loadsInFlight;
             if (room <= 0 || loadsInFlight >= MAX_PARALLEL_LOADS) {
                 return;
             }
             long now = SystemClock.uptimeMillis();
-            if (lastFailUptimeMs > 0L && (now - lastFailUptimeMs) < FAIL_BACKOFF_MS) {
+            if (TextUtils.isEmpty(unitOverride)
+                    && lastFailUptimeMs > 0L
+                    && (now - lastFailUptimeMs) < FAIL_BACKOFF_MS) {
                 return;
             }
-            unit = resolveUnit(appContext);
+            if (!TextUtils.isEmpty(unitOverride)) {
+                unit = unitOverride.trim();
+                isSecondaryAttempt = true;
+            } else {
+                unit = resolveUnit(appContext);
+                isSecondaryAttempt = false;
+            }
             if (TextUtils.isEmpty(unit)) {
                 return;
             }
@@ -249,6 +270,7 @@ public final class AdPreloader {
         mainHandler.post(() -> {
             try {
                 Log.d(TAG, "AdPreloader LOAD START unit=" + unit
+                        + (isSecondaryAttempt ? " (secondary)" : "")
                         + " inFlight=" + loadsInFlight
                         + " pool=" + readySlots.size());
                 AdLoader adLoader = new AdLoader.Builder(appContext, unit)
@@ -274,8 +296,8 @@ public final class AdPreloader {
                                 // Parked house/share seat: paint without waiting for FlipView recycle.
                                 notifyReadyListener();
                             }
-                            // Top up toward MAX_READY while warm.
-                            prefetch(appContext);
+                            // Do not chain another load here. Refill happens after
+                            // takeReadyAndReplenish / HomePage settle — one load → show → refill.
                         })
                         .withAdListener(new AdListener() {
                             @Override
@@ -284,11 +306,31 @@ public final class AdPreloader {
                                     if (loadsInFlight > 0) {
                                         loadsInFlight--;
                                     }
-                                    lastFailUptimeMs = SystemClock.uptimeMillis();
                                 }
+                                boolean noFill = loadAdError != null
+                                        && loadAdError.getCode() == AdRequest.ERROR_CODE_NO_FILL;
                                 String detail = loadAdError != null
                                         ? loadAdError.getMessage() : "unknown";
-                                Log.d(TAG, "AdPreloader LOAD FAIL " + detail);
+                                Log.d(TAG, "AdPreloader LOAD FAIL " + detail
+                                        + " noFill=" + noFill
+                                        + " unit=" + unit);
+                                // Primary no-fill → try secondary once (admin toggle).
+                                if (noFill && !isSecondaryAttempt) {
+                                    String secondary =
+                                            FeedAdConfig.resolveFallbackUnitAfterNoFill(
+                                                    appContext, unit);
+                                    if (!TextUtils.isEmpty(secondary)) {
+                                        Log.d(TAG, "AdPreloader waterfall → secondary="
+                                                + secondary);
+                                        startLoadIfNeeded(appContext, secondary);
+                                        return;
+                                    }
+                                }
+                                synchronized (AdPreloader.this) {
+                                    lastFailUptimeMs = SystemClock.uptimeMillis();
+                                }
+                                // Never stop for the session — resume warm after backoff.
+                                scheduleRecoverPrefetch(appContext);
                             }
                         })
                         .withNativeAdOptions(new NativeAdOptions.Builder()
@@ -304,8 +346,32 @@ public final class AdPreloader {
                     lastFailUptimeMs = SystemClock.uptimeMillis();
                 }
                 Log.d(TAG, "AdPreloader LOAD exception: " + e.getMessage());
+                scheduleRecoverPrefetch(appContext);
             }
         });
+    }
+
+    /**
+     * After a fail streak the warm pool used to sit empty until some other HomePage
+     * path happened to call {@link #prefetch}. Always re-arm after backoff so inventory
+     * can return mid-session without an app kill.
+     */
+    private void scheduleRecoverPrefetch(@Nullable Context appContext) {
+        if (appContext == null) {
+            return;
+        }
+        final Context app = appContext.getApplicationContext();
+        synchronized (this) {
+            if (delayedRecoverPrefetch != null) {
+                mainHandler.removeCallbacks(delayedRecoverPrefetch);
+            }
+            delayedRecoverPrefetch = () -> {
+                delayedRecoverPrefetch = null;
+                Log.d(TAG, "AdPreloader recover prefetch after fail backoff");
+                prefetch(app);
+            };
+            mainHandler.postDelayed(delayedRecoverPrefetch, FAIL_BACKOFF_MS + 80L);
+        }
     }
 
     @Nullable

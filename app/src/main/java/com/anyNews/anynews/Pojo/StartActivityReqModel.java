@@ -704,6 +704,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean destroyNativeAdsAfterImpression;
 
+        /**
+         * Try secondary native after primary no-fill (admin; default true).
+         * Null on old servers → Android keeps cached / default ON.
+         */
+        @SerializedName("use_second_native_ad_unit")
+        @Expose
+        private Boolean useSecondNativeAdUnit;
+
         /** ViewsBatchTracker flush interval seconds (admin; default 60). */
         @SerializedName("views_batch_flush_interval_seconds")
         @Expose
@@ -741,6 +749,14 @@ public class StartActivityReqModel implements Serializable {
         @SerializedName("ad_code")
         @Expose
         private String adCode;
+
+        /**
+         * Secondary native unit for no-fill waterfall (Root_Settings.ad_code_secondary).
+         * Null → keep cached / default secondary unit.
+         */
+        @SerializedName("ad_code_secondary")
+        @Expose
+        private String adCodeSecondary;
 
         // Profile hub / More (null = old server; keep cached defaults).
         @SerializedName("categories_in_footer")
@@ -1241,6 +1257,11 @@ public class StartActivityReqModel implements Serializable {
             return destroyNativeAdsAfterImpression;
         }
 
+        /** Null → old server; caller keeps cached / default ON (waterfall). */
+        public Boolean getUseSecondNativeAdUnit() {
+            return useSecondNativeAdUnit;
+        }
+
         public Integer getViewsBatchFlushIntervalSeconds() {
             return viewsBatchFlushIntervalSeconds;
         }
@@ -1265,6 +1286,11 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / default native unit. */
         public String getAdCode() {
             return adCode;
+        }
+
+        /** Null → old server; caller keeps cached / default secondary unit. */
+        public String getAdCodeSecondary() {
+            return adCodeSecondary;
         }
 
         public Boolean getCategoriesInFooter() {

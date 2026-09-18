@@ -53,6 +53,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.StatusVideoMedia;
+import com.anyNews.anynews.Utils.YouTubeIdHelper;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.google.gson.Gson;
@@ -487,9 +488,16 @@ public class StatusVideoPlayerActivity extends AppCompatActivity {
                         + " video_url=" + StatusVideoMedia.summarize(item.getVideoUrl())
                         + " download=" + StatusVideoMedia.summarize(item.getDownloadUrl()));
 
-                // media_type 5/3 → Exo path first (even if a spurious YT id was guessed).
+                // media_type 5/3 → Exo path first (even if a spurious YT id was guessed),
+                // unless the "stream" is actually a YouTube URL (then prefer YT).
                 boolean preferExo = "3".equals(media) || "5".equals(media);
                 boolean preferYt = "4".equals(media) || "6".equals(media);
+                if (preferExo && !TextUtils.isEmpty(ytId)
+                        && (TextUtils.isEmpty(stream) || YouTubeIdHelper.isYouTubeish(stream))) {
+                    // Uploaded as full_video file type but URL is YouTube — play in-app YT.
+                    preferExo = false;
+                    preferYt = true;
+                }
 
                 if (preferExo && !TextUtils.isEmpty(stream)) {
                     startExo(stream, /*play*/ true);
@@ -497,7 +505,7 @@ public class StatusVideoPlayerActivity extends AppCompatActivity {
                     startYoutube(ytId, /*play*/ true);
                 } else if (!TextUtils.isEmpty(ytId) && !preferExo) {
                     startYoutube(ytId, /*play*/ true);
-                } else if (!TextUtils.isEmpty(stream)) {
+                } else if (!TextUtils.isEmpty(stream) && !YouTubeIdHelper.isYouTubeish(stream)) {
                     startExo(stream, /*play*/ true);
                 } else if (!TextUtils.isEmpty(ytId)) {
                     startYoutube(ytId, /*play*/ true);

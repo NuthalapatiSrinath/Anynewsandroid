@@ -2057,7 +2057,9 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getFeedAdFormat(),
                                 startActivityReqModel.getData().getAdCode(),
                                 startActivityReqModel.getData()
-                                        .getDestroyNativeAdsAfterImpression());
+                                        .getDestroyNativeAdsAfterImpression(),
+                                startActivityReqModel.getData().getUseSecondNativeAdUnit(),
+                                startActivityReqModel.getData().getAdCodeSecondary());
                         FeedAdConfig.warmFromPrefs(getApplicationContext());
                         AnalyticsBatchConfig.saveFromServer(
                                 getApplicationContext(),

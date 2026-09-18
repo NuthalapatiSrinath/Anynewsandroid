@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/native_ad_view"
-    android:background="@drawable/anynews_outline_shape">
+    android:background="#121212">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/background"

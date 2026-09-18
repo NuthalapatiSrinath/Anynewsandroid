@@ -19,17 +19,24 @@ import java.util.Map;
  * not invalidate it. Activity destroy (or a hard pool wipe) calls {@link #clearAll()}.
  * Ordinary News/Local/Flash/Special switches should prefer pruning impressed creatives
  * only — clearing this map alone is fine; do not destroy warm {@link AdPreloader} ads.
+ *
+ * <p>Failures never permanently disable a seat for the process lifetime: after a short
+ * burst of fast retries the slot enters a longer recover backoff, then tries again.
  */
 public final class NativeAdCacheCoordinator {
     private static final String TAG = "ANYNEWS_ADS";
     /**
-     * Seat-level ready markers (not the AdPreloader object pool). Sized above the
-     * shared warm depth so ahead-of-seat prefetch is not blocked by CACHE_FULL.
+     * Seat-level ready markers (not the AdPreloader object pool). Keep near warm
+     * depth so ahead-of-seat prefetch cannot stockpile unused matched creatives.
      */
-    private static final int MAX_READY = 6;
-    private static final int MAX_RETRIES = 2;
-    private static final long RETRY_BASE_MS = 1_000L;
-    private static final long NO_FILL_RETRY_MS = 8_000L;
+    private static final int MAX_READY = 3;
+    /** Fast retries before entering long recover backoff (never session-kill). */
+    private static final int FAST_RETRY_BURST = 1;
+    private static final long RETRY_BASE_MS = 2_000L;
+    private static final long NO_FILL_RETRY_MS = 15_000L;
+    /** After a no-fill / fail streak, wait this long then try again (always). */
+    private static final long RECOVER_BACKOFF_MS = 30_000L;
+    private static final long MAX_BACKOFF_MS = 60_000L;
 
     public enum StartDecision { START, ALREADY_READY, IN_FLIGHT, BACKOFF, CACHE_FULL }
 
@@ -120,7 +127,10 @@ public final class NativeAdCacheCoordinator {
         trimReadyLocked();
     }
 
-    /** Returns a bounded retry delay, or -1 when the slot has exhausted retries. */
+    /**
+     * Returns a retry delay in ms. Never returns {@code -1} — seats must keep
+     * recovering for the whole session whenever inventory returns.
+     */
     public synchronized long onFailed(String adType, String adCode, int requestPosition,
                                       boolean noFill, String detail) {
         Entry entry = getOrCreate(adType, adCode, requestPosition);
@@ -129,15 +139,25 @@ public final class NativeAdCacheCoordinator {
         failures++;
         if (noFill) noFills++;
         entry.failures++;
-        if (entry.failures > MAX_RETRIES) {
-            log((noFill ? "NO FILL" : "LOAD FAILURE") + " retries exhausted " + entry.key);
-            return -1L;
+        long delay;
+        if (entry.failures <= FAST_RETRY_BURST) {
+            delay = noFill ? NO_FILL_RETRY_MS
+                    : RETRY_BASE_MS * (1L << (entry.failures - 1));
+            log((noFill ? "NO FILL" : "LOAD FAILURE") + " / RETRY " + entry.key
+                    + " delay=" + delay + " detail=" + safe(detail));
+        } else {
+            // Soft-exhaust: long recover, then reset burst counter so fill can resume.
+            delay = Math.min(
+                    noFill ? RECOVER_BACKOFF_MS
+                            : Math.max(RECOVER_BACKOFF_MS,
+                                    RETRY_BASE_MS * (1L << Math.min(entry.failures - 1, 5))),
+                    MAX_BACKOFF_MS);
+            entry.failures = 0;
+            log((noFill ? "NO FILL" : "LOAD FAILURE")
+                    + " / RECOVER (never session-kill) " + entry.key
+                    + " delay=" + delay + " detail=" + safe(detail));
         }
-        long delay = noFill ? NO_FILL_RETRY_MS
-                : RETRY_BASE_MS * (1L << (entry.failures - 1));
         entry.retryAfterUptimeMs = SystemClock.uptimeMillis() + delay;
-        log((noFill ? "NO FILL" : "LOAD FAILURE") + " / RETRY " + entry.key
-                + " delay=" + delay + " detail=" + safe(detail));
         return delay;
     }
 
@@ -179,8 +199,10 @@ public final class NativeAdCacheCoordinator {
     }
 
     /**
-     * Settle / land path: clear backoff + exhausted-retry counters so on-land load
-     * always gets another chance. Never cancels a true in-flight SDK request.
+     * Settle / land path: clear backoff + failure counters so on-land load
+     * always gets another chance. Also clears a stale {@code ready} marker so
+     * ALREADY_READY cannot block forever after a destroyed creative. Never
+     * cancels a true in-flight SDK request.
      */
     public synchronized void allowSettleRetry(String adType, String adCode, int requestPosition) {
         Entry entry = entries.get(key(adType, adCode, requestPosition));
@@ -192,6 +214,8 @@ public final class NativeAdCacheCoordinator {
         }
         entry.failures = 0;
         entry.retryAfterUptimeMs = 0L;
+        // Stale ready with no creative left would otherwise skip loads forever.
+        entry.ready = false;
         log("SETTLE RETRY unlocked " + entry.key);
     }
 

@@ -18,10 +18,10 @@ public final class FlipAdWorkGate {
 
     /**
      * During an active fling / grace window, allow at most this many concurrent
-     * native loads (even if admin max_in_flight is higher). 2 keeps the next
-     * ad seat(s) warming without stacking AdMob work on every flip frame.
+     * native loads (even if admin max_in_flight is higher). 1 = soft warm only;
+     * on-settle owns the reliability load for the landed seat.
      */
-    public static final int MAX_IN_FLIGHT_DURING_FLIP = 2;
+    public static final int MAX_IN_FLIGHT_DURING_FLIP = 1;
 
     private static volatile boolean flipAnimating;
     private static volatile long lastInteractionUptimeMs;

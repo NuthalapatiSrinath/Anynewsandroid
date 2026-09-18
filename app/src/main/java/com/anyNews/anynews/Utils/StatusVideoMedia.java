@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 public final class StatusVideoMedia {
 
     private static final Pattern YOUTUBE_ID = Pattern.compile(
-            "(?:youtu\\.be/|youtube(?:-nocookie)?\\.com/(?:watch\\?(?:.*&)?v=|embed/|v/|shorts/))([\\w-]{11})",
+            "(?:youtu\\.be/|youtube(?:-nocookie)?\\.com/(?:watch\\?(?:.*&)?v=|embed/|v/|shorts/|live/|e/)|youtube\\.com/(?:shorts/|live/))([\\w-]{11})",
             Pattern.CASE_INSENSITIVE);
 
     private StatusVideoMedia() {
@@ -306,6 +306,11 @@ public final class StatusVideoMedia {
     private static String youtubeIdFromUrl(@Nullable String url, boolean allowBareId) {
         if (TextUtils.isEmpty(url)) {
             return null;
+        }
+        // Prefer shared helper (shorts / live / embed / watch / bare id).
+        String viaHelper = YouTubeIdHelper.extract(url);
+        if (viaHelper != null) {
+            return viaHelper;
         }
         String trimmed = url.trim();
         if (allowBareId || isYoutubeish(trimmed)) {

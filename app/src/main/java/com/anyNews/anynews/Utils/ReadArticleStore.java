@@ -676,6 +676,43 @@ public final class ReadArticleStore {
                 || type.equalsIgnoreCase("google_vasttag");
     }
 
+    /**
+     * Drop every native / vast / share / ratings shell from a FlipView list
+     * (mutates in place). Used for keyword search: hits only, then
+     * Continue-reading hub — no mid-list synthetics. Does not remove feed_end.
+     *
+     * @return true if any row was removed
+     */
+    public static boolean stripAdFeedSlots(@Nullable List<ModelClass.Datum> items) {
+        if (items == null || items.isEmpty()) return false;
+        boolean changed = false;
+        for (int i = items.size() - 1; i >= 0; i--) {
+            ModelClass.Datum d = items.get(i);
+            if (d == null) {
+                items.remove(i);
+                changed = true;
+                continue;
+            }
+            if (FeedEndHelper.isFeedEnd(d)) {
+                continue;
+            }
+            if (isAdFeedSlot(d) || isShareFeedSlot(d) || isRatingsFeedSlot(d)) {
+                items.remove(i);
+                changed = true;
+                continue;
+            }
+            String type = d.getPostType();
+            if (type != null
+                    && (type.equalsIgnoreCase("web")
+                            || type.equalsIgnoreCase("web_ads")
+                            || type.equalsIgnoreCase("google_vasttag"))) {
+                items.remove(i);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     /** True when this row is the "Share AnyNews with friends" shell. */
     public static boolean isShareFeedSlot(@Nullable ModelClass.Datum d) {
         if (d == null) return false;

@@ -28,6 +28,7 @@
     <!-- Native ad unit, not the AdMob application ID above. Used only if malformed
          remote AdMob metadata would otherwise leave every native seat unrequestable. -->
     <string name="admob_native_ad_unit_fallback" translatable="false">ca-app-pub-8562336752221105/4901277505</string>
+    <string name="admob_native_ad_unit_secondary" translatable="false">ca-app-pub-8562336752221105/8909042175</string>
 
 
     <string name="todo">TODO</string>

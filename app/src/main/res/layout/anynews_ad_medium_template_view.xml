@@ -200,7 +200,7 @@
                                 android:layout_marginTop="@dimen/anynews_no_margin"
                                 android:layout_marginEnd="@dimen/anynews_no_margin"
                                 android:layout_marginBottom="@dimen/anynews_no_margin"
-                                android:background="@color/form_surface_elevated"
+                                android:background="#121212"
                                 android:gravity="top"
                                 android:lines="1"
                                 android:textColor="@color/anynews_gray"

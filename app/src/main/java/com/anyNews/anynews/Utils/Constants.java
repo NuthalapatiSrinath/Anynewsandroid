@@ -397,6 +397,13 @@ public class Constants {
     public static String DESTROY_NATIVE_ADS_AFTER_IMPRESSION =
             "destroy_native_ads_after_impression";
     /**
+     * Try secondary native unit after primary no-fill (default ON).
+     * Admin: Configuration → Performance Tuning → Use second native ad unit.
+     */
+    public static String USE_SECOND_NATIVE_AD_UNIT = "use_second_native_ad_unit";
+    /** Secondary AdMob native unit (splash/session; Root_Settings.ad_code_secondary). */
+    public static String FEED_AD_SECOND_UNIT_ID = "feed_ad_second_unit_id";
+    /**
      * ViewsBatchTracker flush interval seconds (splash/session; default 60, 15–300).
      */
     public static String VIEWS_BATCH_FLUSH_INTERVAL_SECONDS =

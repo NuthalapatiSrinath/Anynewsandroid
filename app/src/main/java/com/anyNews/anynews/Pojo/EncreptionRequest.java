@@ -369,6 +369,14 @@ public class EncreptionRequest {
     @Expose
     private Boolean destroy_native_ads_after_impression;
 
+    /**
+     * When true (default): primary no-fill → try secondary native unit.
+     * Null on old servers → Android keeps cached / default ON.
+     */
+    @SerializedName("use_second_native_ad_unit")
+    @Expose
+    private Boolean use_second_native_ad_unit;
+
     @SerializedName("feed_ad_format")
     @Expose
     private String feed_ad_format;
@@ -376,6 +384,10 @@ public class EncreptionRequest {
     @SerializedName("ad_code")
     @Expose
     private String ad_code;
+
+    @SerializedName("ad_code_secondary")
+    @Expose
+    private String ad_code_secondary;
 
     @SerializedName("views_batch_flush_interval_seconds")
     @Expose
@@ -413,12 +425,20 @@ public class EncreptionRequest {
         return destroy_native_ads_after_impression;
     }
 
+    public Boolean getUse_second_native_ad_unit() {
+        return use_second_native_ad_unit;
+    }
+
     public String getFeed_ad_format() {
         return feed_ad_format;
     }
 
     public String getAd_code() {
         return ad_code;
+    }
+
+    public String getAd_code_secondary() {
+        return ad_code_secondary;
     }
 
     public Integer getViews_batch_flush_interval_seconds() {
