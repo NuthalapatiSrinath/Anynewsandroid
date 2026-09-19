@@ -777,11 +777,11 @@ public class InAppSearchActivity extends AppCompatActivity {
                 vh.action.setVisibility(View.GONE);
                 // Prefer the typed needle when the row is a truncated snippet (…),
                 // so FlipView search_text matches what Suggestions found.
-                // Count=1 + post_id → open that article only (not soft keyword multi-hit).
+                // Count=1 + post_id → [article, Continue-reading hub] (not soft keyword multi-hit).
                 vh.itemView.setOnClickListener(
                         v -> {
                             if (row.meta == 1) {
-                                // Single-article row: that story only — no Continue-reading hub.
+                                // Single-article row: that story + Continue-reading hub only.
                                 openSearch(suggestSubmitText(row), row.postId, true);
                             } else {
                                 submitQuery(suggestSubmitText(row));
