@@ -48,12 +48,19 @@ public final class SearchRevealHelper {
 
     /**
      * Run enter circular reveal on {@code root} after layout.
-     * Safe for search-icon open and search-result open into HomePage FlipView.
+     * Safe for {@link com.anyNews.anynews.Activities.InAppSearchActivity} only —
+     * never pass {@code android.R.id.content} (3.41.64 left HomePage chrome dead).
      */
     public static void playEnterReveal(
             @NonNull final Activity activity,
             @NonNull final View root,
             @Nullable Intent intent) {
+        // Never blank the activity content root — that hides footer/back forever
+        // if the reveal listener/animation does not finish.
+        if (root.getId() == android.R.id.content) {
+            root.setVisibility(View.VISIBLE);
+            return;
+        }
         if (intent == null || !intent.getBooleanExtra(EXTRA_HAS_REVEAL, false)) {
             root.setVisibility(View.VISIBLE);
             return;
@@ -65,6 +72,17 @@ public final class SearchRevealHelper {
         root.setVisibility(View.INVISIBLE);
         final int cxExtra = intent.getIntExtra(EXTRA_REVEAL_CX, -1);
         final int cyExtra = intent.getIntExtra(EXTRA_REVEAL_CY, -1);
+        final Runnable failSafe =
+                () -> {
+                    try {
+                        if (root.getVisibility() != View.VISIBLE) {
+                            root.setVisibility(View.VISIBLE);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                };
+        // If layout never arrives, restore visibility so back/footer stay usable.
+        root.postDelayed(failSafe, 600L);
         final Runnable start =
                 () -> startCircularEnter(root, cxExtra, cyExtra);
         if (root.isLaidOut() && root.getWidth() > 0 && root.getHeight() > 0) {
@@ -83,8 +101,13 @@ public final class SearchRevealHelper {
     }
 
     private static void startCircularEnter(@NonNull View root, int cxExtra, int cyExtra) {
+        // Always restore first — circular reveal can clip while VISIBLE.
+        root.setVisibility(View.VISIBLE);
         int w = Math.max(1, root.getWidth());
         int h = Math.max(1, root.getHeight());
+        if (w <= 1 || h <= 1) {
+            return;
+        }
         int[] rootLoc = new int[2];
         root.getLocationOnScreen(rootLoc);
         int cx = cxExtra >= 0 ? Math.max(0, Math.min(w, cxExtra - rootLoc[0])) : w / 2;
@@ -95,7 +118,6 @@ public final class SearchRevealHelper {
             Animator anim =
                     ViewAnimationUtils.createCircularReveal(root, cx, cy, 0f, finalRadius);
             anim.setDuration(420);
-            root.setVisibility(View.VISIBLE);
             anim.start();
         } catch (Exception e) {
             root.setVisibility(View.VISIBLE);

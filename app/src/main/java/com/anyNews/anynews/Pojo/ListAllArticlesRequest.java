@@ -23,6 +23,9 @@ public class ListAllArticlesRequest implements Serializable {
     @SerializedName("skip")
     @Expose
     private Long skip;
+    @SerializedName("limit")
+    @Expose
+    private Integer limit;
     @SerializedName("last_post_id")
     @Expose
     private Long lastPostId;
@@ -282,6 +285,14 @@ public class ListAllArticlesRequest implements Serializable {
 
     public void setSkip(Long skip) {
         this.skip = skip;
+    }
+
+    public Integer getLimit() {
+        return limit;
+    }
+
+    public void setLimit(Integer limit) {
+        this.limit = limit;
     }
 
     public Long getLastPostId() {

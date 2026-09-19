@@ -397,10 +397,15 @@ public class Constants {
     public static String DESTROY_NATIVE_ADS_AFTER_IMPRESSION =
             "destroy_native_ads_after_impression";
     /**
-     * Try secondary native unit after primary no-fill (default ON).
-     * Admin: Configuration → Performance Tuning → Use second native ad unit.
+     * Try secondary native unit after primary no-fill (legacy bool; default ON).
+     * Prefer {@link #FEED_NATIVE_AD_UNIT_MODE}.
      */
     public static String USE_SECOND_NATIVE_AD_UNIT = "use_second_native_ad_unit";
+    /**
+     * Feed native unit mode: primary_only | primary_then_secondary | secondary_only.
+     * Admin: Configuration → Advertisements → Feed native ad unit mode.
+     */
+    public static String FEED_NATIVE_AD_UNIT_MODE = "feed_native_ad_unit_mode";
     /** Secondary AdMob native unit (splash/session; Root_Settings.ad_code_secondary). */
     public static String FEED_AD_SECOND_UNIT_ID = "feed_ad_second_unit_id";
     /**

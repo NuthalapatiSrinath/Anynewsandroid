@@ -335,7 +335,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public View customConvertView;
     public int customPosition;
     Callbacks callbacks;
-   public NativeAd nativeAd=null;
+    public NativeAd nativeAd=null;
+    /**
+     * Prevents unbounded getView recursion from search bind-fail retry (ANR).
+     */
+    private int searchBindRetryDepth = 0;
     /**
      * Response id of the last Google native painted into a feed seat. Used only to
      * prefer a different ready creative for the next seat when the pool has one —
@@ -520,17 +524,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Soft-hide lived only on the overlay-era adapter. Seat-sticky path: normal
-     * flip leave does not destroy; settle only prunes claimed/impressed natives
-     * whose ad seat was removed from the list (admin destroy toggle ON).
+     * Soft-hide lived only on the overlay-era adapter. July / Play Store path:
+     * settle destroys claimed/impressed natives for seats the user left (admin
+     * destroy toggle ON) so flip-back requests a fresh AdMob fill.
      */
     public void pauseAdMediaForLeaveGesture(int adPage) {
         // intentionally empty during gesture — orphan prune happens on settle
     }
 
     /**
-     * After settle: destroy claimed/impressed creatives whose seat is gone from
-     * the adapter list. Flip away from a still-present seat keeps the sticky ad.
+     * After settle: destroy claimed/impressed creatives for seats that are not
+     * the current page (flip-away). Flip-back then loads a new creative.
      */
     public void releaseOffscreenAdMediaAfterSettle(int currentPage) {
         try {
@@ -844,7 +848,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         Integer fromBoxed = adShellFromViewTypes.get(position);
                         int fromView = fromBoxed != null ? fromBoxed : 2;
                         rememberAdShellPlaceholder(position, (FrameLayout) found, fromView);
-                        adShellAwaitingCreative.put(position, true);
+                        // Do NOT re-arm awaiting when MediaView chrome is already live —
+                        // that caused a second setNativeAd and mute/pause blinked once.
+                        if (!placeholderHasNativeCreative((FrameLayout) found)) {
+                            adShellAwaitingCreative.put(position, true);
+                        }
                         return (FrameLayout) found;
                     }
                 }
@@ -864,26 +872,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     || !slot.getPostType().equalsIgnoreCase("ad")) {
                 return false;
             }
-            NativeAd ad = findGoogleNativeForSlot(slot);
-            if (ad == null) {
-                return false;
-            }
             FrameLayout fl = resolveAdShellFrame(position);
             if (fl == null || !fl.isAttachedToWindow()) {
                 return false;
-            }
-            Integer fromBoxed = adShellFromViewTypes.get(position);
-            int fromView = fromBoxed != null ? fromBoxed : 2;
-            View myView;
-            if (fromView == 0) {
-                myView = LayoutInflater.from(context).inflate(
-                        R.layout.anynews_ad_full_template_view, fl, false);
-            } else if (fromView == 1) {
-                myView = LayoutInflater.from(context).inflate(
-                        R.layout.anynews_ad_medium_template_view, fl, false);
-            } else {
-                myView = LayoutInflater.from(context).inflate(
-                        R.layout.custom_ad_native, fl, false);
             }
             View convertView = fl;
             try {
@@ -899,6 +890,37 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
             } catch (Exception ignored) {
                 convertView = fl;
+            }
+            Integer needReqPos = slot.getAd_req_position();
+            // Keep live MediaView only while a packed creative still exists for this
+            // seat. After flip-away destroy, scrap may still hold a dead NativeAdView —
+            // do not treat that as filled (July fresh-fill on return).
+            if (placeholderHasNativeCreative(fl)
+                    && isPaintedAdSeatForReqPos(convertView, needReqPos)
+                    && hasLiveGoogleNativePackedForReqPos(needReqPos)) {
+                adShellAwaitingCreative.delete(position);
+                cancelAdShellFillTimeout(position);
+                if (position == parkedAdFillPage) {
+                    cancelParkedAdFillWatchdog();
+                }
+                return true;
+            }
+            NativeAd ad = findGoogleNativeForSlot(slot);
+            if (ad == null) {
+                return false;
+            }
+            Integer fromBoxed = adShellFromViewTypes.get(position);
+            int fromView = fromBoxed != null ? fromBoxed : 2;
+            View myView;
+            if (fromView == 0) {
+                myView = LayoutInflater.from(context).inflate(
+                        R.layout.anynews_ad_full_template_view, fl, false);
+            } else if (fromView == 1) {
+                myView = LayoutInflater.from(context).inflate(
+                        R.layout.anynews_ad_medium_template_view, fl, false);
+            } else {
+                myView = LayoutInflater.from(context).inflate(
+                        R.layout.custom_ad_native, fl, false);
             }
             paintGoogleNativeIntoSeat(fl, ad, myView, fromView, convertView, position);
             return true;
@@ -1258,13 +1280,26 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Bind Google native (or dark house) into an existing {@code fl_adplaceholder}
-     * without reinflating {@code ads_screen}. Used by sticky reuse and fresh inflate.
+     * without reinflating {@code ads_screen}. Used by scrap reuse and fresh inflate.
      */
     private void bindGoogleAdIntoPlaceholder(
             @NonNull FrameLayout fl_adplaceholder,
             @NonNull View convertView,
             int position) {
         ModelClass.Datum googleSlot = list.get(position);
+        Integer needReqPos = googleSlot != null ? googleSlot.getAd_req_position() : null;
+        // Keep live MediaView on the landed seat only while the packed creative is
+        // still in the pool — avoids AdMob mute blink. After flip-away destroy there
+        // is no live packed ad → fall through to house + fresh request (July path).
+        if (placeholderHasNativeCreative(fl_adplaceholder)
+                && isPaintedAdSeatForReqPos(convertView, needReqPos)
+                && position == currentFlipPage
+                && hasLiveGoogleNativePackedForReqPos(needReqPos)) {
+            rememberAdShellPlaceholder(position, fl_adplaceholder, 2);
+            adShellAwaitingCreative.delete(position);
+            cancelAdShellFillTimeout(position);
+            return;
+        }
         int fromView = 2;
         View myView;
         String adViewType = googleSlot.getAd_view_type();
@@ -1326,11 +1361,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @NonNull View convertView,
             int position) {
         nativeAdLayout.setBackgroundColor(0xFF121212);
-        // Already painted FB chrome (not house / dark plate) — seat-sticky.
+        ModelClass.Datum fbSlot = list.get(position);
+        Integer fbNeedReq = fbSlot != null ? fbSlot.getAd_req_position() : null;
+        // Keep painted FB chrome only while a live packed creative exists for this seat.
         try {
             View unit = nativeAdLayout.findViewById(R.id.ad_unit);
             if (unit != null
-                    && nativeAdLayout.findViewById(R.id.ad_default_placeholder_root) == null) {
+                    && nativeAdLayout.findViewById(R.id.ad_default_placeholder_root) == null
+                    && position == currentFlipPage
+                    && hasLiveFbNativePackedForReqPos(fbNeedReq)) {
                 adShellAwaitingCreative.delete(position);
                 return;
             }
@@ -1340,7 +1379,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         RelativeLayout adView = (RelativeLayout) fbInflater.inflate(
                 R.layout.custom_fb_ad, nativeAdLayout, false);
         adView.setBackgroundColor(0xFF121212);
-        ModelClass.Datum fbSlot = list.get(position);
         fbAd = findFbNativeForSlot(fbSlot);
         if (position == currentFlipPage) {
             requestNativeAdLoadForSlot(fbSlot);
@@ -1555,8 +1593,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Sticky scrap is only valid for the same seat reqPos. FlipView recycling used to
-     * keep seat A's NativeAdView on seat B (= same creative everywhere, unpaid reuse).
+     * Scrap paint tag is only valid for the same seat reqPos. FlipView recycling used
+     * to keep seat A's NativeAdView on seat B (= same creative everywhere, unpaid reuse).
      */
     private boolean isPaintedAdSeatForReqPos(@Nullable View root, @Nullable Integer needReqPos) {
         if (root == null || needReqPos == null) {
@@ -1565,6 +1603,46 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         try {
             Object tagged = root.getTag(R.id.tag_ad_seat_req_pos);
             return tagged instanceof Integer && needReqPos.equals(tagged);
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /**
+     * True when HomePage still holds a live (non-destroyed) Google {@link NativeAd}
+     * packed for this reqPos. After flip-away destroy the scrap may still show a
+     * detached NativeAdView — that must not count as a filled seat.
+     */
+    private boolean hasLiveGoogleNativePackedForReqPos(@Nullable Integer reqPos) {
+        if (reqPos == null || HomePage.nativeGoogleAdList == null) {
+            return false;
+        }
+        try {
+            for (int i = 0; i < HomePage.nativeGoogleAdList.size(); i++) {
+                FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
+                if (packed != null && packed.getAd() != null
+                        && packed.getReqPos() == reqPos) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Live FB native still packed for this reqPos (not destroyed on flip-away). */
+    private boolean hasLiveFbNativePackedForReqPos(@Nullable Integer reqPos) {
+        if (reqPos == null || HomePage.nativeFBAdList == null) {
+            return false;
+        }
+        try {
+            for (int i = 0; i < HomePage.nativeFBAdList.size(); i++) {
+                FlipGoogleNativeAds packed = HomePage.nativeFBAdList.get(i);
+                if (packed != null && packed.getFbAd() != null
+                        && packed.getReqPos() == reqPos) {
+                    return true;
+                }
+            }
         } catch (Exception ignored) {
         }
         return false;
@@ -4815,6 +4893,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             pauseVideo();
                         }
                         adsScreenViewHolder = new AdsScreenViewHolder();
+                        // HomePage keeps bottom nav on native in-feed ads; only hides
+                        // for share/ratings or true interstitial format.
                         adapterCallback.closeBottomStrip(true);
                         String adTypeAtPos = list.get(position).getAd_type();
                         if (adTypeAtPos == null || adTypeAtPos.trim().isEmpty()) {
@@ -4824,9 +4904,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         cancelAdShellFillTimeout(position);
                         // Do not cancel parked fill watchdog here — buffer scrap getView
                         // used to abort the visible seat's poll and leave house forever.
-                        // Seat-sticky: any scrap that is already this ad layout with
-                        // fl_adplaceholder must be reused — never reinflate empty black
-                        // ads_screen over house/creative/dark underlay (notify loop flash).
+                        // Scrap reuse: keep ads_screen shell, but never seat-sticky the
+                        // same impressed creative on flip-back (July / Play Store path).
                         String adReuseKey = "ad_" + adTypeAtPos.toLowerCase(java.util.Locale.US);
                         if (adTypeAtPos.equalsIgnoreCase("google")
                                 || adTypeAtPos.equalsIgnoreCase("admanager")) {
@@ -4837,26 +4916,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     customConvertView = convertView;
                                     try {
                                         View lpRoot = convertView.findViewById(R.id.layoutParent);
-                                        if (lpRoot != null && lpRoot.getLayoutParams() != null) {
+                                        if (lpRoot != null && lpRoot.getLayoutParams() != null
+                                                && lpRoot.getLayoutParams().height != screenHeight) {
                                             lpRoot.getLayoutParams().height = screenHeight;
                                         }
                                     } catch (Exception ignored) {
                                     }
-                                    existingFl.setVisibility(VISIBLE);
-                                    stripAdSeatSpinners(existingFl);
-                                    Integer needReqPos = list.get(position).getAd_req_position();
-                                    // Same scrap + creative only when this seat's reqPos matches
-                                    // what was painted — otherwise rebind (fixes same-ad-everywhere).
-                                    if (placeholderHasNativeCreative(existingFl)
-                                            && isPaintedAdSeatForReqPos(convertView, needReqPos)) {
-                                        showLog("AD seat sticky reuse (same reqPos) pos="
-                                                + position + " reqPos=" + needReqPos);
-                                        rememberAdShellPlaceholder(position, existingFl, 2);
-                                        adShellAwaitingCreative.delete(position);
-                                        showLog("AD Point Adapter:: END sticky");
-                                        break;
+                                    if (existingFl.getVisibility() != VISIBLE) {
+                                        existingFl.setVisibility(VISIBLE);
                                     }
-                                    // Wrong seat scrap, house, or empty — paint this seat in place.
+                                    stripAdSeatSpinners(existingFl);
+                                    // Rebind every opportunity — bindGoogle keeps live
+                                    // MediaView only while a packed creative still exists.
                                     bindGoogleAdIntoPlaceholder(
                                             existingFl, convertView, position);
                                     showLog("AD Point Adapter:: END seat-reuse");
@@ -4888,7 +4959,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     existingFb.setBackgroundColor(0xFF121212);
                                     bindFacebookAdIntoLayout(
                                             existingFb, convertView, position);
-                                    showLog("AD Point Adapter:: END fb sticky");
+                                    showLog("AD Point Adapter:: END fb scrap-reuse");
                                     break;
                                 }
                             }
@@ -5269,8 +5340,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             e.printStackTrace();
             if (parent != null) {
                 // Search: never paint Continue-reading for a real post_id hit.
+                // One retry only — unbounded getView recursion caused ANR when
+                // getIs_source() was null (Boolean unbox NPE).
                 try {
-                    if (list != null && position >= 0 && position < list.size()) {
+                    if (searchBindRetryDepth == 0
+                            && list != null
+                            && position >= 0
+                            && position < list.size()) {
                         ModelClass.Datum row = list.get(position);
                         if (row != null
                                 && !FeedEndHelper.isFeedEnd(row)
@@ -5285,9 +5361,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 row.setPostType(fallback);
                             } catch (Exception ignored) {
                             }
-                            showLog("getView search bind fail → retry as " + fallback
+                            showLog("getView search bind fail → retry once as " + fallback
                                     + " pos=" + position);
-                            return getView(position, null, parent);
+                            searchBindRetryDepth = 1;
+                            try {
+                                return getView(position, null, parent);
+                            } finally {
+                                searchBindRetryDepth = 0;
+                            }
                         }
                     }
                 } catch (Exception ignored) {
@@ -5627,7 +5708,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Exact pool match only — never consumes {@link AdPreloader}. Used when getView
      * will defer MediaView paint (mid-flip / settle grace) so a buffer shell cannot
-     * strand the warm creative on an ahead reqPos. Includes impressed sticky seats.
+     * strand the warm creative on an ahead reqPos. Skips impressed creatives
+     * (destroyed on flip-away; not sticky on return).
      */
     @Nullable
     private NativeAd peekExactGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -5640,6 +5722,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
                 if (packed == null || packed.getAd() == null) continue;
                 if (packed.getReqPos() == slotPos) {
+                    // Impressed = already paid; flip-back must not peek the same creative.
+                    if (packed.isImpressed()) {
+                        return null;
+                    }
                     return packed.getAd();
                 }
             }
@@ -5649,13 +5735,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Exact {@code ad_req_position} match first (seat-sticky, including impressed
-     * return visits), then ready-pool transfer: orphan (reqPos not on a live ad
-     * seat) or an <b>unclaimed</b> creative from a seat further ahead (idle only).
-     * Claimed/impressed creatives stay on their painted seat until that seat is
-     * removed from the list and are never handed to another seat. Prefer a
-     * different responseId when reclaiming; same responseId on a <b>new</b>
-     * unimpressed object is OK (paid).
+     * Exact {@code ad_req_position} match first (unimpressed / first paint only),
+     * then ready-pool transfer: orphan (reqPos not on a live ad seat) or an
+     * <b>unclaimed</b> creative from a seat further ahead (idle only).
+     * Claimed/impressed creatives are never handed to another seat (money-safe).
+     * Impressed exact matches are released so flip-back requests a fresh AdMob fill
+     * (July / Play Store path — no seat-sticky same creative).
      */
     @Nullable
     private NativeAd findGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -5668,10 +5753,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
                 if (packed == null || packed.getAd() == null) continue;
                 if (packed.getReqPos() != slotPos) continue;
-                // Exact seat match — sticky including after impression / flip return.
+                if (packed.isImpressed()) {
+                    // Flip-back / re-land: drop paid creative and request anew.
+                    showLog("HomePage.nativeAdList release impressed for fresh fill reqPos="
+                            + slotPos);
+                    releaseImpressedGooglePackedAt(i);
+                    break;
+                }
                 showLog("HomePage.nativeAdList exact pos match reqPos=" + slotPos
-                        + (packed.isImpressed() ? " (impressed sticky)"
-                        : (packed.isClaimed() ? " (claimed same-seat)" : "")));
+                        + (packed.isClaimed() ? " (claimed same-seat)" : ""));
                 return packed.getAd();
             }
         }
@@ -5750,6 +5840,93 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 ? " (same-respId ok — new object)" : ""));
         reassignGoogleNativeReqPos(donor, slotPos);
         return donor.getAd();
+    }
+
+    /**
+     * Destroy an impressed Google packed entry so flip-back can request a fresh
+     * fill. Never transfers the creative to another seat.
+     */
+    private void releaseImpressedGooglePackedAt(int index) {
+        if (HomePage.nativeGoogleAdList == null
+                || index < 0
+                || index >= HomePage.nativeGoogleAdList.size()) {
+            return;
+        }
+        try {
+            FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(index);
+            if (packed == null) {
+                HomePage.nativeGoogleAdList.remove(index);
+                return;
+            }
+            int oldPos = packed.getReqPos();
+            try {
+                if (packed.getAd() != null) {
+                    packed.getAd().destroy();
+                }
+            } catch (Exception ignored) {
+            }
+            packed.setAd(null);
+            packed.setClaimed(false);
+            packed.setImpressed(false);
+            HomePage.nativeGoogleAdList.remove(index);
+            try {
+                if (HomePage.nativeGoogleAdArray != null) {
+                    HomePage.nativeGoogleAdArray.remove(Integer.valueOf(oldPos));
+                }
+            } catch (Exception ignored) {
+            }
+            showLog("released impressed google for fresh fill reqPos=" + oldPos);
+            if (context instanceof HomePage) {
+                try {
+                    ((HomePage) context).refillNativeAdPoolAfterConsume();
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception e) {
+            showLog("releaseImpressedGooglePackedAt: " + e.getMessage());
+        }
+    }
+
+    /** Destroy impressed FB packed entry for fresh fill on flip-back. */
+    private void releaseImpressedFbPackedAt(int index) {
+        if (HomePage.nativeFBAdList == null
+                || index < 0
+                || index >= HomePage.nativeFBAdList.size()) {
+            return;
+        }
+        try {
+            FlipGoogleNativeAds packed = HomePage.nativeFBAdList.get(index);
+            if (packed == null) {
+                HomePage.nativeFBAdList.remove(index);
+                return;
+            }
+            int oldPos = packed.getReqPos();
+            try {
+                if (packed.getFbAd() != null) {
+                    packed.getFbAd().destroy();
+                }
+            } catch (Exception ignored) {
+            }
+            packed.setFbAd(null);
+            packed.setClaimed(false);
+            packed.setImpressed(false);
+            HomePage.nativeFBAdList.remove(index);
+            try {
+                if (HomePage.nativeFBAdArray != null) {
+                    HomePage.nativeFBAdArray.remove(Integer.valueOf(oldPos));
+                }
+            } catch (Exception ignored) {
+            }
+            showLog("released impressed fb for fresh fill reqPos=" + oldPos);
+            if (context instanceof HomePage) {
+                try {
+                    ((HomePage) context).refillNativeAdPoolAfterConsume();
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception e) {
+            showLog("releaseImpressedFbPackedAt: " + e.getMessage());
+        }
     }
 
     /** AdMob response id for back-to-back creative preference (best-effort). */
@@ -5910,8 +6087,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * FB: exact match only (ahead-steal disabled for flip lag). Includes impressed
-     * sticky seats for flip return; never transfers impressed to another seat.
+     * FB: exact match only (ahead-steal disabled for flip lag). Impressed exact
+     * matches are released for fresh fill on flip-back; never transferred to
+     * another seat.
      */
     @Nullable
     private com.facebook.ads.NativeAd findFbNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -5926,6 +6104,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             FlipGoogleNativeAds packed = HomePage.nativeFBAdList.get(i);
             if (packed == null || packed.getFbAd() == null) continue;
             if (packed.getReqPos() == slotPos) {
+                if (packed.isImpressed()) {
+                    showLog("fb release impressed for fresh fill reqPos=" + slotPos);
+                    releaseImpressedFbPackedAt(i);
+                    return null;
+                }
                 return packed.getFbAd();
             }
         }
@@ -5933,9 +6116,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * True when Google/FB has an exact creative <b>or</b> an unclaimed ready-pool
-     * ad that can be transferred (orphan / ahead). Peek only — does not mutate.
-     * Exact-seat impressed creatives count (sticky); they are not transferable.
+     * True when Google/FB has an exact <b>unimpressed</b> creative <b>or</b> an
+     * unclaimed ready-pool ad that can be transferred (orphan / ahead). Peek only
+     * — does not mutate. Impressed exact seats do not count (fresh fill needed).
      */
     private boolean hasNativeCreativeForSlot(@Nullable ModelClass.Datum slot) {
         if (slot == null) {
@@ -5965,7 +6148,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
                     if (packed == null || packed.getAd() == null) continue;
                     if (packed.getReqPos() == slotPos) {
-                        return true;
+                        // Impressed = need fresh fill; do not treat as ready creative.
+                        if (!packed.isImpressed()) {
+                            return true;
+                        }
+                        continue;
                     }
                     if (!packed.isClaimed() && !packed.isImpressed()
                             && !isHomeFlipAnimating()) {
@@ -5981,7 +6168,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     FlipGoogleNativeAds packed = HomePage.nativeFBAdList.get(i);
                     if (packed == null || packed.getFbAd() == null) continue;
                     if (packed.getReqPos() == slotPos) {
-                        return true;
+                        if (!packed.isImpressed()) {
+                            return true;
+                        }
+                        continue;
                     }
                     if (!packed.isClaimed() && !packed.isImpressed()
                             && !isHomeFlipAnimating()
@@ -8012,7 +8202,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         });
 
         showLog("Check Point Adapter:: 11");
-        if (list.get(position).getIs_source()) {
+        if (Boolean.TRUE.equals(list.get(position).getIs_source())) {
             descriptionText = "" + list.get(position).getDescription();
             descriptionHash = descriptionText.substring(descriptionText.indexOf("#") + 1);
             showLog("descriptionHash:"+descriptionHash);
@@ -8116,7 +8306,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 e.printStackTrace();
             }
 
-            if (list.get(position).getIs_source()) {
+            if (Boolean.TRUE.equals(list.get(position).getIs_source())) {
 
                 if (LanguageId == 4) {
                     halfImageActivity.tamil_half_content_description.setText(ssText);

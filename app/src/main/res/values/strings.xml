@@ -242,6 +242,7 @@
     <string name="search_back">Back</string>
     <string name="search_stories_hint">Search..</string>
     <string name="search_keyword_examples">Search keyword ex : Modi, Politics, Health, Stocks, …</string>
+    <string name="search_daily_updates_section">Daily Updates</string>
     <string name="recent_searches">Recent Searches</string>
     <string name="search_categories">Categories</string>
     <string name="search_hub_title">Continue reading</string>

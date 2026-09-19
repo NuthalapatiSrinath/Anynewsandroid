@@ -287,6 +287,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public static final String EXTRA_FOOTER_TAB = "extra_footer_tab";
     /** In-app Search → FlipView keyword mode (from InAppSearchActivity). */
     public static final String EXTRA_SEARCH_QUERY = "extra_search_query";
+    /**
+     * Optional Daily Updates deep-open after {@link #EXTRA_FOOTER_TAB} status:
+     * {@link com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest#DU_OPEN_PANCHANGAM} etc.
+     */
+    public static final String EXTRA_DU_OPEN =
+            com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest.EXTRA_DU_OPEN;
 
     private static final String TAG = "HomePage :";
     private static final String ADS_TAG = "ANYNEWS_ADS";
@@ -1663,6 +1669,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Reload is the already-selected home tab — selection listener does not fire on re-tap.
         bottomNavigationView.setOnNavigationItemReselectedListener(mOnNavigationItemReselectedListener);
         handleFooterTabExtra(getIntent());
+        applyDailyUpdatesOpenExtra(getIntent());
         // firebase store
         hashMapUser = new HashMap<>();
         draft_id_firebase = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
@@ -1683,6 +1690,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             handleFooterTabExtra(intent);
             applySearchQueryExtra(intent);
             applyCategorySessionExtra(intent);
+            applyDailyUpdatesOpenExtra(intent);
         }
     }
 
@@ -1719,10 +1727,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         updateSearchContextBar();
-        try {
-            playSearchResultEnterReveal(intent);
-        } catch (Exception ignored) {
-        }
+        // Never circular-reveal android.R.id.content — 3.41.64 set it INVISIBLE and
+        // left footer/back dead when the reveal did not complete. Keep chrome live.
+        ensureSearchChromeInteractive();
         last_post_id = 0;
         skip = 0;
         actual_skip = 0;
@@ -1748,6 +1755,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 mFlipView.setVisibility(View.VISIBLE);
             }
             showHomeFeedLoadingReveal();
+            ensureSearchChromeInteractive();
         } catch (Exception ignored) {
             list = new ArrayList<>();
         }
@@ -1873,6 +1881,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 txtNoData.setVisibility(View.GONE);
             }
             hideHomeFeedLoadingReveal(true);
+            ensureSearchChromeInteractive();
         } catch (Exception ignored) {
         }
         if (paintables > 0 && landOnHits) {
@@ -1891,6 +1900,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
+        ensureSearchChromeInteractive();
     }
 
     /**
@@ -2094,6 +2104,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         clearSearchFeedMode();
+        ensureSearchChromeInteractive();
         try {
             performFeedReload();
         } catch (Exception e) {
@@ -2106,6 +2117,141 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /**
+     * Search mode must keep activity content + bottom tabs + context-back live.
+     * 3.41.64 circular-reveal on {@code android.R.id.content} left them INVISIBLE.
+     * Never {@link View#bringToFront()} the context bar inside the footer
+     * LinearLayout — that reorders children and pushes search chrome <b>below</b>
+     * the bottom nav (3.41.66 screenshot bug).
+     */
+    private void ensureSearchChromeInteractive() {
+        try {
+            View content = findViewById(android.R.id.content);
+            if (content != null && content.getVisibility() != View.VISIBLE) {
+                content.setVisibility(View.VISIBLE);
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (layout_with_out_data != null
+                    && layout_with_out_data.getVisibility() == View.VISIBLE
+                    && list != null
+                    && !list.isEmpty()) {
+                hideHomeFeedLoadingReveal(true);
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (isDeviceOnline() && !offlineChromeMode) {
+                ensureOnlineBottomNavVisible();
+            } else if (home_page_navigation != null) {
+                setHomePageNavigationVisibility(View.VISIBLE);
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            restoreSearchContextBarAboveFooter();
+            updateSearchContextBar();
+            if (searchContextBar != null && isSearchFeedActive()) {
+                searchContextBar.setVisibility(View.VISIBLE);
+                searchContextBar.setClickable(true);
+                searchContextBar.setEnabled(true);
+                View back = searchContextBar.findViewById(R.id.search_context_back);
+                if (back != null) {
+                    back.setClickable(true);
+                    back.setEnabled(true);
+                    back.setOnClickListener(v -> exitSearchFeedMode());
+                }
+                searchContextBar.setOnClickListener(v -> exitSearchFeedMode());
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * XML order is search bar then bottom nav. A prior bringToFront left the bar
+     * as last child (under the footer). Re-insert immediately before the nav.
+     */
+    private void restoreSearchContextBarAboveFooter() {
+        if (searchContextBar == null || home_page_navigation == null) {
+            return;
+        }
+        try {
+            android.view.ViewParent vp = searchContextBar.getParent();
+            if (!(vp instanceof android.view.ViewGroup)) {
+                return;
+            }
+            android.view.ViewGroup parent = (android.view.ViewGroup) vp;
+            if (home_page_navigation.getParent() != parent) {
+                return;
+            }
+            int navIndex = parent.indexOfChild(home_page_navigation);
+            int barIndex = parent.indexOfChild(searchContextBar);
+            if (navIndex < 0 || barIndex < 0) {
+                return;
+            }
+            // Bar must sit directly above nav (index == navIndex - 1 after fix).
+            if (barIndex < navIndex) {
+                return;
+            }
+            parent.removeView(searchContextBar);
+            int insertAt = parent.indexOfChild(home_page_navigation);
+            if (insertAt < 0) {
+                insertAt = parent.getChildCount();
+            }
+            parent.addView(searchContextBar, insertAt);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Search suggestion → open a Daily Updates category (panchangam / rashi /
+     * flash / mana) after the status tab hosts the hub.
+     */
+    private void applyDailyUpdatesOpenExtra(@Nullable Intent intent) {
+        if (intent == null || !intent.hasExtra(EXTRA_DU_OPEN)) {
+            return;
+        }
+        final String open = intent.getStringExtra(EXTRA_DU_OPEN);
+        intent.removeExtra(EXTRA_DU_OPEN);
+        if (open == null || open.trim().isEmpty()) {
+            return;
+        }
+        final String key = open.trim();
+        // Hub-only: handleFooterTabExtra already opened Daily Updates.
+        if (com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest.DU_OPEN_HUB.equals(key)) {
+            return;
+        }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            try {
+                clearSearchFeedMode();
+                if (com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest.DU_OPEN_PANCHANGAM
+                        .equals(key)) {
+                    performCalendarOpen(false, true);
+                } else if (com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest.DU_OPEN_RASHI
+                        .equals(key)) {
+                    performCalendarOpen(true, true);
+                } else if (com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest.DU_OPEN_FLASH
+                        .equals(key)) {
+                    performFlashNewsOpen();
+                } else if (com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest.DU_OPEN_MANA
+                        .equals(key)) {
+                    performLocalFeedOpenFromDailyUpdates();
+                } else {
+                    performDailyUpdatesOpen();
+                }
+            } catch (Exception e) {
+                try {
+                    performDailyUpdatesOpen();
+                } catch (Exception ignored) {
+                }
+            }
+        }, 350L);
     }
 
     /** Search end hub → Main News. */
@@ -2175,18 +2321,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** Circular reveal when opening search results into FlipView (same helper as search icon). */
+    /**
+     * Intentionally no-op. 3.41.64 revealed {@code android.R.id.content} (set
+     * INVISIBLE) and broke footer/back; FlipView reveal blanked seating. Search
+     * results open without a circular reveal so chrome stays interactive.
+     */
     private void playSearchResultEnterReveal(@Nullable Intent intent) {
-        if (intent == null
-                || !intent.getBooleanExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, false)) {
-            return;
-        }
-        // Reveal on the activity content root — never on FlipView itself.
-        // Animating FlipView INVISIBLE while seating Search_Stories caused
-        // mid-gesture VelocityTracker NPEs and blank/hub-only first paint.
-        View target = findViewById(android.R.id.content);
-        if (target == null) return;
-        SearchRevealHelper.playEnterReveal(this, target, intent);
+        ensureSearchChromeInteractive();
     }
 
     /** Admin search_icon_on_toggle + search_icon_size_dp on News|Read chrome. */
@@ -3170,6 +3311,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                 }
                 ensureFeedNativeAdLoaded(code, reqPos, type);
+                // Interstitial: show full-screen when landed on an ad seat (cadence = every N).
+                maybeShowFeedInterstitialForSlot(seat);
             } catch (Exception ignored) {
             }
             // Prefer paint of any ready warm creative onto the parked Share/house seat.
@@ -3181,7 +3324,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             // Do not loadAds(next_req) here — prefetchUpcoming covers the next 1–2
             // seats without a duplicate AdLoader for the same ahead inventory.
-            // Interstitial show path removed (native-only; was $0 / wasted requests).
         }
         prefetchUpcomingNativeAds(position, getAdPrefetchLookahead());
         // Soft top-up of shared warm only when empty (refill after claim owns the rest).
@@ -3241,8 +3383,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (nativeGoogleAdArray != null && nativeGoogleAdArray.contains(ad_req_position)) {
                 return;
             }
-            // Native-only feed — never request interstitials (was $0 / -100% revenue).
-            loadGoogleAds(ad_code, ad_req_position, 0);
+            int reqType = FeedAdConfig.isInterstitial(this) ? 1 : 0;
+            loadGoogleAds(ad_code, ad_req_position, reqType);
         }else{
             if (ad_code == null || ad_code.trim().isEmpty()) {
                 Log.w(ADS_TAG, "request skip empty Facebook placement reqPos=" + ad_req_position);
@@ -3280,12 +3422,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 return;
             }
             if (type.equalsIgnoreCase("google") || type.equalsIgnoreCase("admanager")) {
+                final boolean interstitialMode = FeedAdConfig.isInterstitial(this);
                 if (nativeGoogleAdList != null) {
                     for (int i = 0; i < nativeGoogleAdList.size(); i++) {
                         FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
                         if (packed != null
                                 && packed.getReqPos() == adReqPosition
-                                && packed.getAd() != null) {
+                                && (packed.getAd() != null
+                                        || packed.getInterstitialAd() != null)) {
                             return;
                         }
                     }
@@ -3297,14 +3441,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (pendingNativeLoadStarts.contains(adReqPosition)) {
                     return;
                 }
-                // Warm pool has a matchable creative — paint path claims it; do not
-                // fire a parallel AdLoader that would never impress if unused.
-                try {
-                    if (AdPreloader.get().isReady()) {
-                        scheduleFlipSafeAdRebind();
-                        return;
+                // Warm pool is native-only — skip when admin format is interstitial.
+                if (!interstitialMode) {
+                    try {
+                        if (AdPreloader.get().isReady()) {
+                            scheduleFlipSafeAdRebind();
+                            return;
+                        }
+                    } catch (Exception ignored) {
                     }
-                } catch (Exception ignored) {
                 }
             } else {
                 if (nativeFBAdList != null) {
@@ -3377,8 +3522,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (nativeGoogleAdList != null) {
                 for (int i = 0; i < nativeGoogleAdList.size(); i++) {
                     FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
-                    if (packed != null && packed.getAd() != null
-                            && packed.getReqPos() == slotPos) {
+                    if (packed != null
+                            && packed.getReqPos() == slotPos
+                            && (packed.getAd() != null
+                                    || packed.getInterstitialAd() != null)) {
                         return true;
                     }
                 }
@@ -3756,9 +3903,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Mark the packed Google native for {@code reqPos} as impressed (one paid show).
-     * Sticky on this seat for flip return; destroyed only when the seat/feed is gone
-     * ({@link #destroyOffscreenImpressedNatives(int)}) or pools cleared. Kick a
-     * replacement into the shared warm pool for upcoming empty seats.
+     * Flip-away destroys it (admin destroy toggle ON) so flip-back requests a fresh
+     * fill — no seat-sticky same creative. Kick a replacement into the shared warm
+     * pool for upcoming empty seats.
      */
     public void markGoogleNativeImpressed(@Nullable Integer reqPos) {
         if (reqPos == null || nativeGoogleAdList == null) {
@@ -3806,13 +3953,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * After settle: destroy claimed/impressed natives whose {@code ad_req_position}
-     * seat is no longer in the adapter list (item removed, feed rebuild, mode wipe).
-     * Normal flip away from an ad page does <b>not</b> destroy — seat-sticky return
-     * shows the same NativeAd. Unimpressed warm pool + AdPreloader stay intact.
+     * After settle: destroy claimed/impressed natives whose seat is not the
+     * current Flip page (July / Play Store: flip-away release → fresh fill on
+     * return). Also destroys when the seat was removed from the list. Unimpressed
+     * warm pool + AdPreloader stay intact. Never transfers impressed creatives
+     * to another seat (money-safe).
      * Gated by admin {@code destroy_native_ads_after_impression} (default ON).
-     * When OFF: even softer retention until {@link #clearNativeAdPools()} /
-     * activity destroy. {@code currentPage} unused (API kept for call sites).
+     * When OFF: softer retention until {@link #clearNativeAdPools()} /
+     * activity destroy.
      */
     public void destroyOffscreenImpressedNatives(int currentPage) {
         if (isFinishing() || isDestroyed()) {
@@ -3821,19 +3969,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (!FeedAdConfig.isDestroyAfterImpression(this)) {
             return;
         }
-        java.util.HashSet<Integer> liveSeats = new java.util.HashSet<>();
+        Integer currentSeatReqPos = null;
         try {
-            if (list != null) {
-                for (int i = 0; i < list.size(); i++) {
-                    ModelClass.Datum slot = list.get(i);
-                    if (slot == null || slot.getPostType() == null
-                            || !slot.getPostType().equalsIgnoreCase("ad")) {
-                        continue;
-                    }
-                    Integer p = slot.getAd_req_position();
-                    if (p != null) {
-                        liveSeats.add(p);
-                    }
+            if (list != null && currentPage >= 0 && currentPage < list.size()) {
+                ModelClass.Datum cur = list.get(currentPage);
+                if (cur != null && cur.getPostType() != null
+                        && cur.getPostType().equalsIgnoreCase("ad")) {
+                    currentSeatReqPos = cur.getAd_req_position();
                 }
             }
         } catch (Exception ignored) {
@@ -3850,8 +3992,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         continue;
                     }
                     int oldPos = packed.getReqPos();
-                    // Seat still in the feed — sticky; keep for flip return.
-                    if (liveSeats.contains(oldPos)) {
+                    // Still on this seat — keep until the user flips away.
+                    if (currentSeatReqPos != null
+                            && currentSeatReqPos.intValue() == oldPos) {
                         continue;
                     }
                     try {
@@ -3869,7 +4012,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     } catch (Exception ignored) {
                     }
                     destroyedAny = true;
-                    showLog("destroy orphaned impressed google reqPos=" + oldPos);
+                    showLog("destroy flip-away impressed google reqPos=" + oldPos);
                 }
             }
             if (nativeFBAdList != null) {
@@ -3882,7 +4025,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         continue;
                     }
                     int oldPos = packed.getReqPos();
-                    if (liveSeats.contains(oldPos)) {
+                    if (currentSeatReqPos != null
+                            && currentSeatReqPos.intValue() == oldPos) {
                         continue;
                     }
                     try {
@@ -3900,7 +4044,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     } catch (Exception ignored) {
                     }
                     destroyedAny = true;
-                    showLog("destroy orphaned impressed fb reqPos=" + oldPos);
+                    showLog("destroy flip-away impressed fb reqPos=" + oldPos);
                 }
             }
         } catch (Exception e) {
@@ -4114,6 +4258,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 + " list=" + (list != null ? list.size() : -1)
                 + " video=" + isVideoFeedMode()
                 + " special=" + isSpecialFeedMode());
+        // Keyword search must never soft-page into List_All_Articles loops.
+        if (searchFeedActive
+                && activeSearchQuery != null
+                && !activeSearchQuery.trim().isEmpty()) {
+            showLog("ANYNEWS_SEARCH soft-empty diverted → finalize (" + reason + ")");
+            if (list == null) {
+                list = new ArrayList<>();
+            }
+            finalizeSearchFeedSeating(true);
+            return;
+        }
         try {
             if (canPageActiveOnlineFlipFeed()
                     && !bookmarksModeSelected
@@ -4379,20 +4534,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Prefer admin/splash unit ({@link FeedAdConfig}); fall back to production native
      * string. Ignore Google test publisher units and empty/GAM-mismatched values when
      * the admin unit is unset — keep paid AdMob requests working.
+     * <p>Interstitial mode must use an AdMob {@code ca-app-pub-…/…} unit — never a
+     * GAM native path ({@code /network,unit/name}).
      */
     @NonNull
     private String resolveGoogleNativeAdUnit(@Nullable String configuredCode) {
+        final boolean interstitial = FeedAdConfig.isInterstitial(this);
         String adminUnit = FeedAdConfig.getUnitId(this);
-        if (!TextUtils.isEmpty(adminUnit) && !adminUnit.contains("3940256099942544")) {
+        if (!TextUtils.isEmpty(adminUnit)
+                && !adminUnit.contains("3940256099942544")
+                && !(interstitial && adminUnit.startsWith("/"))
+                && !adminUnit.contains("~")) {
             Log.d(ADS_TAG, "resolved ad_code=" + adminUnit + " source=FeedAdConfig"
+                    + " format=" + (interstitial ? "interstitial" : "native")
                     + " ignored_slot_ad_code=" + (configuredCode == null ? "" : configuredCode));
             return adminUnit;
         }
         String code = configuredCode == null ? "" : configuredCode.trim();
         if (!code.isEmpty()
                 && !code.contains("3940256099942544")
-                && !code.contains("~")) {
-            Log.d(ADS_TAG, "resolved ad_code=" + code + " source=slot");
+                && !code.contains("~")
+                && !(interstitial && code.startsWith("/"))) {
+            Log.d(ADS_TAG, "resolved ad_code=" + code + " source=slot"
+                    + " format=" + (interstitial ? "interstitial" : "native"));
             return code;
         }
         String fallback = getString(R.string.admob_native_ad_unit_fallback).trim();
@@ -4400,16 +4564,80 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             fallback = FeedAdConfig.DEFAULT_UNIT_ID;
         }
         Log.d(ADS_TAG, "resolved ad_code=" + fallback + " source=strings-fallback"
+                + " format=" + (interstitial ? "interstitial" : "native")
                 + " ignored_server_ad_code=" + code);
         return fallback;
     }
 
     /**
-     * Feed interstitial show disabled — native-only money path. Kept as no-op so
-     * leftover call sites compile without firing wasted interstitial requests.
+     * When admin format (or slot ad_screen_type) is interstitial, show a full-screen
+     * ad at most once per seat. Frequency is still feed_ad_every_n (ad seats only).
      */
     private void maybeShowFeedInterstitialForSlot(@Nullable ModelClass.Datum slot) {
-        // no-op
+        if (slot == null || isFinishing() || isDestroyed()) return;
+        boolean interstitial =
+                FeedAdConfig.isInterstitial(this)
+                        || "interstitial".equalsIgnoreCase(
+                                slot.getAd_screen_type() == null
+                                        ? ""
+                                        : slot.getAd_screen_type().trim());
+        if (!interstitial) return;
+        Integer reqPos = slot.getAd_req_position();
+        if (reqPos == null) return;
+        if (feedInterstitialShownPos.contains(reqPos)) return;
+        if (nativeGoogleAdList == null || nativeGoogleAdList.isEmpty()) return;
+        InterstitialAd ready = null;
+        int readyIndex = -1;
+        for (int i = 0; i < nativeGoogleAdList.size(); i++) {
+            FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
+            if (packed == null || packed.getInterstitialAd() == null) continue;
+            if (packed.getReqPos() == reqPos) {
+                ready = packed.getInterstitialAd();
+                readyIndex = i;
+                break;
+            }
+            if (ready == null) {
+                ready = packed.getInterstitialAd();
+                readyIndex = i;
+            }
+        }
+        if (ready == null) return;
+        try {
+            feedInterstitialShownPos.add(reqPos);
+            if (readyIndex >= 0 && readyIndex < nativeGoogleAdList.size()) {
+                FlipGoogleNativeAds packed = nativeGoogleAdList.get(readyIndex);
+                if (packed != null) packed.setInterstitialAd(null);
+            }
+            Log.d(ADS_TAG, "show feed interstitial reqPos=" + reqPos);
+            try {
+                ready.setFullScreenContentCallback(
+                        new com.google.android.gms.ads.FullScreenContentCallback() {
+                            @Override
+                            public void onAdImpression() {
+                                adImpress = true;
+                                Log.d(ADS_TAG, "interstitial onAdImpression reqPos=" + reqPos
+                                        + " (AdMob Impressions / estimated earnings)");
+                            }
+
+                            @Override
+                            public void onAdDismissedFullScreenContent() {
+                                Log.d(ADS_TAG, "interstitial dismissed reqPos=" + reqPos);
+                                try {
+                                    // Restore in-feed chrome after overlay closes.
+                                    if (!FeedAdConfig.isInterstitial(HomePage.this)) {
+                                        ensureOnlineBottomNavVisible();
+                                    }
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        });
+            } catch (Exception ignored) {
+            }
+            ready.show(this);
+        } catch (Exception e) {
+            feedInterstitialShownPos.remove(reqPos);
+            Log.w(ADS_TAG, "feed interstitial show failed: " + e.getMessage());
+        }
     }
 
     private void loadGoogleAds(String adCode, Integer ad_req_position,int reqType) {
@@ -4418,7 +4646,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         adCode = resolveGoogleNativeAdUnit(adCode);
-        Log.d(ADS_TAG, "request start type=google format=AdMob"
+        Log.d(ADS_TAG, "request start type=google format="
+                + (reqType == 1 ? "interstitial" : "native")
                 + " ad_code=" + adCode + " reqPos=" + ad_req_position);
 
         // Do NOT mark in-flight here — startNativeAdLoader may defer across flips.
@@ -4428,8 +4657,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             loadAdLoader(adCode,ad_req_position);
 
         }else if(reqType==1){
-            // Interstitial feed loads disabled — do not burn AdMob requests with $0 show.
-            Log.w(ADS_TAG, "interstitial load gated off reqPos=" + ad_req_position);
+            // Interstitial path still needs a reservation marker.
+            if (ad_req_position != null && nativeGoogleAdArray != null
+                    && !nativeGoogleAdArray.contains(ad_req_position)) {
+                nativeGoogleAdArray.add(ad_req_position);
+            }
+            loadInterstitialAd(adCode,ad_req_position);
         }
 
         showLog("Ad2 loading");
@@ -4660,8 +4893,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     public void onAdImpression() {
                         super.onAdImpression();
                         adImpress=true;
-                        Log.d(ADS_TAG, "paid impression ad_code=" + adCode
-                                + " reqPos=" + ad_req_position);
+                        Log.d(ADS_TAG, "AdMob onAdImpression ad_code=" + adCode
+                                + " reqPos=" + ad_req_position
+                                + " (counts in AdMob Impressions; money = paid if matched)");
                         NativeAdCacheCoordinator.get().onPaidShown(
                                 "google", adCode, ad_req_position);
                         // One impression = one creative — exclude from shared pool forever.
@@ -4708,6 +4942,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     }
                                 }
                                 nativeGoogleAdList.add(flipGoogleNativeAds);
+                                try {
+                                    // Lightweight earnings debug — AdMob console remains
+                                    // source of truth. Safe no-op if SDK omits value.
+                                    nativeAd.setOnPaidEventListener(adValue -> {
+                                        if (adValue == null) return;
+                                        Log.d(ADS_TAG, "onPaidEvent micros="
+                                                + adValue.getValueMicros()
+                                                + " currency=" + adValue.getCurrencyCode()
+                                                + " precision=" + adValue.getPrecisionType()
+                                                + " ad_code=" + adCode
+                                                + " reqPos=" + ad_req_position);
+                                    });
+                                } catch (Exception ignored) {
+                                }
                                 String adapterName = null;
                                 try {
                                     if (nativeAd.getResponseInfo() != null
@@ -4760,11 +5008,68 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void loadInterstitialAd(String adCode, Integer ad_req_position) {
-        // Feed interstitial requests permanently gated — native-only money path.
-        Log.w(ADS_TAG, "loadInterstitialAd ignored (native-only) reqPos=" + ad_req_position);
-        if (nativeGoogleAdArray != null && ad_req_position != null) {
-            nativeGoogleAdArray.remove(ad_req_position);
+        if (adCode == null || adCode.isEmpty()) {
+            if (nativeGoogleAdArray != null && ad_req_position != null) {
+                nativeGoogleAdArray.remove(ad_req_position);
+            }
+            return;
         }
+        // InterstitialAd.load requires an AdMob unit (ca-app-pub-…/…), not a GAM
+        // native path. resolveGoogleNativeAdUnit already prefers FeedAdConfig.
+        if (adCode.startsWith("/")) {
+            Log.w(ADS_TAG, "interstitial skip GAM-style unit ad_code=" + adCode
+                    + " reqPos=" + ad_req_position
+                    + " — set AdMob interstitial unit + matching format");
+            if (nativeGoogleAdArray != null && ad_req_position != null) {
+                nativeGoogleAdArray.remove(ad_req_position);
+            }
+            return;
+        }
+        AdRequest adRequest = new AdRequest.Builder().build();
+        InterstitialAd.load(this, adCode, adRequest, new InterstitialAdLoadCallback() {
+            @Override
+            public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                super.onAdFailedToLoad(loadAdError);
+                if (nativeGoogleAdArray != null && ad_req_position != null) {
+                    nativeGoogleAdArray.remove(ad_req_position);
+                }
+                Log.w(ADS_TAG, "interstitial load failure ad_code=" + adCode
+                        + " reqPos=" + ad_req_position
+                        + " error=" + (loadAdError != null ? loadAdError.getMessage() : ""));
+            }
+
+            @Override
+            public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
+                super.onAdLoaded(interstitialAd);
+                try {
+                    FlipGoogleNativeAds flipGoogleNativeAds = new FlipGoogleNativeAds();
+                    flipGoogleNativeAds.setInterstitialAd(interstitialAd);
+                    flipGoogleNativeAds.setAdCode(adCode);
+                    flipGoogleNativeAds.setReqPos(ad_req_position);
+                    if (nativeGoogleAdArray != null
+                            && ad_req_position != null
+                            && !nativeGoogleAdArray.contains(ad_req_position)) {
+                        nativeGoogleAdArray.add(ad_req_position);
+                    }
+                    nativeGoogleAdList.add(flipGoogleNativeAds);
+                    Log.d(ADS_TAG, "interstitial ready ad_code=" + adCode
+                            + " reqPos=" + ad_req_position);
+                    // If user already settled on this seat, show immediately.
+                    try {
+                        if (list != null
+                                && positionx >= 0
+                                && positionx < list.size()
+                                && list.get(positionx) != null
+                                && "ad".equalsIgnoreCase(list.get(positionx).getPostType())) {
+                            maybeShowFeedInterstitialForSlot(list.get(positionx));
+                        }
+                    } catch (Exception ignored) {
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        });
     }
 
     /**
@@ -8342,14 +8647,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * When online + main News: always keep the bottom tabs visible.
-     * Ads/share cards used to GONE the footer (white bottom).
+     * Share/ratings and true AdMob interstitial seats still hide the footer;
+     * in-feed native ad cards keep it visible (not a full-screen takeover).
      */
     private void ensureOnlineBottomNavVisible() {
         if (home_page_navigation == null) return;
         if (!isDeviceOnline() || offlineChromeMode) return;
         try {
-            // July-stable: never force footer VISIBLE while seated on ad/share/web
-            // interstitials — refreshHomeModeToggleUi used to undo closeBottomStrip.
+            // Do not force VISIBLE while seated on share/ratings or true interstitial.
             if (isCurrentFlipInterstitialForFooter()) {
                 setHomePageNavigationVisibility(View.GONE);
                 return;
@@ -8361,12 +8666,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** True when the visible Flip card should keep bottom tabs hidden (July ads). */
+    /**
+     * True when bottom tabs should stay hidden for the visible Flip card.
+     * In-feed native ads keep the footer; only share/ratings and admin
+     * {@code feed_ad_format=interstitial} (or slot {@code ad_screen_type}) hide it.
+     */
     private boolean isCurrentFlipInterstitialForFooter() {
         String type = post_type;
+        int pos = positionx;
         try {
             if (list != null && !list.isEmpty()) {
-                int pos = positionx;
                 if (mFlipView != null) {
                     int cur = mFlipView.getCurrentPage();
                     if (cur >= 0 && cur < list.size()) {
@@ -8379,13 +8688,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception ignored) {
         }
-        // Match July closeBottomStrip: ad / share_app / ratings only (not web).
         if (type == null || type.isEmpty()) {
             return false;
         }
-        return type.equalsIgnoreCase("ad")
-                || type.equalsIgnoreCase("share_app")
-                || type.equalsIgnoreCase("ratings");
+        if (type.equalsIgnoreCase("share_app") || type.equalsIgnoreCase("ratings")) {
+            return true;
+        }
+        if (type.equalsIgnoreCase("ad")) {
+            return shouldHideFooterForAdSlot(pos);
+        }
+        return false;
+    }
+
+    /**
+     * Hide app footer only for true full-screen interstitial seats — not native
+     * in-feed cards (those leave Home/Videos/etc. visible under the flip card).
+     */
+    private boolean shouldHideFooterForAdSlot(int pos) {
+        if (FeedAdConfig.isInterstitial(this)) {
+            return true;
+        }
+        try {
+            if (list != null && pos >= 0 && pos < list.size()) {
+                ModelClass.Datum d = list.get(pos);
+                if (d != null) {
+                    String screen = d.getAd_screen_type();
+                    if (screen != null
+                            && "interstitial".equalsIgnoreCase(screen.trim())) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     /**
@@ -10055,16 +10391,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void closeBottomStrip(boolean closeStrip) {
         showLog("closeBottomStrip:"+closeStrip);
-        // July-stable: hide bottom tabs on ad/share/ratings. Do not leave footer
-        // VISIBLE on ads (online bypass) — FlipperAdapter case "ad" calls this on
-        // every bind; thrashing GONE↔VISIBLE is avoided by set-if-changed below.
+        // Share/ratings hide bottom tabs. Native in-feed ads keep footer visible;
+        // only true interstitial format hides it (full-screen AdMob overlay).
+        // FlipperAdapter case "ad" calls this on every bind — set-if-changed below.
         if (list == null || positionx < 0 || positionx >= list.size()) {
             return;
         }
         String postType = list.get(positionx).getPostType();
-        if (postType != null && (postType.equalsIgnoreCase("ad")
-                || postType.equalsIgnoreCase("share_app")
+        if (postType != null && (postType.equalsIgnoreCase("share_app")
                 || postType.equalsIgnoreCase("ratings"))) {
+            setHomePageNavigationVisibility(View.GONE);
+        } else if (postType != null && postType.equalsIgnoreCase("ad")
+                && shouldHideFooterForAdSlot(positionx)) {
             setHomePageNavigationVisibility(View.GONE);
         } else if (isDeviceOnline() && !offlineChromeMode) {
             ensureOnlineBottomNavVisible();
@@ -13284,6 +13622,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             requestModel.setPushPostId(0L);
             requestModel.setSharePostId(0L);
             requestModel.setExclude_post_ids(null);
+            // Cap page size so Search_Stories matches server RESULT_LIMIT_DEFAULT.
+            requestModel.setLimit(12);
             showLog("ANYNEWS_SEARCH request search_text=\""
                     + activeSearchQuery.trim() + "\" skip=" + skip);
         }
@@ -13858,6 +14198,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         return;
                     }
                     showLog("home feed loading safety timeout — force resolve");
+                    // Keyword search: never soft-page main News — seat hub / hits.
+                    if (searchFeedActive
+                            && activeSearchQuery != null
+                            && !activeSearchQuery.trim().isEmpty()) {
+                        showLog("ANYNEWS_SEARCH loading timeout → finalize seating");
+                        if (list == null) {
+                            list = new ArrayList<>();
+                        }
+                        finalizeSearchFeedSeating(true);
+                        return;
+                    }
                     int paintables = list != null
                             ? ReadArticleStore.countPaintableArticles(list) : 0;
                     if (list != null && !list.isEmpty() && paintables > 0) {
@@ -14346,7 +14697,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getPn_title_size_sp()
                     );
                     // Performance → Ad every N / prefetch / concurrency / flush / format /
-                    // destroy-when-seat-gone (seat-sticky flip). Must land BEFORE unread-strip
+                    // destroy on flip-away (fresh fill on return). Must land BEFORE unread-strip
                     // rebalance so client cadence matches server seats.
                     if (encreptionRequest.getFeed_ad_every_n() != null
                             || encreptionRequest.getAd_prefetch_lookahead() != null
@@ -14354,6 +14705,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             || encreptionRequest.getAd_impr_flush_every_n() != null
                             || encreptionRequest.getDestroy_native_ads_after_impression() != null
                             || encreptionRequest.getUse_second_native_ad_unit() != null
+                            || (encreptionRequest.getFeed_native_ad_unit_mode() != null
+                                    && !encreptionRequest.getFeed_native_ad_unit_mode().trim()
+                                            .isEmpty())
                             || encreptionRequest.getFeed_ad_format() != null
                             || (encreptionRequest.getAd_code() != null
                                     && !encreptionRequest.getAd_code().trim().isEmpty())
@@ -14370,7 +14724,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 encreptionRequest.getAd_code(),
                                 encreptionRequest.getDestroy_native_ads_after_impression(),
                                 encreptionRequest.getUse_second_native_ad_unit(),
-                                encreptionRequest.getAd_code_secondary());
+                                encreptionRequest.getAd_code_secondary(),
+                                encreptionRequest.getFeed_native_ad_unit_mode());
                         FeedAdConfig.warmFromPrefs(getApplicationContext());
                     }
                     if (encreptionRequest.getViews_batch_flush_interval_seconds() != null
@@ -15264,16 +15619,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         layout_with_data.setVisibility(View.VISIBLE);
                     }
                 } else if (!fromCache) {
-                    if (mFlipView != null) {
-                        mFlipView.setVisibility(View.GONE);
+                    if (searchFeedActive
+                            && activeSearchQuery != null
+                            && !activeSearchQuery.trim().isEmpty()) {
+                        showLog("ANYNEWS_SEARCH parse error → hub seating");
+                        if (list == null) {
+                            list = new ArrayList<>();
+                        }
+                        finalizeSearchFeedSeating(true);
+                    } else {
+                        if (mFlipView != null) {
+                            mFlipView.setVisibility(View.GONE);
+                        }
+                        if (layout_with_data != null) {
+                            layout_with_data.setVisibility(View.VISIBLE);
+                        }
+                        if (txtNoData != null) {
+                            txtNoData.setVisibility(View.VISIBLE);
+                        }
+                        initialCall = true;
                     }
-                    if (layout_with_data != null) {
-                        layout_with_data.setVisibility(View.VISIBLE);
-                    }
-                    if (txtNoData != null) {
-                        txtNoData.setVisibility(View.VISIBLE);
-                    }
-                    initialCall = true;
                 }
             } catch (Exception ignored) {
             }
@@ -15297,6 +15662,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         int count = this.getSupportFragmentManager().getBackStackEntryCount();
         if (count == 0) {
             if (isSearchFeedActive()) {
+                ensureSearchChromeInteractive();
                 exitSearchFeedMode();
                 return;
             }
@@ -16067,8 +16433,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (adapter != null) {
             adapter.setCurrentFlipPage(position);
         }
-        // Leave-ad: soft-hide MediaView now; orphan seat destroy only after settle
-        // (seat-sticky: flip away keeps the same NativeAd while the shell remains).
+        // Leave-ad: soft-hide MediaView now; flip-away destroy after settle so
+        // return requests a fresh AdMob fill (July / Play Store path).
         final boolean leftAdShell = isFlipChromeInterstitialType(previousPostType)
                 && !isFlipChromeInterstitialType(post_type);
         final boolean enteredAdShell = !isFlipChromeInterstitialType(previousPostType)
@@ -16236,10 +16602,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         deferFlipChromeUntilSettle = false;
         try {
-            String type = post_type != null ? post_type : "";
-            if (type.equalsIgnoreCase("ad")
-                    || type.equalsIgnoreCase("share_app")
-                    || type.equalsIgnoreCase("ratings")) {
+            // Native in-feed ads keep footer; share/ratings + true interstitial hide it.
+            if (isCurrentFlipInterstitialForFooter()) {
                 setHomePageNavigationVisibility(View.GONE);
             } else if (isDeviceOnline() && !offlineChromeMode) {
                 ensureOnlineBottomNavVisible();
@@ -17862,9 +18226,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (items == null || items.isEmpty() || lookahead < 0) {
             return;
         }
+        final boolean interstitialMode = FeedAdConfig.isInterstitial(this);
         try {
             // Prefer consuming warm-pool matches over starting parallel seat AdLoaders.
-            if (AdPreloader.get().readyCount() >= AdPreloader.maxReady()) {
+            // Native warm pool does not apply in interstitial mode.
+            if (!interstitialMode
+                    && AdPreloader.get().readyCount() >= AdPreloader.maxReady()) {
                 showLog("prefetchUpcomingNativeAds skip — warm pool full");
                 return;
             }
@@ -17918,7 +18285,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     continue;
                 }
                 // Warm pool can satisfy this seat — skip a duplicate network request.
-                if (AdPreloader.get().isReady()) {
+                if (!interstitialMode && AdPreloader.get().isReady()) {
                     showLog("prefetchUpcomingNativeAds skip seat — AdPreloader ready"
                             + " reqPos=" + pos);
                     continue;

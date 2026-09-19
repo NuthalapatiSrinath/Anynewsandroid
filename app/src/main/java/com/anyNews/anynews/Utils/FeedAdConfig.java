@@ -12,16 +12,25 @@ import androidx.annotation.Nullable;
  * {@code feed_ad_format}, {@code ad_code},
  * {@code ad_prefetch_lookahead}, {@code max_native_ad_loads_in_flight},
  * {@code ad_impr_flush_every_n}, {@code destroy_native_ads_after_impression},
- * {@code use_second_native_ad_unit}, {@code ad_code_secondary}).
+ * {@code feed_native_ad_unit_mode}, {@code use_second_native_ad_unit},
+ * {@code ad_code_secondary}).
  *
  * <p>After a multi-format APK, admin alone switches native ↔ interstitial + unit;
  * no rebuild for format/unit changes. Cadence ({@link #getEveryN}) remains the
  * frequency cap for both formats.
+ *
+ * <p>Native unit mode: {@code primary_only} | {@code primary_then_secondary}
+ * (default) | {@code secondary_only}. Legacy bool maps when mode is absent.
  */
 public final class FeedAdConfig {
 
     public static final String FORMAT_NATIVE = "native";
     public static final String FORMAT_INTERSTITIAL = "interstitial";
+
+    /** Feed native unit selection (admin {@code feed_native_ad_unit_mode}). */
+    public static final String MODE_PRIMARY_ONLY = "primary_only";
+    public static final String MODE_PRIMARY_THEN_SECONDARY = "primary_then_secondary";
+    public static final String MODE_SECONDARY_ONLY = "secondary_only";
 
     /** Production feed native unit (code / strings fallback). */
     public static final String DEFAULT_UNIT_ID =
@@ -58,17 +67,21 @@ public final class FeedAdConfig {
     public static final int MAX_FLUSH_EVERY_N = 50;
 
     /**
-     * Default ON: destroy claimed/impressed natives when their seat leaves the
-     * feed (item removed / rebuild / mode wipe). Flip away keeps seat-sticky.
-     * OFF = softer retention until pool clear / activity destroy.
+     * Default ON: destroy claimed/impressed natives when the user flips away from
+     * their seat (July fresh-fill on return) or the seat leaves the feed. Flip
+     * leave no longer keeps a seat-sticky same creative. OFF = softer retention
+     * until pool clear / activity destroy.
      */
     public static final boolean DEFAULT_DESTROY_AFTER_IMPRESSION = true;
 
     /**
-     * Default ON: after primary native no-fill, try {@link #DEFAULT_SECOND_UNIT_ID}
-     * (or admin {@code ad_code_secondary}). OFF = primary only.
+     * Default: primary then secondary on no-fill.
+     * @deprecated Prefer {@link #DEFAULT_NATIVE_AD_UNIT_MODE}.
      */
     public static final boolean DEFAULT_USE_SECOND_NATIVE = true;
+
+    /** Default feed native unit mode (matches prior waterfall ON). */
+    public static final String DEFAULT_NATIVE_AD_UNIT_MODE = MODE_PRIMARY_THEN_SECONDARY;
 
     private static volatile int cachedEveryN = DEFAULT_EVERY_N;
     private static volatile int cachedPrefetchLookahead = DEFAULT_PREFETCH_LOOKAHEAD;
@@ -76,7 +89,7 @@ public final class FeedAdConfig {
     private static volatile int cachedFlushEveryN = DEFAULT_FLUSH_EVERY_N;
     private static volatile boolean cachedDestroyAfterImpression =
             DEFAULT_DESTROY_AFTER_IMPRESSION;
-    private static volatile boolean cachedUseSecondNative = DEFAULT_USE_SECOND_NATIVE;
+    private static volatile String cachedNativeAdUnitMode = DEFAULT_NATIVE_AD_UNIT_MODE;
     private static volatile String cachedFormat = FORMAT_NATIVE;
     private static volatile String cachedUnitId = DEFAULT_UNIT_ID;
     private static volatile String cachedSecondUnitId = DEFAULT_SECOND_UNIT_ID;
@@ -91,7 +104,7 @@ public final class FeedAdConfig {
         getMaxInFlight(context);
         getFlushEveryN(context);
         isDestroyAfterImpression(context);
-        isUseSecondNativeAdUnit(context);
+        getNativeAdUnitMode(context);
         getFormat(context);
         getUnitId(context);
         getSecondUnitId(context);
@@ -168,6 +181,32 @@ public final class FeedAdConfig {
             @Nullable Boolean destroyAfterImpression,
             @Nullable Boolean useSecondNative,
             @Nullable String secondUnitId) {
+        saveFromServer(
+                context,
+                everyN,
+                prefetchLookahead,
+                maxInFlight,
+                flushEveryN,
+                feedAdFormat,
+                feedAdUnitId,
+                destroyAfterImpression,
+                useSecondNative,
+                secondUnitId,
+                null);
+    }
+
+    public static void saveFromServer(
+            @Nullable Context context,
+            @Nullable Integer everyN,
+            @Nullable Integer prefetchLookahead,
+            @Nullable Integer maxInFlight,
+            @Nullable Integer flushEveryN,
+            @Nullable String feedAdFormat,
+            @Nullable String feedAdUnitId,
+            @Nullable Boolean destroyAfterImpression,
+            @Nullable Boolean useSecondNative,
+            @Nullable String secondUnitId,
+            @Nullable String nativeAdUnitMode) {
         if (everyN != null) {
             saveEveryNFromServer(context, everyN);
         }
@@ -189,7 +228,9 @@ public final class FeedAdConfig {
         if (destroyAfterImpression != null) {
             saveDestroyAfterImpressionFromServer(context, destroyAfterImpression);
         }
-        if (useSecondNative != null) {
+        if (nativeAdUnitMode != null && !TextUtils.isEmpty(nativeAdUnitMode.trim())) {
+            saveNativeAdUnitModeFromServer(context, nativeAdUnitMode);
+        } else if (useSecondNative != null) {
             saveUseSecondNativeFromServer(context, useSecondNative);
         }
         if (secondUnitId != null) {
@@ -265,26 +306,34 @@ public final class FeedAdConfig {
     public static void saveUseSecondNativeFromServer(
             @Nullable Context context, @Nullable Boolean useSecond) {
         if (useSecond == null) return;
-        boolean safe = Boolean.TRUE.equals(useSecond);
-        cachedUseSecondNative = safe;
+        // Legacy bool → mode (cannot express secondary_only).
+        saveNativeAdUnitModeFromServer(
+                context,
+                Boolean.TRUE.equals(useSecond)
+                        ? MODE_PRIMARY_THEN_SECONDARY
+                        : MODE_PRIMARY_ONLY);
+    }
+
+    public static void saveNativeAdUnitModeFromServer(
+            @Nullable Context context, @Nullable String mode) {
+        if (mode == null) return;
+        String safe = normalizeNativeAdUnitMode(mode);
+        cachedNativeAdUnitMode = safe;
         if (context == null) return;
+        Context app = context.getApplicationContext();
+        SharedPrefsData.putString(
+                app, Constants.FEED_NATIVE_AD_UNIT_MODE, safe, Constants.PREF_NAME);
         SharedPrefsData.putBool(
-                context.getApplicationContext(),
+                app,
                 Constants.USE_SECOND_NATIVE_AD_UNIT,
-                safe,
+                MODE_PRIMARY_THEN_SECONDARY.equals(safe),
                 Constants.PREF_NAME);
     }
 
     public static void saveFormatFromServer(
             @Nullable Context context, @Nullable String format) {
         if (format == null) return;
-        // Feed money path is native-only. Interstitial format used to fire loads with
-        // $0 show/revenue while still counting as AdMob requests — coerce to native.
-        String safe = FORMAT_NATIVE;
-        if (FORMAT_INTERSTITIAL.equals(normalizeFormat(format))) {
-            android.util.Log.w("ANYNEWS_ADS",
-                    "feed_ad_format=interstitial ignored — native only");
-        }
+        String safe = normalizeFormat(format);
         cachedFormat = safe;
         if (context == null) return;
         SharedPrefsData.putString(
@@ -422,10 +471,11 @@ public final class FeedAdConfig {
     }
 
     /**
-     * When true (default): destroy claimed/impressed natives when their seat is
-     * gone from the list or on mode prune. Flip leave keeps sticky. When false:
-     * softer retention until clearNativeAdPools / activity destroy; impressed
-     * still never transfer to another seat.
+     * When true (default): destroy claimed/impressed natives when the user flips
+     * away from their seat or the seat leaves the list. Flip-back requests a
+     * fresh fill (no seat-sticky same creative). When false: softer retention
+     * until clearNativeAdPools / activity destroy; impressed still never transfer
+     * to another seat.
      */
     public static boolean isDestroyAfterImpression(@Nullable Context context) {
         if (context != null) {
@@ -449,55 +499,120 @@ public final class FeedAdConfig {
     }
 
     /**
-     * When true (default): on primary native no-fill, try the secondary unit for
-     * the same seat. When false: primary only (previous single-unit behavior).
+     * When true: on primary native no-fill, try the secondary unit for the same
+     * seat ({@link #MODE_PRIMARY_THEN_SECONDARY}). False for primary-only and
+     * secondary-only (no waterfall).
      */
     public static boolean isUseSecondNativeAdUnit(@Nullable Context context) {
-        if (context != null) {
-            try {
-                boolean v =
-                        SharedPrefsData.getBool(
-                                context.getApplicationContext(),
-                                Constants.USE_SECOND_NATIVE_AD_UNIT,
-                                Constants.PREF_NAME,
-                                DEFAULT_USE_SECOND_NATIVE);
-                cachedUseSecondNative = v;
-                return v;
-            } catch (Exception ignored) {
-            }
-        }
-        return cachedUseSecondNative;
+        return MODE_PRIMARY_THEN_SECONDARY.equals(getNativeAdUnitMode(context));
     }
 
     public static boolean isUseSecondNativeAdUnit() {
-        return cachedUseSecondNative;
+        return MODE_PRIMARY_THEN_SECONDARY.equals(normalizeNativeAdUnitMode(cachedNativeAdUnitMode));
+    }
+
+    /**
+     * Admin feed native unit mode: primary_only | primary_then_secondary |
+     * secondary_only.
+     */
+    @NonNull
+    public static String getNativeAdUnitMode(@Nullable Context context) {
+        if (context != null) {
+            try {
+                Context app = context.getApplicationContext();
+                String modeRaw =
+                        SharedPrefsData.getString(
+                                app, Constants.FEED_NATIVE_AD_UNIT_MODE, Constants.PREF_NAME);
+                if (!TextUtils.isEmpty(modeRaw)) {
+                    String n = normalizeNativeAdUnitMode(modeRaw);
+                    cachedNativeAdUnitMode = n;
+                    return n;
+                }
+                // Legacy prefs: derive from boolean when mode key absent.
+                boolean useSecond =
+                        SharedPrefsData.getBool(
+                                app,
+                                Constants.USE_SECOND_NATIVE_AD_UNIT,
+                                Constants.PREF_NAME,
+                                DEFAULT_USE_SECOND_NATIVE);
+                String derived =
+                        useSecond ? MODE_PRIMARY_THEN_SECONDARY : MODE_PRIMARY_ONLY;
+                cachedNativeAdUnitMode = derived;
+                return derived;
+            } catch (Exception ignored) {
+            }
+        }
+        return normalizeNativeAdUnitMode(cachedNativeAdUnitMode);
+    }
+
+    @NonNull
+    public static String getNativeAdUnitMode() {
+        return normalizeNativeAdUnitMode(cachedNativeAdUnitMode);
+    }
+
+    public static boolean isSecondaryOnly(@Nullable Context context) {
+        return MODE_SECONDARY_ONLY.equals(getNativeAdUnitMode(context));
     }
 
     @NonNull
     public static String getFormat(@Nullable Context context) {
-        // Native-only feed money path (ignore stored interstitial prefs).
-        cachedFormat = FORMAT_NATIVE;
-        return FORMAT_NATIVE;
+        if (context != null) {
+            try {
+                String v =
+                        SharedPrefsData.getString(
+                                context.getApplicationContext(),
+                                Constants.FEED_AD_FORMAT,
+                                Constants.PREF_NAME);
+                if (!TextUtils.isEmpty(v)) {
+                    String n = normalizeFormat(v);
+                    cachedFormat = n;
+                    return n;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return normalizeFormat(cachedFormat);
     }
 
     @NonNull
     public static String getFormat() {
-        cachedFormat = FORMAT_NATIVE;
-        return FORMAT_NATIVE;
+        return normalizeFormat(cachedFormat);
     }
 
-    /** Always false — feed interstitial requests are disabled (native-only money path). */
+    /** True when admin between-news format is interstitial (splash/session). */
     public static boolean isInterstitial(@Nullable Context context) {
-        return false;
+        return FORMAT_INTERSTITIAL.equals(getFormat(context));
     }
 
-    /** Always false — feed interstitial requests are disabled (native-only money path). */
     public static boolean isInterstitial() {
-        return false;
+        return FORMAT_INTERSTITIAL.equals(getFormat());
+    }
+
+    /**
+     * Effective unit for feed native loads. In {@link #MODE_SECONDARY_ONLY}
+     * (native format only), returns the secondary unit; otherwise the primary
+     * admin unit. Interstitial format always uses the primary {@code ad_code}.
+     */
+    @NonNull
+    public static String getUnitId(@Nullable Context context) {
+        if (MODE_SECONDARY_ONLY.equals(getNativeAdUnitMode(context))
+                && !isInterstitial(context)) {
+            return getSecondUnitId(context);
+        }
+        return getPrimaryUnitId(context);
     }
 
     @NonNull
-    public static String getUnitId(@Nullable Context context) {
+    public static String getUnitId() {
+        if (MODE_SECONDARY_ONLY.equals(getNativeAdUnitMode()) && !isInterstitial()) {
+            return getSecondUnitId();
+        }
+        return getPrimaryUnitId();
+    }
+
+    /** Stored primary unit (never remapped by secondary-only mode). */
+    @NonNull
+    public static String getPrimaryUnitId(@Nullable Context context) {
         if (context != null) {
             try {
                 String v =
@@ -520,7 +635,7 @@ public final class FeedAdConfig {
     }
 
     @NonNull
-    public static String getUnitId() {
+    public static String getPrimaryUnitId() {
         String cached = cachedUnitId == null ? "" : cachedUnitId.trim();
         return TextUtils.isEmpty(cached) ? DEFAULT_UNIT_ID : cached;
     }
@@ -555,13 +670,14 @@ public final class FeedAdConfig {
     }
 
     /**
-     * When toggle ON and {@code primaryUnit} is not already the secondary id,
-     * return the secondary unit for a no-fill waterfall; otherwise null.
+     * When mode is {@link #MODE_PRIMARY_THEN_SECONDARY} and {@code primaryUnit}
+     * is not already the secondary id, return the secondary unit for a no-fill
+     * waterfall; otherwise null (primary-only / secondary-only / same unit).
      */
     @Nullable
     public static String resolveFallbackUnitAfterNoFill(
             @Nullable Context context, @Nullable String primaryUnit) {
-        if (!isUseSecondNativeAdUnit(context)) {
+        if (!MODE_PRIMARY_THEN_SECONDARY.equals(getNativeAdUnitMode(context))) {
             return null;
         }
         String secondary = getSecondUnitId(context);
@@ -573,6 +689,18 @@ public final class FeedAdConfig {
             return null;
         }
         return secondary;
+    }
+
+    @NonNull
+    private static String normalizeNativeAdUnitMode(@Nullable String raw) {
+        if (raw == null) return DEFAULT_NATIVE_AD_UNIT_MODE;
+        String v = raw.trim().toLowerCase();
+        if (MODE_PRIMARY_ONLY.equals(v)
+                || MODE_PRIMARY_THEN_SECONDARY.equals(v)
+                || MODE_SECONDARY_ONLY.equals(v)) {
+            return v;
+        }
+        return DEFAULT_NATIVE_AD_UNIT_MODE;
     }
 
     @NonNull

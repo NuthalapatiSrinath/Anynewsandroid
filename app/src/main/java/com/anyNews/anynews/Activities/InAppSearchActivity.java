@@ -30,6 +30,7 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest;
 import com.anyNews.anynews.Utils.RecentSearchStore;
 import com.anyNews.anynews.Utils.SearchRevealHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -252,10 +253,25 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void fetchSuggestions(final String q) {
-        if (q.equals(lastSuggestQuery) && !rows.isEmpty() && rows.get(0).type == Row.TYPE_SUGGEST) {
-            return;
+        if (q.equals(lastSuggestQuery)
+                && !rows.isEmpty()
+                && (rows.get(0).type == Row.TYPE_SUGGEST
+                        || rows.get(0).type == Row.TYPE_HEADER)) {
+            // Allow re-paint when only DU header was showing; skip identical story burst.
+            boolean hasStorySuggest = false;
+            for (Row r : rows) {
+                if (r.type == Row.TYPE_SUGGEST) {
+                    hasStorySuggest = true;
+                    break;
+                }
+            }
+            if (hasStorySuggest) {
+                return;
+            }
         }
         lastSuggestQuery = q;
+        // Daily Updates category matches first (local, instant) while story API runs.
+        final List<Row> duRows = buildDailyUpdatesSuggestRows(q);
         try {
             JsonObject req = new JsonObject();
             req.addProperty(
@@ -285,6 +301,10 @@ public class InAppSearchActivity extends AppCompatActivity {
                             if (!typed.equals(q)) return;
                             try {
                                 List<Row> next = new ArrayList<>();
+                                if (!duRows.isEmpty()) {
+                                    next.add(Row.header(getString(R.string.search_daily_updates_section)));
+                                    next.addAll(duRows);
+                                }
                                 if (response.body() != null
                                         && response.body().getData() != null) {
                                     String raw = decrypt(response.body().getData());
@@ -318,19 +338,71 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 rows.addAll(next);
                                 adapter.notifyDataSetChanged();
                             } catch (Exception e) {
-                                noResults.setVisibility(View.VISIBLE);
+                                paintDailyUpdatesOnly(q, duRows);
                             }
                         }
 
                         @Override
                         public void onFailure(Call<EncreptionRequest> call, Throwable t) {
                             if (!call.isCanceled()) {
-                                noResults.setVisibility(View.VISIBLE);
+                                if (!duRows.isEmpty()) {
+                                    paintDailyUpdatesOnly(q, duRows);
+                                } else {
+                                    noResults.setVisibility(View.VISIBLE);
+                                }
                             }
                         }
                     });
         } catch (Exception e) {
+            if (!duRows.isEmpty()) {
+                paintDailyUpdatesOnly(q, duRows);
+            } else {
+                noResults.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
+    @NonNull
+    private List<Row> buildDailyUpdatesSuggestRows(@Nullable String q) {
+        List<Row> out = new ArrayList<>();
+        try {
+            for (DailyUpdatesSearchSuggest.Match m :
+                    DailyUpdatesSearchSuggest.matches(this, q)) {
+                out.add(Row.duCategory(m));
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    private void paintDailyUpdatesOnly(
+            @NonNull String q, @NonNull List<Row> duRows) {
+        String typed =
+                searchInput.getText() != null
+                        ? searchInput.getText().toString().trim()
+                        : "";
+        if (!typed.equals(q) || duRows.isEmpty()) {
             noResults.setVisibility(View.VISIBLE);
+            return;
+        }
+        noResults.setVisibility(View.GONE);
+        rows.clear();
+        rows.add(Row.header(getString(R.string.search_daily_updates_section)));
+        rows.addAll(duRows);
+        adapter.notifyDataSetChanged();
+    }
+
+    private void openDailyUpdatesMatch(@NonNull DailyUpdatesSearchSuggest.Match match) {
+        try {
+            Intent intent = DailyUpdatesSearchSuggest.launchIntent(this, match);
+            if (getApplicationContext() != null
+                    && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                startActivity(intent);
+            }
+            finish();
+            overridePendingTransition(0, 0);
+        } catch (Exception e) {
+            submitQuery(match.title);
         }
     }
 
@@ -424,35 +496,48 @@ public class InAppSearchActivity extends AppCompatActivity {
         static final int TYPE_RECENT = 1;
         static final int TYPE_CATEGORY = 2;
         static final int TYPE_SUGGEST = 3;
+        static final int TYPE_DU_CATEGORY = 4;
 
         final int type;
         final String title;
         final int meta;
         final int categoryId;
         final String highlight;
+        @Nullable final DailyUpdatesSearchSuggest.Match duMatch;
 
-        private Row(int type, String title, int meta, int categoryId, String highlight) {
+        private Row(
+                int type,
+                String title,
+                int meta,
+                int categoryId,
+                String highlight,
+                @Nullable DailyUpdatesSearchSuggest.Match duMatch) {
             this.type = type;
             this.title = title;
             this.meta = meta;
             this.categoryId = categoryId;
             this.highlight = highlight;
+            this.duMatch = duMatch;
         }
 
         static Row header(String t) {
-            return new Row(TYPE_HEADER, t, 0, 0, null);
+            return new Row(TYPE_HEADER, t, 0, 0, null, null);
         }
 
         static Row recent(String t) {
-            return new Row(TYPE_RECENT, t, 0, 0, null);
+            return new Row(TYPE_RECENT, t, 0, 0, null, null);
         }
 
         static Row category(String t, int id) {
-            return new Row(TYPE_CATEGORY, t, 0, id, null);
+            return new Row(TYPE_CATEGORY, t, 0, id, null, null);
         }
 
         static Row suggest(String t, int count, String highlight) {
-            return new Row(TYPE_SUGGEST, t, count, 0, highlight);
+            return new Row(TYPE_SUGGEST, t, count, 0, highlight, null);
+        }
+
+        static Row duCategory(@NonNull DailyUpdatesSearchSuggest.Match m) {
+            return new Row(TYPE_DU_CATEGORY, m.title, 0, 0, null, m);
         }
     }
 
@@ -507,6 +592,19 @@ public class InAppSearchActivity extends AppCompatActivity {
                 // so FlipView search_text matches what Suggestions found.
                 vh.itemView.setOnClickListener(
                         v -> submitQuery(suggestSubmitText(row)));
+            } else if (row.type == Row.TYPE_DU_CATEGORY) {
+                vh.meta.setVisibility(View.GONE);
+                vh.icon.setImageResource(R.drawable.ic_action_more_vert);
+                vh.action.setVisibility(View.VISIBLE);
+                vh.action.setImageResource(R.drawable.ic_action_more_vert);
+                vh.action.setRotation(270f);
+                final DailyUpdatesSearchSuggest.Match match = row.duMatch;
+                vh.itemView.setOnClickListener(
+                        v -> {
+                            if (match != null) {
+                                openDailyUpdatesMatch(match);
+                            }
+                        });
             } else if (row.type == Row.TYPE_RECENT) {
                 vh.meta.setVisibility(View.GONE);
                 vh.icon.setImageResource(android.R.drawable.ic_menu_recent_history);

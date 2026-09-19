@@ -707,10 +707,19 @@ public class StartActivityReqModel implements Serializable {
         /**
          * Try secondary native after primary no-fill (admin; default true).
          * Null on old servers → Android keeps cached / default ON.
+         * Prefer {@link #feedNativeAdUnitMode} when present.
          */
         @SerializedName("use_second_native_ad_unit")
         @Expose
         private Boolean useSecondNativeAdUnit;
+
+        /**
+         * primary_only | primary_then_secondary | secondary_only.
+         * Null on old servers → derive from {@link #useSecondNativeAdUnit}.
+         */
+        @SerializedName("feed_native_ad_unit_mode")
+        @Expose
+        private String feedNativeAdUnitMode;
 
         /** ViewsBatchTracker flush interval seconds (admin; default 60). */
         @SerializedName("views_batch_flush_interval_seconds")
@@ -1260,6 +1269,11 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / default ON (waterfall). */
         public Boolean getUseSecondNativeAdUnit() {
             return useSecondNativeAdUnit;
+        }
+
+        /** Null → old server; derive from {@link #getUseSecondNativeAdUnit()}. */
+        public String getFeedNativeAdUnitMode() {
+            return feedNativeAdUnitMode;
         }
 
         public Integer getViewsBatchFlushIntervalSeconds() {

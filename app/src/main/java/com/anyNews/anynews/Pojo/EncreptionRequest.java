@@ -372,10 +372,19 @@ public class EncreptionRequest {
     /**
      * When true (default): primary no-fill → try secondary native unit.
      * Null on old servers → Android keeps cached / default ON.
+     * Prefer {@link #feed_native_ad_unit_mode} when present.
      */
     @SerializedName("use_second_native_ad_unit")
     @Expose
     private Boolean use_second_native_ad_unit;
+
+    /**
+     * primary_only | primary_then_secondary | secondary_only.
+     * Null on old servers → derive from {@link #use_second_native_ad_unit}.
+     */
+    @SerializedName("feed_native_ad_unit_mode")
+    @Expose
+    private String feed_native_ad_unit_mode;
 
     @SerializedName("feed_ad_format")
     @Expose
@@ -427,6 +436,10 @@ public class EncreptionRequest {
 
     public Boolean getUse_second_native_ad_unit() {
         return use_second_native_ad_unit;
+    }
+
+    public String getFeed_native_ad_unit_mode() {
+        return feed_native_ad_unit_mode;
     }
 
     public String getFeed_ad_format() {

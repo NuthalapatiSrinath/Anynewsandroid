@@ -1035,6 +1035,7 @@ public final class SessionAnalyticsTracker {
                     Integer flushEveryN = null;
                     Boolean destroyAfterImpression = null;
                     Boolean useSecondNative = null;
+                    String feedNativeAdUnitMode = null;
                     String feedAdFormat = null;
                     String feedAdUnit = null;
                     String feedAdUnitSecondary = null;
@@ -1075,6 +1076,14 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    if (resBody.has("feed_native_ad_unit_mode")
+                            && !resBody.get("feed_native_ad_unit_mode").isJsonNull()) {
+                        try {
+                            feedNativeAdUnitMode =
+                                    resBody.get("feed_native_ad_unit_mode").getAsString();
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (resBody.has("use_second_native_ad_unit")
                             && !resBody.get("use_second_native_ad_unit").isJsonNull()) {
                         try {
@@ -1110,6 +1119,7 @@ public final class SessionAnalyticsTracker {
                             || flushEveryN != null
                             || destroyAfterImpression != null
                             || useSecondNative != null
+                            || feedNativeAdUnitMode != null
                             || feedAdFormat != null
                             || feedAdUnit != null
                             || feedAdUnitSecondary != null) {
@@ -1123,7 +1133,8 @@ public final class SessionAnalyticsTracker {
                                 feedAdUnit,
                                 destroyAfterImpression,
                                 useSecondNative,
-                                feedAdUnitSecondary);
+                                feedAdUnitSecondary,
+                                feedNativeAdUnitMode);
                     }
                     Integer viewsFlushSec = null;
                     Integer viewsFlushAt = null;

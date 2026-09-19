@@ -557,7 +557,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />
 
-                <!-- Mist + teal-rail search chrome: bottom, just above the main tab bar. -->
+                <!-- Mist + teal-rail search chrome: bottom, JUST ABOVE the main tab bar.
+     Do not call View.bringToFront() on this include from Java — LinearLayout
+     reorders children and the bar ends up below the footer. -->
                 <include
                     android:id="@+id/include_search_context_bar"
                     layout="@layout/layout_search_context_bar"
