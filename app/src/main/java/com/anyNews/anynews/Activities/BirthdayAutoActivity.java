@@ -107,6 +107,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
     private String uploadedPhotoUrl = "";
     private String scheduleDate = "";
     private String earliestDate = "";
+    private String latestDate = "";
+    /** Admin max days from today (IST); default 10. */
+    private int maxDaysAhead = 10;
     private String publishLabel = "02:00 IST";
     private String cutoffLabel = "00:00 IST";
     private boolean busy;
@@ -709,6 +712,16 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                     if (data.has("earliest_schedule_date")) {
                                         earliestDate = data.get("earliest_schedule_date").getAsString();
                                     }
+                                    if (data.has("latest_schedule_date")) {
+                                        latestDate = data.get("latest_schedule_date").getAsString();
+                                    }
+                                    if (data.has("max_days_ahead")) {
+                                        try {
+                                            int n = data.get("max_days_ahead").getAsInt();
+                                            if (n >= 1 && n <= 365) maxDaysAhead = n;
+                                        } catch (Exception ignored) {
+                                        }
+                                    }
                                     if (data.has("publish_label")) {
                                         publishLabel = data.get("publish_label").getAsString();
                                     }
@@ -717,6 +730,15 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                     }
                                     if (TextUtils.isEmpty(scheduleDate) && !TextUtils.isEmpty(earliestDate)) {
                                         scheduleDate = earliestDate;
+                                        if (pickDateBtn != null) {
+                                            pickDateBtn.setText(scheduleDate);
+                                        }
+                                    }
+                                    // Clamp a stale selected date if config tightened.
+                                    if (!TextUtils.isEmpty(latestDate)
+                                            && !TextUtils.isEmpty(scheduleDate)
+                                            && scheduleDate.compareTo(latestDate) > 0) {
+                                        scheduleDate = latestDate;
                                         if (pickDateBtn != null) {
                                             pickDateBtn.setText(scheduleDate);
                                         }
@@ -788,6 +810,7 @@ public class BirthdayAutoActivity extends AppCompatActivity {
 
     private void applyFallbackDates() {
         Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
+        Calendar today = (Calendar) cal.clone();
         cal.add(Calendar.DAY_OF_MONTH, 1);
         earliestDate =
                 String.format(
@@ -796,6 +819,14 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                         cal.get(Calendar.YEAR),
                         cal.get(Calendar.MONTH) + 1,
                         cal.get(Calendar.DAY_OF_MONTH));
+        today.add(Calendar.DAY_OF_MONTH, maxDaysAhead);
+        latestDate =
+                String.format(
+                        Locale.US,
+                        "%04d-%02d-%02d",
+                        today.get(Calendar.YEAR),
+                        today.get(Calendar.MONTH) + 1,
+                        today.get(Calendar.DAY_OF_MONTH));
         if (TextUtils.isEmpty(scheduleDate)) {
             scheduleDate = earliestDate;
             if (pickDateBtn != null) pickDateBtn.setText(scheduleDate);
@@ -806,7 +837,11 @@ public class BirthdayAutoActivity extends AppCompatActivity {
     private void updateScheduleInfo() {
         if (scheduleInfo == null) return;
         scheduleInfo.setText(
-                getString(R.string.birthday_auto_schedule_info_fmt, publishLabel, cutoffLabel));
+                getString(
+                        R.string.birthday_auto_schedule_info_fmt,
+                        publishLabel,
+                        cutoffLabel,
+                        maxDaysAhead));
     }
 
     private void openDatePicker() {
@@ -819,6 +854,35 @@ public class BirthdayAutoActivity extends AppCompatActivity {
             } catch (Exception ignored) {
             }
         }
+        Calendar max = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
+        max.set(Calendar.HOUR_OF_DAY, 23);
+        max.set(Calendar.MINUTE, 59);
+        max.set(Calendar.SECOND, 59);
+        max.set(Calendar.MILLISECOND, 999);
+        if (!TextUtils.isEmpty(latestDate) && latestDate.length() >= 10) {
+            try {
+                String[] p = latestDate.split("-");
+                max.set(Integer.parseInt(p[0]), Integer.parseInt(p[1]) - 1, Integer.parseInt(p[2]));
+            } catch (Exception ignored) {
+                max.add(Calendar.DAY_OF_MONTH, maxDaysAhead);
+            }
+        } else {
+            // today (IST) + N — reset from midnight then add days
+            Calendar today = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
+            today.set(Calendar.HOUR_OF_DAY, 0);
+            today.set(Calendar.MINUTE, 0);
+            today.set(Calendar.SECOND, 0);
+            today.set(Calendar.MILLISECOND, 0);
+            today.add(Calendar.DAY_OF_MONTH, maxDaysAhead);
+            max.setTimeInMillis(today.getTimeInMillis());
+            max.set(Calendar.HOUR_OF_DAY, 23);
+            max.set(Calendar.MINUTE, 59);
+            max.set(Calendar.SECOND, 59);
+            max.set(Calendar.MILLISECOND, 999);
+        }
+        if (max.before(min)) {
+            max.setTimeInMillis(min.getTimeInMillis());
+        }
         Calendar start = (Calendar) min.clone();
         if (!TextUtils.isEmpty(scheduleDate) && scheduleDate.length() >= 10) {
             try {
@@ -827,6 +891,8 @@ public class BirthdayAutoActivity extends AppCompatActivity {
             } catch (Exception ignored) {
             }
         }
+        if (start.before(min)) start = (Calendar) min.clone();
+        if (start.after(max)) start = (Calendar) max.clone();
         DatePickerDialog dlg =
                 new DatePickerDialog(
                         this,
@@ -840,6 +906,7 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                         start.get(Calendar.MONTH),
                         start.get(Calendar.DAY_OF_MONTH));
         dlg.getDatePicker().setMinDate(min.getTimeInMillis());
+        dlg.getDatePicker().setMaxDate(max.getTimeInMillis());
         dlg.show();
     }
 

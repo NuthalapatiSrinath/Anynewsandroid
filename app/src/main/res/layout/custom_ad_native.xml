@@ -6,12 +6,12 @@
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#121212">
+        android:background="@color/form_surface_elevated">
 
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#121212"
+            android:background="@color/red"
             android:layout_alignParentTop="true"
             android:layout_above="@+id/rl_btm">
 

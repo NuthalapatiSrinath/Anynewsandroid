@@ -53,12 +53,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="200dp"
                     android:layout_alignParentTop="true"
-                    android:background="#121212"
                     android:layout_gravity="bottom"
                     android:layout_marginStart="@dimen/anynews_no_size"
                     android:layout_marginTop="@dimen/anynews_no_size"
                     android:layout_marginEnd="@dimen/anynews_no_size"
                     android:layout_marginBottom="@dimen/anynews_no_size"
+                    android:background="#121212"
                     android:visibility="visible" />
             </RelativeLayout>
 
@@ -200,7 +200,7 @@
                                 android:layout_marginTop="@dimen/anynews_no_margin"
                                 android:layout_marginEnd="@dimen/anynews_no_margin"
                                 android:layout_marginBottom="@dimen/anynews_no_margin"
-                                android:background="#121212"
+                                android:background="@color/form_surface_elevated"
                                 android:gravity="top"
                                 android:lines="1"
                                 android:textColor="@color/anynews_gray"

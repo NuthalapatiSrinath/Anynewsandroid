@@ -751,6 +751,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
+     * Remove any rotating ProgressBar from an ad container immediately.
+     * Ad seats never show a spinner — Share default or static dark house only.
+     */
+    private void stripAdSeatSpinners(@Nullable ViewGroup container) {
+        if (container == null) {
+            return;
+        }
+        try {
+            for (int i = container.getChildCount() - 1; i >= 0; i--) {
+                View child = container.getChildAt(i);
+                if (child instanceof ProgressBar) {
+                    container.removeViewAt(i);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
      * Inflated {@code ads_screen} with empty placeholder (legacy ProgressBar-only
      * or zero children) — house shell should already be mounted; treat as needs paint.
      */
@@ -768,14 +787,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return false;
             }
             ViewGroup group = (ViewGroup) fl;
-            if (group.getChildCount() == 0) {
-                return true;
-            }
-            // Legacy path only — never mount a ProgressBar on ad seats anymore.
-            if (group.getChildCount() == 1 && group.getChildAt(0) instanceof ProgressBar) {
-                return true;
-            }
-            return false;
+            stripAdSeatSpinners(group);
+            return group.getChildCount() == 0;
         } catch (Exception ignored) {
         }
         return false;
@@ -1167,12 +1180,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * first (that left an empty black void for 1–2 frames). Dark underlay stays
      * until Share is on top; prior children stripped on the next frame. When a
      * native fills, creative overlays Share without a black flash.
+     * Never mounts a ProgressBar / rotating spinner on ad seats.
      */
     private void mountDefaultAdPlaceholder(@Nullable ViewGroup container) {
         if (container == null) {
             return;
         }
         try {
+            stripAdSeatSpinners(container);
             container.setBackgroundColor(0xFF121212);
             container.setVisibility(VISIBLE);
             View existing = container.findViewById(R.id.ad_default_placeholder_root);
@@ -1296,6 +1311,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } else {
             showLog("AD seat pending fill (house shell) pos=" + position
                     + " reqPos=" + googleSlot.getAd_req_position());
+            tagAdSeatReqPos(convertView, null);
             mountAdPendingEmptyShell(fl_adplaceholder, position, fromView);
         }
     }
@@ -1371,6 +1387,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         markGoogleNativeClaimed(ad);
         notePaintedGoogleNative(ad);
         try {
+            Integer paintedReq = null;
+            try {
+                if (list != null && position >= 0 && position < list.size()
+                        && list.get(position) != null) {
+                    paintedReq = list.get(position).getAd_req_position();
+                }
+            } catch (Exception ignored) {
+            }
+            tagAdSeatReqPos(convertView, paintedReq);
             if (fromView == 0) {
                 displayGoogleFullNativeAd(fl_adplaceholder, ad, myView, convertView, position);
             } else if (fromView == 1) {
@@ -1378,6 +1403,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             } else {
                 displayGoogleNativeAd(fl_adplaceholder, ad, myView, convertView, position);
             }
+            // Never leave last creative on the field — July unpaid same-ad fallback path.
+            nativeAd = null;
         } catch (Exception displayEx) {
             showLog("native ad display failed → default placeholder: " + displayEx.getMessage());
             mountAdPendingEmptyShell(fl_adplaceholder, position, fromView);
@@ -1386,15 +1413,26 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * Opaque dark plate so {@code ads_screen}/{@code fl_adplaceholder} is never an
-     * empty black void before house or creative paints.
+     * empty black void before house or creative paints. Strips any ProgressBar
+     * first — spinner is never an acceptable wait UI on ad seats.
      */
     private void ensureDarkAdUnderlay(@Nullable ViewGroup container) {
         if (container == null) {
             return;
         }
         try {
+            stripAdSeatSpinners(container);
             container.setBackgroundColor(0xFF121212);
             container.setVisibility(VISIBLE);
+            try {
+                ViewGroup.LayoutParams flLp = container.getLayoutParams();
+                if (flLp != null) {
+                    flLp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                    flLp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                    container.setLayoutParams(flLp);
+                }
+            } catch (Exception ignored) {
+            }
             if (container.getChildCount() > 0) {
                 return;
             }
@@ -1420,20 +1458,33 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         try {
-            parent.setBackgroundColor(0xFF121212);
             ensureDarkAdUnderlay(parent);
             if (adView.getParent() instanceof ViewGroup) {
                 ((ViewGroup) adView.getParent()).removeView(adView);
             }
-            // Dark MediaView so texture init isn't a white/empty plate.
+            // July chrome: keep NativeAdView / title-footer surfaces from XML.
+            // Only darken MediaView / blur plate so texture init isn't a white/gray flash.
             try {
-                adView.setBackgroundColor(0xFF121212);
                 View media = adView.findViewById(R.id.ad_media);
                 if (media == null) {
                     media = adView.findViewById(R.id.media_view);
                 }
                 if (media != null) {
                     media.setBackgroundColor(0xFF121212);
+                }
+                View blur = adView.findViewById(R.id.iv_ad_view_blur);
+                if (blur != null) {
+                    blur.setBackgroundColor(0xFF121212);
+                    if (blur instanceof ImageView
+                            && ((ImageView) blur).getDrawable() == null) {
+                        ((ImageView) blur).setImageDrawable(
+                                new android.graphics.drawable.ColorDrawable(0xFF121212));
+                    }
+                }
+                // Full-bleed templates (no rl_btm / medium primary): dark root is fine.
+                if (adView.findViewById(R.id.rl_btm) == null
+                        && adView.findViewById(R.id.primary) == null) {
+                    adView.setBackgroundColor(0xFF121212);
                 }
             } catch (Exception ignored) {
             }
@@ -1487,6 +1538,33 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             View nav = fl.findViewById(R.id.native_ad_view);
             return nav instanceof NativeAdView && nav.getParent() != null;
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Record which feed ad_req_position was painted into this Flip scrap. */
+    private void tagAdSeatReqPos(@Nullable View root, @Nullable Integer reqPos) {
+        if (root == null) {
+            return;
+        }
+        try {
+            root.setTag(R.id.tag_ad_seat_req_pos, reqPos);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Sticky scrap is only valid for the same seat reqPos. FlipView recycling used to
+     * keep seat A's NativeAdView on seat B (= same creative everywhere, unpaid reuse).
+     */
+    private boolean isPaintedAdSeatForReqPos(@Nullable View root, @Nullable Integer needReqPos) {
+        if (root == null || needReqPos == null) {
+            return false;
+        }
+        try {
+            Object tagged = root.getTag(R.id.tag_ad_seat_req_pos);
+            return tagged instanceof Integer && needReqPos.equals(tagged);
         } catch (Exception ignored) {
         }
         return false;
@@ -1880,6 +1958,26 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
+     * Keyword search / mode switch: apply the new deck immediately.
+     * Deferred {@link #notifyWhenFlipSettled()} left FlipView on a stale pageCount
+     * and let {@code flipTo} / clamp land on Continue-reading while hits existed.
+     */
+    public void setDataImmediate(ArrayList<ModelClass.Datum> list__) {
+        resetAdBindState();
+        stripHalfPostsIfSpecialMode(list__);
+        list = list__;
+        normalizeEngagementCounts(list);
+        try {
+            notifyDataSetChangedNow();
+        } catch (Exception e) {
+            try {
+                notifyWhenFlipSettled();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /**
      * Pagination append: mutate the list and grow FlipView page count without
      * {@code notifyDataSetChanged} / force-rebinding the visible card (blink).
      */
@@ -1918,7 +2016,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Drop deferred binds, fill timeouts, and last-bound creatives. Call on feed
      * mode switches / pool clears so tab return cannot reuse a destroyed NativeAd
-     * or leave a ProgressBar shell.
+     * or leave an empty/spinner shell (Share/house remounts on next getView).
      */
     public void resetAdBindState() {
         try {
@@ -4248,6 +4346,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         //return position;
         try {
             ModelClass.Datum album = list.get(position);
+            if (album == null) {
+                return position + 1L;
+            }
             if (album.getPostId() != null && album.getPostId() > 0) {
                 return album.getPostId();
             }
@@ -4286,10 +4387,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             // Never return a blank white scrap past the adapter — show end card.
             return inflateFeedEndCard(parent, convertView, false);
         }
-        String pagePostType = list.get(position).getPostType();
+        ModelClass.Datum pageDatum = list.get(position);
+        if (pageDatum == null) {
+            showLog("getView null datum at pos=" + position);
+            if (isSearchFeedEndHub()) {
+                return inflateFeedEndCard(parent, convertView, true);
+            }
+            return inflateFeedEndCard(parent, convertView, false);
+        }
+        String pagePostType = pageDatum.getPostType();
         if (BuildConfig.DEBUG) {
             showLog("getView pos=" + position + " type=" + pagePostType
-                    + " postId=" + list.get(position).getPostId());
+                    + " postId=" + pageDatum.getPostId());
         }
         customConvertView=convertView;
         customPosition=position;
@@ -4304,13 +4413,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // Search Continue-reading hub is ONLY for the feed_end sentinel —
         // never for blank/unknown real hits (that painted hub on every page).
         if (FeedEndHelper.isFeedEndType(pagePostType)
-                || FeedEndHelper.isFeedEnd(list.get(position))) {
+                || FeedEndHelper.isFeedEnd(pageDatum)) {
             return inflateFeedEndCard(parent, convertView, true);
         }
 
         // Keyword search: never bind mid-list native / vast ad shells.
         if (isSearchFeedEndHub()
-                && ReadArticleStore.isAdFeedSlot(list.get(position))) {
+                && ReadArticleStore.isAdFeedSlot(pageDatum)) {
             showLog("getView search strip ad shell pos=" + position
                     + " type=" + pagePostType);
             try {
@@ -4734,15 +4843,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     } catch (Exception ignored) {
                                     }
                                     existingFl.setVisibility(VISIBLE);
-                                    existingFl.setBackgroundColor(0xFF121212);
-                                    if (placeholderHasNativeCreative(existingFl)) {
-                                        showLog("AD seat sticky reuse (painted) pos=" + position);
+                                    stripAdSeatSpinners(existingFl);
+                                    Integer needReqPos = list.get(position).getAd_req_position();
+                                    // Same scrap + creative only when this seat's reqPos matches
+                                    // what was painted — otherwise rebind (fixes same-ad-everywhere).
+                                    if (placeholderHasNativeCreative(existingFl)
+                                            && isPaintedAdSeatForReqPos(convertView, needReqPos)) {
+                                        showLog("AD seat sticky reuse (same reqPos) pos="
+                                                + position + " reqPos=" + needReqPos);
                                         rememberAdShellPlaceholder(position, existingFl, 2);
                                         adShellAwaitingCreative.delete(position);
                                         showLog("AD Point Adapter:: END sticky");
                                         break;
                                     }
-                                    // House / dark underlay / empty dark plate — paint in place.
+                                    // Wrong seat scrap, house, or empty — paint this seat in place.
                                     bindGoogleAdIntoPlaceholder(
                                             existingFl, convertView, position);
                                     showLog("AD Point Adapter:: END seat-reuse");
@@ -4755,13 +4869,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             final RelativeLayout layoutParent =
                                     convertView.findViewById(R.id.layoutParent);
                             layoutParent.getLayoutParams().height = screenHeight;
-                            layoutParent.setBackgroundColor(0xFF121212);
+                            // July ads_screen uses form_surface_elevated — keep theme chrome
+                            // so title/CTA footer stay readable (do not force #121212 on host).
                             final FrameLayout fl_adplaceholder =
                                     convertView.findViewById(R.id.fl_adplaceholder);
                             fl_adplaceholder.setVisibility(VISIBLE);
-                            fl_adplaceholder.setBackgroundColor(0xFF121212);
-                            // Dark underlay immediately — never leave empty void before
-                            // house/creative bind (inflate→paint gap was the land flash).
+                            // Dark underlay only inside the placeholder until creative/Share.
                             ensureDarkAdUnderlay(fl_adplaceholder);
                             bindGoogleAdIntoPlaceholder(
                                     fl_adplaceholder, convertView, position);
@@ -6128,10 +6241,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if(ad!=null){
                 showLog("AD #2");
                 NativeAdView adView = (NativeAdView) myView;
-                try {
-                    adView.setBackgroundColor(0xFF121212);
-                } catch (Exception ignored) {
-                }
                 showLog("AD #3");
                 MediaView mediaView = (MediaView) adView.findViewById(R.id.ad_media);
                 adView.setMediaView(mediaView);
@@ -6184,14 +6293,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 background = (ConstraintLayout) myView.findViewById(R.id.background);
              ConstraintLayout   background1 = (ConstraintLayout) myView.findViewById(R.id.backgroundBG);
              background1.getLayoutParams().height=screenHeight;
-             try {
-                 myView.setBackgroundColor(0xFF121212);
-                 background1.setBackgroundColor(0xFF121212);
-                 if (background != null) {
-                     background.setBackgroundColor(0xFF121212);
-                 }
-             } catch (Exception ignored) {
-             }
 
                 mediaView = (MediaView) myView.findViewById(R.id.media_view);
                 
@@ -6290,10 +6391,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if(ad!=null){
                 showLog("AD #2");
                 NativeAdView adView = (NativeAdView) myView;
-                try {
-                    adView.setBackgroundColor(0xFF121212);
-                } catch (Exception ignored) {
-                }
                 showLog("AD #3");
                 MediaView mediaView = (MediaView) adView.findViewById(R.id.ad_media);
                 adView.setMediaView(mediaView);

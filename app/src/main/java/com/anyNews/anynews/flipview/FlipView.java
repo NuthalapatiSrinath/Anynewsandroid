@@ -1341,7 +1341,12 @@ public class FlipView extends FrameLayout {
                     deltaFlipDistance = deltaFlipDistance;
                     // }
                     ///nullpointer exception   java.lang.IllegalStateException: The specified child already has a parent. You must call removeView() on the child's parent first.
+                    // Search open / mid-gesture cancel can recycle the tracker while
+                    // ACTION_MOVE still arrives with mIsFlipping — never NPE here.
                     final VelocityTracker velocityTracker = mVelocityTracker;
+                    if (velocityTracker == null) {
+                        break;
+                    }
                     velocityTracker.computeCurrentVelocity(400, mMaximumVelocity);
                     if (isFlippingVertically()) {
                         if (mOnFlipAppeared != null) {
@@ -1408,14 +1413,16 @@ public class FlipView extends FrameLayout {
                 releaseParentDisallow();
                 if (mIsFlipping) {
                     final VelocityTracker velocityTracker = mVelocityTracker;
-                    velocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
                     int velocity = 0;
-                    if (isFlippingVertically()) {
-                        velocity = (int) VelocityTrackerCompat.getYVelocity(
-                                velocityTracker, mActivePointerId);
-                    } else {
-                        velocity = (int) VelocityTrackerCompat.getXVelocity(
-                                velocityTracker, mActivePointerId);
+                    if (velocityTracker != null) {
+                        velocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
+                        if (isFlippingVertically()) {
+                            velocity = (int) VelocityTrackerCompat.getYVelocity(
+                                    velocityTracker, mActivePointerId);
+                        } else {
+                            velocity = (int) VelocityTrackerCompat.getXVelocity(
+                                    velocityTracker, mActivePointerId);
+                        }
                     }
                     //System.out.println("velocity   :::" + velocity);
                     //System.out.println("farword   :::" + farword);
@@ -2337,8 +2344,13 @@ public class FlipView extends FrameLayout {
     }
 
     public void flipTo(int page) {
+        // Keyword search clears FlipView to 0 pages then seats hits — never crash
+        // with IllegalArgumentException when notify is still catching up.
+        if (mPageCount < 1) {
+            return;
+        }
         if (page < 0 || page > mPageCount - 1) {
-            throw new IllegalArgumentException("That page does not exist");
+            page = Math.max(0, Math.min(mPageCount - 1, page));
         }
 //        //Log.e("TRACKING","flipTo "+page);
         endFlip();

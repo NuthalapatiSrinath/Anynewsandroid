@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:layout_gravity="center"
     android:gravity="center"
-    android:background="#121212"
+    android:background="@color/form_surface_elevated"
     android:id="@+id/layoutParent"
     tools:context=".Activities.HomePage">
 
@@ -13,8 +13,7 @@
     <FrameLayout
         android:id="@+id/fl_adplaceholder"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#121212"
+        android:layout_height="wrap_content"
         android:visibility="visible"/>
 
   <!--  <com.google.android.ads.nativetemplates.TemplateView

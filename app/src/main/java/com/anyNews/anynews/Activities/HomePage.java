@@ -1739,7 +1739,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             FeedEndHelper.stripAll(list);
             if (adapter != null) {
-                adapter.setData(list);
+                // Immediate notify — deferred settle left FlipView on a stale
+                // News pageCount and crashed flipTo / painted hub-only.
+                adapter.setDataImmediate(list);
             }
             if (mFlipView != null) {
                 mFlipView.resetSeatForNewFeed();
@@ -1859,7 +1861,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 + " land=" + landOnHits);
         try {
             if (adapter != null) {
-                adapter.setData(list);
+                adapter.setDataImmediate(list);
             }
             if (mFlipView != null) {
                 mFlipView.setVisibility(View.VISIBLE);
@@ -1881,9 +1883,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 mFlipView.resetSeatForNewFeed();
                 if (adapter != null) {
                     adapter.setCurrentFlipPage(positionx);
-                    adapter.setData(list);
+                    adapter.setDataImmediate(list);
                 }
-                mFlipView.flipTo(positionx);
+                if (mFlipView.getPageCount() > 0) {
+                    mFlipView.flipTo(Math.min(positionx, mFlipView.getPageCount() - 1));
+                }
             } catch (Exception ignored) {
             }
         }
@@ -1937,7 +1941,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             mFlipView.resetSeatForNewFeed();
             if (adapter != null) {
                 adapter.setCurrentFlipPage(0);
-                adapter.setData(list);
+                adapter.setDataImmediate(list);
             }
             if (mFlipView.getPageCount() > 0) {
                 mFlipView.flipTo(0);
@@ -2062,6 +2066,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 searchContextBar.setOnClickListener(v -> exitSearchFeedMode());
             }
         } catch (Exception ignored) {
+            searchContextBar = null;
+            searchContextQuery = null;
         }
         updateSearchContextBar();
     }
@@ -2072,7 +2078,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (isSearchFeedActive()) {
                 searchContextBar.setVisibility(View.VISIBLE);
                 if (searchContextQuery != null) {
-                    searchContextQuery.setText(activeSearchQuery.trim());
+                    searchContextQuery.setText(
+                            activeSearchQuery != null ? activeSearchQuery.trim() : "");
                 }
             } else {
                 searchContextBar.setVisibility(View.GONE);
@@ -2174,7 +2181,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 || !intent.getBooleanExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, false)) {
             return;
         }
-        View target = mFlipView != null ? mFlipView : findViewById(android.R.id.content);
+        // Reveal on the activity content root — never on FlipView itself.
+        // Animating FlipView INVISIBLE while seating Search_Stories caused
+        // mid-gesture VelocityTracker NPEs and blank/hub-only first paint.
+        View target = findViewById(android.R.id.content);
         if (target == null) return;
         SearchRevealHelper.playEnterReveal(this, target, intent);
     }
@@ -14900,7 +14910,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         } else {
                             showLog("response body not null after load data:");
                             adapter.hasStableIds();
-                            if (!fromCache && listSizeBeforeAppend > 0 && listSizeBeforeAppend < list.size()) {
+                            // Keyword search: seating owns the only notify — an early
+                            // setData lets FlipView clamp the prior News index onto the
+                            // last page (Continue-reading hub) and can crash mid-seat.
+                            if (!fromCache && searchFeedActive) {
+                                if (page0Replace && list != null && !list.isEmpty()) {
+                                    finalizeSearchFeedSeating(true);
+                                } else if (list != null && !list.isEmpty()) {
+                                    finalizeSearchFeedSeating(false);
+                                }
+                            } else if (!fromCache && listSizeBeforeAppend > 0 && listSizeBeforeAppend < list.size()) {
                                 adapter.appendData(list, listSizeBeforeAppend);
                             } else {
                                 adapter.setData(list);
@@ -14908,22 +14927,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             if (!fromCache && !searchFeedActive) {
                                 maybeRestoreFlipPositionAfterArticlesLoad();
                             }
-                            // Keyword search: always land on the first matching post —
-                            // never restore a prior News index onto the end hub.
-                            if (!fromCache && searchFeedActive && page0Replace
-                                    && list != null && !list.isEmpty()) {
-                                // [hits...] + one hub. Single hit → 2 pages. No ads.
-                                finalizeSearchFeedSeating(true);
-                            } else if (!fromCache && searchFeedActive
-                                    && list != null && !list.isEmpty()) {
-                                // Pagination append: keep exactly one hub after last hit.
-                                finalizeSearchFeedSeating(false);
-                            }
                             // Always show flip when list has paintables — never empty white forever.
                             if (list != null && !list.isEmpty()) {
-                                mFlipView.setVisibility(View.VISIBLE);
-                                txtNoData.setVisibility(View.GONE);
-                                layout_with_data.setVisibility(View.VISIBLE);
+                                if (mFlipView != null) {
+                                    mFlipView.setVisibility(View.VISIBLE);
+                                }
+                                if (txtNoData != null) {
+                                    txtNoData.setVisibility(View.GONE);
+                                }
+                                if (layout_with_data != null) {
+                                    layout_with_data.setVisibility(View.VISIBLE);
+                                }
                             }
                             hideHomeFeedLoadingReveal(fromCache);
                             if (list != null && !list.isEmpty()) {
@@ -16004,6 +16018,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (list == null || position < 0 || position >= list.size()) {
             return;
         }
+        ModelClass.Datum flipped = list.get(position);
+        if (flipped == null) {
+            return;
+        }
         // Super-fast swipe on a short screen used to dispatch page 0 mid-fling.
         // Ignore that unless the user actually started on page 0/1.
         if (position == 0 && lastSettledFlipIndex > 1
@@ -16027,7 +16045,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         cancelPendingFlipSettleCallbacks();
         FlipAdWorkGate.setFlipAnimating(true);
         pendingFlipTrackingPos = position;
-        showLog("onFlippedToPage:::POS::" + position + "....post_type.." + list.get(position).getPostType());
+        showLog("onFlippedToPage:::POS::" + position + "....post_type.." + flipped.getPostType());
         isPlayingVideoInFullScreen = false;
         currentView = view;
         initialCall = true;
@@ -16042,7 +16060,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         positionx = position;
         // Flip restore prefs are written after settle paint (not mid-flip / not at settle start)
         // to avoid SharedPreferences editor work during the animation.
-        post_type = list.get(position).getPostType();
+        post_type = flipped.getPostType();
         if (post_type == null) {
             post_type = "";
         }
@@ -16108,14 +16126,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (list == null || position < 0 || position >= list.size()) {
             return;
         }
+        ModelClass.Datum settleDatum = list.get(position);
+        if (settleDatum == null) {
+            return;
+        }
         showLog("runDeferredFlipSettleWork:::POS::" + position);
-        post_type = list.get(position).getPostType();
+        post_type = settleDatum.getPostType();
         if (post_type == null) {
             post_type = "";
         }
         try {
-            if (list.get(position).getPostId() != null) {
-                updated_post_id_firebase = list.get(position).getPostId().intValue();
+            if (settleDatum.getPostId() != null) {
+                updated_post_id_firebase = settleDatum.getPostId().intValue();
             }
         } catch (NullPointerException e) {
             e.printStackTrace();
