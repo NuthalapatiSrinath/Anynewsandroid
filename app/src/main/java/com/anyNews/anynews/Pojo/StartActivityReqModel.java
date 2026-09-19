@@ -667,6 +667,14 @@ public class StartActivityReqModel implements Serializable {
         private Integer readHistoryHours;
 
         /**
+         * Status Videos lookback days (admin; default 5, range 1–30).
+         * Null on old servers → Android keeps cached / default 5.
+         */
+        @SerializedName("status_videos_days")
+        @Expose
+        private Integer statusVideosDays;
+
+        /**
          * In-feed native ad after every N real articles (admin; default 4, range 2–10).
          * Null on old servers → Android keeps cached / default 4.
          */
@@ -1241,6 +1249,11 @@ public class StartActivityReqModel implements Serializable {
 
         public Integer getReadHistoryHours() {
             return readHistoryHours;
+        }
+
+        /** Null → old server; caller keeps cached / default 5. */
+        public Integer getStatusVideosDays() {
+            return statusVideosDays;
         }
 
         /** Null → old server; caller keeps cached / default 4. */

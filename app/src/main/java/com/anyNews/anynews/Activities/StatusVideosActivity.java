@@ -32,6 +32,7 @@ import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.StatusVideoMedia;
 import com.anyNews.anynews.Utils.StatusVideosCache;
+import com.anyNews.anynews.Utils.StatusVideosDaysConfig;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -60,9 +61,10 @@ import retrofit2.Response;
 
 /**
  * Language-filtered Status Videos hub — instant paint from disk cache, then one
- * network {@code status_videos=true} pack (Redis ~1h on server: full_video only,
- * last {@link #STATUS_VIDEOS_DAYS} days, published_time &lt;= now). Falls back to
- * a short Special crawl only when the pack path returns nothing usable.
+ * network {@code status_videos=true} pack (Redis ~1h on server: full_video +
+ * status_videos_only posts, last admin {@code status_videos_days} / default 5,
+ * published_time &lt;= now). Falls back to a short Special crawl only when the
+ * pack path returns nothing usable.
  */
 public class StatusVideosActivity extends AppCompatActivity {
 
@@ -76,13 +78,6 @@ public class StatusVideosActivity extends AppCompatActivity {
     private static final int MAX_PAGES = 24;
     /** Match server STATUS_VIDEOS_LIMIT — not a tiny cap. */
     private static final int MAX_VIDEOS = 30;
-    /**
-     * Lookback for published full videos (matches server STATUS_VIDEOS_DAYS default).
-     * Tunable server-side via env; client keeps the same default for disk/Special.
-     */
-    private static final int STATUS_VIDEOS_DAYS = 5;
-    private static final long STATUS_VIDEOS_WINDOW_MS =
-            STATUS_VIDEOS_DAYS * 24L * 60L * 60L * 1000L;
 
     private RecyclerView listView;
     private ProgressBar progressBar;
@@ -169,13 +164,16 @@ public class StatusVideosActivity extends AppCompatActivity {
         items.clear();
         seenPostIds.clear();
         final long nowMs = System.currentTimeMillis();
+        final long windowMs = StatusVideosDaysConfig.getWindowMs(this);
         if (next != null) {
             for (ModelClass.Datum d : next) {
                 if (d == null || isAd(d)) continue;
-                // Full videos only — drop half (normal_video) from stale disk/network.
-                if (!isVideoPost(d)) continue;
-                // Live + last STATUS_VIDEOS_DAYS (drop schedules and older disk rows).
-                if (!isPublishedInStatusWindow(d, nowMs)) continue;
+                // Pack already curated (full_video + status_videos_only). Special
+                // fallback / stale disk still require a playable video type.
+                if (!fromCache && !useStatusPackEndpoint && !isVideoPost(d)) continue;
+                if (fromCache && !isStatusVideosListItem(d)) continue;
+                // Live + last admin days (drop schedules and older disk rows).
+                if (!isPublishedInStatusWindow(d, nowMs, windowMs)) continue;
                 Long id = d.getPostId();
                 if (id != null && !seenPostIds.add(id)) continue;
                 items.add(d);
@@ -295,7 +293,8 @@ public class StatusVideosActivity extends AppCompatActivity {
                 if (page != null) {
                     for (ModelClass.Datum d : page) {
                         if (d == null || isAd(d)) continue;
-                        if (!isVideoPost(d)) continue;
+                        // Trust server pack (full_video + status_videos_only exclusives).
+                        if (!isStatusVideosListItem(d)) continue;
                         videos.add(d);
                     }
                 }
@@ -364,11 +363,12 @@ public class StatusVideosActivity extends AppCompatActivity {
                     }
 
                     final long nowMs = System.currentTimeMillis();
+                    final long windowMs = StatusVideosDaysConfig.getWindowMs(StatusVideosActivity.this);
                     for (ModelClass.Datum d : page) {
                         if (d == null || isAd(d)) continue;
                         logPostFields(d);
                         if (!isVideoPost(d)) continue;
-                        if (!isPublishedInStatusWindow(d, nowMs)) continue;
+                        if (!isPublishedInStatusWindow(d, nowMs, windowMs)) continue;
                         Long id = d.getPostId();
                         if (id != null && !seenPostIds.add(id)) continue;
                         items.add(d);
@@ -481,24 +481,40 @@ public class StatusVideosActivity extends AppCompatActivity {
     }
 
     /**
-     * Status Videos: {@code full_video} only.
-     * Half layout is {@code normal_video}; galleries are excluded.
+     * Status Videos: {@code full_video} or any row with a playable video payload
+     * (status_videos_only exclusives from the admin page).
+     * Half layout is {@code normal_video}; galleries are excluded from Special crawl.
      */
     static boolean isVideoPost(ModelClass.Datum d) {
         if (d == null) return false;
         return "full_video".equals(normalize(d.getPostType()));
     }
 
+    /** Pack / disk: full_video or any playable video (exclusive posts). */
+    static boolean isStatusVideosListItem(ModelClass.Datum d) {
+        if (d == null) return false;
+        if (isVideoPost(d)) return true;
+        return hasVideoPayload(d);
+    }
+
     /**
-     * Published and due (not scheduled) within the last {@link #STATUS_VIDEOS_DAYS}.
+     * Published and due (not scheduled) within the admin lookback window.
      * Matches server {@code statusVideosPack} published_time gate + lookback.
      */
-    static boolean isPublishedInStatusWindow(ModelClass.Datum d, long nowMs) {
+    static boolean isPublishedInStatusWindow(
+            ModelClass.Datum d, long nowMs, long windowMs) {
         if (d == null) return false;
         Long pub = d.getPublishedTime();
         if (pub == null || pub <= 0L) return false;
         if (pub > nowMs + 1000L) return false; // scheduled / future
-        return pub >= nowMs - STATUS_VIDEOS_WINDOW_MS;
+        long win = windowMs > 0L ? windowMs : StatusVideosDaysConfig.DEFAULT_DAYS * 24L * 60L * 60L * 1000L;
+        return pub >= nowMs - win;
+    }
+
+    /** @deprecated Prefer {@link #isPublishedInStatusWindow(ModelClass.Datum, long, long)}. */
+    static boolean isPublishedInStatusWindow(ModelClass.Datum d, long nowMs) {
+        return isPublishedInStatusWindow(
+                d, nowMs, StatusVideosDaysConfig.DEFAULT_DAYS * 24L * 60L * 60L * 1000L);
     }
 
     static boolean hasVideoPayload(ModelClass.Datum d) {

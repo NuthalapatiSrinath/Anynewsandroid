@@ -1008,6 +1008,14 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    if (resBody.has("status_videos_days")
+                            && !resBody.get("status_videos_days").isJsonNull()) {
+                        try {
+                            StatusVideosDaysConfig.saveDaysFromServer(
+                                    context, resBody.get("status_videos_days").getAsInt());
+                        } catch (Exception ignored) {
+                        }
+                    }
                     try {
                         Boolean onEng = null;
                         Boolean onToggle = null;

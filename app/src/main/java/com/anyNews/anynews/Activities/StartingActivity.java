@@ -56,6 +56,7 @@ import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
+import com.anyNews.anynews.Utils.StatusVideosDaysConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
 import com.anyNews.anynews.Utils.CategoriesDiskCache;
@@ -2046,6 +2047,10 @@ public class StartingActivity extends AppCompatActivity {
                         ReadHistoryConfig.saveHoursFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getReadHistoryHours());
+                        // Status Videos lookback days (default 5; 1–30).
+                        StatusVideosDaysConfig.saveDaysFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getStatusVideosDays());
                         // Feed ad cadence + format/unit + Android prefetch/concurrency + impression flush
                         // + destroy on flip-away (fresh fill on return; default ON).
                         FeedAdConfig.saveFromServer(

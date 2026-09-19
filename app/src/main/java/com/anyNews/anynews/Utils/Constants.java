@@ -441,6 +441,8 @@ public class Constants {
     public static String CATEGORIES_IN_FOOTER = "categories_in_footer";
     public static String SHOW_HEADER_PROFILE_ICON = "show_header_profile_icon";
     public static String ENABLE_STATUS_VIDEOS = "enable_status_videos";
+    /** Admin Status Videos lookback days (splash / session; default 5). */
+    public static String STATUS_VIDEOS_DAYS = "status_videos_days";
     /** Profile hub Become a Reporter row (splash hiring toggle). Default true. */
     public static String ENABLE_BECOME_A_REPORTER = "enable_become_a_reporter";
     /** Profile hub Birthday Special row (splash master). Default true; OFF hides row. */
