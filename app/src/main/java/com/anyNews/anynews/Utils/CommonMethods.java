@@ -316,11 +316,16 @@ public class CommonMethods {
       DateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS Z");
       Date date = new Date(milliSeconds);
       showLog(dateFormat.format(date));*/
-        if (formattedDate == null
-                || "null".equalsIgnoreCase(formattedDate.trim())) {
+        if (formattedDate == null) {
             return "";
         }
-        return formattedDate;
+        String out = formattedDate.trim();
+        if (out.isEmpty()
+                || "null".equalsIgnoreCase(out)
+                || "undefined".equalsIgnoreCase(out)) {
+            return "";
+        }
+        return out;
     }
 
     public boolean isEmail(String sEmail) {

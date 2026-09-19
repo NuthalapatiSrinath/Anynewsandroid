@@ -289,12 +289,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public static final String EXTRA_SEARCH_QUERY = "extra_search_query";
     /**
      * Count=1 suggestion / open-article: FlipView shows that post only
-     * (+ Continue-reading hub). Avoids soft keyword multi-hit stacks.
+     * then Continue-reading hub (exactly 2 pages). Avoids soft keyword multi-hit stacks.
      */
     public static final String EXTRA_SEARCH_POST_ID = "extra_search_post_id";
     /**
      * True when the user tapped a count=1 suggestion (even without post_id).
-     * Client keeps only the first hit + Continue-reading hub.
+     * Client seats exactly {@code [first hit, Continue-reading hub]} — no extra articles.
      */
     public static final String EXTRA_SEARCH_SINGLE_ONLY = "extra_search_single_only";
     /**
@@ -1874,8 +1874,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Search deck invariant: real hits only, then exactly one Continue-reading hub.
      * Zero ads/share/ratings. Never hub-first when hits exist. Hub-only only when
-     * paintables == 0. Single-hit → [article, hub]. Multi → [hits..., hub].
-     * Single-article open ({@link #activeSearchSingleOnly}) keeps at most one hit.
+     * paintables == 0. Single-article open ({@link #activeSearchSingleOnly}) →
+     * exactly {@code [chosen article, Continue-reading hub]} — no extra hits,
+     * no unlimited News pagination.
      */
     private void finalizeSearchFeedSeating(boolean landOnHits) {
         if (!searchFeedActive) return;
@@ -1900,7 +1901,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
-        // Count=1 suggestion / post_id open: never leave a soft-expanded multi stack.
+        // Count=1 suggestion / post_id open: exactly [chosen article, Continue-reading hub].
+        // Never soft-expanded multi stacks, never article-only (hub/redirection is OK).
         if (activeSearchSingleOnly) {
             ModelClass.Datum keep = null;
             for (int i = 0; i < list.size(); i++) {
@@ -1923,13 +1925,34 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             list.clear();
             if (keep != null) {
                 list.add(keep);
+                // Pin context bar to the opened article title (not a stale keyword).
+                try {
+                    String title = keep.getTitle();
+                    if (title != null && !title.trim().isEmpty()
+                            && !"null".equalsIgnoreCase(title.trim())) {
+                        activeSearchQuery = title.trim();
+                    }
+                } catch (Exception ignored) {
+                }
             }
-            // Single open = that article only. No Continue-reading hub (hub peeks
-            // other titles and overflip used to feel like unlimited News).
-            FeedEndHelper.stripAll(list);
-            showLog("ANYNEWS_SEARCH single-only keep postId="
+            FeedEndHelper.ensureAtEnd(list, this);
+            // Finite deck — block near-end / overflip pagination forever in this mode.
+            try {
+                skip = Integer.MAX_VALUE / 4;
+                actual_skip = skip;
+                dummyResponse = null;
+                isApiRequested = false;
+                requestSize = list.size();
+                requestPostition = Math.max(0, list.size()); // never == positionx on hub
+            } catch (Exception ignored) {
+            }
+            showLog("ANYNEWS_SEARCH single-only seat=[article,hub] postId="
                     + (keep != null && keep.getPostId() != null ? keep.getPostId() : 0)
-                    + " (no hub)");
+                    + " listSize=" + list.size());
+            try {
+                updateSearchContextBar();
+            } catch (Exception ignored) {
+            }
         } else {
             // Keyword multi-hit: exactly one Continue-reading hub last.
             FeedEndHelper.ensureAtEnd(list, this);
@@ -4321,10 +4344,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 + " list=" + (list != null ? list.size() : -1)
                 + " video=" + isVideoFeedMode()
                 + " special=" + isSpecialFeedMode());
-        // Keyword search must never soft-page into List_All_Articles loops.
+        // Keyword / single search must never soft-page into List_All_Articles loops.
         if (searchFeedActive
-                && activeSearchQuery != null
-                && !activeSearchQuery.trim().isEmpty()) {
+                && (activeSearchSingleOnly
+                        || activeSearchPostId > 0L
+                        || (activeSearchQuery != null
+                                && !activeSearchQuery.trim().isEmpty()))) {
             showLog("ANYNEWS_SEARCH soft-empty diverted → finalize (" + reason + ")");
             if (list == null) {
                 list = new ArrayList<>();
@@ -5641,9 +5666,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
                             || activeSearchPostId > 0L
                             || activeSearchSingleOnly)) {
-                if (activeSearchSingleOnly) {
-                    // Single article FlipView — rubber-band only; never page more News.
+                if (activeSearchSingleOnly || activeSearchPostId > 0L) {
+                    // Finite [article, hub] — rubber-band only; never page more News.
                     showLog("ANYNEWS_SEARCH overflip blocked — single-article mode");
+                    try {
+                        if (list != null && !FeedEndHelper.hasAtEnd(list)
+                                && ReadArticleStore.countPaintableArticles(list) > 0) {
+                            finalizeSearchFeedSeating(false);
+                        }
+                    } catch (Exception ignored) {
+                    }
                 } else if (list != null && !list.isEmpty()
                         && FeedEndHelper.isFeedEnd(list.get(list.size() - 1))) {
                     // Already on hub — nothing more to append.
@@ -13689,6 +13721,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         activeSearchPostId > 0L ? activeSearchPostId : null);
                 // Exact / single open: one card only — never soft keyword expansion.
                 requestModel.setLimit(1);
+                // post_id open must not also keyword-seat (server prefers post_id, but
+                // clearing search_text is a hard client guard against soft-expand).
+                if (activeSearchPostId > 0L) {
+                    requestModel.setSearch_text(null);
+                }
             } else {
                 // Cap page size so Search_Stories matches server RESULT_LIMIT_DEFAULT.
                 requestModel.setLimit(12);
@@ -13747,6 +13784,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void ShowNews_Data_Values(int category_id,int reqPos) {
         showLog("API CATEGORY ID:" + category_id);
         showLog("API CATEGORY REQPOS:" + reqPos);
+
+        // Single-article search deck is finite — never enqueue page-2+ Search_Stories
+        // (server returns [] on skip>0; client used to finalize and yank the hub).
+        if (searchFeedActive
+                && (activeSearchSingleOnly || activeSearchPostId > 0L)
+                && (skip > 0 || actual_skip > 0 || reqPos == 3)) {
+            showLog("ANYNEWS_SEARCH ShowNews blocked — single-article no pagination"
+                    + " skip=" + skip + " reqPos=" + reqPos);
+            isApiRequested = false;
+            try {
+                finalizeSearchFeedSeating(false);
+            } catch (Exception ignored) {
+            }
+            return;
+        }
 
         // Online Read flip is local-only (ReadArticleStore postcards). Do not fire
         // List_All_Articles densify / top-up while the user is on Read — except
@@ -15246,11 +15298,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 });
                             }
                         } else if (!fromCache
+                                && !searchFeedActive
                                 && canPageActiveOnlineFlipFeed()
                                 && !bookmarksModeSelected
                                 && list != null
                                 && !list.isEmpty()) {
                             // News / Local / Special: load more when near end (Video sets above).
+                            // Never eager-page Search_Stories / single-article decks here —
+                            // that appended unlimited hits after finalizeSearchFeedSeating.
                             int n = list.size();
                             requestPostition = Math.max(1, Math.min(n - 1, Math.max(1, n - 3)));
                             // Prefetch thrift: only eager-hold next page for small decks
@@ -15275,12 +15330,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                         if (dummyResponse != null || isApiRequested) return;
                                         if (list == null || list.isEmpty()) return;
                                         if (isVideoFeedMode()) return;
+                                        if (searchFeedActive) return;
                                         if (specialAtParse != isSpecialFeedMode()) return;
                                         isApiRequested = true;
                                         ShowNews_Data_Values(category_id, 3);
                                     }
                                 });
                             }
+                        } else if (searchFeedActive && (activeSearchSingleOnly
+                                || activeSearchPostId > 0L)) {
+                            // Finite search deck — park cursors past any near-end trigger.
+                            requestSize = list != null ? list.size() : 0;
+                            requestPostition = Math.max(requestSize, 99);
                         }
                         showLog("pagination cursors fromCache=" + fromCache
                                 + " skip=" + skip + " actual_skip=" + actual_skip
@@ -16289,6 +16350,31 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("positionx::"+positionx);
         showLog("requestPostition::"+requestPostition);
         showLog("LIST SIZE:"+(list.size()+":positionx:"+positionx));
+        // Single-article search: finite [article, hub] — never page Search_Stories
+        // or List_All_Articles (near-end prefetch used to append unlimited News).
+        if (searchFeedActive && (activeSearchSingleOnly || activeSearchPostId > 0L)) {
+            showLog("ANYNEWS_SEARCH refreshDetails blocked — single-article deck");
+            isApiRequested = false;
+            try {
+                if (list != null && !FeedEndHelper.hasAtEnd(list)
+                        && ReadArticleStore.countPaintableArticles(list) > 0) {
+                    finalizeSearchFeedSeating(false);
+                }
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+        // Keyword multi search with hub already seated: never treat hub as News EOF
+        // trigger into List_All_Articles — only Search_Stories paging before hub.
+        if (searchFeedActive
+                && list != null
+                && !list.isEmpty()
+                && FeedEndHelper.isFeedEnd(list.get(Math.min(positionx, list.size() - 1)))
+                && FeedEndHelper.hasAtEnd(list)) {
+            showLog("ANYNEWS_SEARCH refreshDetails skip — on Continue-reading hub");
+            isApiRequested = false;
+            return;
+        }
         // Offline: never fire List_All_Articles / held next-page poll (ShowNews also guards).
         if (!isDeviceOnline()) {
             showLog("refreshDetails skip network while offline");
@@ -16408,14 +16494,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         final boolean feedNotExhausted = !isOnlinePageableFeedTrulyExhausted()
                 && !(isFeedExhaustedMessage()
                         && (!canPageActiveOnlineFlipFeed() || bookmarksModeSelected));
-        if (positionx == requestPostition
+        // Search single / hub-complete: never near-end page into more stories or News.
+        final boolean searchBlocksPaging = searchFeedActive
+                && (activeSearchSingleOnly
+                        || activeSearchPostId > 0L
+                        || (list != null && FeedEndHelper.hasAtEnd(list)
+                                && positionx >= Math.max(0, list.size() - 1)));
+        if (searchBlocksPaging) {
+            showLog("ANYNEWS_SEARCH near-end paging suppressed");
+            isApiRequested = false;
+        } else if (positionx == requestPostition
                 && dummyResponse == null
                 && !isApiRequested
                 && feedNotExhausted) {
             showLog("request at position::"+requestSize);
             isApiRequested=true;
             ShowNews_Data_Values(category_id,3);
-        } else if (canPageActiveOnlineFlipFeed()
+        } else if (!searchFeedActive
+                && canPageActiveOnlineFlipFeed()
                 && !bookmarksModeSelected
                 && list != null
                 && !list.isEmpty()
@@ -16425,6 +16521,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && positionx >= Math.max(0, list.size() - 2)
                 && feedNotExhausted) {
             // News / Special / Video: near end of loaded list — prefetch next page.
+            // Keyword multi may still page via positionx==requestPostition above.
             showLog((isVideoFeedMode() ? "video" : isSpecialFeedMode() ? "special"
                     : "online News")
                     + " end-edge prefetch pos=" + positionx

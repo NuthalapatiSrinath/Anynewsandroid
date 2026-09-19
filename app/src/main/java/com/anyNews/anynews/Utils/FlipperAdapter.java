@@ -3808,14 +3808,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         if (nameView != null) {
-            nameView.setText(AutoNewsBylineHelper.displayWriterName(item.getWriterName()));
+            nameView.setText(safeBylineText(
+                    AutoNewsBylineHelper.displayWriterName(item.getWriterName())));
         }
         if (designationView != null) {
             String designation =
                     AutoNewsBylineHelper.displayDesignation(
                             context, languageModelResponse, item);
-            if (TextUtils.isEmpty(designation)
-                    || "null".equalsIgnoreCase(designation.trim())) {
+            designation = safeBylineText(designation);
+            if (TextUtils.isEmpty(designation)) {
                 designationView.setText("");
                 designationView.setVisibility(View.GONE);
             } else {
@@ -3824,17 +3825,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         }
         if (timeView != null) {
+            // Always clear first — recycled FlipView scrap can keep literal "null".
+            timeView.setText("");
             String relative = "";
             try {
                 Long published = item.getPublishedTime();
-                if (published != null && published > 0L) {
+                if (published != null && published > 0L && commonMethods != null) {
                     relative = commonMethods.getHrsFormatfromDate(published);
                 }
             } catch (Exception ignored) {
                 relative = "";
             }
-            if (TextUtils.isEmpty(relative)
-                    || "null".equalsIgnoreCase(relative.trim())) {
+            relative = safeBylineText(relative);
+            if (TextUtils.isEmpty(relative)) {
                 timeView.setText("");
                 timeView.setVisibility(View.GONE);
             } else {
@@ -3842,6 +3845,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 timeView.setVisibility(View.VISIBLE);
             }
         }
+    }
+
+    /** Drop empty / literal {@code null} strings before painting writer strip. */
+    @NonNull
+    private static String safeBylineText(@Nullable String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String t = raw.trim();
+        if (t.isEmpty() || "null".equalsIgnoreCase(t) || "undefined".equalsIgnoreCase(t)) {
+            return "";
+        }
+        return t;
     }
 
     // Body/description TextViews across the half-image and half-video layouts (plain
