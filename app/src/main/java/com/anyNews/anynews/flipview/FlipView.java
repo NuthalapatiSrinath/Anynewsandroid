@@ -163,6 +163,13 @@ public class FlipView extends FrameLayout {
     /** Re-entrant notify from getView during restore must not resolve a wiped index. */
     private int mDataSetChangeDepth = 0;
     private Runnable mRestoreAfterFlip;
+    /**
+     * Keyword / single search open: the next {@link #dataSetChanged()} must seat
+     * page 0 (first hit), never clamp a prior News index onto the last page
+     * (Continue-reading hub). Cleared when the user deliberately flips away from 0
+     * or after {@link #releaseForcedPage0Seat()}.
+     */
+    private boolean mForcePage0OnDataChange = false;
     private OverFlipMode mOverFlipMode;
     private OverFlipper mOverFlipper;
     //
@@ -333,27 +340,53 @@ public class FlipView extends FrameLayout {
                 updateEmptyStatus();
                 return;
             }
-            if (restore == INVALID_PAGE_POSITION) {
+            if (mForcePage0OnDataChange) {
+                // Search open / fresh deck: never clamp a stale mid-feed index onto
+                // the last page (Continue-reading hub at count-1).
+                restore = 0;
+            } else if (restore == INVALID_PAGE_POSITION) {
                 restore = fallbackPageNeverHomeUnlessOnZero();
             } else if (restore > mPageCount - 1) {
-                restore = mPageCount - 1;
+                // Shrinking the deck: landing on count-1 paints the EOF/hub card
+                // first. Prefer the nearest in-range page, not the sentinel.
+                restore = Math.max(0, mPageCount - 2);
+                if (mPageCount == 1) {
+                    restore = 0;
+                }
             } else if (restore < 0) {
                 restore = 0;
             }
             newPosition = restore;
             // Never recycle or snap while the user is still swiping. A recycle here
             // aborted the gesture and the next notify treated the seat as unknown.
-            if (driving) {
+            // Forced page-0 search seats must still apply (cancel peak/fling first).
+            if (driving && !mForcePage0OnDataChange) {
                 rememberFlipAnchor();
                 scheduleRestoreAfterFlip();
                 invalidate();
                 updateEmptyStatus();
                 return;
             }
+            if (mForcePage0OnDataChange && driving) {
+                try {
+                    endFlip();
+                } catch (Exception ignored) {
+                }
+                try {
+                    if (mPeakAnim != null) {
+                        mPeakAnim.cancel();
+                        mPeakAnim = null;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
             // Apply the restored page BEFORE layout. Do not clear index, flip
             // distance, or page id first — that window was the snap-to-first bug.
             // Same page: keep last-dispatched so we do not re-fire onFlippedToPage(0).
             setFlipDistance(restore * (float) FLIP_DISTANCE_PER_PAGE, true);
+            if (mForcePage0OnDataChange && restore == 0) {
+                commitExplicitPage(0);
+            }
             updateEmptyStatus();
         } finally {
             mDataSetChangeDepth--;
@@ -455,11 +488,20 @@ public class FlipView extends FrameLayout {
         if (count < 1) {
             return INVALID_PAGE_POSITION;
         }
+        // Search seating: absolute page-0 lock until releaseForcedPage0Seat().
+        if (mForcePage0OnDataChange) {
+            return 0;
+        }
         final int reference = bestKnownPageIndex();
         final long pageId = bestKnownPageId();
         if (reference != INVALID_PAGE_POSITION) {
             final int clamped = Math.max(0, Math.min(count - 1, reference));
             if (pageId == 0 || pageId == -1) {
+                // Stale high index from a prior longer feed — never snap to the
+                // new last page (EOF / Continue-reading hub).
+                if (reference > count - 1 && count > 1) {
+                    return Math.max(0, count - 2);
+                }
                 return clamped;
             }
             try {
@@ -472,6 +514,11 @@ public class FlipView extends FrameLayout {
             int nearest = nearestIndexForPageId(pageId, reference, count);
             if (nearest != INVALID_PAGE_POSITION) {
                 return nearest;
+            }
+            // Id vanished (News → search deck): do not clamp onto the last page
+            // (Continue-reading / feed_end). Prefer the nearest in-range real page.
+            if (clamped == count - 1 && count > 1) {
+                return Math.max(0, count - 2);
             }
             return clamped;
         }
@@ -2355,6 +2402,10 @@ public class FlipView extends FrameLayout {
 //        //Log.e("TRACKING","flipTo "+page);
         endFlip();
         clearGestureAnchor();
+        // User (or seating) left page 0 — stop forcing page-0 on later notifies.
+        if (page > 0) {
+            mForcePage0OnDataChange = false;
+        }
         // Explicit navigation (deep link, restore) is a real land — including page 0.
         mCommittedPageIndex = page;
         setFlipDistance(page * FLIP_DISTANCE_PER_PAGE);
@@ -2371,9 +2422,26 @@ public class FlipView extends FrameLayout {
             endFlip();
         } catch (Exception ignored) {
         }
+        try {
+            if (mPeakAnim != null) {
+                mPeakAnim.cancel();
+                mPeakAnim = null;
+            }
+        } catch (Exception ignored) {
+        }
         clearGestureAnchor();
         clearFlipAnchor();
         clearCommittedSeat();
+        // Cancel a deferred restore that still holds a pre-search News index —
+        // that runnable was the hub-first race after Search_Stories landed.
+        if (mRestoreAfterFlip != null) {
+            try {
+                removeCallbacks(mRestoreAfterFlip);
+            } catch (Exception ignored) {
+            }
+            mRestoreAfterFlip = null;
+        }
+        mForcePage0OnDataChange = true;
         mCurrentPageIndex = 0;
         mCurrentPageId = -1;
         mLastDispatchedPageEventIndex = INVALID_PAGE_POSITION;
@@ -2385,6 +2453,20 @@ public class FlipView extends FrameLayout {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /** Keep forcing page 0 across the next dataset notify (search seating). */
+    public void beginForcedPage0Seat() {
+        mForcePage0OnDataChange = true;
+    }
+
+    /** Allow normal restore after search content has landed on page 0. */
+    public void releaseForcedPage0Seat() {
+        mForcePage0OnDataChange = false;
+    }
+
+    public boolean isForcedPage0Seat() {
+        return mForcePage0OnDataChange;
     }
 
     private void commitExplicitPage(int page) {

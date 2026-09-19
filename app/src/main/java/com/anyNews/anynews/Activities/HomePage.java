@@ -317,11 +317,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Count=1 suggestion: seat at most one paintable hit (+ hub). */
     private boolean activeSearchSingleOnly = false;
     /**
-     * Single-article open has successfully landed FlipView on the article (page 0).
-     * Later {@code finalizeSearchFeedSeating(false)} must not re-notify in a way that
-     * clamps onto the Continue-reading hub.
+     * Search open has successfully landed FlipView on the first paintable hit
+     * (page 0) — keyword multi-hit or single-article. Later
+     * {@code finalizeSearchFeedSeating(false)} must not re-notify in a way that
+     * clamps onto the Continue-reading hub until the user has seen that hit.
      */
-    private boolean searchSingleArticleLanded = false;
+    private boolean searchContentLanded = false;
     private boolean searchFeedActive = false;
     /**
      * When true, {@link #applySearchQueryExtra} already called {@link #inlist(int)} —
@@ -1749,7 +1750,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         activeSearchQuery = q;
         activeSearchPostId = postIdExtra > 0L ? postIdExtra : 0L;
         activeSearchSingleOnly = singleOnly || activeSearchPostId > 0L;
-        searchSingleArticleLanded = false;
+        searchContentLanded = false;
         searchFeedActive = true;
         searchOpenHandledInCreate = true;
         // Never soft-retry a single-article open into a multi-hit keyword stack.
@@ -1969,21 +1970,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             FeedEndHelper.ensureAtEnd(list, this);
         }
         int paintables = ReadArticleStore.countPaintableArticles(list);
-        // Single-article must open on the article. Never notify first (FlipView
-        // clamps a prior News index onto the hub at list.size()-1). Also force
-        // when we have not yet landed, even if a later path passes landOnHits=false.
-        // Once landed, do not yank the user back from a deliberate hub swipe.
-        final boolean singleOpen = activeSearchSingleOnly || activeSearchPostId > 0L;
-        boolean forceHits = paintables > 0 && (landOnHits
-                || (singleOpen && !searchSingleArticleLanded));
+        // Hard rule: while search content has not landed on page 0, ALWAYS force
+        // hits-first — keyword and single alike. FlipView used to clamp a prior
+        // News index onto list.size()-1 (Continue-reading hub). Once landed, do
+        // not yank the user back from a deliberate hub swipe.
+        boolean forceHits = paintables > 0 && (landOnHits || !searchContentLanded);
         showLog("ANYNEWS_SEARCH finalize paintables=" + paintables
                 + " listSize=" + list.size()
                 + " land=" + landOnHits
                 + " forceHits=" + forceHits
-                + " singleLanded=" + searchSingleArticleLanded);
+                + " contentLanded=" + searchContentLanded);
         try {
             if (mFlipView != null) {
                 mFlipView.setVisibility(View.VISIBLE);
+                if (forceHits) {
+                    mFlipView.beginForcedPage0Seat();
+                }
             }
             if (layout_with_data != null) {
                 layout_with_data.setVisibility(View.VISIBLE);
@@ -2001,6 +2003,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             positionx = list.size() - 1;
             try {
                 mFlipView.resetSeatForNewFeed();
+                mFlipView.releaseForcedPage0Seat();
                 if (adapter != null) {
                     adapter.setCurrentFlipPage(positionx);
                     adapter.setDataImmediate(list);
@@ -2012,9 +2015,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } else if (paintables > 0) {
             // Multi-hit EOF / already scrolled: refresh deck without yanking to page 0.
-            // Preserve seat when on a real hit; if FlipView drifted onto hub wrongly
-            // while hits exist and landOnHits was requested upstream, forceHits above
-            // already handled single-open. Here only notify + keep current page.
+            // Never keep a hub seat while hits exist — that was hub-first after EOF.
             try {
                 int keepPage = 0;
                 try {
@@ -2026,7 +2027,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 } catch (Exception ignored) {
                 }
                 if (keepPage >= list.size()) {
-                    keepPage = Math.max(0, list.size() - 1);
+                    keepPage = Math.max(0, list.size() - 2);
+                }
+                if (keepPage < 0) keepPage = 0;
+                // If FlipView drifted onto the hub, reclaim the last real hit.
+                if (keepPage < list.size()
+                        && FeedEndHelper.isFeedEnd(list.get(keepPage))) {
+                    keepPage = Math.max(0, list.size() - 2);
+                    if (FeedEndHelper.isFeedEnd(list.get(keepPage))) {
+                        keepPage = 0;
+                    }
                 }
                 if (adapter != null) {
                     adapter.setCurrentFlipPage(keepPage);
@@ -2040,6 +2050,41 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         }
         ensureSearchChromeInteractive();
+        assertSearchHubIsLast();
+    }
+
+    /** Regression guard: hub must be last when paintables exist; never at index 0. */
+    private void assertSearchHubIsLast() {
+        if (!searchFeedActive || list == null || list.isEmpty()) return;
+        try {
+            int paintables = ReadArticleStore.countPaintableArticles(list);
+            if (paintables <= 0) return;
+            if (FeedEndHelper.isFeedEnd(list.get(0))
+                    || ReadArticleStore.isSyntheticFeedSlot(list.get(0))) {
+                showLog("ANYNEWS_SEARCH ASSERT hub/synth at 0 — repairing");
+                forceSearchHitsOnPage0();
+                return;
+            }
+            if (!FeedEndHelper.hasAtEnd(list)) {
+                showLog("ANYNEWS_SEARCH ASSERT hub missing at end — ensuring");
+                FeedEndHelper.ensureAtEnd(list, this);
+                if (adapter != null) {
+                    adapter.setDataImmediate(list);
+                }
+            }
+            // Deduplicate mid-list hubs.
+            for (int i = list.size() - 2; i >= 0; i--) {
+                if (FeedEndHelper.isFeedEnd(list.get(i))) {
+                    showLog("ANYNEWS_SEARCH ASSERT mid-list hub at " + i + " — stripping");
+                    list.remove(i);
+                }
+            }
+            if (!FeedEndHelper.hasAtEnd(list)) {
+                FeedEndHelper.ensureAtEnd(list, this);
+            }
+        } catch (Exception e) {
+            showLog("ANYNEWS_SEARCH assert hub failed: " + e.getMessage());
+        }
     }
 
     /**
@@ -2066,11 +2111,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             showLog("ANYNEWS_SEARCH ASSERT hub/synth at index 0 — stripping");
             list.remove(0);
         }
-        if (ReadArticleStore.countPaintableArticles(list) > 0
-                && !FeedEndHelper.hasAtEnd(list)) {
-            FeedEndHelper.ensureAtEnd(list, this);
-        } else if (ReadArticleStore.countPaintableArticles(list) > 0) {
-            // Deduplicate hubs that may have piled up.
+        if (ReadArticleStore.countPaintableArticles(list) > 0) {
+            // Exactly one hub last (dedupe any piled-up end cards).
             FeedEndHelper.ensureAtEnd(list, this);
         }
         if (list.isEmpty()
@@ -2086,8 +2128,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         positionx = 0;
         try {
             // Clear restore anchors BEFORE notify so dataSetChanged cannot clamp
-            // onto the hub at list.size()-1.
+            // onto the hub at list.size()-1. Also lock FlipView to page 0.
             mFlipView.resetSeatForNewFeed();
+            mFlipView.beginForcedPage0Seat();
             if (adapter != null) {
                 adapter.setCurrentFlipPage(0);
                 adapter.setDataImmediate(list);
@@ -2100,44 +2143,70 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             int cur = mFlipView.getCurrentPage();
-            if (cur != 0
-                    && cur < list.size()
-                    && (FeedEndHelper.isFeedEnd(list.get(cur))
-                            || ReadArticleStore.isSyntheticFeedSlot(list.get(cur)))) {
-                showLog("ANYNEWS_SEARCH ASSERT still on hub/synth idx=" + cur + " — flipTo(0)");
+            if (cur != 0) {
+                showLog("ANYNEWS_SEARCH ASSERT seat=" + cur + " — flipTo(0)");
                 mFlipView.flipTo(0);
                 positionx = 0;
                 cur = 0;
             }
-            if (cur == 0 && (activeSearchSingleOnly || activeSearchPostId > 0L)) {
-                searchSingleArticleLanded = true;
+            if (cur == 0
+                    && !list.isEmpty()
+                    && !FeedEndHelper.isFeedEnd(list.get(0))) {
+                markSearchContentLanded();
             }
         } catch (Exception ignored) {
         }
-        mFlipView.post(() -> {
+        // Multi-frame reclaim: deferred dataSetChanged / peakNext / scheduleRestore
+        // used to snap onto the hub one frame after a successful flipTo(0).
+        scheduleSearchPage0Reclaim(0);
+        scheduleSearchPage0Reclaim(32L);
+        scheduleSearchPage0Reclaim(96L);
+    }
+
+    private void markSearchContentLanded() {
+        searchContentLanded = true;
+    }
+
+    private void scheduleSearchPage0Reclaim(long delayMs) {
+        if (mFlipView == null) return;
+        final Runnable reclaim = () -> {
             try {
                 if (!searchFeedActive || mFlipView == null || list == null) return;
                 if (ReadArticleStore.countPaintableArticles(list) <= 0) return;
                 if (list.isEmpty() || FeedEndHelper.isFeedEnd(list.get(0))) return;
                 int cur = mFlipView.getCurrentPage();
                 if (cur == 0) {
-                    if (activeSearchSingleOnly || activeSearchPostId > 0L) {
-                        searchSingleArticleLanded = true;
+                    markSearchContentLanded();
+                    // Release the page-0 lock only after a stable frame so a
+                    // deferred dataSetChanged cannot clamp onto the hub first.
+                    if (delayMs >= 96L) {
+                        mFlipView.releaseForcedPage0Seat();
                     }
                     return;
                 }
-                // Do not yank after a successful article land (user may have swiped
-                // to Continue-reading). Only reclaim when open has not seated yet.
-                if (searchSingleArticleLanded) return;
-                showLog("ANYNEWS_SEARCH ASSERT post-frame seat=" + cur + " — flipTo(0)");
-                positionx = 0;
-                mFlipView.flipTo(0);
-                if (activeSearchSingleOnly || activeSearchPostId > 0L) {
-                    searchSingleArticleLanded = true;
+                // After a successful land, user may have swiped to Continue-reading.
+                if (searchContentLanded && delayMs >= 96L) {
+                    mFlipView.releaseForcedPage0Seat();
+                    return;
                 }
+                if (searchContentLanded) return;
+                showLog("ANYNEWS_SEARCH ASSERT post-frame seat=" + cur
+                        + " delay=" + delayMs + " — flipTo(0)");
+                positionx = 0;
+                mFlipView.beginForcedPage0Seat();
+                mFlipView.flipTo(0);
+                if (adapter != null) {
+                    adapter.setCurrentFlipPage(0);
+                }
+                markSearchContentLanded();
             } catch (Exception ignored) {
             }
-        });
+        };
+        if (delayMs <= 0L) {
+            mFlipView.post(reclaim);
+        } else {
+            mFlipView.postDelayed(reclaim, delayMs);
+        }
     }
 
     /**
@@ -2204,8 +2273,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         activeSearchQuery = "";
         activeSearchPostId = 0L;
         activeSearchSingleOnly = false;
-        searchSingleArticleLanded = false;
+        searchContentLanded = false;
         searchSoftRetryUsed = false;
+        try {
+            if (mFlipView != null) {
+                mFlipView.releaseForcedPage0Seat();
+            }
+        } catch (Exception ignored) {
+        }
         updateSearchContextBar();
     }
 
@@ -3602,18 +3677,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     return;
                 }
                 // AdPreloader is best-effort warm only (Play Store / July fill path is
-                // per-seat AdLoader). If the pool has a creative for the *current*
-                // seat, rebind can claim it and we skip a duplicate request. Never
-                // skip AdLoader for ahead seats just because the pool has 1 creative
-                // — that caused primary_only to fill once then Share forever when
-                // primary warm refill no-filled.
+                // always per-seat AdLoader). Rebind may claim a warm creative for
+                // faster paint — never skip loadAds because the pool looks ready.
+                // Skipping the current seat when isReady() left Share forever when
+                // rebind failed to claim / primary warm refill no-filled.
                 if (!interstitialMode) {
                     try {
                         if (AdPreloader.get().isReady()) {
                             scheduleFlipSafeAdRebind();
-                            if (isCurrentAdSeatReqPos(adReqPosition)) {
-                                return;
-                            }
                         }
                     } catch (Exception ignored) {
                     }
@@ -3641,34 +3712,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             loadAds(adCode, adReqPosition, type);
         } catch (Exception e) {
             showLog("ensureFeedNativeAdLoaded: " + e.getMessage());
-        }
-    }
-
-    /** True when {@code reqPos} is the ad seat the user is currently on. */
-    private boolean isCurrentAdSeatReqPos(@Nullable Integer reqPos) {
-        if (reqPos == null || list == null || list.isEmpty()) {
-            return false;
-        }
-        try {
-            int page = positionx;
-            if (mFlipView != null) {
-                int cur = mFlipView.getCurrentPage();
-                if (cur >= 0) {
-                    page = cur;
-                }
-            }
-            if (page < 0 || page >= list.size()) {
-                return false;
-            }
-            ModelClass.Datum d = list.get(page);
-            if (d == null || d.getPostType() == null
-                    || !d.getPostType().equalsIgnoreCase("ad")) {
-                return false;
-            }
-            Integer curPos = d.getAd_req_position();
-            return curPos != null && curPos.intValue() == reqPos.intValue();
-        } catch (Exception ignored) {
-            return false;
         }
     }
 
@@ -5783,9 +5826,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     try {
                         if (list != null
                                 && ReadArticleStore.countPaintableArticles(list) > 0
-                                && (!searchSingleArticleLanded
+                                && (!searchContentLanded
                                         || !FeedEndHelper.hasAtEnd(list))) {
-                            finalizeSearchFeedSeating(!searchSingleArticleLanded);
+                            finalizeSearchFeedSeating(!searchContentLanded);
                         }
                     } catch (Exception ignored) {
                     }
@@ -12405,11 +12448,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         int flipTo = 0;
         if (data != null && !data.isEmpty()) {
-            flipTo = Math.max(0, Math.min(positionx, data.size() - 1));
+            // Search: never clamp a stale News positionx onto the last page (hub).
+            if (searchFeedActive) {
+                flipTo = 0;
+            } else {
+                flipTo = Math.max(0, Math.min(positionx, data.size() - 1));
+            }
         }
         adapter.setCurrentFlipPage(flipTo);
         if (data != null) {
-            adapter.setData(data);
+            if (searchFeedActive) {
+                try {
+                    if (mFlipView != null) {
+                        mFlipView.beginForcedPage0Seat();
+                    }
+                } catch (Exception ignored) {
+                }
+                adapter.setDataImmediate(data);
+            } else {
+                adapter.setData(data);
+            }
         }
         // First-paint guarantee: successful list must show the flip surface.
         if (data != null && !data.isEmpty()) {
@@ -13905,15 +13963,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && (skip > 0 || actual_skip > 0 || reqPos == 3)) {
             showLog("ANYNEWS_SEARCH ShowNews blocked — single-article no pagination"
                     + " skip=" + skip + " reqPos=" + reqPos
-                    + " landed=" + searchSingleArticleLanded);
+                    + " landed=" + searchContentLanded);
             isApiRequested = false;
             try {
                 // Only re-seat if hub missing or article never landed — never
                 // re-notify a finished [article,hub] deck (clamped onto hub).
                 if (list != null
                         && ReadArticleStore.countPaintableArticles(list) > 0
-                        && (!searchSingleArticleLanded || !FeedEndHelper.hasAtEnd(list))) {
-                    finalizeSearchFeedSeating(!searchSingleArticleLanded);
+                        && (!searchContentLanded || !FeedEndHelper.hasAtEnd(list))) {
+                    finalizeSearchFeedSeating(!searchContentLanded);
                 }
             } catch (Exception ignored) {
             }
@@ -16474,13 +16532,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // or List_All_Articles (near-end prefetch used to append unlimited News).
         if (searchFeedActive && (activeSearchSingleOnly || activeSearchPostId > 0L)) {
             showLog("ANYNEWS_SEARCH refreshDetails blocked — single-article deck"
-                    + " landed=" + searchSingleArticleLanded);
+                    + " landed=" + searchContentLanded);
             isApiRequested = false;
             try {
                 if (list != null
                         && ReadArticleStore.countPaintableArticles(list) > 0
-                        && (!searchSingleArticleLanded || !FeedEndHelper.hasAtEnd(list))) {
-                    finalizeSearchFeedSeating(!searchSingleArticleLanded);
+                        && (!searchContentLanded || !FeedEndHelper.hasAtEnd(list))) {
+                    finalizeSearchFeedSeating(!searchContentLanded);
                 }
             } catch (Exception ignored) {
             }
@@ -18527,17 +18585,14 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (items == null || items.isEmpty() || lookahead < 0) {
             return;
         }
-        final boolean interstitialMode = FeedAdConfig.isInterstitial(this);
         try {
             int start = Math.max(0, fromIndex);
             int end = Math.min(items.size() - 1, fromIndex + lookahead);
             int started = 0;
             int inFlight = countInFlightNativeAdLoads();
-            // Each ready warm creative can cover one upcoming seat — not every seat.
-            // Skipping all seats when readyCount>=1 left primary_only with one fill
-            // then Share when primary warm refill no-filled (Play Store always did
-            // per-seat AdLoader).
-            int warmBudget = interstitialMode ? 0 : AdPreloader.get().readyCount();
+            // Play Store / July: always start per-seat AdLoader. Warm pool may paint
+            // faster via rebind/claim but must not suppress ahead-seat requests —
+            // warmBudget skips left seats on Share when primary refill no-filled.
             // Hard cap: at most 2 upcoming ad seats (current may already be in-flight).
             final int maxSeatsToStart = 2;
             for (int i = start; i <= end; i++) {
@@ -18581,12 +18636,6 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 } catch (Exception ignored) {
                 }
                 if (already) {
-                    continue;
-                }
-                if (warmBudget > 0) {
-                    warmBudget--;
-                    showLog("prefetchUpcomingNativeAds skip seat — warm budget"
-                            + " reqPos=" + pos + " left=" + warmBudget);
                     continue;
                 }
                 ensureFeedNativeAdLoaded(code, pos, d.getAd_type());
