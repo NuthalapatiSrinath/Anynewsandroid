@@ -168,7 +168,12 @@ public class FullPostRecyclerAdopter extends RecyclerView.Adapter<FullBaseViewHo
                 e.printStackTrace();
             }
             
-            post_time.setText(""+commonMethods.getHrsFormatfromDate(Created_at));
+            String relative = commonMethods.getHrsFormatfromDate(Created_at);
+            if (relative == null || relative.isEmpty() || "null".equalsIgnoreCase(relative.trim())) {
+                post_time.setText("");
+            } else {
+                post_time.setText(relative);
+            }
 
 
             if (item.getPostStatus() == 1) {

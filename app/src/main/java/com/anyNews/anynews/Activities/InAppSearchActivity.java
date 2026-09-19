@@ -32,6 +32,7 @@ import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest;
 import com.anyNews.anynews.Utils.RecentSearchStore;
+import com.anyNews.anynews.Utils.SearchFuzzyHelper;
 import com.anyNews.anynews.Utils.SearchRevealHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.SearchModel;
@@ -54,12 +55,16 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 /**
  * In-app Search: mist + teal chrome, recent + categories idle state,
  * debounced suggestions with counts while typing, submit opens HomePage search mode.
+ * Typo intent: local edit-distance against recent (+ last suggest texts) with no
+ * extra API; empty state paints quickly after a short timeout if the server is slow.
  */
 public class InAppSearchActivity extends AppCompatActivity {
 
     public static final String EXTRA_QUERY = "extra_search_query";
 
-    private static final long SUGGEST_DEBOUNCE_MS = 250L;
+    private static final long SUGGEST_DEBOUNCE_MS = 180L;
+    /** Show empty / fuzzy hint if Suggestions still pending after this. */
+    private static final long EMPTY_HINT_MS = 650L;
 
     private View root;
     private EditText searchInput;
@@ -68,11 +73,15 @@ public class InAppSearchActivity extends AppCompatActivity {
     private RecyclerView listView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable pendingSuggest;
+    private Runnable pendingEmptyHint;
     private Call<EncreptionRequest> suggestCall;
     private String lastSuggestQuery = "";
     private final List<Row> rows = new ArrayList<>();
+    /** Last server suggestion texts — reused for local fuzzy (no extra call). */
+    private final List<String> lastSuggestTexts = new ArrayList<>();
     private SearchRowsAdapter adapter;
     private final List<SearchModel.Datum> categories = new ArrayList<>();
+    private int suggestSeq = 0;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -120,6 +129,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                             showIdleState();
                             return;
                         }
+                        // Instant local fuzzy (recent + last suggest) — no network wait.
+                        paintLocalFuzzyWhileWaiting(q);
                         scheduleSuggest(q);
                     }
                 });
@@ -142,18 +153,40 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     private void scheduleSuggest(final String q) {
         cancelSuggest();
+        final int seq = ++suggestSeq;
         pendingSuggest =
                 () -> {
                     pendingSuggest = null;
+                    if (seq != suggestSeq) return;
                     fetchSuggestions(q);
                 };
         handler.postDelayed(pendingSuggest, SUGGEST_DEBOUNCE_MS);
+        pendingEmptyHint =
+                () -> {
+                    pendingEmptyHint = null;
+                    if (seq != suggestSeq) return;
+                    String typed =
+                            searchInput.getText() != null
+                                    ? searchInput.getText().toString().trim()
+                                    : "";
+                    if (!typed.equals(q)) return;
+                    // Still waiting on network — show empty / fuzzy so UI feels instant.
+                    if (!hasStorySuggestRows()) {
+                        paintEmptyOrFuzzy(q);
+                    }
+                };
+        handler.postDelayed(pendingEmptyHint, EMPTY_HINT_MS);
     }
 
     private void cancelSuggest() {
+        suggestSeq++;
         if (pendingSuggest != null) {
             handler.removeCallbacks(pendingSuggest);
             pendingSuggest = null;
+        }
+        if (pendingEmptyHint != null) {
+            handler.removeCallbacks(pendingEmptyHint);
+            pendingEmptyHint = null;
         }
         if (suggestCall != null) {
             suggestCall.cancel();
@@ -161,13 +194,72 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
     }
 
+    private boolean hasStorySuggestRows() {
+        for (Row r : rows) {
+            if (r.type == Row.TYPE_SUGGEST || r.type == Row.TYPE_FUZZY) return true;
+        }
+        return false;
+    }
+
+    private void paintLocalFuzzyWhileWaiting(@NonNull String q) {
+        List<String> pool = new ArrayList<>();
+        for (RecentSearchStore.Entry e : RecentSearchStore.loadEntries(this)) {
+            if (e != null && !TextUtils.isEmpty(e.term)) pool.add(e.term);
+        }
+        pool.addAll(lastSuggestTexts);
+        List<String> fuzzy = SearchFuzzyHelper.closeMatches(q, pool, 4);
+        if (fuzzy.isEmpty()) return;
+        List<Row> next = new ArrayList<>();
+        List<Row> duRows = buildDailyUpdatesSuggestRows(q);
+        if (!duRows.isEmpty()) {
+            next.add(Row.header(getString(R.string.search_daily_updates_section)));
+            next.addAll(duRows);
+        }
+        next.add(Row.header(getString(R.string.search_did_you_mean)));
+        for (String f : fuzzy) {
+            next.add(Row.fuzzy(f));
+        }
+        noResults.setVisibility(View.GONE);
+        rows.clear();
+        rows.addAll(next);
+        adapter.notifyDataSetChanged();
+    }
+
+    private void paintEmptyOrFuzzy(@NonNull String q) {
+        List<String> pool = new ArrayList<>();
+        for (RecentSearchStore.Entry e : RecentSearchStore.loadEntries(this)) {
+            if (e != null && !TextUtils.isEmpty(e.term)) pool.add(e.term);
+        }
+        pool.addAll(lastSuggestTexts);
+        List<String> fuzzy = SearchFuzzyHelper.closeMatches(q, pool, 5);
+        if (!fuzzy.isEmpty()) {
+            List<Row> next = new ArrayList<>();
+            next.add(Row.header(getString(R.string.search_did_you_mean)));
+            for (String f : fuzzy) {
+                next.add(Row.fuzzy(f));
+            }
+            noResults.setVisibility(View.GONE);
+            rows.clear();
+            rows.addAll(next);
+            adapter.notifyDataSetChanged();
+            return;
+        }
+        noResults.setVisibility(View.VISIBLE);
+        // Keep idle recent/categories underneath the banner.
+        if (!hasStorySuggestRows()) {
+            showIdleState();
+            noResults.setVisibility(View.VISIBLE);
+        }
+    }
+
     private void showIdleState() {
         rows.clear();
-        List<String> recent = RecentSearchStore.load(this);
+        List<RecentSearchStore.Entry> recent = RecentSearchStore.loadEntries(this);
         if (!recent.isEmpty()) {
             rows.add(Row.header(getString(R.string.recent_searches)));
-            for (String r : recent) {
-                rows.add(Row.recent(r));
+            for (RecentSearchStore.Entry r : recent) {
+                if (r == null || TextUtils.isEmpty(r.term)) continue;
+                rows.add(Row.recent(r.term, r.postId));
             }
         }
         if (!categories.isEmpty()) {
@@ -321,19 +413,70 @@ public class InAppSearchActivity extends AppCompatActivity {
                                                     o.has("text") ? o.get("text").getAsString() : "";
                                             int count =
                                                     o.has("count") ? o.get("count").getAsInt() : 0;
+                                            long postId = 0L;
+                                            try {
+                                                if (o.has("post_id") && !o.get("post_id").isJsonNull()) {
+                                                    postId = o.get("post_id").getAsLong();
+                                                }
+                                            } catch (Exception ignored) {
+                                                postId = 0L;
+                                            }
+                                            // Only honor post_id on true singles (count 1).
+                                            if (count != 1) {
+                                                postId = 0L;
+                                            }
                                             if (!TextUtils.isEmpty(text)) {
-                                                next.add(Row.suggest(text, count, q));
+                                                next.add(Row.suggest(text, count, q, postId));
+                                                lastSuggestTexts.add(text);
                                             }
                                         }
                                     }
                                 }
-                                if (next.isEmpty()) {
-                                    // Keep recent+categories instead of harsh empty; soft banner.
-                                    noResults.setVisibility(View.VISIBLE);
-                                    showIdleState();
+                                // Cap cached suggest texts for local fuzzy reuse.
+                                while (lastSuggestTexts.size() > 40) {
+                                    lastSuggestTexts.remove(0);
+                                }
+                                boolean hasStory = false;
+                                for (Row r : next) {
+                                    if (r.type == Row.TYPE_SUGGEST) {
+                                        hasStory = true;
+                                        break;
+                                    }
+                                }
+                                if (!hasStory) {
+                                    // Local fuzzy first (recent + prior suggests) — no extra call.
+                                    paintEmptyOrFuzzy(q);
+                                    if (!duRows.isEmpty() && rows.isEmpty()) {
+                                        paintDailyUpdatesOnly(q, duRows);
+                                    }
                                     return;
                                 }
                                 noResults.setVisibility(View.GONE);
+                                // Append Did-you-mean under results when typed looks like a typo.
+                                List<String> pool = new ArrayList<>(lastSuggestTexts);
+                                for (RecentSearchStore.Entry e :
+                                        RecentSearchStore.loadEntries(InAppSearchActivity.this)) {
+                                    if (e != null && !TextUtils.isEmpty(e.term)) {
+                                        pool.add(e.term);
+                                    }
+                                }
+                                List<String> fuzzy =
+                                        SearchFuzzyHelper.closeMatches(q, pool, 3);
+                                if (!fuzzy.isEmpty()) {
+                                    next.add(Row.header(getString(R.string.search_did_you_mean)));
+                                    for (String f : fuzzy) {
+                                        boolean dup = false;
+                                        for (Row r : next) {
+                                            if (r.type == Row.TYPE_SUGGEST
+                                                    && r.title != null
+                                                    && r.title.equalsIgnoreCase(f)) {
+                                                dup = true;
+                                                break;
+                                            }
+                                        }
+                                        if (!dup) next.add(Row.fuzzy(f));
+                                    }
+                                }
                                 rows.clear();
                                 rows.addAll(next);
                                 adapter.notifyDataSetChanged();
@@ -345,10 +488,15 @@ public class InAppSearchActivity extends AppCompatActivity {
                         @Override
                         public void onFailure(Call<EncreptionRequest> call, Throwable t) {
                             if (!call.isCanceled()) {
-                                if (!duRows.isEmpty()) {
+                                String typed =
+                                        searchInput.getText() != null
+                                                ? searchInput.getText().toString().trim()
+                                                : "";
+                                if (typed.equals(q)) {
+                                    paintEmptyOrFuzzy(q);
+                                }
+                                if (!duRows.isEmpty() && !hasStorySuggestRows()) {
                                     paintDailyUpdatesOnly(q, duRows);
-                                } else {
-                                    noResults.setVisibility(View.VISIBLE);
                                 }
                             }
                         }
@@ -357,7 +505,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             if (!duRows.isEmpty()) {
                 paintDailyUpdatesOnly(q, duRows);
             } else {
-                noResults.setVisibility(View.VISIBLE);
+                paintEmptyOrFuzzy(q);
             }
         }
     }
@@ -407,12 +555,35 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void submitQuery(String q) {
+        openSearch(q, 0L);
+    }
+
+    /** Keyword FlipView search (multi-hit + Continue-reading hub). */
+    private void openSearch(String q, long postId) {
+        openSearch(q, postId, postId > 0L);
+    }
+
+    /**
+     * @param singleOnly count=1 suggestion: at most one FlipView hit + hub
+     *                   (even when server has not yet returned post_id).
+     */
+    private void openSearch(String q, long postId, boolean singleOnly) {
         String clean = softenClientQuery(q);
-        if (clean.isEmpty()) return;
-        RecentSearchStore.add(this, clean);
+        if (clean.isEmpty() && postId <= 0L) return;
+        if (!clean.isEmpty()) {
+            RecentSearchStore.add(this, clean, postId > 0L ? postId : 0L);
+        }
         Intent intent = new Intent(this, HomePage.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.putExtra(HomePage.EXTRA_SEARCH_QUERY, clean);
+        if (!clean.isEmpty()) {
+            intent.putExtra(HomePage.EXTRA_SEARCH_QUERY, clean);
+        }
+        if (postId > 0L) {
+            intent.putExtra(HomePage.EXTRA_SEARCH_POST_ID, postId);
+        }
+        if (singleOnly || postId > 0L) {
+            intent.putExtra(HomePage.EXTRA_SEARCH_SINGLE_ONLY, true);
+        }
         // Circular reveal into search results (same origin as opening search when available).
         Intent self = getIntent();
         if (self != null && self.getBooleanExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, false)) {
@@ -497,12 +668,14 @@ public class InAppSearchActivity extends AppCompatActivity {
         static final int TYPE_CATEGORY = 2;
         static final int TYPE_SUGGEST = 3;
         static final int TYPE_DU_CATEGORY = 4;
+        static final int TYPE_FUZZY = 5;
 
         final int type;
         final String title;
         final int meta;
         final int categoryId;
         final String highlight;
+        final long postId;
         @Nullable final DailyUpdatesSearchSuggest.Match duMatch;
 
         private Row(
@@ -511,33 +684,47 @@ public class InAppSearchActivity extends AppCompatActivity {
                 int meta,
                 int categoryId,
                 String highlight,
+                long postId,
                 @Nullable DailyUpdatesSearchSuggest.Match duMatch) {
             this.type = type;
             this.title = title;
             this.meta = meta;
             this.categoryId = categoryId;
             this.highlight = highlight;
+            this.postId = postId;
             this.duMatch = duMatch;
         }
 
         static Row header(String t) {
-            return new Row(TYPE_HEADER, t, 0, 0, null, null);
+            return new Row(TYPE_HEADER, t, 0, 0, null, 0L, null);
         }
 
         static Row recent(String t) {
-            return new Row(TYPE_RECENT, t, 0, 0, null, null);
+            return recent(t, 0L);
+        }
+
+        static Row recent(String t, long postId) {
+            return new Row(TYPE_RECENT, t, 0, 0, null, postId, null);
         }
 
         static Row category(String t, int id) {
-            return new Row(TYPE_CATEGORY, t, 0, id, null, null);
+            return new Row(TYPE_CATEGORY, t, 0, id, null, 0L, null);
         }
 
         static Row suggest(String t, int count, String highlight) {
-            return new Row(TYPE_SUGGEST, t, count, 0, highlight, null);
+            return suggest(t, count, highlight, 0L);
+        }
+
+        static Row suggest(String t, int count, String highlight, long postId) {
+            return new Row(TYPE_SUGGEST, t, count, 0, highlight, postId, null);
+        }
+
+        static Row fuzzy(String t) {
+            return new Row(TYPE_FUZZY, t, 0, 0, null, 0L, null);
         }
 
         static Row duCategory(@NonNull DailyUpdatesSearchSuggest.Match m) {
-            return new Row(TYPE_DU_CATEGORY, m.title, 0, 0, null, m);
+            return new Row(TYPE_DU_CATEGORY, m.title, 0, 0, null, 0L, m);
         }
     }
 
@@ -590,8 +777,28 @@ public class InAppSearchActivity extends AppCompatActivity {
                 vh.action.setVisibility(View.GONE);
                 // Prefer the typed needle when the row is a truncated snippet (…),
                 // so FlipView search_text matches what Suggestions found.
+                // Count=1 + post_id → open that article only (not soft keyword multi-hit).
                 vh.itemView.setOnClickListener(
-                        v -> submitQuery(suggestSubmitText(row)));
+                        v -> {
+                            if (row.meta == 1) {
+                                // Single-article row: that story only — no Continue-reading hub.
+                                openSearch(suggestSubmitText(row), row.postId, true);
+                            } else {
+                                submitQuery(suggestSubmitText(row));
+                            }
+                        });
+            } else if (row.type == Row.TYPE_FUZZY) {
+                vh.meta.setVisibility(View.GONE);
+                vh.icon.setImageResource(R.drawable.ic_action_search);
+                vh.action.setVisibility(View.GONE);
+                vh.itemView.setOnClickListener(
+                        v -> {
+                            if (searchInput != null) {
+                                searchInput.setText(row.title);
+                                searchInput.setSelection(row.title != null ? row.title.length() : 0);
+                            }
+                            submitQuery(row.title);
+                        });
             } else if (row.type == Row.TYPE_DU_CATEGORY) {
                 vh.meta.setVisibility(View.GONE);
                 vh.icon.setImageResource(R.drawable.ic_action_more_vert);
@@ -615,7 +822,15 @@ public class InAppSearchActivity extends AppCompatActivity {
                             RecentSearchStore.remove(InAppSearchActivity.this, row.title);
                             showIdleState();
                         });
-                vh.itemView.setOnClickListener(v -> submitQuery(row.title));
+                vh.itemView.setOnClickListener(
+                        v -> {
+                            // Recent of a single story (stored post_id) or long title →
+                            // single-article FlipView, not unlimited keyword hub.
+                            boolean single =
+                                    row.postId > 0L
+                                            || (row.title != null && row.title.trim().length() >= 28);
+                            openSearch(row.title, row.postId, single);
+                        });
             } else {
                 vh.meta.setVisibility(View.GONE);
                 vh.icon.setImageResource(R.drawable.ic_action_more_vert);

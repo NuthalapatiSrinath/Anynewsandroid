@@ -3797,6 +3797,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Writer strip name + designation + relative time for half image/video layouts.
      * Desk Auto News: clean admin name (no "Auto News" suffix) and role Reporter.
+     * Never paints the literal word {@code null} (missing role / published_time).
      */
     private void bindWriterStripIdentity(
             ModelClass.Datum item,
@@ -3810,13 +3811,36 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             nameView.setText(AutoNewsBylineHelper.displayWriterName(item.getWriterName()));
         }
         if (designationView != null) {
-            designationView.setText(
+            String designation =
                     AutoNewsBylineHelper.displayDesignation(
-                            context, languageModelResponse, item));
+                            context, languageModelResponse, item);
+            if (TextUtils.isEmpty(designation)
+                    || "null".equalsIgnoreCase(designation.trim())) {
+                designationView.setText("");
+                designationView.setVisibility(View.GONE);
+            } else {
+                designationView.setText(designation);
+                designationView.setVisibility(View.VISIBLE);
+            }
         }
         if (timeView != null) {
-            timeView.setText(
-                    "" + commonMethods.getHrsFormatfromDate(item.getPublishedTime()));
+            String relative = "";
+            try {
+                Long published = item.getPublishedTime();
+                if (published != null && published > 0L) {
+                    relative = commonMethods.getHrsFormatfromDate(published);
+                }
+            } catch (Exception ignored) {
+                relative = "";
+            }
+            if (TextUtils.isEmpty(relative)
+                    || "null".equalsIgnoreCase(relative.trim())) {
+                timeView.setText("");
+                timeView.setVisibility(View.GONE);
+            } else {
+                timeView.setText(relative);
+                timeView.setVisibility(View.VISIBLE);
+            }
         }
     }
 

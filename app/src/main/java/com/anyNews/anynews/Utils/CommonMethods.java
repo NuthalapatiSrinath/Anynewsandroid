@@ -125,7 +125,12 @@ public class CommonMethods {
     }
 
     public String getHrsFormatfromDate(long date) {
-        String formattedDate = null;
+        // Never return null — callers historically did "" + result → literal "null"
+        // next to Writer strip "Reporter".
+        if (date <= 0L) {
+            return "";
+        }
+        String formattedDate = "";
         // SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
      /*   CharSequence ago = null;
@@ -154,7 +159,15 @@ public class CommonMethods {
 
 
         long diff = date2.getTime() - date1.getTime();
-
+        // Future / clock-skew timestamps left formattedDate null and painted "null".
+        if (diff < 0) {
+            try {
+                return new SimpleDateFormat("MMM-dd", java.util.Locale.ENGLISH)
+                        .format(date1);
+            } catch (Exception e) {
+                return "";
+            }
+        }
 
         long difference_In_Days
                 = TimeUnit
@@ -276,7 +289,12 @@ public class CommonMethods {
             } else {
 
                 /*  formattedDate=" Today ";*/
-
+                try {
+                    formattedDate = new SimpleDateFormat("MMM-dd", java.util.Locale.ENGLISH)
+                            .format(date1);
+                } catch (Exception e) {
+                    formattedDate = "";
+                }
 
             }
 
@@ -298,6 +316,10 @@ public class CommonMethods {
       DateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS Z");
       Date date = new Date(milliSeconds);
       showLog(dateFormat.format(date));*/
+        if (formattedDate == null
+                || "null".equalsIgnoreCase(formattedDate.trim())) {
+            return "";
+        }
         return formattedDate;
     }
 

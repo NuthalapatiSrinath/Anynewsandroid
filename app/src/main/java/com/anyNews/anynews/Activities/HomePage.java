@@ -288,6 +288,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** In-app Search → FlipView keyword mode (from InAppSearchActivity). */
     public static final String EXTRA_SEARCH_QUERY = "extra_search_query";
     /**
+     * Count=1 suggestion / open-article: FlipView shows that post only
+     * (+ Continue-reading hub). Avoids soft keyword multi-hit stacks.
+     */
+    public static final String EXTRA_SEARCH_POST_ID = "extra_search_post_id";
+    /**
+     * True when the user tapped a count=1 suggestion (even without post_id).
+     * Client keeps only the first hit + Continue-reading hub.
+     */
+    public static final String EXTRA_SEARCH_SINGLE_ONLY = "extra_search_single_only";
+    /**
      * Optional Daily Updates deep-open after {@link #EXTRA_FOOTER_TAB} status:
      * {@link com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest#DU_OPEN_PANCHANGAM} etc.
      */
@@ -299,6 +309,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     LinearLayout floating_action_button, search_icon;
     /** Active keyword for Search_Stories / List_All_Articles search_text. */
     private String activeSearchQuery = "";
+    /**
+     * Exact post for single-article search open ({@link #EXTRA_SEARCH_POST_ID}).
+     * When &gt; 0, Search_Stories must not soft-expand into other hits.
+     */
+    private long activeSearchPostId = 0L;
+    /** Count=1 suggestion: seat at most one paintable hit (+ hub). */
+    private boolean activeSearchSingleOnly = false;
     private boolean searchFeedActive = false;
     /**
      * When true, {@link #applySearchQueryExtra} already called {@link #inlist(int)} —
@@ -1694,21 +1711,42 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** Enter FlipView keyword search mode from {@link InAppSearchActivity}. */
+    /** Enter FlipView keyword / single-article search mode from {@link InAppSearchActivity}. */
     private void applySearchQueryExtra(@Nullable Intent intent) {
-        if (intent == null || !intent.hasExtra(EXTRA_SEARCH_QUERY)) {
+        if (intent == null) {
             return;
         }
-        String q = intent.getStringExtra(EXTRA_SEARCH_QUERY);
-        intent.removeExtra(EXTRA_SEARCH_QUERY);
+        long postIdExtra = 0L;
+        if (intent.hasExtra(EXTRA_SEARCH_POST_ID)) {
+            try {
+                postIdExtra = intent.getLongExtra(EXTRA_SEARCH_POST_ID, 0L);
+            } catch (Exception ignored) {
+                postIdExtra = 0L;
+            }
+            intent.removeExtra(EXTRA_SEARCH_POST_ID);
+        }
+        boolean singleOnly = intent.getBooleanExtra(EXTRA_SEARCH_SINGLE_ONLY, false);
+        intent.removeExtra(EXTRA_SEARCH_SINGLE_ONLY);
+        boolean hasQuery = intent.hasExtra(EXTRA_SEARCH_QUERY);
+        String q = hasQuery ? intent.getStringExtra(EXTRA_SEARCH_QUERY) : null;
+        if (hasQuery) {
+            intent.removeExtra(EXTRA_SEARCH_QUERY);
+        }
         if (q == null) q = "";
         q = softenSearchQuery(q);
-        if (q.isEmpty()) return;
-        showLog("ANYNEWS_SEARCH open query=\"" + q + "\"");
+        if (q.isEmpty() && postIdExtra <= 0L) return;
+        if (q.isEmpty() && postIdExtra > 0L) {
+            q = String.valueOf(postIdExtra);
+        }
+        showLog("ANYNEWS_SEARCH open query=\"" + q + "\" postId=" + postIdExtra
+                + " singleOnly=" + (singleOnly || postIdExtra > 0L));
         activeSearchQuery = q;
+        activeSearchPostId = postIdExtra > 0L ? postIdExtra : 0L;
+        activeSearchSingleOnly = singleOnly || activeSearchPostId > 0L;
         searchFeedActive = true;
         searchOpenHandledInCreate = true;
-        searchSoftRetryUsed = false;
+        // Never soft-retry a single-article open into a multi-hit keyword stack.
+        searchSoftRetryUsed = activeSearchSingleOnly;
         positionx = 0;
         // Leave Read / Special / Flash so search is not skipped by those gates.
         try {
@@ -1837,6 +1875,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Search deck invariant: real hits only, then exactly one Continue-reading hub.
      * Zero ads/share/ratings. Never hub-first when hits exist. Hub-only only when
      * paintables == 0. Single-hit → [article, hub]. Multi → [hits..., hub].
+     * Single-article open ({@link #activeSearchSingleOnly}) keeps at most one hit.
      */
     private void finalizeSearchFeedSeating(boolean landOnHits) {
         if (!searchFeedActive) return;
@@ -1861,8 +1900,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
-        // Exactly one hub last (strip duplicates first).
-        FeedEndHelper.ensureAtEnd(list, this);
+        // Count=1 suggestion / post_id open: never leave a soft-expanded multi stack.
+        if (activeSearchSingleOnly) {
+            ModelClass.Datum keep = null;
+            for (int i = 0; i < list.size(); i++) {
+                ModelClass.Datum d = list.get(i);
+                if (d == null || FeedEndHelper.isFeedEnd(d)) continue;
+                if (d.getPostId() == null || d.getPostId() <= 0) continue;
+                if (activeSearchPostId > 0L
+                        && d.getPostId() != null
+                        && d.getPostId() == activeSearchPostId) {
+                    keep = d;
+                    break;
+                }
+                if (keep == null) {
+                    keep = d;
+                    if (activeSearchPostId <= 0L) {
+                        break;
+                    }
+                }
+            }
+            list.clear();
+            if (keep != null) {
+                list.add(keep);
+            }
+            // Single open = that article only. No Continue-reading hub (hub peeks
+            // other titles and overflip used to feel like unlimited News).
+            FeedEndHelper.stripAll(list);
+            showLog("ANYNEWS_SEARCH single-only keep postId="
+                    + (keep != null && keep.getPostId() != null ? keep.getPostId() : 0)
+                    + " (no hub)");
+        } else {
+            // Keyword multi-hit: exactly one Continue-reading hub last.
+            FeedEndHelper.ensureAtEnd(list, this);
+        }
         int paintables = ReadArticleStore.countPaintableArticles(list);
         showLog("ANYNEWS_SEARCH finalize paintables=" + paintables
                 + " listSize=" + list.size()
@@ -1996,8 +2067,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (intent == null || !intent.hasExtra("EXTRA_SESSION_ID")) {
             return;
         }
-        // Same intent also carrying a keyword search — search wins.
-        if (intent.hasExtra(EXTRA_SEARCH_QUERY)) {
+        // Same intent also carrying a keyword / single-article search — search wins.
+        if (intent.hasExtra(EXTRA_SEARCH_QUERY)
+                || intent.hasExtra(EXTRA_SEARCH_POST_ID)
+                || intent.getBooleanExtra(EXTRA_SEARCH_SINGLE_ONLY, false)) {
             return;
         }
         String raw = intent.getStringExtra("EXTRA_SESSION_ID");
@@ -2047,6 +2120,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void clearSearchFeedMode() {
         searchFeedActive = false;
         activeSearchQuery = "";
+        activeSearchPostId = 0L;
+        activeSearchSingleOnly = false;
         searchSoftRetryUsed = false;
         updateSearchContextBar();
     }
@@ -2054,8 +2129,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Public for FlipperAdapter end-hub + chrome. */
     public boolean isSearchFeedActive() {
         return searchFeedActive
-                && activeSearchQuery != null
-                && !activeSearchQuery.trim().isEmpty();
+                && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
+                        || activeSearchPostId > 0L);
     }
 
     @Nullable
@@ -5563,9 +5638,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             // Keyword search: last page is Continue-reading hub — never invent a
             // second "no more news" sentinel on overflip.
             if (searchFeedActive
-                    && activeSearchQuery != null
-                    && !activeSearchQuery.trim().isEmpty()) {
-                if (list != null && !list.isEmpty()
+                    && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
+                            || activeSearchPostId > 0L
+                            || activeSearchSingleOnly)) {
+                if (activeSearchSingleOnly) {
+                    // Single article FlipView — rubber-band only; never page more News.
+                    showLog("ANYNEWS_SEARCH overflip blocked — single-article mode");
+                } else if (list != null && !list.isEmpty()
                         && FeedEndHelper.isFeedEnd(list.get(list.size() - 1))) {
                     // Already on hub — nothing more to append.
                     showLog("ANYNEWS_SEARCH overflip on hub — no extra end card");
@@ -13600,20 +13679,31 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         requestModel.setNotif_perm_allowed(isPermissionGranted);
 
         if (searchFeedActive
-                && activeSearchQuery != null
-                && !activeSearchQuery.trim().isEmpty()) {
-            requestModel.setSearch_text(activeSearchQuery.trim());
-            // Keyword mode: never special/flash/push sticky — pure Search_Stories.
+                && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
+                        || activeSearchPostId > 0L)) {
+            if (activeSearchQuery != null && !activeSearchQuery.trim().isEmpty()) {
+                requestModel.setSearch_text(activeSearchQuery.trim());
+            }
+            if (activeSearchPostId > 0L || activeSearchSingleOnly) {
+                requestModel.setSearch_post_id(
+                        activeSearchPostId > 0L ? activeSearchPostId : null);
+                // Exact / single open: one card only — never soft keyword expansion.
+                requestModel.setLimit(1);
+            } else {
+                // Cap page size so Search_Stories matches server RESULT_LIMIT_DEFAULT.
+                requestModel.setLimit(12);
+            }
+            // Keyword / single mode: never special/flash/push sticky — pure Search_Stories.
             requestModel.setSpecial_posts(false);
             requestModel.setVideo_posts(false);
             requestModel.setPush_posts(false);
             requestModel.setPushPostId(0L);
             requestModel.setSharePostId(0L);
             requestModel.setExclude_post_ids(null);
-            // Cap page size so Search_Stories matches server RESULT_LIMIT_DEFAULT.
-            requestModel.setLimit(12);
             showLog("ANYNEWS_SEARCH request search_text=\""
-                    + activeSearchQuery.trim() + "\" skip=" + skip);
+                    + (activeSearchQuery != null ? activeSearchQuery.trim() : "")
+                    + "\" postId=" + activeSearchPostId
+                    + " skip=" + skip);
         }
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
@@ -15389,7 +15479,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     // Soften once (drop last token / trailing chars) before
                                     // hub-only — matches server softenOnce for Suggestions.
                                     String soft = softenSearchQueryFurther(activeSearchQuery);
-                                    if (!searchSoftRetryUsed
+                                    if (activeSearchPostId <= 0L
+                                            && !activeSearchSingleOnly
+                                            && !searchSoftRetryUsed
                                             && soft != null
                                             && !soft.isEmpty()
                                             && !soft.equalsIgnoreCase(
@@ -15480,7 +15572,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 ? ReadArticleStore.countPaintableArticles(list) : 0;
                         if (paintables <= 0) {
                             String soft = softenSearchQueryFurther(activeSearchQuery);
-                            if (!searchSoftRetryUsed
+                            if (activeSearchPostId <= 0L
+                                    && !activeSearchSingleOnly
+                                    && !searchSoftRetryUsed
                                     && soft != null
                                     && !soft.isEmpty()
                                     && !soft.equalsIgnoreCase(

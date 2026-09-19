@@ -2047,6 +2047,10 @@ public class StartingActivity extends AppCompatActivity {
                         ReadHistoryConfig.saveHoursFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getReadHistoryHours());
+                        // Recent Searches TTL days (default 7; 1–90) — local prune only.
+                        com.anyNews.anynews.Utils.RecentSearchStore.saveTtlDays(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getSearchRecentTtlDays());
                         // Status Videos lookback days (default 5; 1–30).
                         StatusVideosDaysConfig.saveDaysFromServer(
                                 getApplicationContext(),

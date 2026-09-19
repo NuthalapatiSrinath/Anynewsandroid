@@ -213,12 +213,28 @@ public class ListAllArticlesRequest implements Serializable {
     @Expose
     private String search_text;
 
+    /**
+     * Optional exact post open from a count=1 search suggestion.
+     * Server returns that article only (no soft keyword expansion).
+     */
+    @SerializedName("search_post_id")
+    @Expose
+    private Long search_post_id;
+
     public String getSearch_text() {
         return search_text;
     }
 
     public void setSearch_text(String search_text) {
         this.search_text = search_text;
+    }
+
+    public Long getSearch_post_id() {
+        return search_post_id;
+    }
+
+    public void setSearch_post_id(Long search_post_id) {
+        this.search_post_id = search_post_id;
     }
 
     @SerializedName("sdk_version")

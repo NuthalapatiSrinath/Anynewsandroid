@@ -373,6 +373,11 @@ public class Constants {
      */
     public static String READ_HISTORY_HOURS = "read_history_hours";
     /**
+     * Days to keep in-app recent searches locally (splash/runtime; default 7, 1–90).
+     * Pruned on search open — no network.
+     */
+    public static String SEARCH_RECENT_TTL_DAYS = "search_recent_ttl_days";
+    /**
      * In-feed native ad after every N real articles (splash/runtime; default 4, 2–10).
      */
     public static String FEED_AD_EVERY_N = "feed_ad_every_n";

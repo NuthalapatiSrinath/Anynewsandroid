@@ -1008,6 +1008,14 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    if (resBody.has("search_recent_ttl_days")
+                            && !resBody.get("search_recent_ttl_days").isJsonNull()) {
+                        try {
+                            RecentSearchStore.saveTtlDays(
+                                    context, resBody.get("search_recent_ttl_days").getAsInt());
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (resBody.has("status_videos_days")
                             && !resBody.get("status_videos_days").isJsonNull()) {
                         try {

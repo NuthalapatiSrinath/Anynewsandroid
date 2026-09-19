@@ -667,6 +667,14 @@ public class StartActivityReqModel implements Serializable {
         private Integer readHistoryHours;
 
         /**
+         * Recent Searches local TTL days (admin; default 7, range 1–90).
+         * Null on old servers → Android keeps cached / default 7.
+         */
+        @SerializedName("search_recent_ttl_days")
+        @Expose
+        private Integer searchRecentTtlDays;
+
+        /**
          * Status Videos lookback days (admin; default 5, range 1–30).
          * Null on old servers → Android keeps cached / default 5.
          */
@@ -1249,6 +1257,10 @@ public class StartActivityReqModel implements Serializable {
 
         public Integer getReadHistoryHours() {
             return readHistoryHours;
+        }
+
+        public Integer getSearchRecentTtlDays() {
+            return searchRecentTtlDays;
         }
 
         /** Null → old server; caller keeps cached / default 5. */

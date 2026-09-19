@@ -245,6 +245,7 @@
     <string name="search_daily_updates_section">Daily Updates</string>
     <string name="recent_searches">Recent Searches</string>
     <string name="search_categories">Categories</string>
+    <string name="search_did_you_mean">Did you mean</string>
     <string name="search_hub_title">Continue reading</string>
     <string name="search_hub_subtitle">Pick a section to keep exploring</string>
     <string name="search_hub_main_news">News</string>
