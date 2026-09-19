@@ -390,9 +390,9 @@ public class Constants {
      */
     public static String AD_IMPR_FLUSH_EVERY_N = "ad_impr_flush_every_n";
     /**
-     * Destroy native creatives after impression when leaving the seat (default ON).
+     * Retained for admin/server compat (default ON). Flip-away and mode-switch
+     * always destroy claimed/impressed natives regardless of this flag.
      * Admin: Configuration → Performance Tuning → Destroy native ads after impression.
-     * Impression is counted when shown — destroy only frees the object.
      */
     public static String DESTROY_NATIVE_ADS_AFTER_IMPRESSION =
             "destroy_native_ads_after_impression";

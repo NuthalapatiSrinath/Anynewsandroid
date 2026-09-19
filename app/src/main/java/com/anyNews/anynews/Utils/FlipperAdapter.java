@@ -1363,11 +1363,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         nativeAdLayout.setBackgroundColor(0xFF121212);
         ModelClass.Datum fbSlot = list.get(position);
         Integer fbNeedReq = fbSlot != null ? fbSlot.getAd_req_position() : null;
-        // Keep painted FB chrome only while a live packed creative exists for this seat.
+        // Keep painted FB chrome only while a live packed creative exists for
+        // THIS seat reqPos. Scrap recycle without the paint tag used to keep
+        // seat A's NativeAdLayout on seat B (unpaid / wrong creative).
         try {
             View unit = nativeAdLayout.findViewById(R.id.ad_unit);
             if (unit != null
                     && nativeAdLayout.findViewById(R.id.ad_default_placeholder_root) == null
+                    && isPaintedAdSeatForReqPos(convertView, fbNeedReq)
                     && position == currentFlipPage
                     && hasLiveFbNativePackedForReqPos(fbNeedReq)) {
                 adShellAwaitingCreative.delete(position);
@@ -1389,9 +1392,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 showLog("Defer FB native MediaView bind for buffer ad page=" + position);
                 pendingNativeAdBinds.put(position, new PendingNativeAdBind(
                         convertView, fbAd, adView, nativeAdLayout));
+                tagAdSeatReqPos(convertView, null);
                 mountFbAdPendingDefaultShell(nativeAdLayout, position);
             } else {
                 ensureDarkAdUnderlay(nativeAdLayout);
+                tagAdSeatReqPos(convertView, fbNeedReq);
                 attachNativeAdViewWithoutFlash(nativeAdLayout, adView);
                 displayFBNativeAd(convertView, fbAd, adView, nativeAdLayout);
                 markFbNativeClaimed(fbAd);
@@ -1399,6 +1404,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         } else {
             showLog(" fb ad pending fill (house shell) pos=" + position);
+            tagAdSeatReqPos(convertView, null);
             mountFbAdPendingDefaultShell(nativeAdLayout, position);
         }
     }
@@ -1672,6 +1678,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 pending.fbNativeAdLayout, pending.fbAdView);
                     } catch (Exception ignored) {
                     }
+                    Integer paintedFbReq = null;
+                    try {
+                        if (list != null && page >= 0 && page < list.size()
+                                && list.get(page) != null) {
+                            paintedFbReq = list.get(page).getAd_req_position();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    tagAdSeatReqPos(pending.convertView, paintedFbReq);
                     displayFBNativeAd(pending.convertView, pending.fbAd,
                             pending.fbAdView, pending.fbNativeAdLayout);
                     markFbNativeClaimed(pending.fbAd);

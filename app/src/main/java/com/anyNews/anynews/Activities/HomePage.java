@@ -3830,7 +3830,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (nativeGoogleAdList == null || nativeGoogleAdList.isEmpty()) {
             return;
         }
-        final boolean destroyAfter = FeedAdConfig.isDestroyAfterImpression(this);
         for (int i = nativeGoogleAdList.size() - 1; i >= 0; i--) {
             FlipGoogleNativeAds packed = nativeGoogleAdList.get(i);
             if (packed == null) {
@@ -3843,11 +3842,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (!used && !empty) {
                 continue;
             }
-            // OFF: keep claimed/impressed creatives (softer retention / fill debug).
-            // Still skip re-showing via FlipperAdapter impressed/claimed checks.
-            if (used && !destroyAfter) {
-                continue;
-            }
+            // Always destroy claimed/impressed on mode switch (money-safe). Keeping
+            // them under admin destroy-OFF allowed flip/tab return to early-keep the
+            // same already-paid NativeAd object with no new AdMob impression.
             try {
                 if (packed.getAd() != null) {
                     packed.getAd().destroy();
@@ -3873,7 +3870,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (nativeFBAdList == null || nativeFBAdList.isEmpty()) {
             return;
         }
-        final boolean destroyAfter = FeedAdConfig.isDestroyAfterImpression(this);
         for (int i = nativeFBAdList.size() - 1; i >= 0; i--) {
             FlipGoogleNativeAds packed = nativeFBAdList.get(i);
             if (packed == null) {
@@ -3883,9 +3879,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             boolean used = packed.isClaimed() || packed.isImpressed();
             boolean empty = packed.getFbAd() == null;
             if (!used && !empty) {
-                continue;
-            }
-            if (used && !destroyAfter) {
                 continue;
             }
             try {
@@ -3903,9 +3896,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Mark the packed Google native for {@code reqPos} as impressed (one paid show).
-     * Flip-away destroys it (admin destroy toggle ON) so flip-back requests a fresh
-     * fill — no seat-sticky same creative. Kick a replacement into the shared warm
-     * pool for upcoming empty seats.
+     * Flip-away destroys it so flip-back requests a fresh fill — no seat-sticky
+     * same creative. Kick a replacement into the shared warm pool for upcoming
+     * empty seats.
      */
     public void markGoogleNativeImpressed(@Nullable Integer reqPos) {
         if (reqPos == null || nativeGoogleAdList == null) {
@@ -3957,16 +3950,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * current Flip page (July / Play Store: flip-away release → fresh fill on
      * return). Also destroys when the seat was removed from the list. Unimpressed
      * warm pool + AdPreloader stay intact. Never transfers impressed creatives
-     * to another seat (money-safe).
-     * Gated by admin {@code destroy_native_ads_after_impression} (default ON).
-     * When OFF: softer retention until {@link #clearNativeAdPools()} /
-     * activity destroy.
+     * to another seat (money-safe). Always runs on flip-away (not gated by admin
+     * destroy toggle — that flag is retained for server compat only).
      */
     public void destroyOffscreenImpressedNatives(int currentPage) {
         if (isFinishing() || isDestroyed()) {
-            return;
-        }
-        if (!FeedAdConfig.isDestroyAfterImpression(this)) {
             return;
         }
         Integer currentSeatReqPos = null;

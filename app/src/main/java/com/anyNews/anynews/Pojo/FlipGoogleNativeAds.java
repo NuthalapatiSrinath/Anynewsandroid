@@ -102,8 +102,8 @@ public class FlipGoogleNativeAds {
 
     /**
      * True after the network reports a paid impression. Impressed objects must not
-     * transfer to another seat; they stay sticky on this seat for flip return until
-     * the seat/feed is gone or pools are cleared.
+     * transfer to another seat and must not be early-kept / re-shown on flip-back
+     * (July / Play Store: destroy on leave → fresh AdMob fill = new paid impression).
      */
     public boolean isImpressed() {
         return impressed;

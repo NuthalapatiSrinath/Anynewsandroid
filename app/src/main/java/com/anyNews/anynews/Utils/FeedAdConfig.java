@@ -471,11 +471,8 @@ public final class FeedAdConfig {
     }
 
     /**
-     * When true (default): destroy claimed/impressed natives when the user flips
-     * away from their seat or the seat leaves the list. Flip-back requests a
-     * fresh fill (no seat-sticky same creative). When false: softer retention
-     * until clearNativeAdPools / activity destroy; impressed still never transfer
-     * to another seat.
+     * Retained for server/session compat. Flip-away and mode-switch prune always
+     * destroy claimed/impressed natives (money-safe). Prefer leaving this true.
      */
     public static boolean isDestroyAfterImpression(@Nullable Context context) {
         if (context != null) {
