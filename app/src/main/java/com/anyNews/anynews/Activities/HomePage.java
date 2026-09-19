@@ -3267,8 +3267,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (FeedAdConfig.isInterstitial(this)) {
             return;
         }
-        // Shared warm pool already has inventory — do not double-request for seats.
-        if (AdPreloader.get().readyCount() > 0 || AdPreloader.get().isLoading()) {
+        // Warm pool can cover the next seat — skip a duplicate AdLoader.
+        // Do NOT bail merely because AdPreloader isLoading: that blocked the July
+        // on-seat path while primary refill was in-flight/no-fill, leaving Share.
+        if (AdPreloader.get().readyCount() > 0) {
             return;
         }
         int from = Math.max(0, positionx);
@@ -3539,12 +3541,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (pendingNativeLoadStarts.contains(adReqPosition)) {
                     return;
                 }
-                // Warm pool is native-only — skip when admin format is interstitial.
+                // AdPreloader is best-effort warm only (Play Store / July fill path is
+                // per-seat AdLoader). If the pool has a creative for the *current*
+                // seat, rebind can claim it and we skip a duplicate request. Never
+                // skip AdLoader for ahead seats just because the pool has 1 creative
+                // — that caused primary_only to fill once then Share forever when
+                // primary warm refill no-filled.
                 if (!interstitialMode) {
                     try {
                         if (AdPreloader.get().isReady()) {
                             scheduleFlipSafeAdRebind();
-                            return;
+                            if (isCurrentAdSeatReqPos(adReqPosition)) {
+                                return;
+                            }
                         }
                     } catch (Exception ignored) {
                     }
@@ -3564,10 +3573,42 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     return;
                 }
             }
-            NativeAdCacheCoordinator.get().resetSlotFailure(type, adCode, adReqPosition);
+            String resetCode = adCode;
+            if (type.equalsIgnoreCase("google") || type.equalsIgnoreCase("admanager")) {
+                resetCode = resolveGoogleNativeAdUnit(adCode);
+            }
+            NativeAdCacheCoordinator.get().resetSlotFailure(type, resetCode, adReqPosition);
             loadAds(adCode, adReqPosition, type);
         } catch (Exception e) {
             showLog("ensureFeedNativeAdLoaded: " + e.getMessage());
+        }
+    }
+
+    /** True when {@code reqPos} is the ad seat the user is currently on. */
+    private boolean isCurrentAdSeatReqPos(@Nullable Integer reqPos) {
+        if (reqPos == null || list == null || list.isEmpty()) {
+            return false;
+        }
+        try {
+            int page = positionx;
+            if (mFlipView != null) {
+                int cur = mFlipView.getCurrentPage();
+                if (cur >= 0) {
+                    page = cur;
+                }
+            }
+            if (page < 0 || page >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum d = list.get(page);
+            if (d == null || d.getPostType() == null
+                    || !d.getPostType().equalsIgnoreCase("ad")) {
+                return false;
+            }
+            Integer curPos = d.getAd_req_position();
+            return curPos != null && curPos.intValue() == reqPos.intValue();
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
@@ -3761,8 +3802,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             int target = getMaxNativeAdLoadsInFlight();
             showLog("refillNativeAdPool ready=" + ready + " inFlight=" + inFlight
                     + " preloader=" + preloaderReady + " target=" + target);
-            // If warm pool or seat inventory already covers the next seat, stop.
-            if (preloaderReady > 0 || ready + inFlight >= target) {
+            // Count warm inventory toward coverage — do not abort seat refill merely
+            // because AdPreloader has 1 creative (primary_only Share-after-first bug).
+            if (ready + inFlight + preloaderReady >= target) {
                 return;
             }
             int from = Math.max(0, positionx);
@@ -4087,6 +4129,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         packed.getAd().destroy();
                     } catch (Exception ignored) {
                     }
+                    String destroyedCode = packed.getAdCode();
                     packed.setAd(null);
                     packed.setClaimed(false);
                     packed.setImpressed(false);
@@ -4095,6 +4138,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if (nativeGoogleAdArray != null) {
                             nativeGoogleAdArray.remove(Integer.valueOf(oldPos));
                         }
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        String coordCode = !TextUtils.isEmpty(destroyedCode)
+                                ? destroyedCode.trim()
+                                : FeedAdConfig.getUnitId(this);
+                        NativeAdCacheCoordinator.get().onConsumed(
+                                "google", coordCode, oldPos);
+                        NativeAdCacheCoordinator.get().allowSettleRetry(
+                                "google", coordCode, oldPos);
                     } catch (Exception ignored) {
                     }
                     destroyedAny = true;
@@ -4818,7 +4871,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             if (cacheDecision == NativeAdCacheCoordinator.StartDecision.ALREADY_READY) {
                 // Stale ready marker (creative destroyed / claimed without clear) must not
-                // block the seat for the rest of the session.
+                // block the seat for the rest of the session. AdPreloader inventory alone
+                // is NOT "this seat has a creative" — that skipped July on-seat loads.
                 boolean hasCreative = false;
                 try {
                     if (nativeGoogleAdList != null) {
@@ -4830,9 +4884,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 break;
                             }
                         }
-                    }
-                    if (!hasCreative && AdPreloader.get().isReady()) {
-                        hasCreative = true;
                     }
                 } catch (Exception ignored) {
                 }
@@ -18407,17 +18458,15 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         final boolean interstitialMode = FeedAdConfig.isInterstitial(this);
         try {
-            // Prefer consuming warm-pool matches over starting parallel seat AdLoaders.
-            // Native warm pool does not apply in interstitial mode.
-            if (!interstitialMode
-                    && AdPreloader.get().readyCount() >= AdPreloader.maxReady()) {
-                showLog("prefetchUpcomingNativeAds skip — warm pool full");
-                return;
-            }
             int start = Math.max(0, fromIndex);
             int end = Math.min(items.size() - 1, fromIndex + lookahead);
             int started = 0;
             int inFlight = countInFlightNativeAdLoads();
+            // Each ready warm creative can cover one upcoming seat — not every seat.
+            // Skipping all seats when readyCount>=1 left primary_only with one fill
+            // then Share when primary warm refill no-filled (Play Store always did
+            // per-seat AdLoader).
+            int warmBudget = interstitialMode ? 0 : AdPreloader.get().readyCount();
             // Hard cap: at most 2 upcoming ad seats (current may already be in-flight).
             final int maxSeatsToStart = 2;
             for (int i = start; i <= end; i++) {
@@ -18463,10 +18512,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 if (already) {
                     continue;
                 }
-                // Warm pool can satisfy this seat — skip a duplicate network request.
-                if (!interstitialMode && AdPreloader.get().isReady()) {
-                    showLog("prefetchUpcomingNativeAds skip seat — AdPreloader ready"
-                            + " reqPos=" + pos);
+                if (warmBudget > 0) {
+                    warmBudget--;
+                    showLog("prefetchUpcomingNativeAds skip seat — warm budget"
+                            + " reqPos=" + pos + " left=" + warmBudget);
                     continue;
                 }
                 ensureFeedNativeAdLoaded(code, pos, d.getAd_type());

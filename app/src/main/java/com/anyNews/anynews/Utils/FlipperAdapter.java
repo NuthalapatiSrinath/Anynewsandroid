@@ -5931,6 +5931,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             } catch (Exception ignored) {
             }
             showLog("released impressed google for fresh fill reqPos=" + oldPos);
+            try {
+                String coordCode = packed.getAdCode();
+                if (coordCode == null || coordCode.trim().isEmpty()) {
+                    coordCode = FeedAdConfig.getUnitId(context);
+                }
+                NativeAdCacheCoordinator.get().onConsumed("google", coordCode, oldPos);
+                NativeAdCacheCoordinator.get().allowSettleRetry("google", coordCode, oldPos);
+            } catch (Exception ignored) {
+            }
             if (context instanceof HomePage) {
                 try {
                     ((HomePage) context).refillNativeAdPoolAfterConsume();
