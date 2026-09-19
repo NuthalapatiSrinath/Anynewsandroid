@@ -14,12 +14,55 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Lightweight client-side typo / intent matching (edit distance ≤ 1–2).
+ * Lightweight client-side typo / intent matching (edit distance ≤ 1–2)
+ * plus instant prefix/contains matches for live typeahead (Telugu + English).
  * Used against recent searches + last suggestion texts — no extra network.
  */
 public final class SearchFuzzyHelper {
 
     private SearchFuzzyHelper() {}
+
+    /**
+     * Instant Google-like local matches: prefix first, then contains.
+     * Works for Telugu (Unicode) and English (case-insensitive).
+     */
+    @NonNull
+    public static List<String> livePrefixMatches(
+            @Nullable String query, @Nullable List<String> candidates, int max) {
+        ArrayList<String> out = new ArrayList<>();
+        if (TextUtils.isEmpty(query) || candidates == null || candidates.isEmpty() || max <= 0) {
+            return out;
+        }
+        String q = query.trim();
+        if (q.length() < 1) return out;
+        String qLower = q.toLowerCase(Locale.ROOT);
+        ArrayList<String> prefix = new ArrayList<>();
+        ArrayList<String> contains = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String raw : candidates) {
+            if (TextUtils.isEmpty(raw)) continue;
+            String c = raw.trim();
+            if (c.isEmpty()) continue;
+            String cl = c.toLowerCase(Locale.ROOT);
+            if (cl.equals(qLower)) continue;
+            if (!seen.add(cl)) continue;
+            if (cl.startsWith(qLower)) {
+                prefix.add(c);
+            } else if (cl.contains(qLower)) {
+                contains.add(c);
+            }
+            if (prefix.size() + contains.size() >= max * 3) break;
+        }
+        for (String s : prefix) {
+            out.add(s);
+            if (out.size() >= max) return out;
+        }
+        for (String s : contains) {
+            out.add(s);
+            if (out.size() >= max) return out;
+        }
+        return out;
+    }
 
     /**
      * Ranked close matches for {@code query} from {@code candidates}.
@@ -32,7 +75,7 @@ public final class SearchFuzzyHelper {
         if (TextUtils.isEmpty(query) || candidates == null || candidates.isEmpty() || max <= 0) {
             return out;
         }
-        String q = query.trim().toLowerCase(Locale.US);
+        String q = query.trim().toLowerCase(Locale.ROOT);
         if (q.length() < 3) return out;
         int maxDist = q.length() <= 5 ? 1 : 2;
 
@@ -42,7 +85,7 @@ public final class SearchFuzzyHelper {
             if (TextUtils.isEmpty(raw)) continue;
             String c = raw.trim();
             if (c.isEmpty()) continue;
-            String cl = c.toLowerCase(Locale.US);
+            String cl = c.toLowerCase(Locale.ROOT);
             if (cl.equals(q)) continue;
             if (!seen.add(cl)) continue;
             // Prefer token-level distance for multi-word candidates.

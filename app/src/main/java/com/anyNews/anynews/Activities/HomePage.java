@@ -1753,8 +1753,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         searchContentLanded = false;
         searchFeedActive = true;
         searchOpenHandledInCreate = true;
-        // Never soft-retry a single-article open into a multi-hit keyword stack.
-        searchSoftRetryUsed = activeSearchSingleOnly;
+        // Allow one post_id→keyword retry; never soften single-only into multi stacks
+        // (empty handler already skips soften when activeSearchSingleOnly).
+        searchSoftRetryUsed = false;
         positionx = 0;
         // Leave Read / Special / Flash so search is not skipped by those gates.
         try {
@@ -1915,6 +1916,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         // Count=1 suggestion / post_id open: exactly [chosen article, Continue-reading hub].
         // Never soft-expanded multi stacks, never article-only (hub/redirection is OK).
+        // CRITICAL: never seat hub-only when the chosen article is missing — caller retries.
         if (activeSearchSingleOnly) {
             ModelClass.Datum keep = null;
             for (int i = 0; i < list.size(); i++) {
@@ -1935,17 +1937,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             }
             list.clear();
-            if (keep != null) {
-                list.add(keep);
-                // Pin context bar to the opened article title (not a stale keyword).
-                try {
-                    String title = keep.getTitle();
-                    if (title != null && !title.trim().isEmpty()
-                            && !"null".equalsIgnoreCase(title.trim())) {
-                        activeSearchQuery = title.trim();
-                    }
-                } catch (Exception ignored) {
+            if (keep == null) {
+                showLog("ANYNEWS_SEARCH single-only miss postId=" + activeSearchPostId
+                        + " — skip hub-only seat");
+                return;
+            }
+            list.add(keep);
+            // Pin context bar to the opened article title (not a stale keyword).
+            try {
+                String title = keep.getTitle();
+                if (title != null && !title.trim().isEmpty()
+                        && !"null".equalsIgnoreCase(title.trim())) {
+                    activeSearchQuery = title.trim();
                 }
+            } catch (Exception ignored) {
             }
             FeedEndHelper.ensureAtEnd(list, this);
             // Finite deck — block near-end / overflip pagination forever in this mode.
@@ -1959,7 +1964,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
             showLog("ANYNEWS_SEARCH single-only seat=[article,hub] postId="
-                    + (keep != null && keep.getPostId() != null ? keep.getPostId() : 0)
+                    + (keep.getPostId() != null ? keep.getPostId() : 0)
                     + " listSize=" + list.size());
             try {
                 updateSearchContextBar();
@@ -12542,8 +12547,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         if (showToast) {
+            // Never claim offline when the device still has a network path —
+            // false ServerAvailability / cancel storms used to toast over Search.
             try {
-                Toast.makeText(this, R.string.offline_showing_saved_news, Toast.LENGTH_SHORT).show();
+                if (!isNetworkConnected()) {
+                    Toast.makeText(this, R.string.offline_showing_saved_news, Toast.LENGTH_SHORT)
+                            .show();
+                }
             } catch (Exception ignored) {
             }
         }
@@ -13899,11 +13909,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         activeSearchPostId > 0L ? activeSearchPostId : null);
                 // Exact / single open: one card only — never soft keyword expansion.
                 requestModel.setLimit(1);
-                // post_id open must not also keyword-seat (server prefers post_id, but
-                // clearing search_text is a hard client guard against soft-expand).
-                if (activeSearchPostId > 0L) {
-                    requestModel.setSearch_text(null);
-                }
+                // Keep search_text as fallback so a missed post_id still finds the
+                // title (server prefers post_id when present). Clearing it caused
+                // hub-only opens when the id was stale / language-mismatched.
             } else {
                 // Cap page size so Search_Stories matches server RESULT_LIMIT_DEFAULT.
                 requestModel.setLimit(12);
@@ -15733,6 +15741,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     // Soften once (drop last token / trailing chars) before
                                     // hub-only — matches server softenOnce for Suggestions.
                                     String soft = softenSearchQueryFurther(activeSearchQuery);
+                                    // Suggestion tap with post_id miss: drop post_id and
+                                    // retry keyword once while keeping single-only seating.
+                                    if (activeSearchPostId > 0L && !searchSoftRetryUsed) {
+                                        searchSoftRetryUsed = true;
+                                        showLog("ANYNEWS_SEARCH post_id miss → keyword retry q=\""
+                                                + (activeSearchQuery != null
+                                                        ? activeSearchQuery.trim() : "")
+                                                + "\" wasPostId=" + activeSearchPostId);
+                                        activeSearchPostId = 0L;
+                                        last_post_id = 0;
+                                        skip = 0;
+                                        actual_skip = 0;
+                                        isApiRequested = false;
+                                        try {
+                                            showHomeFeedLoadingReveal();
+                                        } catch (Exception ignored) {
+                                        }
+                                        ShowNews_Data_Values(0, -1);
+                                        initialCall = true;
+                                        return;
+                                    }
                                     if (activeSearchPostId <= 0L
                                             && !activeSearchSingleOnly
                                             && !searchSoftRetryUsed
@@ -15754,6 +15783,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                         } catch (Exception ignored) {
                                         }
                                         ShowNews_Data_Values(0, -1);
+                                        initialCall = true;
+                                        return;
+                                    }
+                                    // Single-article open: never paint hub-only without
+                                    // the article — keep loading chrome if still possible.
+                                    if (activeSearchSingleOnly) {
+                                        showLog("ANYNEWS_SEARCH single-only zero hits — no hub-only");
+                                        try {
+                                            hideHomeFeedLoadingReveal(true);
+                                            ensureSearchChromeInteractive();
+                                        } catch (Exception ignored) {
+                                        }
                                         initialCall = true;
                                         return;
                                     }

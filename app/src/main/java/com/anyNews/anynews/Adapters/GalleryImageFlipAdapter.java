@@ -67,6 +67,9 @@ public final class GalleryImageFlipAdapter extends BaseAdapter {
 
     @Override
     public Object getItem(int position) {
+        if (position < 0 || position >= images.size()) {
+            return "";
+        }
         return images.get(position);
     }
 
@@ -91,7 +94,10 @@ public final class GalleryImageFlipAdapter extends BaseAdapter {
         if (useContainFit) {
             imageView.setBackgroundColor(Color.BLACK);
         }
-        String url = images.get(position);
+        String url = "";
+        if (position >= 0 && position < images.size()) {
+            url = images.get(position);
+        }
         try {
             imageLoader.displayImage(url != null ? url : "", imageView, options, null);
         } catch (Exception e) {

@@ -945,26 +945,19 @@ public class FlipView extends FrameLayout {
         // p.viewType = mAdapter.getItemViewType(st45.get(0).position);
         // p.v = st45.get(0).v;
         // }else if(l==1){
-        p.viewType = mAdapter.getItemViewType(p.position);
+        try {
+            if (mAdapter != null && p.position >= 0 && p.position < mPageCount) {
+                p.viewType = mAdapter.getItemViewType(p.position);
+            } else {
+                p.viewType = 0;
+            }
+        } catch (Exception e) {
+            p.viewType = 0;
+        }
         p.v = getView(p.position, p.viewType);
         stampBoundIdentity(p);
-        //
-        // }
-        // else {
-        
-        // p.viewType = mAdapter.getItemViewType(st45.get(1).position);
-        // p.v = st45.get(1).v;
-        
-        // }
-        // else{
-        // p.viewType = mAdapter.getItemViewType(st45.get(1).position);
-        
-        // ////System.out.println(st45.get(1).v);
-        // p.v = st45.get(1).v;
-        // }
-        // ////System.out.println("sssssss  :::" + l + "   "
-        // + //System.currentTimeMillis());
-        p.valid = true;
+        // Never mark valid with a null child — drawChild NPE on horizontal gallery swipe.
+        p.valid = p.v != null;
         // } else {
         // //
         // p.position = i;
@@ -976,13 +969,21 @@ public class FlipView extends FrameLayout {
 
     private Page fillPageForIndex(Page p, int i) {
         p.position = i;
-        p.viewType = mAdapter.getItemViewType(p.position);
+        try {
+            if (mAdapter != null && i >= 0 && i < mPageCount) {
+                p.viewType = mAdapter.getItemViewType(p.position);
+            } else {
+                p.viewType = 0;
+            }
+        } catch (Exception e) {
+            p.viewType = 0;
+        }
         p.v = getView(p.position, p.viewType);
         stampBoundIdentity(p);
-        p.valid = true;
+        p.valid = p.v != null;
         prvpage.v = p.v;
         prvpage.viewType = p.viewType;
-        prvpage.valid = true;
+        prvpage.valid = p.valid;
         return p;
     }
 
@@ -1535,9 +1536,9 @@ public class FlipView extends FrameLayout {
                 }
                 endScroll();
                 commitSettledPage();
-                setDrawWithLayer(mCurrentPage.v, false);
-                hideOtherPages(mCurrentPage);
-                if (mCurrentPage.v != null) {
+                if (mCurrentPage != null && mCurrentPage.v != null) {
+                    setDrawWithLayer(mCurrentPage.v, false);
+                    hideOtherPages(mCurrentPage);
                     drawChild(canvas, mCurrentPage.v, 0);
                 }
                 // dispatch listener event now that we have "landed" on a page.
@@ -1634,7 +1635,7 @@ public class FlipView extends FrameLayout {
         final float degreesFlipped = getDegreesFlipped();
         final Page p = degreesFlipped > 90 ? mPreviousPage : mCurrentPage;
         // if the view does not exist, skip drawing it
-        if (p.valid) {
+        if (p.valid && p.v != null) {
             // ////System.out.println("drawPreviousHalf   ");
             setDrawWithLayer(p.v, true);
             drawChild(canvas, p.v, 0);
@@ -1673,7 +1674,7 @@ public class FlipView extends FrameLayout {
         // ////System.out.println("degreesFlipped11 degreesFlipped11  :::: "
         // + degreesFlipped);
         // if the view does not exist, skip drawing it
-        if (p.valid) {
+        if (p.valid && p.v != null) {
             // ////System.out.println("drawNextHalf");
             setDrawWithLayer(p.v, true);
             drawChild(canvas, p.v, 0);
@@ -1816,8 +1817,10 @@ public class FlipView extends FrameLayout {
         mCamera.getMatrix(mMatrix);
         positionMatrix();
         canvas.concat(mMatrix);
-        setDrawWithLayer(mCurrentPage.v, true);
-        drawChild(canvas, mCurrentPage.v, 0);
+        if (mCurrentPage != null && mCurrentPage.v != null) {
+            setDrawWithLayer(mCurrentPage.v, true);
+            drawChild(canvas, mCurrentPage.v, 0);
+        }
         drawFlippingShadeShine(canvas);
         mCamera.restore();
         canvas.restore();
@@ -1856,13 +1859,14 @@ public class FlipView extends FrameLayout {
      */
     @SuppressLint("NewApi")
     private void setDrawWithLayer(View v, boolean drawWithLayer) {
+        if (v == null) {
+            return;
+        }
         if (isHardwareAccelerated()) {
-            if (v != null) {
-                if (v.getLayerType() != LAYER_TYPE_HARDWARE && drawWithLayer) {
-                    v.setLayerType(LAYER_TYPE_HARDWARE, null);
-                } else if (v.getLayerType() != LAYER_TYPE_NONE && !drawWithLayer) {
-                    v.setLayerType(LAYER_TYPE_NONE, null);
-                }
+            if (v.getLayerType() != LAYER_TYPE_HARDWARE && drawWithLayer) {
+                v.setLayerType(LAYER_TYPE_HARDWARE, null);
+            } else if (v.getLayerType() != LAYER_TYPE_NONE && !drawWithLayer) {
+                v.setLayerType(LAYER_TYPE_NONE, null);
             }
         }
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.JELLY_BEAN_MR2) {

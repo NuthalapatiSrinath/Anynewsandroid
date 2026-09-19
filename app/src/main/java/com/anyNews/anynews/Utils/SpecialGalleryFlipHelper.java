@@ -74,7 +74,16 @@ public final class SpecialGalleryFlipHelper {
         if (urls.isEmpty()) {
             urls.add("");
         }
-        // New bind must not inherit a stuck drive flag from a prior gesture.
+        // New bind must not inherit a stuck drive flag from a prior gesture —
+        // unless the user is mid-swipe on this same nested FlipView (rebind would
+        // reset adapter mid-flip → NPE / IndexOOB on left swipe).
+        FlipView existing = host.findViewById(R.id.gallery_horizontal_flip);
+        if (NESTED_GALLERY_DRIVING.get()
+                && existing != null
+                && existing.getVisibility() == View.VISIBLE
+                && existing.getWindowToken() != null) {
+            return existing;
+        }
         NESTED_GALLERY_DRIVING.set(false);
 
         if (pager != null) {
@@ -154,7 +163,10 @@ public final class SpecialGalleryFlipHelper {
         flip.setOnFlipListener(new FlipView.OnFlipListener() {
             @Override
             public void onFlippedToPage(FlipView v, int position, long id) {
-                syncDots(dotsRef, position, pageCount);
+                int safe = position;
+                if (safe < 0) safe = 0;
+                if (safe >= pageCount) safe = Math.max(0, pageCount - 1);
+                syncDots(dotsRef, safe, pageCount);
                 if (onPageChanged != null) {
                     try {
                         onPageChanged.run();

@@ -176,9 +176,15 @@ public final class ServerAvailabilityMonitor {
 
     /**
      * Transport / connect failure. Device-offline errors are ignored; timeouts are soft.
+     * Cancelled Retrofit/OkHttp calls (typeahead debounce) must NEVER count — rapid
+     * Search_Suggestions cancel was falsely entering offline-server and toasting
+     * "You're offline — showing saved news" while Wi‑Fi/4G were up.
      */
     public void onTransportFailure(@Nullable IOException error) {
         if (error == null) return;
+        if (isCancelledFailure(error)) {
+            return;
+        }
         if (!isDeviceNetworkUp(null)) {
             // Airplane / no Wi‑Fi — Home connectivity path owns offline UI.
             synchronized (lock) {
@@ -198,6 +204,38 @@ public final class ServerAvailabilityMonitor {
         }
         // Other IOExceptions (e.g. unexpected EOF): treat as soft so one blip is ignored.
         recordFailure(false, "io:" + error.getClass().getSimpleName());
+    }
+
+    /** True for deliberate call cancel (debounce / activity leave) — not an outage. */
+    private static boolean isCancelledFailure(@Nullable Throwable error) {
+        Throwable t = error;
+        int depth = 0;
+        while (t != null && depth < 6) {
+            if (t instanceof java.util.concurrent.CancellationException) {
+                return true;
+            }
+            String msg = t.getMessage();
+            if (msg != null) {
+                String lower = msg.trim().toLowerCase();
+                // OkHttp/Retrofit: "Canceled" / "Cancelled" when Call.cancel() runs.
+                if (lower.equals("canceled")
+                        || lower.equals("cancelled")
+                        || lower.startsWith("canceled:")
+                        || lower.startsWith("cancelled:")) {
+                    return true;
+                }
+            }
+            String simple = t.getClass().getSimpleName();
+            if (simple != null) {
+                String n = simple.toLowerCase();
+                if (n.contains("cancel")) {
+                    return true;
+                }
+            }
+            t = t.getCause();
+            depth++;
+        }
+        return false;
     }
 
     private static boolean isSoftTimeout(@NonNull IOException error) {

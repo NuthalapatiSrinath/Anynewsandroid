@@ -62,9 +62,9 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     public static final String EXTRA_QUERY = "extra_search_query";
 
-    private static final long SUGGEST_DEBOUNCE_MS = 180L;
+    private static final long SUGGEST_DEBOUNCE_MS = 110L;
     /** Show empty / fuzzy hint if Suggestions still pending after this. */
-    private static final long EMPTY_HINT_MS = 650L;
+    private static final long EMPTY_HINT_MS = 520L;
 
     private View root;
     private EditText searchInput;
@@ -129,8 +129,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                             showIdleState();
                             return;
                         }
-                        // Instant local fuzzy (recent + last suggest) — no network wait.
-                        paintLocalFuzzyWhileWaiting(q);
+                        // Instant local prefix/contains + typo hints while network runs.
+                        paintLocalLiveSuggestions(q);
                         scheduleSuggest(q);
                     }
                 });
@@ -170,7 +170,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     ? searchInput.getText().toString().trim()
                                     : "";
                     if (!typed.equals(q)) return;
-                    // Still waiting on network — show empty / fuzzy so UI feels instant.
+                    // Still waiting on network — keep local live rows; only fall back
+                    // to empty/fuzzy when nothing useful is on screen yet.
                     if (!hasStorySuggestRows()) {
                         paintEmptyOrFuzzy(q);
                     }
@@ -201,23 +202,61 @@ public class InAppSearchActivity extends AppCompatActivity {
         return false;
     }
 
-    private void paintLocalFuzzyWhileWaiting(@NonNull String q) {
+    /** Build candidate pool: recent terms + last server suggestion texts. */
+    @NonNull
+    private List<String> localSuggestPool() {
         List<String> pool = new ArrayList<>();
         for (RecentSearchStore.Entry e : RecentSearchStore.loadEntries(this)) {
             if (e != null && !TextUtils.isEmpty(e.term)) pool.add(e.term);
         }
         pool.addAll(lastSuggestTexts);
-        List<String> fuzzy = SearchFuzzyHelper.closeMatches(q, pool, 4);
-        if (fuzzy.isEmpty()) return;
-        List<Row> next = new ArrayList<>();
+        return pool;
+    }
+
+    /**
+     * Google-like live rows on every keystroke: prefix/contains as suggestions,
+     * then Did-you-mean typos underneath. Network results replace this when ready.
+     */
+    private void paintLocalLiveSuggestions(@NonNull String q) {
+        List<String> pool = localSuggestPool();
+        List<String> live = SearchFuzzyHelper.livePrefixMatches(q, pool, 8);
+        List<String> fuzzy = SearchFuzzyHelper.closeMatches(q, pool, 3);
         List<Row> duRows = buildDailyUpdatesSuggestRows(q);
+        if (live.isEmpty() && fuzzy.isEmpty() && duRows.isEmpty()) {
+            // Keep prior suggest rows until network replies — avoid blank flash.
+            if (!hasStorySuggestRows()) {
+                rows.clear();
+                adapter.notifyDataSetChanged();
+            }
+            return;
+        }
+        List<Row> next = new ArrayList<>();
         if (!duRows.isEmpty()) {
             next.add(Row.header(getString(R.string.search_daily_updates_section)));
             next.addAll(duRows);
         }
-        next.add(Row.header(getString(R.string.search_did_you_mean)));
-        for (String f : fuzzy) {
-            next.add(Row.fuzzy(f));
+        for (String t : live) {
+            long postId = 0L;
+            for (RecentSearchStore.Entry e : RecentSearchStore.loadEntries(this)) {
+                if (e != null && e.term != null && e.term.equalsIgnoreCase(t) && e.postId > 0L) {
+                    postId = e.postId;
+                    break;
+                }
+            }
+            next.add(Row.suggest(t, postId > 0L ? 1 : 0, q, postId));
+        }
+        if (!fuzzy.isEmpty()) {
+            next.add(Row.header(getString(R.string.search_did_you_mean)));
+            for (String f : fuzzy) {
+                boolean dup = false;
+                for (String t : live) {
+                    if (t != null && t.equalsIgnoreCase(f)) {
+                        dup = true;
+                        break;
+                    }
+                }
+                if (!dup) next.add(Row.fuzzy(f));
+            }
         }
         noResults.setVisibility(View.GONE);
         rows.clear();
@@ -226,11 +265,12 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void paintEmptyOrFuzzy(@NonNull String q) {
-        List<String> pool = new ArrayList<>();
-        for (RecentSearchStore.Entry e : RecentSearchStore.loadEntries(this)) {
-            if (e != null && !TextUtils.isEmpty(e.term)) pool.add(e.term);
+        List<String> pool = localSuggestPool();
+        List<String> live = SearchFuzzyHelper.livePrefixMatches(q, pool, 8);
+        if (!live.isEmpty()) {
+            paintLocalLiveSuggestions(q);
+            return;
         }
-        pool.addAll(lastSuggestTexts);
         List<String> fuzzy = SearchFuzzyHelper.closeMatches(q, pool, 5);
         if (!fuzzy.isEmpty()) {
             List<Row> next = new ArrayList<>();
@@ -444,9 +484,10 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     }
                                 }
                                 if (!hasStory) {
-                                    // Local fuzzy first (recent + prior suggests) — no extra call.
-                                    paintEmptyOrFuzzy(q);
-                                    if (!duRows.isEmpty() && rows.isEmpty()) {
+                                    // Keep Google-like local prefix rows; don't wipe to
+                                    // weak Did-you-mean-only when the pool still matches.
+                                    paintLocalLiveSuggestions(q);
+                                    if (!duRows.isEmpty() && !hasStorySuggestRows()) {
                                         paintDailyUpdatesOnly(q, duRows);
                                     }
                                     return;
@@ -493,7 +534,10 @@ public class InAppSearchActivity extends AppCompatActivity {
                                                 ? searchInput.getText().toString().trim()
                                                 : "";
                                 if (typed.equals(q)) {
-                                    paintEmptyOrFuzzy(q);
+                                    paintLocalLiveSuggestions(q);
+                                    if (!hasStorySuggestRows()) {
+                                        paintEmptyOrFuzzy(q);
+                                    }
                                 }
                                 if (!duRows.isEmpty() && !hasStorySuggestRows()) {
                                     paintDailyUpdatesOnly(q, duRows);
@@ -780,8 +824,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                 // Count=1 + post_id → [article, Continue-reading hub] (not soft keyword multi-hit).
                 vh.itemView.setOnClickListener(
                         v -> {
-                            if (row.meta == 1) {
-                                // Single-article row: that story + Continue-reading hub only.
+                            // Count=1 OR known post_id → that article then Continue-reading hub.
+                            if (row.meta == 1 || row.postId > 0L) {
                                 openSearch(suggestSubmitText(row), row.postId, true);
                             } else {
                                 submitQuery(suggestSubmitText(row));
