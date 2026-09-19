@@ -1968,6 +1968,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } else {
             // Keyword multi-hit: exactly one Continue-reading hub last.
             FeedEndHelper.ensureAtEnd(list, this);
+            // Finite first Search_Stories page only — park cursors so a stale
+            // News requestPostition cannot fire page-N into this deck.
+            try {
+                skip = Integer.MAX_VALUE / 4;
+                actual_skip = skip;
+                dummyResponse = null;
+                isApiRequested = false;
+                requestSize = list.size();
+                requestPostition = Math.max(requestSize, 99);
+            } catch (Exception ignored) {
+            }
         }
         int paintables = ReadArticleStore.countPaintableArticles(list);
         // Hard rule: while search content has not landed on page 0, ALWAYS force
@@ -2138,6 +2149,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (mFlipView.getPageCount() > 0) {
                 mFlipView.flipTo(0);
             }
+            showLog("ANYNEWS_SEARCH force page0 ok listSize=" + list.size()
+                    + " page0Type="
+                    + (list.get(0).getPostType() != null ? list.get(0).getPostType() : "?")
+                    + " page0Id="
+                    + (list.get(0).getPostId() != null ? list.get(0).getPostId() : 0)
+                    + " seat=" + mFlipView.getCurrentPage()
+                    + " forced=" + mFlipView.isForcedPage0Seat());
         } catch (Exception e) {
             showLog("ANYNEWS_SEARCH force page0 failed: " + e.getMessage());
         }
@@ -2177,19 +2195,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 int cur = mFlipView.getCurrentPage();
                 if (cur == 0) {
                     markSearchContentLanded();
-                    // Release the page-0 lock only after a stable frame so a
-                    // deferred dataSetChanged cannot clamp onto the hub first.
-                    if (delayMs >= 96L) {
-                        mFlipView.releaseForcedPage0Seat();
-                    }
+                    // Keep mForcePage0OnDataChange until the user flips away
+                    // (flipTo(page>0) clears it). Releasing at 96ms let a deferred
+                    // dataSetChanged / peakNext clamp onto Continue-reading hub.
                     return;
                 }
-                // After a successful land, user may have swiped to Continue-reading.
-                if (searchContentLanded && delayMs >= 96L) {
+                // User already left page 0 (hub or later hit) — stop reclaiming.
+                if (searchContentLanded) {
                     mFlipView.releaseForcedPage0Seat();
                     return;
                 }
-                if (searchContentLanded) return;
                 showLog("ANYNEWS_SEARCH ASSERT post-frame seat=" + cur
                         + " delay=" + delayMs + " — flipTo(0)");
                 positionx = 0;
@@ -5820,24 +5835,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
                             || activeSearchPostId > 0L
                             || activeSearchSingleOnly)) {
-                if (activeSearchSingleOnly || activeSearchPostId > 0L) {
-                    // Finite [article, hub] — rubber-band only; never page more News.
-                    showLog("ANYNEWS_SEARCH overflip blocked — single-article mode");
-                    try {
-                        if (list != null
-                                && ReadArticleStore.countPaintableArticles(list) > 0
-                                && (!searchContentLanded
-                                        || !FeedEndHelper.hasAtEnd(list))) {
-                            finalizeSearchFeedSeating(!searchContentLanded);
-                        }
-                    } catch (Exception ignored) {
+                // Finite search deck — rubber-band only; never page more News/hits.
+                showLog("ANYNEWS_SEARCH overflip blocked — finite search deck");
+                try {
+                    if (list != null
+                            && ReadArticleStore.countPaintableArticles(list) > 0
+                            && (!searchContentLanded
+                                    || !FeedEndHelper.hasAtEnd(list))) {
+                        finalizeSearchFeedSeating(!searchContentLanded);
                     }
-                } else if (list != null && !list.isEmpty()
-                        && FeedEndHelper.isFeedEnd(list.get(list.size() - 1))) {
-                    // Already on hub — nothing more to append.
-                    showLog("ANYNEWS_SEARCH overflip on hub — no extra end card");
-                } else {
-                    ensureFeedEndCardVisible(false);
+                } catch (Exception ignored) {
                 }
             } else {
             boolean paginationInFlight = isApiRequested && dummyResponse == null;
@@ -13956,18 +13963,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("API CATEGORY ID:" + category_id);
         showLog("API CATEGORY REQPOS:" + reqPos);
 
-        // Single-article search deck is finite — never enqueue page-2+ Search_Stories
-        // (server returns [] on skip>0; client used to finalize and yank the hub).
+        // Search deck is finite after first Search_Stories land — never enqueue
+        // page-2+ (skip>0 / reqPos=3). That path appended News/ads past the hub
+        // and FlipView could clamp onto Continue-reading first.
         if (searchFeedActive
-                && (activeSearchSingleOnly || activeSearchPostId > 0L)
-                && (skip > 0 || actual_skip > 0 || reqPos == 3)) {
-            showLog("ANYNEWS_SEARCH ShowNews blocked — single-article no pagination"
+                && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
+                        || activeSearchPostId > 0L
+                        || activeSearchSingleOnly)
+                && (skip > 0 || actual_skip > 0 || reqPos == 3 || searchContentLanded)) {
+            showLog("ANYNEWS_SEARCH ShowNews blocked — finite search no pagination"
                     + " skip=" + skip + " reqPos=" + reqPos
-                    + " landed=" + searchContentLanded);
+                    + " landed=" + searchContentLanded
+                    + " single=" + activeSearchSingleOnly);
             isApiRequested = false;
+            dummyResponse = null;
             try {
-                // Only re-seat if hub missing or article never landed — never
-                // re-notify a finished [article,hub] deck (clamped onto hub).
+                // Only re-seat if hub missing or hits never landed — never
+                // re-notify a finished deck (clamped onto hub).
                 if (list != null
                         && ReadArticleStore.countPaintableArticles(list) > 0
                         && (!searchContentLanded || !FeedEndHelper.hasAtEnd(list))) {
@@ -15515,11 +15527,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     }
                                 });
                             }
-                        } else if (searchFeedActive && (activeSearchSingleOnly
-                                || activeSearchPostId > 0L)) {
-                            // Finite search deck — park cursors past any near-end trigger.
+                        } else if (searchFeedActive) {
+                            // Keyword + single: park cursors past any near-end trigger.
+                            // Stale News requestPostition used to fire ShowNews mid-search
+                            // and append main-feed ads / unlimited hits after the hub.
                             requestSize = list != null ? list.size() : 0;
                             requestPostition = Math.max(requestSize, 99);
+                            dummyResponse = null;
+                            isApiRequested = false;
                         }
                         showLog("pagination cursors fromCache=" + fromCache
                                 + " skip=" + skip + " actual_skip=" + actual_skip
@@ -16528,12 +16543,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("positionx::"+positionx);
         showLog("requestPostition::"+requestPostition);
         showLog("LIST SIZE:"+(list.size()+":positionx:"+positionx));
-        // Single-article search: finite [article, hub] — never page Search_Stories
-        // or List_All_Articles (near-end prefetch used to append unlimited News).
-        if (searchFeedActive && (activeSearchSingleOnly || activeSearchPostId > 0L)) {
-            showLog("ANYNEWS_SEARCH refreshDetails blocked — single-article deck"
-                    + " landed=" + searchContentLanded);
+        // Search FlipView is a finite deck after page-0 Search_Stories lands:
+        // [hits…, Continue-reading hub]. Never near-end page into more
+        // Search_Stories / List_All_Articles (that appended News ads + yanked hub).
+        if (searchFeedActive
+                && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
+                        || activeSearchPostId > 0L
+                        || activeSearchSingleOnly)) {
+            showLog("ANYNEWS_SEARCH refreshDetails blocked — finite search deck"
+                    + " landed=" + searchContentLanded
+                    + " single=" + activeSearchSingleOnly
+                    + " pos=" + positionx
+                    + " size=" + (list != null ? list.size() : -1));
             isApiRequested = false;
+            dummyResponse = null;
             try {
                 if (list != null
                         && ReadArticleStore.countPaintableArticles(list) > 0
@@ -16542,17 +16565,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             } catch (Exception ignored) {
             }
-            return;
-        }
-        // Keyword multi search with hub already seated: never treat hub as News EOF
-        // trigger into List_All_Articles — only Search_Stories paging before hub.
-        if (searchFeedActive
-                && list != null
-                && !list.isEmpty()
-                && FeedEndHelper.isFeedEnd(list.get(Math.min(positionx, list.size() - 1)))
-                && FeedEndHelper.hasAtEnd(list)) {
-            showLog("ANYNEWS_SEARCH refreshDetails skip — on Continue-reading hub");
-            isApiRequested = false;
             return;
         }
         // Offline: never fire List_All_Articles / held next-page poll (ShowNews also guards).
@@ -16674,15 +16686,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         final boolean feedNotExhausted = !isOnlinePageableFeedTrulyExhausted()
                 && !(isFeedExhaustedMessage()
                         && (!canPageActiveOnlineFlipFeed() || bookmarksModeSelected));
-        // Search single / hub-complete: never near-end page into more stories or News.
+        // Any active search: never near-end page (keyword used to keep paging when
+        // not yet on the hub, appending main-feed cards past Continue-reading).
         final boolean searchBlocksPaging = searchFeedActive
-                && (activeSearchSingleOnly
+                && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
                         || activeSearchPostId > 0L
-                        || (list != null && FeedEndHelper.hasAtEnd(list)
-                                && positionx >= Math.max(0, list.size() - 1)));
+                        || activeSearchSingleOnly);
         if (searchBlocksPaging) {
             showLog("ANYNEWS_SEARCH near-end paging suppressed");
             isApiRequested = false;
+            dummyResponse = null;
         } else if (positionx == requestPostition
                 && dummyResponse == null
                 && !isApiRequested
