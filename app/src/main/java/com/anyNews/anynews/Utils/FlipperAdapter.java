@@ -6183,6 +6183,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * True when Google/FB has an exact <b>unimpressed</b> creative <b>or</b> an
      * unclaimed ready-pool ad that can be transferred (orphan / ahead). Peek only
      * — does not mutate. Impressed exact seats do not count (fresh fill needed).
+     * <p>
+     * {@link AdPreloader} being ready is <b>not</b> enough: that warm creative may
+     * never claim onto this seat (primary_only / rebind miss) and used to skip
+     * per-seat {@code AdLoader} → Share forever. Play Store always fires seat loads.
      */
     private boolean hasNativeCreativeForSlot(@Nullable ModelClass.Datum slot) {
         if (slot == null) {
@@ -6244,9 +6248,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     }
                 }
             }
-            if (AdPreloader.get().isReady()) {
-                return true;
-            }
+            // Do NOT treat AdPreloader.isReady() as a seat creative — that skipped
+            // July on-seat AdLoader when the warm object never painted this reqPos.
         } catch (Exception ignored) {
         }
         return false;
@@ -6255,17 +6258,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Ask HomePage to (re)load this slot if no creative is ready yet.
      * No-op when context is not HomePage (bookmark reader, etc.).
+     * Always fires per-seat load when the seat lacks a claimable creative —
+     * matching Play Store. Warm pool may still paint via rebind/claim.
      */
     private void requestNativeAdLoadForSlot(@Nullable ModelClass.Datum slot) {
         if (slot == null || !(context instanceof HomePage)) return;
         try {
-            // Prefer painting an already-matched warm creative over another request.
+            // Prefer painting an already-matched / transferable seat creative.
             if (hasNativeCreativeForSlot(slot)) {
                 return;
             }
-            if (AdPreloader.get().isReady()) {
-                // HomePage settle / ready listener will paint — don't dual-request.
-                return;
+            // Best-effort claim warm inventory into the seat pool for faster paint,
+            // but never skip ensureFeedNativeAdLoaded just because AdPreloader is ready.
+            try {
+                Integer warmPos = slot.getAd_req_position();
+                if (warmPos != null && AdPreloader.get().isReady()) {
+                    takeAdPreloaderIntoPool(warmPos);
+                    if (hasNativeCreativeForSlot(slot)) {
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {
             }
             // Best-effort warm (may run mid-flip). Cap/backoff never permanently blocks —
             // HomePage settle path unlocks and retries on land.
