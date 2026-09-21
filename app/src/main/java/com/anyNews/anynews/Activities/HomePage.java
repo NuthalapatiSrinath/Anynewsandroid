@@ -330,7 +330,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * replaced by a main-feed OpenPath paint.
      */
     private boolean searchOpenHandledInCreate = false;
-    /** One soften+retry for empty Search_Stories before showing hub-only. */
+    /** One soften+retry for empty Search_Stories before aborting to search UI. */
     private boolean searchSoftRetryUsed = false;
     /** Mist + teal bottom bar: back + query while keyword FlipView is active. */
     private View searchContextBar;
@@ -1984,8 +1984,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Search deck invariant: real hits only, then exactly one Continue-reading hub.
-     * Zero ads/share/ratings. Never hub-first when hits exist. Hub-only only when
-     * paintables == 0. Suggestion / post_id open ({@link #activeSearchSingleOnly}) →
+     * Zero ads/share/ratings. Never hub-first when hits exist. Never hub-alone when
+     * paintables == 0 — bounce to in-app search empty UI instead (Enter/Search with
+     * no suggestion tap must not dump to Continue Reading). Suggestion / post_id
+     * open ({@link #activeSearchSingleOnly}) →
      * {@code [chosen article, similar siblings…, Continue-reading hub]} — server
      * already ranked exact then similar; never hub-first; no News pagination.
      */
@@ -2012,9 +2014,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
+        // Hard stop: zero paintables must never become Continue-reading hub alone.
+        if (ReadArticleStore.countPaintableArticles(list) <= 0) {
+            showLog("ANYNEWS_SEARCH finalize zero paintables — abort to search UI");
+            abortKeywordSearchNoHits();
+            return;
+        }
         // Suggestion / post_id open: pin chosen article first, keep server-ranked
-        // similar siblings below, then Continue-reading hub. Never hub-only when
-        // the chosen article is missing — caller retries.
+        // similar siblings below, then Continue-reading hub. Missing primary →
+        // abort to search UI (never hub-only).
         if (activeSearchSingleOnly) {
             ModelClass.Datum keep = null;
             ArrayList<ModelClass.Datum> siblings = new ArrayList<>();
@@ -2041,7 +2049,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             list.clear();
             if (keep == null) {
                 showLog("ANYNEWS_SEARCH single-only miss postId=" + activeSearchPostId
-                        + " — skip hub-only seat");
+                        + " — abort to search UI");
+                abortKeywordSearchNoHits();
                 return;
             }
             list.add(keep);
@@ -2099,11 +2108,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         }
         int paintables = ReadArticleStore.countPaintableArticles(list);
+        if (paintables <= 0) {
+            showLog("ANYNEWS_SEARCH finalize post-seat zero — abort to search UI");
+            abortKeywordSearchNoHits();
+            return;
+        }
         // Hard rule: while search content has not landed on page 0, ALWAYS force
         // hits-first — keyword and single alike. FlipView used to clamp a prior
         // News index onto list.size()-1 (Continue-reading hub). Once landed, do
         // not yank the user back from a deliberate hub swipe.
-        boolean forceHits = paintables > 0 && (landOnHits || !searchContentLanded);
+        boolean forceHits = landOnHits || !searchContentLanded;
         showLog("ANYNEWS_SEARCH finalize paintables=" + paintables
                 + " listSize=" + list.size()
                 + " land=" + landOnHits
@@ -2128,20 +2142,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         if (forceHits) {
             forceSearchHitsOnPage0();
-        } else if (paintables <= 0 && mFlipView != null && !list.isEmpty()) {
-            positionx = list.size() - 1;
-            try {
-                mFlipView.resetSeatForNewFeed();
-                mFlipView.releaseForcedPage0Seat();
-                if (adapter != null) {
-                    adapter.setCurrentFlipPage(positionx);
-                    adapter.setDataImmediate(list);
-                }
-                if (mFlipView.getPageCount() > 0) {
-                    mFlipView.flipTo(Math.min(positionx, mFlipView.getPageCount() - 1));
-                }
-            } catch (Exception ignored) {
-            }
         } else if (paintables > 0) {
             // Multi-hit EOF / already scrolled: refresh deck without yanking to page 0.
             // Never keep a hub seat while hits exist — that was hub-first after EOF.
@@ -2415,6 +2415,68 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         updateSearchContextBar();
+    }
+
+    /**
+     * Enter/Search with no suggestion tap returned zero paintables (or fetch failed).
+     * Never seat Continue-reading hub alone — restore Main News under the stack and
+     * reopen {@link InAppSearchActivity} with the typed query + empty/similar UI.
+     */
+    private void abortKeywordSearchNoHits() {
+        if (!searchFeedActive) {
+            return;
+        }
+        final String q =
+                activeSearchQuery != null ? activeSearchQuery.trim() : "";
+        showLog("ANYNEWS_SEARCH zero hits → search UI (no hub) q=\"" + q + "\"");
+        try {
+            hideHomeFeedLoadingReveal(true);
+        } catch (Exception ignored) {
+        }
+        try {
+            if (list == null) {
+                list = new ArrayList<>();
+            } else {
+                list.clear();
+            }
+            FeedEndHelper.stripAll(list);
+            if (adapter != null) {
+                adapter.setDataImmediate(list);
+            }
+            if (mFlipView != null) {
+                mFlipView.releaseForcedPage0Seat();
+                mFlipView.setVisibility(View.GONE);
+            }
+            if (txtNoData != null) {
+                txtNoData.setVisibility(View.GONE);
+            }
+        } catch (Exception ignored) {
+        }
+        clearSearchFeedMode();
+        ensureSearchChromeInteractive();
+        try {
+            performFeedReload();
+        } catch (Exception e) {
+            try {
+                last_post_id = 0;
+                skip = 0;
+                actual_skip = 0;
+                list = new ArrayList<>();
+                inlist(0);
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            Intent intent = new Intent(this, InAppSearchActivity.class);
+            if (!q.isEmpty()) {
+                intent.putExtra(InAppSearchActivity.EXTRA_QUERY, q);
+            }
+            intent.putExtra(InAppSearchActivity.EXTRA_SHOW_NO_RESULTS, true);
+            startActivity(intent);
+            overridePendingTransition(0, 0);
+        } catch (Exception e) {
+            showLog("ANYNEWS_SEARCH abort reopen search failed: " + e.getMessage());
+        }
     }
 
     /** Public for FlipperAdapter end-hub + chrome. */
@@ -4651,11 +4713,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         || activeSearchPostId > 0L
                         || (activeSearchQuery != null
                                 && !activeSearchQuery.trim().isEmpty()))) {
-            showLog("ANYNEWS_SEARCH soft-empty diverted → finalize (" + reason + ")");
+            showLog("ANYNEWS_SEARCH soft-empty diverted → finalize/abort (" + reason + ")");
             if (list == null) {
                 list = new ArrayList<>();
             }
-            finalizeSearchFeedSeating(true);
+            if (ReadArticleStore.countPaintableArticles(list) > 0) {
+                finalizeSearchFeedSeating(true);
+            } else {
+                abortKeywordSearchNoHits();
+            }
             return;
         }
         try {
@@ -14208,16 +14274,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showLog("Flash: monitor offline but link up — continue push_posts network");
                 // fall through to network path below
             } else if (searchMode) {
-                // Keyword search is network-only — never paint main OpenPath as "results".
-                hideHomeFeedLoadingReveal(true);
-                try {
-                    if (list == null) list = new ArrayList<>();
-                    ensureFeedEndCardVisible(true);
-                    if (mFlipView != null) mFlipView.setVisibility(View.VISIBLE);
-                    if (txtNoData != null) txtNoData.setVisibility(View.GONE);
-                    if (layout_with_data != null) layout_with_data.setVisibility(View.VISIBLE);
-                } catch (Exception ignored) {
-                }
+                // Keyword search is network-only — never paint main OpenPath / hub as "results".
+                showLog("ANYNEWS_SEARCH offline → search UI (no hub)");
+                abortKeywordSearchNoHits();
                 if (OpenPathCache.isForceFeedNetworkPending()) {
                     OpenPathCache.clearForceFeedNetwork();
                 }
@@ -14516,9 +14575,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     hideHomeFeedLoadingReveal(true);
                     try {
                         if (searchMode) {
-                            showLog("ANYNEWS_SEARCH onFailure → hub only");
-                            if (list == null) list = new ArrayList<>();
-                            finalizeSearchFeedSeating(true);
+                            showLog("ANYNEWS_SEARCH onFailure → search UI (no hub)");
+                            abortKeywordSearchNoHits();
                             initialCall = true;
                             return;
                         }
@@ -14698,15 +14756,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         return;
                     }
                     showLog("home feed loading safety timeout — force resolve");
-                    // Keyword search: never soft-page main News — seat hub / hits.
+                    // Keyword search: never soft-page main News — seat hits or abort to search UI.
                     if (searchFeedActive
                             && activeSearchQuery != null
                             && !activeSearchQuery.trim().isEmpty()) {
-                        showLog("ANYNEWS_SEARCH loading timeout → finalize seating");
+                        showLog("ANYNEWS_SEARCH loading timeout → finalize or abort");
                         if (list == null) {
                             list = new ArrayList<>();
                         }
-                        finalizeSearchFeedSeating(true);
+                        if (ReadArticleStore.countPaintableArticles(list) > 0) {
+                            finalizeSearchFeedSeating(true);
+                        } else {
+                            abortKeywordSearchNoHits();
+                        }
                         return;
                     }
                     int paintables = list != null
@@ -15897,8 +15959,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if (validateUserOtp.getData() != null
                                 && validateUserOtp.getData().size() == 0) {
                             // Keyword search: empty page = true EOF → hub AFTER results.
-                            // Zero hits: hub alone. Never leave hub as every scroll page
-                            // while real hits should have been first.
+                            // Zero hits: return to search UI (never Continue-reading alone).
                             if (searchFeedActive && !fromCache) {
                                 showLog("ANYNEWS_SEARCH empty page paintables="
                                         + (list != null
@@ -15911,7 +15972,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                         ? ReadArticleStore.countPaintableArticles(list) : 0;
                                 if (paintables <= 0) {
                                     // Soften once (drop last token / trailing chars) before
-                                    // hub-only — matches server softenOnce for Suggestions.
+                                    // abort — matches server softenOnce for Suggestions.
                                     String soft = softenSearchQueryFurther(activeSearchQuery);
                                     // Suggestion tap with post_id miss: drop post_id and
                                     // retry keyword once while keeping single-only seating.
@@ -15958,23 +16019,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                         initialCall = true;
                                         return;
                                     }
-                                    // Single-article open: never paint hub-only without
-                                    // the article — keep loading chrome if still possible.
-                                    if (activeSearchSingleOnly) {
-                                        showLog("ANYNEWS_SEARCH single-only zero hits — no hub-only");
-                                        try {
-                                            hideHomeFeedLoadingReveal(true);
-                                            ensureSearchChromeInteractive();
-                                        } catch (Exception ignored) {
-                                        }
-                                        initialCall = true;
-                                        return;
-                                    }
-                                    if (list == null) list = new ArrayList<>();
-                                    FeedEndHelper.stripAll(list);
-                                    // Zero hits: single Continue-reading hub (not article).
-                                    showLog("ANYNEWS_SEARCH zero hits → hub only");
-                                    finalizeSearchFeedSeating(true);
+                                    // Zero hits after retries — stay on search UI, never hub.
+                                    showLog("ANYNEWS_SEARCH zero hits → search UI (no hub)");
+                                    abortKeywordSearchNoHits();
                                 } else {
                                     // Hits already on FlipView — exactly one hub after last hit.
                                     // Do not yank the user back to page 0 if they already scrolled.
@@ -16031,7 +16078,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                 } else if (!fromCache) {
                     // Search_Stories / List failure payload (success:false) — never leave
-                    // FlipView blank; for keyword search seat hub (or soft-retry).
+                    // FlipView blank; for keyword search soft-retry or abort to search UI.
                     if (searchFeedActive) {
                         showLog("ANYNEWS_SEARCH success=false — treat as empty");
                         no_article_message = FeedEndHelper.resolveMessage(this);
@@ -16063,9 +16110,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 initialCall = true;
                                 return;
                             }
-                            if (list == null) list = new ArrayList<>();
-                            FeedEndHelper.stripAll(list);
-                            finalizeSearchFeedSeating(true);
+                            abortKeywordSearchNoHits();
                         } else {
                             finalizeSearchFeedSeating(false);
                         }
@@ -16171,11 +16216,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (searchFeedActive
                             && activeSearchQuery != null
                             && !activeSearchQuery.trim().isEmpty()) {
-                        showLog("ANYNEWS_SEARCH parse error → hub seating");
-                        if (list == null) {
-                            list = new ArrayList<>();
-                        }
-                        finalizeSearchFeedSeating(true);
+                        showLog("ANYNEWS_SEARCH parse error → search UI (no hub)");
+                        abortKeywordSearchNoHits();
                     } else {
                         if (mFlipView != null) {
                             mFlipView.setVisibility(View.GONE);

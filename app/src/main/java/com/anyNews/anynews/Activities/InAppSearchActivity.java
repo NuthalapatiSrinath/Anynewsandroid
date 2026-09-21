@@ -10,6 +10,8 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.style.StyleSpan;
+import android.graphics.drawable.Drawable;
+import android.view.MotionEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -60,6 +62,8 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 public class InAppSearchActivity extends AppCompatActivity {
 
     public static final String EXTRA_QUERY = "extra_search_query";
+    /** HomePage bounced here after Search/Enter with zero FlipView hits. */
+    public static final String EXTRA_SHOW_NO_RESULTS = "extra_search_show_no_results";
 
     private static final long SUGGEST_DEBOUNCE_MS = 110L;
     /** Show empty / fuzzy hint if Suggestions still pending after this. */
@@ -107,6 +111,30 @@ public class InAppSearchActivity extends AppCompatActivity {
                     }
                     return false;
                 });
+        // Pill trailing search icon acts as Search button (same as IME Enter).
+        searchInput.setOnTouchListener(
+                (v, event) -> {
+                    if (event.getAction() != MotionEvent.ACTION_UP) {
+                        return false;
+                    }
+                    Drawable[] drawables = searchInput.getCompoundDrawables();
+                    Drawable end = drawables != null && drawables.length > 2 ? drawables[2] : null;
+                    if (end == null) return false;
+                    int touchX = (int) event.getX();
+                    int iconStart =
+                            searchInput.getWidth()
+                                    - searchInput.getPaddingEnd()
+                                    - end.getBounds().width()
+                                    - (int) (12 * getResources().getDisplayMetrics().density);
+                    if (touchX >= iconStart) {
+                        submitQuery(
+                                searchInput.getText() != null
+                                        ? searchInput.getText().toString()
+                                        : "");
+                        return true;
+                    }
+                    return false;
+                });
         searchInput.addTextChangedListener(
                 new TextWatcher() {
                     @Override
@@ -134,8 +162,44 @@ public class InAppSearchActivity extends AppCompatActivity {
                 });
 
         SearchRevealHelper.playEnterReveal(this, root, getIntent());
-        showIdleState();
+        applyOpenExtras();
         searchInput.requestFocus();
+    }
+
+    /**
+     * Prefill from {@link #EXTRA_QUERY} and optionally show empty/fuzzy (bounce from
+     * HomePage when Search/Enter had zero FlipView hits).
+     */
+    private void applyOpenExtras() {
+        Intent in = getIntent();
+        String seed =
+                in != null && in.hasExtra(EXTRA_QUERY) ? in.getStringExtra(EXTRA_QUERY) : null;
+        boolean showEmpty =
+                in != null && in.getBooleanExtra(EXTRA_SHOW_NO_RESULTS, false);
+        if (in != null) {
+            in.removeExtra(EXTRA_SHOW_NO_RESULTS);
+        }
+        if (TextUtils.isEmpty(seed)) {
+            showIdleState();
+            return;
+        }
+        String clean = seed.trim();
+        searchInput.setText(clean);
+        searchInput.setSelection(clean.length());
+        if (examples != null) {
+            examples.setVisibility(View.GONE);
+        }
+        // Always try live + network suggestions so similar/fuzzy rows can appear.
+        paintLocalLiveSuggestions(clean);
+        scheduleSuggest(clean);
+        if (showEmpty) {
+            // Banner immediately; fuzzy/suggest rows still fill in from scheduleSuggest.
+            noResults.setVisibility(View.VISIBLE);
+            if (!hasStorySuggestRows()) {
+                paintEmptyOrFuzzy(clean);
+                noResults.setVisibility(View.VISIBLE);
+            }
+        }
     }
 
     @Override
