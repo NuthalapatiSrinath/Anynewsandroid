@@ -30,12 +30,10 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
-import com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest;
 import com.anyNews.anynews.Utils.RecentSearchStore;
 import com.anyNews.anynews.Utils.SearchFuzzyHelper;
 import com.anyNews.anynews.Utils.SearchRevealHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
-import com.anyNews.anynews.models.SearchModel;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -53,8 +51,9 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 /**
- * In-app Search: mist + teal chrome, recent + categories idle state,
- * debounced suggestions with counts while typing, submit opens HomePage search mode.
+ * In-app Search: mist + teal chrome, recent-searches idle state,
+ * debounced story suggestions with counts while typing, submit opens HomePage
+ * search mode. No category / Daily Updates category suggestions (product ask).
  * Typo intent: local edit-distance against recent (+ last suggest texts) with no
  * extra API; empty state paints quickly after a short timeout if the server is slow.
  */
@@ -80,7 +79,6 @@ public class InAppSearchActivity extends AppCompatActivity {
     /** Last server suggestion texts — reused for local fuzzy (no extra call). */
     private final List<String> lastSuggestTexts = new ArrayList<>();
     private SearchRowsAdapter adapter;
-    private final List<SearchModel.Datum> categories = new ArrayList<>();
     private int suggestSeq = 0;
 
     @Override
@@ -136,7 +134,6 @@ public class InAppSearchActivity extends AppCompatActivity {
                 });
 
         SearchRevealHelper.playEnterReveal(this, root, getIntent());
-        loadCategories();
         showIdleState();
         searchInput.requestFocus();
     }
@@ -221,8 +218,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         List<String> pool = localSuggestPool();
         List<String> live = SearchFuzzyHelper.livePrefixMatches(q, pool, 8);
         List<String> fuzzy = SearchFuzzyHelper.closeMatches(q, pool, 3);
-        List<Row> duRows = buildDailyUpdatesSuggestRows(q);
-        if (live.isEmpty() && fuzzy.isEmpty() && duRows.isEmpty()) {
+        if (live.isEmpty() && fuzzy.isEmpty()) {
             // Keep prior suggest rows until network replies — avoid blank flash.
             if (!hasStorySuggestRows()) {
                 rows.clear();
@@ -231,10 +227,6 @@ public class InAppSearchActivity extends AppCompatActivity {
             return;
         }
         List<Row> next = new ArrayList<>();
-        if (!duRows.isEmpty()) {
-            next.add(Row.header(getString(R.string.search_daily_updates_section)));
-            next.addAll(duRows);
-        }
         for (String t : live) {
             long postId = 0L;
             for (RecentSearchStore.Entry e : RecentSearchStore.loadEntries(this)) {
@@ -285,7 +277,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             return;
         }
         noResults.setVisibility(View.VISIBLE);
-        // Keep idle recent/categories underneath the banner.
+        // Keep idle recent searches underneath the banner.
         if (!hasStorySuggestRows()) {
             showIdleState();
             noResults.setVisibility(View.VISIBLE);
@@ -302,86 +294,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                 rows.add(Row.recent(r.term, r.postId));
             }
         }
-        if (!categories.isEmpty()) {
-            rows.add(Row.header(getString(R.string.search_categories)));
-            for (SearchModel.Datum c : categories) {
-                if (c == null || TextUtils.isEmpty(c.getName())) continue;
-                int cid = c.getCategoryId() != null ? c.getCategoryId() : 0;
-                rows.add(Row.category(c.getName(), cid));
-            }
-        }
         adapter.notifyDataSetChanged();
-    }
-
-    private void loadCategories() {
-        try {
-            final int langId =
-                    SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
-            String cached =
-                    com.anyNews.anynews.Utils.CategoriesDiskCache.loadIfMatches(this, langId);
-            if (cached != null && !cached.isEmpty()) {
-                SearchModel fromDisk = new Gson().fromJson(cached, SearchModel.class);
-                if (fromDisk != null
-                        && Boolean.TRUE.equals(fromDisk.getSuccess())
-                        && fromDisk.getData() != null) {
-                    categories.clear();
-                    categories.addAll(fromDisk.getData());
-                    showIdleState();
-                    return;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-
-        try {
-            JsonObject body = new JsonObject();
-            JsonObject req = new JsonObject();
-            req.addProperty(
-                    "draft_id",
-                    SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
-            req.addProperty(
-                    "language_id",
-                    SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME));
-            req.addProperty("screen_type", 0);
-            String enc = encrypt(new Gson().toJson(req));
-            body.addProperty("data", enc);
-            APIService api = RestApiClient.getClient().create(APIService.class);
-            api.List_All_Categories("v3", body)
-                    .enqueue(
-                            new Callback<EncreptionRequest>() {
-                                @Override
-                                public void onResponse(
-                                        Call<EncreptionRequest> call,
-                                        Response<EncreptionRequest> response) {
-                                    try {
-                                        if (response.body() == null
-                                                || response.body().getData() == null) {
-                                            return;
-                                        }
-                                        String raw = decrypt(response.body().getData());
-                                        SearchModel model =
-                                                new Gson().fromJson(raw, SearchModel.class);
-                                        if (model != null
-                                                && Boolean.TRUE.equals(model.getSuccess())
-                                                && model.getData() != null) {
-                                            categories.clear();
-                                            categories.addAll(model.getData());
-                                            if (TextUtils.isEmpty(
-                                                    searchInput.getText() != null
-                                                            ? searchInput.getText().toString()
-                                                            : "")) {
-                                                showIdleState();
-                                            }
-                                        }
-                                    } catch (Exception ignored) {
-                                    }
-                                }
-
-                                @Override
-                                public void onFailure(Call<EncreptionRequest> call, Throwable t) {}
-                            });
-        } catch (Exception ignored) {
-        }
     }
 
     private void fetchSuggestions(final String q) {
@@ -389,7 +302,6 @@ public class InAppSearchActivity extends AppCompatActivity {
                 && !rows.isEmpty()
                 && (rows.get(0).type == Row.TYPE_SUGGEST
                         || rows.get(0).type == Row.TYPE_HEADER)) {
-            // Allow re-paint when only DU header was showing; skip identical story burst.
             boolean hasStorySuggest = false;
             for (Row r : rows) {
                 if (r.type == Row.TYPE_SUGGEST) {
@@ -402,8 +314,6 @@ public class InAppSearchActivity extends AppCompatActivity {
             }
         }
         lastSuggestQuery = q;
-        // Daily Updates category matches first (local, instant) while story API runs.
-        final List<Row> duRows = buildDailyUpdatesSuggestRows(q);
         try {
             JsonObject req = new JsonObject();
             req.addProperty(
@@ -433,10 +343,6 @@ public class InAppSearchActivity extends AppCompatActivity {
                             if (!typed.equals(q)) return;
                             try {
                                 List<Row> next = new ArrayList<>();
-                                if (!duRows.isEmpty()) {
-                                    next.add(Row.header(getString(R.string.search_daily_updates_section)));
-                                    next.addAll(duRows);
-                                }
                                 if (response.body() != null
                                         && response.body().getData() != null) {
                                     String raw = decrypt(response.body().getData());
@@ -487,8 +393,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     // Keep Google-like local prefix rows; don't wipe to
                                     // weak Did-you-mean-only when the pool still matches.
                                     paintLocalLiveSuggestions(q);
-                                    if (!duRows.isEmpty() && !hasStorySuggestRows()) {
-                                        paintDailyUpdatesOnly(q, duRows);
+                                    if (!hasStorySuggestRows()) {
+                                        paintEmptyOrFuzzy(q);
                                     }
                                     return;
                                 }
@@ -522,7 +428,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 rows.addAll(next);
                                 adapter.notifyDataSetChanged();
                             } catch (Exception e) {
-                                paintDailyUpdatesOnly(q, duRows);
+                                paintEmptyOrFuzzy(q);
                             }
                         }
 
@@ -539,62 +445,11 @@ public class InAppSearchActivity extends AppCompatActivity {
                                         paintEmptyOrFuzzy(q);
                                     }
                                 }
-                                if (!duRows.isEmpty() && !hasStorySuggestRows()) {
-                                    paintDailyUpdatesOnly(q, duRows);
-                                }
                             }
                         }
                     });
         } catch (Exception e) {
-            if (!duRows.isEmpty()) {
-                paintDailyUpdatesOnly(q, duRows);
-            } else {
-                paintEmptyOrFuzzy(q);
-            }
-        }
-    }
-
-    @NonNull
-    private List<Row> buildDailyUpdatesSuggestRows(@Nullable String q) {
-        List<Row> out = new ArrayList<>();
-        try {
-            for (DailyUpdatesSearchSuggest.Match m :
-                    DailyUpdatesSearchSuggest.matches(this, q)) {
-                out.add(Row.duCategory(m));
-            }
-        } catch (Exception ignored) {
-        }
-        return out;
-    }
-
-    private void paintDailyUpdatesOnly(
-            @NonNull String q, @NonNull List<Row> duRows) {
-        String typed =
-                searchInput.getText() != null
-                        ? searchInput.getText().toString().trim()
-                        : "";
-        if (!typed.equals(q) || duRows.isEmpty()) {
-            noResults.setVisibility(View.VISIBLE);
-            return;
-        }
-        noResults.setVisibility(View.GONE);
-        rows.clear();
-        rows.add(Row.header(getString(R.string.search_daily_updates_section)));
-        rows.addAll(duRows);
-        adapter.notifyDataSetChanged();
-    }
-
-    private void openDailyUpdatesMatch(@NonNull DailyUpdatesSearchSuggest.Match match) {
-        try {
-            Intent intent = DailyUpdatesSearchSuggest.launchIntent(this, match);
-            if (getApplicationContext() != null
-                    && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                startActivity(intent);
-            }
-            finish();
-            overridePendingTransition(0, 0);
-        } catch (Exception e) {
-            submitQuery(match.title);
+            paintEmptyOrFuzzy(q);
         }
     }
 
@@ -661,24 +516,6 @@ public class InAppSearchActivity extends AppCompatActivity {
         overridePendingTransition(0, 0);
     }
 
-    /** Same path as Profile category chips → HomePage EXTRA_SESSION_ID. */
-    private void openCategory(int categoryId) {
-        if (categoryId <= 0) return;
-        try {
-            SharedPrefsData.putInt(this, Constants.CategoryID, categoryId, Constants.PREF_NAME);
-        } catch (Exception ignored) {
-        }
-        Intent intent = new Intent(this, HomePage.class);
-        intent.putExtra("EXTRA_SESSION_ID", "" + categoryId);
-        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        if (getApplicationContext() != null
-                && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-            startActivity(intent);
-        }
-        finish();
-        overridePendingTransition(0, 0);
-    }
-
     /** Align FlipView search_text with Suggestions / server normalizeQuery. */
     private static String softenClientQuery(String q) {
         String clean = q != null ? q.trim() : "";
@@ -709,38 +546,30 @@ public class InAppSearchActivity extends AppCompatActivity {
     private static final class Row {
         static final int TYPE_HEADER = 0;
         static final int TYPE_RECENT = 1;
-        static final int TYPE_CATEGORY = 2;
         static final int TYPE_SUGGEST = 3;
-        static final int TYPE_DU_CATEGORY = 4;
         static final int TYPE_FUZZY = 5;
 
         final int type;
         final String title;
         final int meta;
-        final int categoryId;
         final String highlight;
         final long postId;
-        @Nullable final DailyUpdatesSearchSuggest.Match duMatch;
 
         private Row(
                 int type,
                 String title,
                 int meta,
-                int categoryId,
                 String highlight,
-                long postId,
-                @Nullable DailyUpdatesSearchSuggest.Match duMatch) {
+                long postId) {
             this.type = type;
             this.title = title;
             this.meta = meta;
-            this.categoryId = categoryId;
             this.highlight = highlight;
             this.postId = postId;
-            this.duMatch = duMatch;
         }
 
         static Row header(String t) {
-            return new Row(TYPE_HEADER, t, 0, 0, null, 0L, null);
+            return new Row(TYPE_HEADER, t, 0, null, 0L);
         }
 
         static Row recent(String t) {
@@ -748,11 +577,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
 
         static Row recent(String t, long postId) {
-            return new Row(TYPE_RECENT, t, 0, 0, null, postId, null);
-        }
-
-        static Row category(String t, int id) {
-            return new Row(TYPE_CATEGORY, t, 0, id, null, 0L, null);
+            return new Row(TYPE_RECENT, t, 0, null, postId);
         }
 
         static Row suggest(String t, int count, String highlight) {
@@ -760,15 +585,11 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
 
         static Row suggest(String t, int count, String highlight, long postId) {
-            return new Row(TYPE_SUGGEST, t, count, 0, highlight, postId, null);
+            return new Row(TYPE_SUGGEST, t, count, highlight, postId);
         }
 
         static Row fuzzy(String t) {
-            return new Row(TYPE_FUZZY, t, 0, 0, null, 0L, null);
-        }
-
-        static Row duCategory(@NonNull DailyUpdatesSearchSuggest.Match m) {
-            return new Row(TYPE_DU_CATEGORY, m.title, 0, 0, null, 0L, m);
+            return new Row(TYPE_FUZZY, t, 0, null, 0L);
         }
     }
 
@@ -843,19 +664,6 @@ public class InAppSearchActivity extends AppCompatActivity {
                             }
                             submitQuery(row.title);
                         });
-            } else if (row.type == Row.TYPE_DU_CATEGORY) {
-                vh.meta.setVisibility(View.GONE);
-                vh.icon.setImageResource(R.drawable.ic_action_more_vert);
-                vh.action.setVisibility(View.VISIBLE);
-                vh.action.setImageResource(R.drawable.ic_action_more_vert);
-                vh.action.setRotation(270f);
-                final DailyUpdatesSearchSuggest.Match match = row.duMatch;
-                vh.itemView.setOnClickListener(
-                        v -> {
-                            if (match != null) {
-                                openDailyUpdatesMatch(match);
-                            }
-                        });
             } else if (row.type == Row.TYPE_RECENT) {
                 vh.meta.setVisibility(View.GONE);
                 vh.icon.setImageResource(android.R.drawable.ic_menu_recent_history);
@@ -876,12 +684,10 @@ public class InAppSearchActivity extends AppCompatActivity {
                             openSearch(row.title, row.postId, single);
                         });
             } else {
+                // Unknown / legacy row types — treat as inert.
                 vh.meta.setVisibility(View.GONE);
-                vh.icon.setImageResource(R.drawable.ic_action_more_vert);
-                vh.action.setVisibility(View.VISIBLE);
-                vh.action.setImageResource(R.drawable.ic_action_more_vert);
-                vh.action.setRotation(270f);
-                vh.itemView.setOnClickListener(v -> openCategory(row.categoryId));
+                vh.action.setVisibility(View.GONE);
+                vh.itemView.setOnClickListener(null);
             }
         }
 
