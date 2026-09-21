@@ -1149,11 +1149,20 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                         .show();
                                 return;
                             }
+                            String okMsg =
+                                    root.has("msg") && !root.get("msg").isJsonNull()
+                                            ? root.get("msg").getAsString()
+                                            : null;
+                            if (TextUtils.isEmpty(okMsg)) {
+                                okMsg =
+                                        getString(
+                                                updating
+                                                        ? R.string.birthday_auto_updated_ok
+                                                        : R.string.birthday_auto_scheduled_ok);
+                            }
                             Toast.makeText(
                                             BirthdayAutoActivity.this,
-                                            updating
-                                                    ? R.string.birthday_auto_updated_ok
-                                                    : R.string.birthday_auto_scheduled_ok,
+                                            okMsg,
                                             Toast.LENGTH_LONG)
                                     .show();
                             clearEditingMode();
@@ -1268,11 +1277,11 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                 row.has("can_delete")
                         && !row.get("can_delete").isJsonNull()
                         && row.get("can_delete").getAsBoolean();
-        if ("scheduled".equals(status) && !row.has("can_edit")) {
+        if (("scheduled".equals(status) || "pending".equals(status)) && !row.has("can_edit")) {
             canEdit = true;
             canDelete = true;
         }
-        if ("published".equals(status)) {
+        if ("published".equals(status) || "rejected".equals(status)) {
             canEdit = false;
             canDelete = false;
         }
@@ -1291,8 +1300,14 @@ public class BirthdayAutoActivity extends AppCompatActivity {
             int label = R.string.birthday_auto_status_scheduled;
             if ("published".equals(status)) label = R.string.birthday_auto_status_published;
             else if ("failed".equals(status)) label = R.string.birthday_auto_status_failed;
+            else if ("pending".equals(status)) label = R.string.birthday_auto_status_pending;
+            else if ("rejected".equals(status)) label = R.string.birthday_auto_status_rejected;
             statusTv.setText(getString(label));
-            statusTv.setTextColor("published".equals(status) ? 0xFF059669 : 0xFFE63B19);
+            int color = 0xFFE63B19;
+            if ("published".equals(status)) color = 0xFF059669;
+            else if ("pending".equals(status)) color = 0xFFD97706;
+            else if ("rejected".equals(status)) color = 0xFFDC2626;
+            statusTv.setTextColor(color);
         }
         if (thumb != null && !TextUtils.isEmpty(poster)) {
             Glide.with(this).load(poster).centerCrop().into(thumb);

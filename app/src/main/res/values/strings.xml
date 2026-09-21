@@ -335,6 +335,7 @@
     <string name="birthday_auto_login_required">Please login to create a Birthday Special</string>
     <string name="birthday_auto_need_date">Pick a birthday date within the allowed window</string>
     <string name="birthday_auto_scheduled_ok">Birthday post scheduled</string>
+    <string name="birthday_auto_pending_ok">Birthday post submitted for review</string>
     <string name="birthday_auto_updated_ok">Birthday post updated</string>
     <string name="birthday_auto_deleted_ok">Birthday post deleted</string>
     <string name="birthday_auto_schedule_info_fmt">Publishes at %1$s on the selected date. Submit before %2$s cutoff. You can schedule up to %3$d days ahead.</string>
@@ -345,8 +346,10 @@
     <string name="birthday_auto_delete">Delete</string>
     <string name="birthday_auto_view_only">Posted — view only (no edit/delete)</string>
     <string name="birthday_auto_status_scheduled">Scheduled</string>
+    <string name="birthday_auto_status_pending">Pending review</string>
     <string name="birthday_auto_status_published">Posted</string>
     <string name="birthday_auto_status_failed">Failed</string>
+    <string name="birthday_auto_status_rejected">Rejected</string>
     <string name="birthday_auto_update">Update birthday post</string>
     <string name="birthday_auto_meta_fmt">%1$s · %2$s</string>
     <string name="birthday_auto_confirm_delete">Delete this scheduled birthday post?</string>
