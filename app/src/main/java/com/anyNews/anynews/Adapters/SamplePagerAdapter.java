@@ -104,22 +104,39 @@ public class SamplePagerAdapter extends PagerAdapter {
         try {
 
 
-            //Picasso.with(context).load(arrayList.get(position).toString()).skipMemoryCache().into(textView);
+            // Transparent stubs — never FIT_XY the orange splash logo as a fake
+            // first magazine/gallery page (Play Store regression after animations).
             options = new DisplayImageOptions.Builder()
-                    // below image will be displayed when the image url is empty
-                    .showImageForEmptyUri(R.drawable.app_splash_logo)
-                    // stub image will display when your image is loading
+                    .showImageForEmptyUri(R.drawable.trasparent_background)
                     .showImageOnLoading(R.drawable.trasparent_background)
-                    .showImageOnFail(R.drawable.app_splash_logo)
-                    // cachememory method will caches the image in users external storage
+                    .showImageOnFail(R.drawable.trasparent_background)
                     .cacheInMemory(true)
-                    // cache on disc will caches the image in users internal storage
                     .cacheOnDisk(true)
-                    // build will build the view for displaying image..
                     .build();
 
-            // below method will display image inside our image view..
-            imageLoader.displayImage(arrayList.get(position), imageView, options, null);
+            String pageUrl = "";
+            if (arrayList != null && position >= 0 && position < arrayList.size()
+                    && arrayList.get(position) != null) {
+                pageUrl = arrayList.get(position).trim();
+            }
+            if (pageUrl.isEmpty() || "null".equalsIgnoreCase(pageUrl)) {
+                imageView.setImageResource(R.drawable.trasparent_background);
+            } else if (position == 0) {
+                // Cover wins the Glide pool over neighbor UIL loads.
+                try {
+                    Glide.with(context)
+                            .load(pageUrl)
+                            .priority(com.bumptech.glide.Priority.IMMEDIATE)
+                            .dontAnimate()
+                            .placeholder(R.drawable.trasparent_background)
+                            .error(R.drawable.trasparent_background)
+                            .into(imageView);
+                } catch (Exception glideEx) {
+                    imageLoader.displayImage(pageUrl, imageView, options, null);
+                }
+            } else {
+                imageLoader.displayImage(pageUrl, imageView, options, null);
+            }
             /*Glide
                     .with(textView.getContext())
                     .load(arrayList.get(position).toString())

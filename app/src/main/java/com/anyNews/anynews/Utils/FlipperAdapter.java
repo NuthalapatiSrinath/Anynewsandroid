@@ -4994,16 +4994,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 });
                             }
                             ArrayList<String> magImages =
-                                    OfflineImageStore.resolveGalleryUris(
-                                            context,
-                                            list.get(position).getPostId(),
-                                            list.get(position).getImages());
+                                    GalleryImageUrls.sanitize(
+                                            OfflineImageStore.resolveGalleryUris(
+                                                    context,
+                                                    list.get(position).getPostId(),
+                                                    list.get(position).getImages()));
                             // Empty gallery → ViewPager getCount=0 + ShadowTransformer
                             // getCardViewAt(0) IndexOOB → process death on share open /
                             // magazine bind (looks like “automatically back”).
-                            if (magImages == null) {
-                                magImages = new ArrayList<>();
-                            }
                             if (magImages.isEmpty()) {
                                 magImages.add("");
                                 android.util.Log.e("MagazineCrash",
@@ -5328,15 +5326,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         List<String> galleryImages = list.get(position).getImages();
                         if (galleryImages != null && !galleryImages.isEmpty()) {
                             image_gallary.addAll(
-                                    OfflineImageStore.resolveGalleryUris(
-                                            context,
-                                            list.get(position).getPostId(),
-                                            galleryImages));
+                                    GalleryImageUrls.sanitize(
+                                            OfflineImageStore.resolveGalleryUris(
+                                                    context,
+                                                    list.get(position).getPostId(),
+                                                    galleryImages)));
                             try {
                                 OfflineImageStore.enqueueArticle(context, list.get(position));
                             } catch (Exception ignored) {
                             }
-                        } else {
+                        }
+                        if (image_gallary.isEmpty()) {
+                            // Transparent seat only — never a splash-logo fake page.
                             image_gallary.add("");
                         }
                         TextView gallerySwipeHint =
@@ -8642,8 +8643,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 // half gallery images — prefer offline files when pack warmed
                 halfImageGallery = new ArrayList<>();
                 ArrayList<String> listSample =
-                        OfflineImageStore.resolveGalleryUris(
-                                context, list.get(position).getPostId(), halfGalleryImages);
+                        GalleryImageUrls.sanitize(
+                                OfflineImageStore.resolveGalleryUris(
+                                        context, list.get(position).getPostId(), halfGalleryImages));
                 halfImageGallery.addAll(listSample);
                 try {
                     OfflineImageStore.enqueueArticle(context, list.get(position));

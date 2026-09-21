@@ -38,14 +38,14 @@ import com.anyNews.anynews.flipview.FlipView;
 public final class GallerySwipeHintHelper {
 
     /** Wait so the first magazine/gallery frame is clearly visible first. */
-    private static final long START_DELAY_MS = 300L;
-    private static final long NUDGE_DURATION_MS = 520L;
-    private static final long NUDGE_GAP_MS = 1400L;
-    /** Peeks per show session (3 flipping animations anytime post is opened). */
-    private static final int MAX_NUDGES = 3;
+    private static final long START_DELAY_MS = 900L;
+    private static final long NUDGE_DURATION_MS = 420L;
+    private static final long NUDGE_GAP_MS = 1600L;
+    /** One gentle peek — more caused flash / half-page logo on open. */
+    private static final int MAX_NUDGES = 1;
     /** Total coach shows across the install lifetime (unlimited). */
     private static final int MAX_HINT_SHOWS = 999999;
-    private static final float PEEK_DP = 28f;
+    private static final float PEEK_DP = 22f;
     private static final String PREF_HINT_SHOW_COUNT = "gallery_swipe_hint_show_count";
 
     private GallerySwipeHintHelper() {}

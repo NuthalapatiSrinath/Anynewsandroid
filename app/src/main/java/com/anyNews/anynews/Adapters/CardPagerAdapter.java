@@ -229,13 +229,36 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
     private void bind(CardItem item, View view, int position) {
         try {
             ImageView images = (ImageView) view.findViewById(R.id.images);
+            String url = item != null ? item.getText() : null;
+            if (url == null) {
+                url = "";
+            }
+            url = url.trim();
+            // Same URL already painted — skip restart (ViewPager rebind flash).
+            Object prior = images.getTag(R.id.tag_gallery_image_url);
+            if (url.equals(prior) && images.getDrawable() != null && !url.isEmpty()) {
+                return;
+            }
+            images.setTag(R.id.tag_gallery_image_url, url);
             // Page 0 is on-screen first; neighbors also instantiate (offscreen=1) at the
             // same time as a background Glide load — without IMMEDIATE, cover can lose
             // the race to page 1 and look empty until leave/return hits cache.
             com.bumptech.glide.Priority priority = position == 0
                     ? com.bumptech.glide.Priority.IMMEDIATE
                     : com.bumptech.glide.Priority.NORMAL;
-            Glide.with(context).load(item.getText()).priority(priority).into(images);
+            if (url.isEmpty()) {
+                // Never paint splash orange-N as a magazine page.
+                images.setImageResource(R.drawable.trasparent_background);
+                return;
+            }
+            Glide.with(context)
+                    .load(url)
+                    .priority(priority)
+                    .dontAnimate()
+                    .placeholder(R.drawable.trasparent_background)
+                    .error(R.drawable.trasparent_background)
+                    .fallback(R.drawable.trasparent_background)
+                    .into(images);
         } catch (RuntimeException e) {
             e.printStackTrace();
         }

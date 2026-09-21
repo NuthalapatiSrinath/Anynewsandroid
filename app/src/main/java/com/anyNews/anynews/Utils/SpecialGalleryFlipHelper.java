@@ -40,8 +40,7 @@ public final class SpecialGalleryFlipHelper {
     /** True while a nested Special gallery FlipView is actively dragging. */
     private static final AtomicBoolean NESTED_GALLERY_DRIVING = new AtomicBoolean(false);
 
-    private static final long HINT_DELAY_MS = 450L;
-    private static final int MAX_HINT_PEAKS = 2;
+    private static final long HINT_DELAY_MS = 650L;
 
     private SpecialGalleryFlipHelper() {}
 
@@ -67,17 +66,13 @@ public final class SpecialGalleryFlipHelper {
             @Nullable TextView hintView,
             @Nullable WormDotsIndicator wormDots,
             @Nullable Runnable onPageChanged) {
-        ArrayList<String> urls = new ArrayList<>();
-        if (imageUrls != null) {
-            for (String u : imageUrls) {
-                if (u != null) {
-                    urls.add(u);
-                }
-            }
-        }
+        ArrayList<String> urls = GalleryImageUrls.sanitize(imageUrls);
         if (urls.isEmpty()) {
+            // One transparent seat — never invent a splash-logo "page".
             urls.add("");
         }
+        final String fingerprint = GalleryImageUrls.fingerprint(urls);
+
         // New bind must not inherit a stuck drive flag from a prior gesture —
         // unless the user is mid-swipe on this same nested FlipView (rebind would
         // reset adapter mid-flip → NPE / IndexOOB on left swipe).
@@ -149,6 +144,11 @@ public final class SpecialGalleryFlipHelper {
         }
 
         flip.setVisibility(View.VISIBLE);
+        // Opaque black underlay so letterbox / unload never flashes white.
+        try {
+            flip.setBackgroundColor(0xFF000000);
+        } catch (Exception ignored) {
+        }
         // Match article FlipView travel feel.
         try {
             int travel = Math.max(320, host.getWidth() > 0 ? host.getWidth() : 550);
@@ -156,27 +156,47 @@ public final class SpecialGalleryFlipHelper {
         } catch (Exception ignored) {
         }
 
-        // FIT_XY (useContainFit=false): fill the page like live CardPager fitXY —
-        // FIT_CENTER letterboxed posters into a black bar with dots below content.
-        GalleryImageFlipAdapter adapter =
-                new GalleryImageFlipAdapter(host.getContext(), urls, false);
-        try {
-            flip.setAdapter(adapter);
-        } catch (Exception e) {
-            android.util.Log.e("MagazineCrash", "nested FlipView setAdapter failed: "
-                    + e.getMessage());
-            if (pager != null) {
-                pager.setVisibility(View.VISIBLE);
+        final FlipView flipRef = flip;
+        Object priorFp = flipRef.getTag(R.id.tag_gallery_flip_urls);
+        final boolean sameUrls = fingerprint.equals(priorFp)
+                && flipRef.getAdapter() instanceof GalleryImageFlipAdapter
+                && flipRef.getPageCount() == urls.size();
+
+        if (!sameUrls) {
+            // Cancel any in-flight peak / hint before swapping adapter — mid-peak
+            // capture of an unloaded page-0 caused blank / half-book black.
+            cancelPeakAndHint(flipRef, hintView);
+            try {
+                flipRef.cancelIdlePeak();
+            } catch (Exception ignored) {
             }
-            flip.setVisibility(View.GONE);
-            return null;
+            // FIT_XY (useContainFit=false): fill the page like live CardPager fitXY —
+            // FIT_CENTER letterboxed posters into a black bar with dots below content.
+            GalleryImageFlipAdapter adapter =
+                    new GalleryImageFlipAdapter(host.getContext(), urls, false);
+            try {
+                flipRef.setAdapter(adapter);
+                flipRef.setTag(R.id.tag_gallery_flip_urls, fingerprint);
+            } catch (Exception e) {
+                android.util.Log.e("MagazineCrash", "nested FlipView setAdapter failed: "
+                        + e.getMessage());
+                if (pager != null) {
+                    pager.setVisibility(View.VISIBLE);
+                }
+                flipRef.setVisibility(View.GONE);
+                return null;
+            }
+            // Land on page 0 after adapter swap — never leave a mid-peak seat.
+            try {
+                flipRef.flipTo(0);
+            } catch (Exception ignored) {
+            }
         }
 
-        final FlipView flipRef = flip;
         final int pageCount = urls.size();
         final FlipViewDotsPager dotsPager = bindWormDots(wormDots, flipRef, pageCount);
 
-        flip.setOnFlipListener(new FlipView.OnFlipListener() {
+        flipRef.setOnFlipListener(new FlipView.OnFlipListener() {
             @Override
             public void onFlippedToPage(FlipView v, int position, long id) {
                 int safe = position;
@@ -194,7 +214,9 @@ public final class SpecialGalleryFlipHelper {
             }
         });
 
-        bindSwipeHint(flipRef, hintView, pageCount);
+        // Text coach only — never peakNext/book-bob on open (that painted blank /
+        // half-black before page-0 Glide finished, and flashed 1–2 times).
+        bindSwipeHintLabelOnly(flipRef, hintView, pageCount);
         // Guard last so it owns OnTouchListener (also dismisses hint on contact).
         installNestedSwipeGuard(flipRef, hintView);
         return flipRef;
@@ -364,12 +386,10 @@ public final class SpecialGalleryFlipHelper {
         }
     }
 
-    private static void bindSwipeHint(
+    /** Label-only swipe coach — no FlipView.peakNext (avoids blank/half-black open). */
+    private static void bindSwipeHintLabelOnly(
             @NonNull FlipView flip, @Nullable TextView hintView, int pageCount) {
-        Object prev = flip.getTag(R.id.tag_gallery_swipe_hint_session);
-        if (prev instanceof Handler) {
-            ((Handler) prev).removeCallbacksAndMessages(null);
-        }
+        cancelPeakAndHint(flip, hintView);
         if (hintView == null || pageCount < 2) {
             if (hintView != null) {
                 hintView.setVisibility(View.GONE);
@@ -381,32 +401,38 @@ public final class SpecialGalleryFlipHelper {
         hintView.setAlpha(0f);
         final Handler handler = new Handler(Looper.getMainLooper());
         flip.setTag(R.id.tag_gallery_swipe_hint_session, handler);
-        final Runnable[] peakStep = new Runnable[1];
-        final int[] peaks = {0};
-        peakStep[0] = () -> {
+        handler.postDelayed(() -> {
             if (flip.getWindowToken() == null || flip.getCurrentPage() != 0) {
-                hintView.setVisibility(View.GONE);
                 return;
             }
-            if (peaks[0] == 0) {
-                hintView.setVisibility(View.VISIBLE);
-                hintView.animate().alpha(1f).setDuration(200).start();
-            }
-            if (peaks[0] >= MAX_HINT_PEAKS) {
+            hintView.setVisibility(View.VISIBLE);
+            hintView.animate().alpha(1f).setDuration(200).start();
+            handler.postDelayed(() -> {
+                if (hintView.getWindowToken() == null) {
+                    return;
+                }
                 hintView.animate().alpha(0f).setDuration(250)
                         .withEndAction(() -> hintView.setVisibility(View.GONE))
                         .start();
-                return;
-            }
-            peaks[0]++;
-            try {
-                cancelParentFlipPeak(flip);
-                flip.peakNext(true);
-            } catch (Exception ignored) {
-            }
-            handler.postDelayed(peakStep[0], 1400L);
-        };
-        handler.postDelayed(peakStep[0], HINT_DELAY_MS);
+            }, 2200L);
+        }, HINT_DELAY_MS);
+    }
+
+    private static void cancelPeakAndHint(@NonNull FlipView flip, @Nullable TextView hintView) {
+        Object tag = flip.getTag(R.id.tag_gallery_swipe_hint_session);
+        if (tag instanceof Handler) {
+            ((Handler) tag).removeCallbacksAndMessages(null);
+            flip.setTag(R.id.tag_gallery_swipe_hint_session, null);
+        }
+        if (hintView != null) {
+            hintView.animate().cancel();
+            hintView.setVisibility(View.GONE);
+            hintView.setAlpha(0f);
+        }
+        try {
+            flip.cancelIdlePeak();
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -468,16 +494,7 @@ public final class SpecialGalleryFlipHelper {
     }
 
     private static void dismissHint(@NonNull FlipView flip, @Nullable TextView hintView) {
-        Object tag = flip.getTag(R.id.tag_gallery_swipe_hint_session);
-        if (tag instanceof Handler) {
-            ((Handler) tag).removeCallbacksAndMessages(null);
-            flip.setTag(R.id.tag_gallery_swipe_hint_session, null);
-        }
-        if (hintView != null) {
-            hintView.animate().cancel();
-            hintView.setVisibility(View.GONE);
-            hintView.setAlpha(0f);
-        }
+        cancelPeakAndHint(flip, hintView);
     }
 
     private static void requestParentsDisallow(@NonNull View v, boolean disallow) {
