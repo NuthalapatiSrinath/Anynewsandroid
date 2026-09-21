@@ -67,12 +67,12 @@ public final class FeedAdConfig {
     public static final int MAX_FLUSH_EVERY_N = 50;
 
     /**
-     * Default ON: destroy claimed/impressed natives when the user flips away from
-     * their seat (July fresh-fill on return) or the seat leaves the feed. Flip
-     * leave no longer keeps a seat-sticky same creative. OFF = softer retention
-     * until pool clear / activity destroy.
+     * Default OFF (Play-smooth): keep claimed/impressed natives on flip-away so
+     * return can seat-sticky the same creative without destroy/recreate jank.
+     * ON: destroy after settle when the user leaves the seat (fresh fill on return).
+     * Cross-seat unpaid reuse stays blocked via reqPos + claim-once regardless.
      */
-    public static final boolean DEFAULT_DESTROY_AFTER_IMPRESSION = true;
+    public static final boolean DEFAULT_DESTROY_AFTER_IMPRESSION = false;
 
     /**
      * Default: primary then secondary on no-fill.
@@ -471,8 +471,10 @@ public final class FeedAdConfig {
     }
 
     /**
-     * Retained for server/session compat. Flip-away and mode-switch prune always
-     * destroy claimed/impressed natives (money-safe). Prefer leaving this true.
+     * When true: destroy claimed/impressed natives after flip-away settle (fresh
+     * fill on return). When false (default): seat-sticky keep on the same
+     * {@code ad_req_position}; impressed creatives never transfer to another seat.
+     * Mode-switch / activity wipe still prune used creatives (money-safe).
      */
     public static boolean isDestroyAfterImpression(@Nullable Context context) {
         if (context != null) {

@@ -407,6 +407,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private static final long FLIP_TRACKING_DEFER_MS = 72L;
     private static final long FLIP_RESTORE_DEFER_MS = 160L;
     /**
+     * Footer / News|Read / FLAG_SECURE after land — past first paint so ad-neighbor
+     * flips do not resize FlipView (double top-edge fall) during gesture settle.
+     */
+    private static final long FLIP_CHROME_SECURE_DEFER_MS = 96L;
+    /**
+     * Flip-away destroy delay when admin toggle ON. Past settle grace so destroy
+     * never races Camera flip frames or first ad-neighbor paint.
+     */
+    private static final long FLIP_DESTROY_AFTER_SETTLE_MS = 220L;
+    /**
      * Prefetch coalescing — Sep-7 (3.41.6) fast-fill era used 90ms so the next
      * seat AdLoader starts soon after settle. 280ms starved parked house seats.
      */
@@ -523,6 +533,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private Runnable flipVideoTeardownRunnable;
     private Runnable flipTrackingRunnable;
     private Runnable flipRestoreRunnable;
+    /** Delayed flip-away NativeAd.destroy — cancelled if user flips again. */
+    private Runnable flipDestroyOffscreenRunnable;
+    /** Deferred footer/News|Read + FLAG_SECURE — after first landed paint (no mid-flip resize). */
+    private Runnable flipChromeSecureRunnable;
     private MessageQueue.IdleHandler flipTrackingIdleHandler;
     /** Video-tab autoplay: delay before smoothFlipTo next after STATE_ENDED. */
     private static final long VIDEO_AUTOPLAY_CHAIN_DELAY_MS = 520L;
@@ -1715,6 +1729,91 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             applySearchQueryExtra(intent);
             applyCategorySessionExtra(intent);
             applyDailyUpdatesOpenExtra(intent);
+            // WhatsApp share → StartingActivity CLEAR_TOP|SINGLE_TOP reuses this
+            // HomePage; must consume SHARE_REDIRECT_ID here (onCreate already ran).
+            applyShareRedirectFromIntent(intent);
+        }
+    }
+
+    /**
+     * Warm share open (app already on Home): pin the shared post without stacking
+     * another HomePage. Mirrors onCreate SHARE_REDIRECT_ID / PENDING_SHARE_POST.
+     */
+    private void applyShareRedirectFromIntent(@Nullable Intent intent) {
+        if (intent == null) {
+            return;
+        }
+        String shareRedirect = intent.getStringExtra("SHARE_REDIRECT_ID");
+        if (shareRedirect == null || shareRedirect.trim().isEmpty()
+                || "null".equalsIgnoreCase(shareRedirect.trim())
+                || "0".equals(shareRedirect.trim())) {
+            try {
+                String pendingShare = SharedPrefsData.getString(
+                        getApplicationContext(), Constants.PENDING_SHARE_POST, Constants.PREF_NAME);
+                if (pendingShare != null && !pendingShare.trim().isEmpty()
+                        && !"0".equals(pendingShare.trim())
+                        && !"null".equalsIgnoreCase(pendingShare.trim())) {
+                    shareRedirect = pendingShare.trim();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            SharedPrefsData.putString(
+                    getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        if (shareRedirect == null || shareRedirect.trim().isEmpty()
+                || "null".equalsIgnoreCase(shareRedirect.trim())
+                || "0".equals(shareRedirect.trim())) {
+            return;
+        }
+        long shareId;
+        try {
+            shareId = Long.parseLong(shareRedirect.trim());
+        } catch (NumberFormatException e) {
+            showLog("share onNewIntent bad id=" + shareRedirect);
+            return;
+        }
+        if (shareId <= 0) {
+            return;
+        }
+        SHARE_REDIRECT_ID = String.valueOf(shareId);
+        SHARE_ID = shareId;
+        deepLinkShareRescueAttempted = false;
+        showLog("share onNewIntent SHARE_ID=" + SHARE_ID);
+        try {
+            intent.removeExtra("SHARE_REDIRECT_ID");
+        } catch (Exception ignored) {
+        }
+        // Leave Read / Special / Flash so News land + share_post_id pin can run.
+        try {
+            bookmarksModeSelected = false;
+            setFeedModeFlags(false, false);
+            applyHomeModeContentVisibility();
+            refreshHomeModeToggleUi();
+        } catch (Exception ignored) {
+        }
+        try {
+            clearPendingFlipRestore();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (findListIndexForPostId(shareId) >= 0) {
+                maybeLandDeepLinkPostOnNews(false);
+            } else if (!scheduleDeepLinkShareRescue(shareId)) {
+                // Force a page-0 refresh with share sticky so List_All_Articles pins it.
+                last_post_id = 0;
+                skip = 0;
+                actual_skip = 0;
+                isApiRequested = true;
+                isDataParsed = true;
+                dummyResponse = null;
+                ShowNews_Data_Values(category_id, 0);
+            }
+        } catch (Exception e) {
+            showLog("share onNewIntent land failed: " + e.getMessage());
+            android.util.Log.e("MagazineCrash", "share onNewIntent: " + e.getMessage());
         }
     }
 
@@ -3398,12 +3497,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             pendingFlipSafeAdRebind = false;
         } catch (Exception ignored) {
         }
-        // Do not AdPreloader.prefetch on every flip cancel — that flooded requests
-        // without impressions. Mid-flip only soft-warms the next seat if needed.
-        try {
-            warmNextAdSeatDuringFlip();
-        } catch (Exception ignored) {
-        }
+        // Do NOT warm AdLoader / AdPreloader here. onFlippedToPage runs mid-animation
+        // (FlipView.dispatchDraw); ensureFeedNativeAdLoaded on the UI thread hitchs
+        // Camera flip frames. Reliability path is scheduleSettledAdWork after land.
     }
 
     /**
@@ -3413,6 +3509,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Prefer claiming an existing AdPreloader creative over starting a new AdLoader.
      */
     private void warmNextAdSeatDuringFlip() {
+        // Never start AdLoader / ensureFeedNativeAdLoaded mid-gesture — that is a
+        // primary hitch on fast flips. Shared pool soft-warm only; on-land
+        // scheduleSettledAdWork owns the reliability seat request.
+        if (isNewsFlipAnimating() || isNewsUserDrivingFlip()) {
+            try {
+                if (AdPreloader.get().readyCount() == 0 && !AdPreloader.get().isLoading()) {
+                    AdPreloader.get().prefetch(getApplicationContext());
+                }
+            } catch (Exception ignored) {
+            }
+            return;
+        }
         if (list == null || list.isEmpty()) {
             return;
         }
@@ -4210,14 +4318,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * After settle: destroy claimed/impressed natives whose seat is not the
-     * current Flip page (July / Play Store: flip-away release → fresh fill on
-     * return). Also destroys when the seat was removed from the list. Unimpressed
-     * warm pool + AdPreloader stay intact. Never transfers impressed creatives
-     * to another seat (money-safe). Always runs on flip-away (not gated by admin
-     * destroy toggle — that flag is retained for server compat only).
+     * current Flip page (fresh fill on return). Gated by admin
+     * {@code destroy_native_ads_after_impression} (default OFF for Play-smooth
+     * seat-sticky). When OFF this is a no-op — unpaid cross-seat reuse stays
+     * blocked via reqPos + claim-once in FlipperAdapter. Unimpressed warm pool
+     * + AdPreloader stay intact. Never call mid-flip.
      */
     public void destroyOffscreenImpressedNatives(int currentPage) {
         if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        if (!FeedAdConfig.isDestroyAfterImpression(this)) {
             return;
         }
         Integer currentSeatReqPos = null;
@@ -10635,6 +10746,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void closeBottomStrip(boolean closeStrip) {
         showLog("closeBottomStrip:"+closeStrip);
+        // Never thrash footer mid-flip / while chrome is deferred — GONE↔VISIBLE
+        // resizes FlipView (layout_weight) and reads as a double top-edge fall.
+        if (deferFlipChromeUntilSettle
+                || isNewsFlipAnimating()
+                || isNewsUserDrivingFlip()) {
+            deferFlipChromeUntilSettle = true;
+            return;
+        }
         // Share/ratings hide bottom tabs. Native in-feed ads keep footer visible;
         // only true interstitial format hides it (full-screen AdMob overlay).
         // FlipperAdapter case "ad" calls this on every bind — set-if-changed below.
@@ -10905,6 +11024,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (flipRestoreRunnable != null) {
             flipSettleHandler.removeCallbacks(flipRestoreRunnable);
             flipRestoreRunnable = null;
+        }
+        if (flipDestroyOffscreenRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipDestroyOffscreenRunnable);
+            flipDestroyOffscreenRunnable = null;
+        }
+        if (flipChromeSecureRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipChromeSecureRunnable);
+            flipChromeSecureRunnable = null;
         }
         cancelVideoAutoplayChain();
         cancelVideoAutoplayStart();
@@ -16056,14 +16183,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onBackPressed() {
         showLog("isPlayingVideoInFullScreen"+FlipperAdapter.fullscreen);
         showLog("isPlayingVideoInFullScreen"+isPlayingVideoInFullScreen);
-        // Special multi-image FlipView: back = previous gallery page (not exit / Profile).
-        if (isSpecialFeedMode() && mFlipView != null) {
+        // Nested magazine / Special gallery FlipView: back = previous page (not exit).
+        // Also covers News-tab magazines if a nested FlipView is present.
+        if (mFlipView != null) {
             try {
                 View page = mFlipView.getCurrentPageView();
                 if (SpecialGalleryFlipHelper.tryConsumeBack(page != null ? page : mFlipView)) {
                     return;
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                android.util.Log.e("MagazineCrash", "onBack nested gallery: " + e.getMessage());
             }
         }
         int count = this.getSupportFragmentManager().getBackStackEntryCount();
@@ -16185,10 +16314,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        // Special full-image galleries: horizontal page-turn must not land on the
+        // Special / nested magazine galleries: horizontal page-turn must not land on the
         // footer as a Profile / tab click, and must not race system-back edge.
-        if (isSpecialFeedMode() && bottomNavigationView != null && mFlipView != null
-                && mFlipView.getVisibility() == View.VISIBLE) {
+        boolean guardGallerySwipe = (isSpecialFeedMode()
+                || SpecialGalleryFlipHelper.isNestedGalleryDriving())
+                && bottomNavigationView != null && mFlipView != null
+                && mFlipView.getVisibility() == View.VISIBLE;
+        if (guardGallerySwipe) {
             if (galleryNavTouchSlop < 0) {
                 galleryNavTouchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
             }
@@ -16229,7 +16361,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     break;
             }
         }
-        return super.dispatchTouchEvent(ev);
+        try {
+            return super.dispatchTouchEvent(ev);
+        } catch (Exception e) {
+            // Nested FlipView / ViewPager NPEs during magazine swipe must not kill process.
+            android.util.Log.e("MagazineCrash", "dispatchTouchEvent: " + e.getMessage());
+            SpecialGalleryFlipHelper.clearNestedGalleryDriving();
+            return true;
+        }
     }
 
     private static boolean isRawTouchInsideView(@Nullable View v, float rawX, float rawY) {
@@ -16888,12 +17027,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
-        // Defer bottom nav / News|Read chrome when leaving or entering an ad shell —
-        // mid-gesture visibility thrash is the leave-ad jolt.
-        deferFlipChromeUntilSettle = leftAdShell || enteredAdShell
+        // Always defer footer / News|Read chrome while the scroller is running.
+        // GONE↔VISIBLE on home_page_navigation resizes FlipView (layout_weight) and
+        // reads as top edges "falling twice" — especially around ad before/after pages.
+        final boolean driving = mFlipView != null && mFlipView.isUserDrivingFlip();
+        deferFlipChromeUntilSettle = driving
+                || leftAdShell
+                || enteredAdShell
                 || isFlipChromeInterstitialType(post_type);
         if (!deferFlipChromeUntilSettle) {
-            // July-stable: hide bottom tabs on ad/share/ratings (online or offline).
+            // Already settled (programmatic flip): apply chrome immediately.
             if (isCurrentFlipInterstitialForFooter()) {
                 setHomePageNavigationVisibility(View.GONE);
             } else if (isDeviceOnline() && !offlineChromeMode) {
@@ -16952,23 +17095,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             e.printStackTrace();
         }
         // firbaseJSONObj was write-only (never read) — skip Gson build on settle.
-        // Whether this post is allowed to be captured (screenshots): ad/web surfaces
-        // and admin-allowed capture clear FLAG_SECURE; everything else keeps it set.
-        // Use cachedCaptureAllowed — do not hit SharedPreferences on settle.
-        boolean captureAllowed = cachedCaptureAllowed
-                || post_type.equalsIgnoreCase("ad")
-                || post_type.equalsIgnoreCase("web_ads")
-                || post_type.equalsIgnoreCase("web");
-        boolean desiredSecure = !captureAllowed;
-        // Only hit WindowManager when the secure state actually changes.
-        if (appliedSecureFlag == null || appliedSecureFlag != desiredSecure) {
-            if (desiredSecure) {
-                getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
-            } else {
-                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-            }
-            appliedSecureFlag = desiredSecure;
-        }
+        // FLAG_SECURE + footer/News|Read chrome deferred slightly so first landed
+        // frames match non-ad flip physics (no window/layout thrash mid-settle).
         if (post_type.equalsIgnoreCase("image_gallery")) {
             if (adapter != null && mFlipView != null && ppi >= 0 && ppi < mFlipView.getChildCount()) {
                 View flipChild = mFlipView.getChildAt(ppi);
@@ -17013,14 +17141,109 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // AdMob load / MediaView bind / pool refill — never on the settle frame.
         // Wait settle-grace; cancel if the user flips again before then.
         scheduleSettledAdWork(position);
-        // Leave-ad chrome + orphan seat prune — only after settle (no mid-gesture jolt).
-        applyDeferredFlipChromeAfterSettle();
+        scheduleDeferredFlipChromeAndSecure(position);
+        // Destroy impressed offscreen natives only when admin toggle ON — and only
+        // after settle delay (never mid-flip). OFF = Play-smooth seat-sticky keep.
+        scheduleFlipAwayDestroyIfEnabled(position);
+    }
+
+    /**
+     * Apply FLAG_SECURE + deferred footer/News|Read after first landed paint so
+     * ad-adjacent pages do not resize FlipView during/around the gesture.
+     */
+    private void scheduleDeferredFlipChromeAndSecure(final int settlePos) {
+        if (flipChromeSecureRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipChromeSecureRunnable);
+            flipChromeSecureRunnable = null;
+        }
+        flipChromeSecureRunnable = () -> {
+            flipChromeSecureRunnable = null;
+            try {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                if (settlePos != positionx) {
+                    return;
+                }
+                if (isNewsFlipAnimating() || isNewsUserDrivingFlip()) {
+                    // Still scrolling — retry once past grace; cancel on next flip.
+                    flipChromeSecureRunnable = () -> {
+                        flipChromeSecureRunnable = null;
+                        if (isFinishing() || isDestroyed() || settlePos != positionx) {
+                            return;
+                        }
+                        applyFlipSecureFlagForCurrentPost();
+                        applyDeferredFlipChromeAfterSettle();
+                    };
+                    flipSettleHandler.postDelayed(
+                            flipChromeSecureRunnable, FLIP_CHROME_SECURE_DEFER_MS);
+                    return;
+                }
+                applyFlipSecureFlagForCurrentPost();
+                applyDeferredFlipChromeAfterSettle();
+            } catch (Exception ignored) {
+            }
+        };
+        flipSettleHandler.postDelayed(
+                flipChromeSecureRunnable, FLIP_CHROME_SECURE_DEFER_MS);
+    }
+
+    /** Window FLAG_SECURE from post_type — never mid-gesture (WindowManager relayout). */
+    private void applyFlipSecureFlagForCurrentPost() {
         try {
-            if (adapter != null) {
-                adapter.releaseOffscreenAdMediaAfterSettle(position);
+            String type = post_type != null ? post_type : "";
+            boolean captureAllowed = cachedCaptureAllowed
+                    || type.equalsIgnoreCase("ad")
+                    || type.equalsIgnoreCase("web_ads")
+                    || type.equalsIgnoreCase("web");
+            boolean desiredSecure = !captureAllowed;
+            if (appliedSecureFlag == null || appliedSecureFlag != desiredSecure) {
+                if (desiredSecure) {
+                    getWindow().setFlags(
+                            WindowManager.LayoutParams.FLAG_SECURE,
+                            WindowManager.LayoutParams.FLAG_SECURE);
+                } else {
+                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                }
+                appliedSecureFlag = desiredSecure;
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * When admin destroy-after-impression is ON, destroy claimed/impressed natives
+     * for seats the user left — after settle delay only. OFF: no-op (seat-sticky).
+     */
+    private void scheduleFlipAwayDestroyIfEnabled(final int destroyForPage) {
+        if (flipDestroyOffscreenRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipDestroyOffscreenRunnable);
+            flipDestroyOffscreenRunnable = null;
+        }
+        if (!FeedAdConfig.isDestroyAfterImpression(this)) {
+            return;
+        }
+        flipDestroyOffscreenRunnable = () -> {
+            flipDestroyOffscreenRunnable = null;
+            try {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                if (destroyForPage != positionx) {
+                    return;
+                }
+                if (isNewsFlipAnimating() || isNewsUserDrivingFlip()) {
+                    return;
+                }
+                if (adapter != null) {
+                    adapter.releaseOffscreenAdMediaAfterSettle(destroyForPage);
+                }
+            } catch (Exception ignored) {
+            }
+        };
+        flipSettleHandler.postDelayed(
+                flipDestroyOffscreenRunnable,
+                Math.max(FLIP_DESTROY_AFTER_SETTLE_MS, AD_WORK_AFTER_SETTLE_MS));
     }
 
     /** Ads / share / ratings shells that hide article chrome. */

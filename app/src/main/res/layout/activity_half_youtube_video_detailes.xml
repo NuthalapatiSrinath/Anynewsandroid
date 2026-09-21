@@ -37,7 +37,7 @@
                         android:id="@+id/layoutParentTop"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="#000000">
+                        android:background="@android:color/transparent">
 
                         <TextView
                             android:id="@+id/textViewTitle"

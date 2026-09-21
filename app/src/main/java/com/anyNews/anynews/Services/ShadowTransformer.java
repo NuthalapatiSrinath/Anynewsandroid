@@ -21,16 +21,25 @@ public class ShadowTransformer implements ViewPager.OnPageChangeListener, ViewPa
     }
 
     public void enableScaling(boolean enable) {
+        if (mAdapter == null || mViewPager == null || mAdapter.getCount() < 1) {
+            mScalingEnabled = enable;
+            return;
+        }
+        int cur = mViewPager.getCurrentItem();
+        if (cur < 0 || cur >= mAdapter.getCount()) {
+            mScalingEnabled = enable;
+            return;
+        }
         if (mScalingEnabled && !enable) {
             // shrink main card
-            CardView currentCard = mAdapter.getCardViewAt(mViewPager.getCurrentItem());
+            CardView currentCard = mAdapter.getCardViewAt(cur);
             if (currentCard != null) {
                 currentCard.animate().scaleY(1);
                 currentCard.animate().scaleX(1);
             }
         }else if(!mScalingEnabled && enable){
             // grow main card
-            CardView currentCard = mAdapter.getCardViewAt(mViewPager.getCurrentItem());
+            CardView currentCard = mAdapter.getCardViewAt(cur);
             if (currentCard != null) {
                 currentCard.animate().scaleY(1.1f);
                 currentCard.animate().scaleX(1.1f);
@@ -47,6 +56,9 @@ public class ShadowTransformer implements ViewPager.OnPageChangeListener, ViewPa
 
     @Override
     public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
+        if (mAdapter == null || mAdapter.getCount() < 1) {
+            return;
+        }
         int realCurrentPosition;
         int nextPosition;
         float baseElevation = mAdapter.getBaseElevation();

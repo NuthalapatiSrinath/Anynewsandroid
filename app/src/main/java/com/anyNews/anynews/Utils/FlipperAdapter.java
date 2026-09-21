@@ -39,6 +39,7 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.media.RingtoneManager;
@@ -146,6 +147,8 @@ import com.anyNews.anynews.interfaces.ScreenShott;
 import com.anyNews.anynews.interfaces.ShareInterfaceListener;
 import com.anyNews.anynews.interfaces.SharePostToWhatsApp;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.Priority;
+import com.bumptech.glide.RequestBuilder;
 import com.bumptech.glide.load.DecodeFormat;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.request.RequestOptions;
@@ -490,6 +493,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     public void setCurrentFlipPage(int page) {
         currentFlipPage = page;
+        // Mid-gesture only: onFlippedToPage fires from dispatchDraw while scroller runs.
+        // Index update is enough; bind / watchdog / AdLoader / paint wait for land.
+        // Do NOT gate on settle-grace (shouldDeferAdWork) — settle still needs to arm
+        // the landed seat; MediaView paint is deferred inside bind/scheduleSettledAdWork.
+        if (isHomeFlipAnimating()) {
+            return;
+        }
         // Land: attach deferred buffer MediaView; if still on house shell, arm
         // parked in-place fill (no FlipView recycle / black loop).
         try {
@@ -513,20 +523,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 adShellAwaitingCreative.delete(page);
                 return;
             }
-            // House / empty shell — keep awaiting + poll warm shared pool in place.
+            // House / empty shell — arm parked fill; HomePage.scheduleSettledAdWork
+            // owns the reliability AdLoader (avoid double-stack on land).
             adShellAwaitingCreative.put(page, true);
             scheduleAdShellFillTimeout(page);
             armParkedAdFillWatchdog(page);
-            requestNativeAdLoadForSlot(slot);
-            tryPaintGoogleNativeInPlace(page);
+            if (!shouldDeferAdWork()) {
+                tryPaintGoogleNativeInPlace(page);
+            }
         } catch (Exception ignored) {
         }
     }
 
     /**
      * Soft-hide lived only on the overlay-era adapter. July / Play Store path:
-     * settle destroys claimed/impressed natives for seats the user left (admin
-     * destroy toggle ON) so flip-back requests a fresh AdMob fill.
+     * settle destroys claimed/impressed natives for seats the user left when
+     * admin destroy toggle is ON so flip-back requests a fresh AdMob fill.
      */
     public void pauseAdMediaForLeaveGesture(int adPage) {
         // intentionally empty during gesture — orphan prune happens on settle
@@ -534,7 +546,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * After settle: destroy claimed/impressed creatives for seats that are not
-     * the current page (flip-away). Flip-back then loads a new creative.
+     * the current page when admin destroy toggle is ON. OFF = seat-sticky keep.
      */
     public void releaseOffscreenAdMediaAfterSettle(int currentPage) {
         try {
@@ -622,6 +634,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } catch (Exception ignored) {
         }
         return FlipAdWorkGate.shouldDeferAdWork();
+    }
+
+    /** Admin destroy-after-impression (default OFF). Cached via FeedAdConfig. */
+    private boolean isDestroyImpressedEnabled() {
+        try {
+            return FeedAdConfig.isDestroyAfterImpression(context);
+        } catch (Exception ignored) {
+            return FeedAdConfig.DEFAULT_DESTROY_AFTER_IMPRESSION;
+        }
     }
 
     /**
@@ -1325,17 +1346,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 : peekExactGoogleNativeForSlot(googleSlot);
         // Only the landed seat may start a network load from getView.
         // Ahead buffer binds used to request without ever impressing.
+        // Mid-gesture / settle-grace: never AdLoader (HomePage settle owns it).
         if (position == currentFlipPage) {
             requestNativeAdLoadForSlot(googleSlot);
         }
 
         if (ad != null) {
-            if (position != currentFlipPage) {
-                showLog("Defer native MediaView bind for buffer ad page=" + position);
+            // Never attach NativeAd / MediaView mid-flip — hitch + white blink.
+            // Buffer pages and in-flight land both wait for settle bind.
+            if (position != currentFlipPage
+                    || isHomeFlipAnimating()
+                    || shouldDeferAdWork()) {
+                showLog("Defer native MediaView bind for ad page=" + position
+                        + (position == currentFlipPage ? " (land-wait)" : " (buffer)"));
                 pendingNativeAdBinds.put(position, new PendingNativeAdBind(
                         fl_adplaceholder, ad, myView, fromView, convertView));
-                // Share/house default until land paints — do not claim warm inventory early.
-                mountAdPendingEmptyShell(fl_adplaceholder, position, fromView);
+                // Keep live paint if already showing this seat; else house until settle.
+                if (!(placeholderHasNativeCreative(fl_adplaceholder)
+                        && isPaintedAdSeatForReqPos(convertView, needReqPos)
+                        && hasLiveGoogleNativePackedForReqPos(needReqPos))) {
+                    mountAdPendingEmptyShell(fl_adplaceholder, position, fromView);
+                }
             } else {
                 showLog("HomePage.nativeAdList displaying native ad (landed):");
                 showLog("fromView:;" + fromView);
@@ -1388,12 +1419,28 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         if (fbAd != null) {
             showLog(" fb ad :");
-            if (position != currentFlipPage) {
-                showLog("Defer FB native MediaView bind for buffer ad page=" + position);
+            if (position != currentFlipPage
+                    || isHomeFlipAnimating()
+                    || shouldDeferAdWork()) {
+                showLog("Defer FB native MediaView bind for ad page=" + position
+                        + (position == currentFlipPage ? " (land-wait)" : " (buffer)"));
                 pendingNativeAdBinds.put(position, new PendingNativeAdBind(
                         convertView, fbAd, adView, nativeAdLayout));
-                tagAdSeatReqPos(convertView, null);
-                mountFbAdPendingDefaultShell(nativeAdLayout, position);
+                try {
+                    View unit = nativeAdLayout.findViewById(R.id.ad_unit);
+                    boolean live = unit != null
+                            && nativeAdLayout.findViewById(R.id.ad_default_placeholder_root)
+                            == null
+                            && isPaintedAdSeatForReqPos(convertView, fbNeedReq)
+                            && hasLiveFbNativePackedForReqPos(fbNeedReq);
+                    if (!live) {
+                        tagAdSeatReqPos(convertView, null);
+                        mountFbAdPendingDefaultShell(nativeAdLayout, position);
+                    }
+                } catch (Exception ignored) {
+                    tagAdSeatReqPos(convertView, null);
+                    mountFbAdPendingDefaultShell(nativeAdLayout, position);
+                }
             } else {
                 ensureDarkAdUnderlay(nativeAdLayout);
                 tagAdSeatReqPos(convertView, fbNeedReq);
@@ -1425,6 +1472,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         adShellAwaitingCreative.delete(position);
         pendingNativeAdBinds.remove(position);
         clearAdShellPlaceholder(position);
+        // Safety: never attach MediaView mid-flip even if a caller raced settle.
+        if (isHomeFlipAnimating() || shouldDeferAdWork()) {
+            pendingNativeAdBinds.put(position, new PendingNativeAdBind(
+                    fl_adplaceholder, ad, myView, fromView, convertView));
+            return;
+        }
         if (position == parkedAdFillPage) {
             cancelParkedAdFillWatchdog();
         }
@@ -1717,6 +1770,91 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 .format(DecodeFormat.PREFER_RGB_565)
                 .override(w, h)
                 .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC);
+    }
+
+    /**
+     * Half/full YouTube card poster before iframe play.
+     * Always uses {@code i.ytimg.com/vi/{id}/maxresdefault.jpg} (hq fallback) —
+     * never CMS orange "Click Here", app_splash_logo, or a black plate when an id exists.
+     * Keeps the prior drawable while loading so recycle/bind does not flash black.
+     * Autoplay still starts via {@link #maybeAutoplayVisibleVideo} → center play click.
+     */
+    private void bindYoutubeFeedPoster(
+            @Nullable ImageView target, @Nullable ModelClass.Datum item) {
+        if (target == null || refusePosterOverLiveVideo(target)) {
+            return;
+        }
+        String ytId = null;
+        if (item != null) {
+            ytId = YouTubeIdHelper.extractFromItem(
+                    item.getVideoUrl(),
+                    item.getThumbnail(),
+                    item.getBackgroundImage(),
+                    item.getVideos(),
+                    item.getImages());
+        }
+        String poster = YouTubeIdHelper.feedPosterUrlForId(ytId);
+        String hqFallback = YouTubeIdHelper.hqDefaultThumbnailUrlForId(ytId);
+        try {
+            if (imageLoader != null) {
+                imageLoader.cancelDisplayTask(target);
+            }
+        } catch (Exception ignored) {
+        }
+        // No id → leave whatever is there; never paint black/splash/CMS art.
+        if (TextUtils.isEmpty(poster)) {
+            target.setTag(null);
+            try {
+                target.setBackground(null);
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+        final String contentKey = "ytposter:" + ytId;
+        Object prev = target.getTag();
+        if (prev != null
+                && contentKey.equals(String.valueOf(prev))
+                && target.getDrawable() != null) {
+            return;
+        }
+        // Keep previous thumb visible while the new YT URL loads (no black flash).
+        Drawable keepWhileLoading = target.getDrawable();
+        target.setTag(contentKey);
+        try {
+            target.setBackground(null);
+        } catch (Exception ignored) {
+        }
+        if (!isValidContextForGlide(context)) {
+            return;
+        }
+        try {
+            RequestBuilder<Drawable> errorBuilder = Glide.with(context)
+                    .load(hqFallback)
+                    .apply(flipGlideDecodeOptions().dontAnimate());
+            if (keepWhileLoading != null) {
+                errorBuilder = errorBuilder.placeholder(keepWhileLoading);
+            }
+            RequestBuilder<Drawable> primary = Glide.with(context)
+                    .load(poster)
+                    .apply(flipGlideDecodeOptions().dontAnimate())
+                    .error(errorBuilder);
+            if (keepWhileLoading != null) {
+                primary = primary.placeholder(keepWhileLoading);
+            }
+            primary.into(target);
+        } catch (Exception e) {
+            showLog("bindYoutubeFeedPoster: " + e.getMessage());
+            // Last resort: still try hq URL — never black/splash.
+            try {
+                if (!TextUtils.isEmpty(hqFallback) && isValidContextForGlide(context)) {
+                    Glide.with(context)
+                            .load(hqFallback)
+                            .apply(flipGlideDecodeOptions().dontAnimate())
+                            .into(target);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     /**
@@ -4843,8 +4981,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                             list.get(position),
                                             list.get(position).getBackgroundImage());
                             if (magBg != null) {
+                                // LOW so CardPager page-0 IMMEDIATE cover wins the Glide pool.
                                 Glide.with(context).load(magBg)
                                         .apply(flipGlideDecodeOptions())
+                                        .priority(Priority.LOW)
                                         .into(new SimpleTarget<Drawable>() {
                                     @Override
                                     public void onResourceReady(Drawable resource, Transition<? super Drawable> transition) {
@@ -4857,27 +4997,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                             context,
                                             list.get(position).getPostId(),
                                             list.get(position).getImages());
+                            // Empty gallery → ViewPager getCount=0 + ShadowTransformer
+                            // getCardViewAt(0) IndexOOB → process death on share open /
+                            // magazine bind (looks like “automatically back”).
+                            if (magImages == null) {
+                                magImages = new ArrayList<>();
+                            }
+                            if (magImages.isEmpty()) {
+                                magImages.add("");
+                                android.util.Log.e("MagazineCrash",
+                                        "magazine empty images → placeholder postId="
+                                                + list.get(position).getPostId());
+                            }
                             TextView magSwipeHint =
                                     convertView.findViewById(R.id.gallery_swipe_left_hint);
-                            // Special: book FlipView page-turn (not ViewPager carousel).
-                            if (isSpecialModeNow() && magzine_relative_slider != null) {
-                                FlipView magFlip = SpecialGalleryFlipHelper.bind(
-                                        magzine_relative_slider,
-                                        image_magazineHolder.magzine_viewPager_data,
-                                        magImages,
-                                        magSwipeHint,
-                                        image_magazineHolder.magzine_ll_dots,
-                                        null);
-                                if (magFlip != null) {
-                                    // Remove carousel padding so pages are full-bleed.
-                                    try {
-                                        image_magazineHolder.magzine_viewPager_data
-                                                .setPadding(0, 0, 0, 0);
-                                    } catch (Exception ignored) {
-                                    }
-                                    break;
-                                }
-                            }
+                            // Magazines / post_type magazine: always CardPager carousel (live /
+                            // pre-e23bbb9). SpecialGalleryFlipHelper FIT_CENTER letterboxed
+                            // posters into a black bar with dots below the image.
                             mCardAdapter = new CardPagerAdapter(context, list.get(position).getStrip_content(), new CardPagerAdapter.shareMagazine() {
                                 @Override
                                 public void onClickShareMagzine(CardView cardView, ImageView imageView1) {
@@ -4893,6 +5029,26 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             mCardShadowTransformer.enableScaling(true);
                             image_magazineHolder.magzine_viewPager_data.setVisibility(VISIBLE);
                             image_magazineHolder.magzine_viewPager_data.setAdapter(mCardAdapter);
+                            // enableScaling() runs before instantiateItem, so apply the live
+                            // 1.1 scale after pages exist — card grows into bottom padding and
+                            // dots overlay the poster (not a black gap below it).
+                            final CardPagerAdapter magPagerAdapter = mCardAdapter;
+                            final ViewPager magPager =
+                                    image_magazineHolder.magzine_viewPager_data;
+                            magPager.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        int cur = magPager.getCurrentItem();
+                                        CardView card = magPagerAdapter.getCardViewAt(cur);
+                                        if (card != null) {
+                                            card.setScaleX(1.1f);
+                                            card.setScaleY(1.1f);
+                                        }
+                                    } catch (Exception ignored) {
+                                    }
+                                }
+                            });
                             image_magazineHolder.magzine_ll_dots.removeAllViews();
                             dots = new TextView[mCardAdapter.getCount()];
                             for (int i = 0; i < dots.length; i++) {
@@ -5211,15 +5367,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         } else {
                             image_gallary.add("");
                         }
-                        viewpager.setAdapter(new SamplePagerAdapter(context, image_gallary, 0, false));
-                        // added to increase speed in view pager
-                        viewpager.setOffscreenPageLimit(Math.max(1, Math.min(2, image_gallary.size() - 1)));
                         TextView gallerySwipeHint =
                                 convertView.findViewById(R.id.gallery_swipe_left_hint);
                         // Special: FlipView book page-turn instead of ViewPager slide.
                         // Host must be scrren_icon (ViewPager parent) so single-page share
                         // screenshots include the flipped image — not the FrameLayout root
                         // behind a transparent overlay.
+                        //
+                        // Bind FlipView BEFORE attaching SamplePagerAdapter. Previously we
+                        // setAdapter(UIL) then SpecialGalleryFlipHelper.setAdapter(null),
+                        // which cancelled in-flight page-0 loads while page 1 often already
+                        // sat in memory cache → first image blank/slow, next already there;
+                        // leave+return looked fine once page 0 finished into cache.
                         boolean usedSpecialGalleryFlip = false;
                         ViewGroup galleryFlipHost = null;
                         if (viewpager.getParent() instanceof ViewGroup) {
@@ -5254,6 +5413,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             }
                         }
                         if (!usedSpecialGalleryFlip) {
+                            viewpager.setAdapter(
+                                    new SamplePagerAdapter(context, image_gallary, 0, false));
+                            // Keep 1–2 neighbors warm (default offscreen is also 1).
+                            viewpager.setOffscreenPageLimit(
+                                    Math.max(1, Math.min(2, image_gallary.size() - 1)));
                             if (imageGallaryHolder.indicator != null) {
                                 imageGallaryHolder.indicator.setViewPager(viewpager);
                             }
@@ -5788,8 +5952,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Exact pool match only — never consumes {@link AdPreloader}. Used when getView
      * will defer MediaView paint (mid-flip / settle grace) so a buffer shell cannot
-     * strand the warm creative on an ahead reqPos. Skips impressed creatives
-     * (destroyed on flip-away; not sticky on return).
+     * strand the warm creative on an ahead reqPos. When destroy-after-impression
+     * is OFF, impressed exact matches are seat-sticky (peek OK). When ON, skip
+     * impressed so flip-back requests a fresh fill.
      */
     @Nullable
     private NativeAd peekExactGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -5802,8 +5967,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
                 if (packed == null || packed.getAd() == null) continue;
                 if (packed.getReqPos() == slotPos) {
-                    // Impressed = already paid; flip-back must not peek the same creative.
-                    if (packed.isImpressed()) {
+                    if (packed.isImpressed() && isDestroyImpressedEnabled()) {
                         return null;
                     }
                     return packed.getAd();
@@ -5815,12 +5979,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Exact {@code ad_req_position} match first (unimpressed / first paint only),
-     * then ready-pool transfer: orphan (reqPos not on a live ad seat) or an
-     * <b>unclaimed</b> creative from a seat further ahead (idle only).
-     * Claimed/impressed creatives are never handed to another seat (money-safe).
-     * Impressed exact matches are released so flip-back requests a fresh AdMob fill
-     * (July / Play Store path — no seat-sticky same creative).
+     * Exact {@code ad_req_position} match first, then ready-pool transfer: orphan
+     * (reqPos not on a live ad seat) or an <b>unclaimed</b> creative from a seat
+     * further ahead (idle only). Claimed/impressed creatives are never handed to
+     * another seat (money-safe unpaid-reuse guard).
+     * <p>
+     * Destroy toggle ON: impressed exact matches are released so flip-back
+     * requests a fresh AdMob fill. OFF (default): seat-sticky re-show on same
+     * reqPos without destroy.
      */
     @Nullable
     private NativeAd findGoogleNativeForSlot(@Nullable ModelClass.Datum slot) {
@@ -5834,11 +6000,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (packed == null || packed.getAd() == null) continue;
                 if (packed.getReqPos() != slotPos) continue;
                 if (packed.isImpressed()) {
-                    // Flip-back / re-land: drop paid creative and request anew.
-                    showLog("HomePage.nativeAdList release impressed for fresh fill reqPos="
-                            + slotPos);
-                    releaseImpressedGooglePackedAt(i);
-                    break;
+                    if (isDestroyImpressedEnabled()) {
+                        // Flip-back / re-land: drop paid creative and request anew.
+                        showLog("HomePage.nativeAdList release impressed for fresh fill reqPos="
+                                + slotPos);
+                        releaseImpressedGooglePackedAt(i);
+                        break;
+                    }
+                    // OFF: seat-sticky same reqPos — re-show same creative.
+                    showLog("HomePage.nativeAdList seat-sticky impressed reqPos=" + slotPos);
+                    return packed.getAd();
                 }
                 showLog("HomePage.nativeAdList exact pos match reqPos=" + slotPos
                         + (packed.isClaimed() ? " (claimed same-seat)" : ""));
@@ -6194,9 +6365,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (packed == null || packed.getFbAd() == null) continue;
             if (packed.getReqPos() == slotPos) {
                 if (packed.isImpressed()) {
-                    showLog("fb release impressed for fresh fill reqPos=" + slotPos);
-                    releaseImpressedFbPackedAt(i);
-                    return null;
+                    if (isDestroyImpressedEnabled()) {
+                        showLog("fb release impressed for fresh fill reqPos=" + slotPos);
+                        releaseImpressedFbPackedAt(i);
+                        return null;
+                    }
+                    showLog("fb seat-sticky impressed reqPos=" + slotPos);
+                    return packed.getFbAd();
                 }
                 return packed.getFbAd();
             }
@@ -6205,9 +6380,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * True when Google/FB has an exact <b>unimpressed</b> creative <b>or</b> an
+     * True when Google/FB has an exact claimable creative <b>or</b> an
      * unclaimed ready-pool ad that can be transferred (orphan / ahead). Peek only
-     * — does not mutate. Impressed exact seats do not count (fresh fill needed).
+     * — does not mutate. Impressed exact seats count as ready when destroy toggle
+     * is OFF (seat-sticky); when ON they need a fresh fill.
      * <p>
      * {@link AdPreloader} being ready is <b>not</b> enough: that warm creative may
      * never claim onto this seat (primary_only / rebind miss) and used to skip
@@ -6241,8 +6417,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     FlipGoogleNativeAds packed = HomePage.nativeGoogleAdList.get(i);
                     if (packed == null || packed.getAd() == null) continue;
                     if (packed.getReqPos() == slotPos) {
-                        // Impressed = need fresh fill; do not treat as ready creative.
-                        if (!packed.isImpressed()) {
+                        if (!packed.isImpressed() || !isDestroyImpressedEnabled()) {
                             return true;
                         }
                         continue;
@@ -6261,7 +6436,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     FlipGoogleNativeAds packed = HomePage.nativeFBAdList.get(i);
                     if (packed == null || packed.getFbAd() == null) continue;
                     if (packed.getReqPos() == slotPos) {
-                        if (!packed.isImpressed()) {
+                        if (!packed.isImpressed() || !isDestroyImpressedEnabled()) {
                             return true;
                         }
                         continue;
@@ -6289,6 +6464,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void requestNativeAdLoadForSlot(@Nullable ModelClass.Datum slot) {
         if (slot == null || !(context instanceof HomePage)) return;
         try {
+            // Never start AdLoader mid-gesture — hitch on Camera flip frames.
+            // HomePage.scheduleSettledAdWork owns the reliability path on land.
+            if (isHomeFlipAnimating() || shouldDeferAdWork()) {
+                return;
+            }
             // Prefer painting an already-matched / transferable seat creative.
             if (hasNativeCreativeForSlot(slot)) {
                 return;
@@ -7003,21 +7183,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         ((Activity) convertView.getContext()).getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
 
-        newFullImageView1.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (fullVideoNewYoutubeViewHolder.side_menu.isShown() || fullVideoNewYoutubeViewHolder.side_menu.getVisibility() == View.VISIBLE) {
-                    fullVideoNewYoutubeViewHolder.side_menu = convertView.findViewById(R.id.video_side_menu);
-                    fullVideoNewYoutubeViewHolder.side_menu.setVisibility(View.INVISIBLE);
-                    showLog("fullVideoNewYoutubeViewHolder "+ "click gone");
-                } else {
-                    fullVideoNewYoutubeViewHolder.side_menu = convertView.findViewById(R.id.video_side_menu);
-                    fullVideoNewYoutubeViewHolder.side_menu.setVisibility(View.VISIBLE);
-                    showLog("fullVideoNewYoutubeViewHolder "+ "click visible");
-
-                }
-            }
-        });
+        // Keep iframe hidden until play — its blank WebView is black and must not
+        // show behind / instead of the YouTube poster thumb.
+        try {
+            youTubePlayerView.setVisibility(View.GONE);
+        } catch (Exception ignored) {
+        }
+        if (newFullImageView1 != null) {
+            newFullImageView1.setVisibility(View.VISIBLE);
+            newFullImageView1.setClickable(true);
+            newFullImageView1.setFocusable(true);
+        }
+        if (imageViewYoutubePlayVideo != null) {
+            imageViewYoutubePlayVideo.setVisibility(View.VISIBLE);
+        }
 
         fullVideoNewYoutubeViewHolder.user_pic.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -7032,15 +7211,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         });
         isFullYoutubeVideoIsInitialized=false;
 
-        if (list.get(position).getTitle() != null)
-
-            if (list.get(position).getVideoUrl() != null && isValidContextForGlide(context)) {
-                loadArticleImageGlide(
-                        convertView.getContext(),
-                        newFullImageView1,
-                        list.get(position),
-                        list.get(position).getThumbnail());
-            }
+        // Real YouTube thumb only — never CMS orange / splash / black plate.
+        bindYoutubeFeedPoster(newFullImageView1, list.get(position));
 
         bindThreeStateIcon(fullVideoNewYoutubeViewHolder.like_for_video_image, list.get(position).getLikeStatus());
         hideDislikeView(dislike_for_video_ll);
@@ -7050,19 +7222,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Override
             public void onClick(View view) {
                 fullVideoNewYoutubeViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
-                fullVideoNewYoutubeViewHolder.side_menu.setVisibility(View.INVISIBLE);
+                if (fullVideoNewYoutubeViewHolder.side_menu != null) {
+                    fullVideoNewYoutubeViewHolder.side_menu.setVisibility(View.INVISIBLE);
+                }
                 if (true) {
                     new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                         @Override
                         public void run() {
+                            // Keep YT poster visible until iframe is ready — do not flash black.
                             imageViewYoutubePlayVideo.setVisibility(GONE);
-                            newFullImageView1.setVisibility(GONE);
                             isFullYoutubeVideoIsInitialized=true;
                             youTubePlayerView.setVisibility(View.VISIBLE);
                             View v = youTubePlayerView.inflateCustomPlayerUi(R.layout.youtube_custom_player_ui);
                             YouTubePlayerListener listener = new com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {
                                 @Override
                                 public void onReady(@NonNull com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer youTubePlayer) {
+                                    try {
+                                        newFullImageView1.setVisibility(GONE);
+                                    } catch (Exception ignored) {
+                                    }
                                     fullVideocustomPlayerUiController = new CustomPlayerUiController(context, v, youTubePlayer, youTubePlayerView, layoutHeight, true,new CustomPlayerUiController.ShowFullScreenVideo() {
                                         @Override
                                         public void showFullScreenVideo(boolean b) {
@@ -7108,10 +7286,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                             () -> markUserPausedVideoAutoplay(),
                                             () -> clearUserPausedVideoAutoplay());
                                     attachYoutubeEndedAutoplayListener(youTubePlayer, position);
-                                    String fullYtId = YouTubeIdHelper.extract(
-                                            list.get(position).getVideoUrl());
+                                    ModelClass.Datum fullItem = list.get(position);
+                                    String fullYtId = YouTubeIdHelper.extractFromItem(
+                                            fullItem.getVideoUrl(),
+                                            fullItem.getThumbnail(),
+                                            fullItem.getBackgroundImage(),
+                                            fullItem.getVideos(),
+                                            fullItem.getImages());
                                     if (TextUtils.isEmpty(fullYtId)) {
-                                        fullYtId = list.get(position).getVideoUrl();
+                                        fullYtId = YouTubeIdHelper.extract(fullItem.getVideoUrl());
                                     }
                                     if (!TextUtils.isEmpty(fullYtId)) {
                                         YouTubePlayerUtils.loadOrCueVideo(
@@ -7131,6 +7314,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             }
         });
+
+        // Poster tap = play YouTube immediately (same path as center play).
+        if (newFullImageView1 != null) {
+            newFullImageView1.setOnClickListener(v -> {
+                if (imageViewYoutubePlayVideo != null
+                        && imageViewYoutubePlayVideo.getVisibility() == View.VISIBLE) {
+                    imageViewYoutubePlayVideo.performClick();
+                }
+            });
+        }
 
 
 
@@ -9503,17 +9696,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         showLog("showNormalVideo"+ "after thubnails 2");
 
-        if (list.get(position).getTitle() != null){
-            if (list.get(position).getVideoUrl() != null && isValidContextForGlide(context)) {
-                 displayArticleImage(
-                         imageViewItems,
-                         list.get(position),
-                         list.get(position).getThumbnail());
-            }
-        }
+        // Real YouTube thumb only — never CMS orange / splash / black plate.
+        bindYoutubeFeedPoster(imageViewItems, list.get(position));
 
         isYoutubeVideoIsInitialized=false;
         imageViewYoutubePlayVideo.setVisibility(View.VISIBLE);
+        if (imageViewItems != null) {
+            imageViewItems.setVisibility(View.VISIBLE);
+            imageViewItems.setClickable(true);
+            imageViewItems.setFocusable(true);
+        }
+        try {
+            // Half player host stays empty until tap — avoids black iframe plate.
+            halfyoutubecontainer.setVisibility(View.GONE);
+            halfyoutubecontainer.removeAllViews();
+        } catch (Exception ignored) {
+        }
+        try {
+            // Video area must not sit on a black plate under the YT thumb.
+            layoutParentTop.setBackgroundColor(Color.TRANSPARENT);
+        } catch (Exception ignored) {
+        }
 
         //....................................................Upload video..............................
         layoutParentTitle.setVisibility(View.VISIBLE);
@@ -9549,14 +9752,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             halfyoutubecontainer.addView(youTubePlayerView);
 
                             showLog("Data::"+isYoutubeVideoIsInitialized);
-                            youtubeprogressbar.setVisibility(VISIBLE);
+                            // Keep YT poster under the player until onReady — no black plate.
+                            youtubeprogressbar.setVisibility(GONE);
                             textViewWebUrl.setVisibility(View.GONE);
-                            imageViewItems.setVisibility(View.GONE);
+                            imageViewYoutubePlayVideo.setVisibility(View.GONE);
+                            imageViewItems.setVisibility(View.VISIBLE);
                             youTubePlayerView.setVisibility(View.VISIBLE);
                             View v = youTubePlayerView.inflateCustomPlayerUi(R.layout.youtube_custom_player_ui);
                             listener = new AbstractYouTubePlayerListener() {
                                 @Override
                                 public void onReady(@NonNull com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer youTubePlayer) {
+                                    try {
+                                        imageViewItems.setVisibility(View.GONE);
+                                        imageViewYoutubePlayVideo.setVisibility(View.GONE);
+                                    } catch (Exception ignored) {
+                                    }
                                     layoutParentTitle.setVisibility(View.VISIBLE);
                                     layoutParentReportDetails.setVisibility(View.VISIBLE);
                                     layoutParentMiddle.setVisibility(View.VISIBLE);
@@ -9595,10 +9805,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                             () -> markUserPausedVideoAutoplay(),
                                             () -> clearUserPausedVideoAutoplay());
                                     attachYoutubeEndedAutoplayListener(youTubePlayer, position);
-                                    String halfYtId = YouTubeIdHelper.extract(
-                                            list.get(position).getVideoUrl());
+                                    ModelClass.Datum halfItem = list.get(position);
+                                    String halfYtId = YouTubeIdHelper.extractFromItem(
+                                            halfItem.getVideoUrl(),
+                                            halfItem.getThumbnail(),
+                                            halfItem.getBackgroundImage(),
+                                            halfItem.getVideos(),
+                                            halfItem.getImages());
                                     if (TextUtils.isEmpty(halfYtId)) {
-                                        halfYtId = list.get(position).getVideoUrl();
+                                        halfYtId = YouTubeIdHelper.extract(halfItem.getVideoUrl());
                                     }
                                     if (!TextUtils.isEmpty(halfYtId)) {
                                         YouTubePlayerUtils.loadOrCueVideo(
@@ -9626,6 +9841,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             }
         });
+        // Poster tap = play YouTube immediately (same path as center play).
+        if (imageViewItems != null) {
+            imageViewItems.setOnClickListener(v -> {
+                if (imageViewYoutubePlayVideo != null
+                        && imageViewYoutubePlayVideo.getVisibility() == View.VISIBLE) {
+                    imageViewYoutubePlayVideo.performClick();
+                }
+            });
+        }
         //....................................................DONE........................................
 
         if (list.get(position).getIsFollow() == 0) {

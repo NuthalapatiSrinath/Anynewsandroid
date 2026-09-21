@@ -395,8 +395,9 @@ public class Constants {
      */
     public static String AD_IMPR_FLUSH_EVERY_N = "ad_impr_flush_every_n";
     /**
-     * Retained for admin/server compat (default ON). Flip-away and mode-switch
-     * always destroy claimed/impressed natives regardless of this flag.
+     * Admin destroy-after-impression (default OFF for flip smoothness).
+     * ON: destroy claimed/impressed natives after flip-away settle.
+     * OFF: seat-sticky keep on same reqPos; never unpaid cross-seat reuse.
      * Admin: Configuration → Performance Tuning → Destroy native ads after impression.
      */
     public static String DESTROY_NATIVE_ADS_AFTER_IMPRESSION =

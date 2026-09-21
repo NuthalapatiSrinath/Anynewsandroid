@@ -81,6 +81,11 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
 
     @Override
     public CardView getCardViewAt(int position) {
+        if (mViews == null || position < 0 || position >= mViews.size()) {
+            android.util.Log.e("MagazineCrash", "getCardViewAt OOB pos=" + position
+                    + " size=" + (mViews == null ? -1 : mViews.size()));
+            return null;
+        }
         return mViews.get(position);
     }
 
@@ -97,11 +102,18 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
     @SuppressLint("SetTextI18n")
     @Override
     public Object instantiateItem(ViewGroup container, int position) {
+        if (mData == null || position < 0 || position >= mData.size()) {
+            android.util.Log.e("MagazineCrash", "instantiateItem bad pos=" + position
+                    + " dataSize=" + (mData == null ? -1 : mData.size()));
+            View empty = new View(container.getContext());
+            container.addView(empty);
+            return empty;
+        }
         View view = LayoutInflater.from(container.getContext())
                 .inflate(R.layout.adapter, container, false);
         container.addView(view);
 
-        bind(mData.get(position), view);
+        bind(mData.get(position), view, position);
         CardView cardView = (CardView) view.findViewById(R.id.cardView);
         ImageView images=(ImageView)view.findViewById(R.id.images);
         imageView1=(ImageView)view.findViewById(R.id.imageView1);
@@ -144,14 +156,27 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
         cardView.setFocusableInTouchMode(false);
 
         cardView.setMaxCardElevation(mBaseElevation * MAX_ELEVATION_FACTOR);
-        mViews.set(position,cardView);
+        if (position >= 0 && position < mViews.size()) {
+            mViews.set(position, cardView);
+        } else {
+            android.util.Log.e("MagazineCrash", "instantiateItem mViews OOB pos=" + position
+                    + " size=" + mViews.size());
+        }
         return view;
     }
 
     @Override
     public void destroyItem(ViewGroup container, int position, Object object) {
-        container.removeView((View) object);
-        mViews.set(position, null);
+        try {
+            if (object instanceof View) {
+                container.removeView((View) object);
+            }
+        } catch (Exception e) {
+            android.util.Log.e("MagazineCrash", "destroyItem remove failed: " + e.getMessage());
+        }
+        if (mViews != null && position >= 0 && position < mViews.size()) {
+            mViews.set(position, null);
+        }
     }
 
     private void Share_Count_Value(String share,long post_id){
@@ -201,14 +226,17 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
         });
 
     }
-    private void bind(CardItem item, View view) {
-
+    private void bind(CardItem item, View view, int position) {
         try {
-
-            ImageView images=(ImageView)view.findViewById(R.id.images);
-            Glide.with(context).load(item.getText()).into(images);
-
-        }catch (RuntimeException e){
+            ImageView images = (ImageView) view.findViewById(R.id.images);
+            // Page 0 is on-screen first; neighbors also instantiate (offscreen=1) at the
+            // same time as a background Glide load — without IMMEDIATE, cover can lose
+            // the race to page 1 and look empty until leave/return hits cache.
+            com.bumptech.glide.Priority priority = position == 0
+                    ? com.bumptech.glide.Priority.IMMEDIATE
+                    : com.bumptech.glide.Priority.NORMAL;
+            Glide.with(context).load(item.getText()).priority(priority).into(images);
+        } catch (RuntimeException e) {
             e.printStackTrace();
         }
     }

@@ -997,33 +997,36 @@ public class FlipView extends FrameLayout {
      */
     public void recycleActiveViews(View pinKeep) {
         // remove and recycle the currently active views
-        if (mPreviousPage.valid) {
-            if (mPreviousPage.v != pinKeep) {
-                removeView(mPreviousPage.v);
-                mRecycler.addScrapView(mPreviousPage.v, mPreviousPage.position,
-                        mPreviousPage.viewType, mPreviousPage.boundItemId,
-                        mPreviousPage.boundGeneration);
+        scrapActivePage(mPreviousPage, pinKeep);
+        scrapActivePage(mCurrentPage, pinKeep);
+        scrapActivePage(mNextPage, pinKeep);
+    }
+
+    /** Null-safe scrap: never {@code removeView(null)} (NPE) when valid but child missing. */
+    private void scrapActivePage(Page page, View pinKeep) {
+        if (page == null || !page.valid) {
+            if (page != null) {
+                page.valid = false;
             }
-            mPreviousPage.valid = false;
+            return;
         }
-        if (mCurrentPage.valid) {
-            if (mCurrentPage.v != pinKeep) {
-                removeView(mCurrentPage.v);
-                mRecycler.addScrapView(mCurrentPage.v, mCurrentPage.position,
-                        mCurrentPage.viewType, mCurrentPage.boundItemId,
-                        mCurrentPage.boundGeneration);
+        View v = page.v;
+        if (v != null && v != pinKeep) {
+            try {
+                removeView(v);
+            } catch (Exception e) {
+                Log.e("FlipViewCrash", "recycle removeView failed pos=" + page.position
+                        + " err=" + e.getMessage());
             }
-            mCurrentPage.valid = false;
-        }
-        if (mNextPage.valid) {
-            if (mNextPage.v != pinKeep) {
-                removeView(mNextPage.v);
-                mRecycler.addScrapView(mNextPage.v, mNextPage.position,
-                        mNextPage.viewType, mNextPage.boundItemId,
-                        mNextPage.boundGeneration);
+            try {
+                mRecycler.addScrapView(v, page.position, page.viewType,
+                        page.boundItemId, page.boundGeneration);
+            } catch (Exception e) {
+                Log.e("FlipViewCrash", "recycle addScrap failed pos=" + page.position
+                        + " err=" + e.getMessage());
             }
-            mNextPage.valid = false;
         }
+        page.valid = false;
     }
 
     public void setViewscrap(int index) {
@@ -1258,6 +1261,21 @@ public class FlipView extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        try {
+            return onTouchEventInner(ev);
+        } catch (Exception e) {
+            Log.e("FlipViewCrash", "onTouchEvent fatal: " + e.getMessage());
+            try {
+                endFlip();
+            } catch (Exception ignored) {
+            }
+            releaseParentDisallow();
+            mActivePointerId = INVALID_POINTER;
+            return true;
+        }
+    }
+
+    private boolean onTouchEventInner(MotionEvent ev) {
         if (!mIsFlippingEnabled) {
             return false;
         }
@@ -1350,44 +1368,13 @@ public class FlipView extends FrameLayout {
                     if (mFlipDistance > (maxFlipDistance + 30)) {
                         mFlipDistance = maxFlipDistance;
                     }
-//                    //System.out.println("maxFlipDistance  " + maxFlipDistance);
-//                    //System.out.println("MFLIPDISTANCE LIBRARY " + mFlipDistance);
-                    /*
-                     * if(mFlipDistance<=-50){ mFlipDistance=0; }
-                     * if(deltaFlipDistance<=0){ deltaFlipDistance=(float) 0.22; }
-                     */
-                    /*
-                     * if(mFlipDistance>=120){ mFlipDistance=0; }
-                     */
-//                    //System.out.println(getHeight());
-//                    //System.out.println(FLIP_DISTANCE_PER_PAGE);
-//                    //System.out.println(getHeight() / FLIP_DISTANCE_PER_PAGE);
-//                    //System.out.println("xxxxxx        :: " + ((isFlippingVertically()
-//                            ? getHeight()
-//                            : getWidth()) / FLIP_DISTANCE_PER_PAGE));
-//                    //System.out.println("mLastX        :: " + mLastX);
                     deltaFlipDistance /= pageTravelScale();
                     // One motion event cannot skip the feed or slam distance to 0/end.
                     // Small phones used to divide by 0 here (short FlipView) and explode.
                     deltaFlipDistance = clampFlipDelta(deltaFlipDistance);
-//                    //System.out.println("mFlipDistance   ::" + mFlipDistance);
-//                    //System.out.println("deltaFlipDistance   ::" + deltaFlipDistance);
 					farword = deltaFlipDistance < 0;
-//                    //System.out.println("before setFlipdistance  "
-//                            + //System.currentTimeMillis());
-//                    //System.out.println("total  "
-//                            + (mFlipDistance % FLIP_DISTANCE_PER_PAGE) + "   "
-//                            + deltaFlipDistance);
-//                    //System.out.println("aaaaaaaaaa     "
-//                            + (mFlipDistance + deltaFlipDistance)
-//                            % FLIP_DISTANCE_PER_PAGE);
-                    // if((mFlipDistance +
-                    // deltaFlipDistance)%FLIP_DISTANCE_PER_PAGE)
-                    // flipnext
-                    // if(flipnext){
                     setFlipDistance(mFlipDistance + deltaFlipDistance);
                     deltaFlipDistance = deltaFlipDistance;
-                    // }
                     ///nullpointer exception   java.lang.IllegalStateException: The specified child already has a parent. You must call removeView() on the child's parent first.
                     // Search open / mid-gesture cancel can recycle the tracker while
                     // ACTION_MOVE still arrives with mIsFlipping — never NPE here.
@@ -1409,43 +1396,21 @@ public class FlipView extends FrameLayout {
                                 velocityTracker, mActivePointerId);
                     }
                     final int minFlipDistance = 0;
-                    // mIsFlipping=false;
-                    /*
-                     * final int maxFlipDistance = (mPageCount - 1)
-                     * FLIP_DISTANCE_PER_PAGE;
-                     */
                     final boolean isOverFlipping = mFlipDistance < minFlipDistance
                             || mFlipDistance > maxFlipDistance;
-//                    //System.out.println("mFlipDistance ::" + mFlipDistance);
-//                    //System.out.println("minFlipDistance ::" + minFlipDistance);
-//                    //System.out.println("maxFlipDistance ::" + maxFlipDistance);
                     if (isOverFlipping) {
                         mIsOverFlipping = true;
                         setFlipDistance(mOverFlipper.calculate(mFlipDistance,
                                 minFlipDistance, maxFlipDistance));
                         if (mOnOverFlipListener != null) {
-                           // //System.out.println("mOnOverFlipListener      ");
                             float overFlip = mOverFlipper.getTotalOverFlip();
-                            // if (overFlip >= 70) {
-                            // overFlip = 0;
-                            // }
-                     //       //System.out.println("OVERFLIP IN LIBRARY  " + overFlip);
-                            /*
-                             * // * else{ overFlip=-29; }
-                             */
                             mOnOverFlipListener.onOverFlip(this, mOverFlipMode,
                                     overFlip < 0, Math.abs(overFlip),
                                     FLIP_DISTANCE_PER_PAGE);
-                            //System.out.println("FLIP_DISTANCE_PER_PAGE         " + FLIP_DISTANCE_PER_PAGE);
-                            //System.out.println("overFlip  " + overFlip);
                         }
                     } else if (mIsOverFlipping) {
                         mIsOverFlipping = false;
                         if (mOnOverFlipListener != null) {
-                            // TODO in the future should only notify flip
-                            // distance 0
-                            // on the correct edge (previous/next)
-                            //System.out.println("mIsOverFlipping      ");
                             mOnOverFlipListener.onOverFlip(this, mOverFlipMode,
                                     false, 0, FLIP_DISTANCE_PER_PAGE);
                             mOnOverFlipListener.onOverFlip(this, mOverFlipMode,
@@ -1463,23 +1428,36 @@ public class FlipView extends FrameLayout {
                     final VelocityTracker velocityTracker = mVelocityTracker;
                     int velocity = 0;
                     if (velocityTracker != null) {
-                        velocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
-                        if (isFlippingVertically()) {
-                            velocity = (int) VelocityTrackerCompat.getYVelocity(
-                                    velocityTracker, mActivePointerId);
-                        } else {
-                            velocity = (int) VelocityTrackerCompat.getXVelocity(
-                                    velocityTracker, mActivePointerId);
+                        try {
+                            velocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
+                            if (isFlippingVertically()) {
+                                velocity = (int) VelocityTrackerCompat.getYVelocity(
+                                        velocityTracker, mActivePointerId);
+                            } else {
+                                velocity = (int) VelocityTrackerCompat.getXVelocity(
+                                        velocityTracker, mActivePointerId);
+                            }
+                        } catch (Exception e) {
+                            Log.e("FlipViewCrash", "velocity UP failed: " + e.getMessage());
+                            velocity = 0;
                         }
                     }
-                    //System.out.println("velocity   :::" + velocity);
-                    //System.out.println("farword   :::" + farword);
                     if (velocity < 0) {
                         str = true;
                     } else {
                         str1 = true;
                     }
-                    smoothFlipTo(clampLandingPage(getNextPage(velocity)));
+                    // Never throw from finger-up — pageCount can shrink mid-gesture
+                    // (search clear / magazine rebind) and IllegalArgumentException
+                    // looks like “app closed” on magazine scroll / share open.
+                    try {
+                        if (mPageCount >= 1) {
+                            smoothFlipTo(clampLandingPage(getNextPage(velocity)));
+                        }
+                    } catch (Exception e) {
+                        Log.e("FlipViewCrash", "smoothFlipTo on UP failed pageCount="
+                                + mPageCount + " err=" + e.getMessage());
+                    }
                     clearGestureAnchor();
                     mActivePointerId = INVALID_POINTER;
                     endFlip();
@@ -1490,21 +1468,30 @@ public class FlipView extends FrameLayout {
                 break;
             case MotionEventCompat.ACTION_POINTER_DOWN: {
                 final int index = MotionEventCompat.getActionIndex(ev);
-                final float x = MotionEventCompat.getX(ev, index);
-                final float y = MotionEventCompat.getY(ev, index);
-                mLastX = x;
-                mLastY = y;
-                mActivePointerId = MotionEventCompat.getPointerId(ev, index);
+                if (index >= 0 && index < ev.getPointerCount()) {
+                    final float x = MotionEventCompat.getX(ev, index);
+                    final float y = MotionEventCompat.getY(ev, index);
+                    mLastX = x;
+                    mLastY = y;
+                    mActivePointerId = MotionEventCompat.getPointerId(ev, index);
+                }
                 break;
             }
             case MotionEventCompat.ACTION_POINTER_UP:
                 onSecondaryPointerUp(ev);
                 final int index = MotionEventCompat.findPointerIndex(ev,
                         mActivePointerId);
-                final float x = MotionEventCompat.getX(ev, index);
-                final float y = MotionEventCompat.getY(ev, index);
-                mLastX = x;
-                mLastY = y;
+                // index == -1 after active pointer ended → getX(-1) crashes process.
+                if (index >= 0 && index < ev.getPointerCount()) {
+                    final float x = MotionEventCompat.getX(ev, index);
+                    final float y = MotionEventCompat.getY(ev, index);
+                    mLastX = x;
+                    mLastY = y;
+                } else {
+                    Log.e("FlipViewCrash", "POINTER_UP bad index=" + index
+                            + " activeId=" + mActivePointerId
+                            + " pointers=" + ev.getPointerCount());
+                }
                 break;
         }
         if (mActivePointerId == INVALID_POINTER) {
@@ -1941,14 +1928,23 @@ public class FlipView extends FrameLayout {
     private void onSecondaryPointerUp(MotionEvent ev) {
         // ////System.out.println("onSecondaryPointerUp  "+ev);
         final int pointerIndex = MotionEventCompat.getActionIndex(ev);
+        if (pointerIndex < 0 || pointerIndex >= ev.getPointerCount()) {
+            return;
+        }
         final int pointerId = MotionEventCompat.getPointerId(ev, pointerIndex);
         if (pointerId == mActivePointerId) {
             // This was our active pointer going up. Choose a new
             // active pointer and adjust accordingly.
             final int newPointerIndex = pointerIndex == 0 ? 1 : 0;
-            mLastX = MotionEventCompat.getX(ev, newPointerIndex);
-            mActivePointerId = MotionEventCompat.getPointerId(ev,
-                    newPointerIndex);
+            if (newPointerIndex >= 0 && newPointerIndex < ev.getPointerCount()) {
+                mLastX = MotionEventCompat.getX(ev, newPointerIndex);
+                mActivePointerId = MotionEventCompat.getPointerId(ev,
+                        newPointerIndex);
+            } else {
+                mActivePointerId = INVALID_POINTER;
+                Log.e("FlipViewCrash", "secondary UP no remaining pointer"
+                        + " count=" + ev.getPointerCount());
+            }
             if (mVelocityTracker != null) {
                 mVelocityTracker.clear();
             }
@@ -2075,6 +2071,9 @@ public class FlipView extends FrameLayout {
     }
 
     private int getNextPage(int velocity) {
+        if (mPageCount < 1) {
+            return 0;
+        }
         int nextPage;
         if (velocity > mMinimumVelocity) {
             nextPage = getCurrentPageFloor();
@@ -2083,6 +2082,7 @@ public class FlipView extends FrameLayout {
         } else {
             nextPage = getCurrentPageRound();
         }
+        // mPageCount==0 must never yield -1 (Math.min(..., -1)) → smoothFlipTo crash.
         return Math.min(Math.max(nextPage, 0), mPageCount - 1);
     }
 
@@ -2538,8 +2538,18 @@ public class FlipView extends FrameLayout {
     }
 
     public void smoothFlipTo(int page1) {
+        // Clamp instead of throw — magazine nested FlipView / search empty deck /
+        // mid-swipe notify used to IllegalArgumentException and kill the process
+        // (user sees WhatsApp “back” or feed close).
+        if (mPageCount < 1) {
+            Log.e("FlipViewCrash", "smoothFlipTo ignored pageCount=0 want=" + page1);
+            return;
+        }
         if (page1 < 0 || page1 > mPageCount - 1) {
-            throw new IllegalArgumentException("That page does not exist");
+            int clamped = Math.max(0, Math.min(page1, mPageCount - 1));
+            Log.e("FlipViewCrash", "smoothFlipTo clamp " + page1 + "→" + clamped
+                    + " pageCount=" + mPageCount);
+            page1 = clamped;
         }
 //        //Log.e("TRACKING","smoothFlipTo "+page1);
         final int start = (int) mFlipDistance;
@@ -2550,8 +2560,12 @@ public class FlipView extends FrameLayout {
     }
 
     public void smoothFlipTo1(int page1) {
+        if (mPageCount < 1) {
+            Log.e("FlipViewCrash", "smoothFlipTo1 ignored pageCount=0");
+            return;
+        }
         if (page1 < 0 || page1 > mPageCount - 1) {
-            throw new IllegalArgumentException("That page does not exist");
+            page1 = Math.max(0, Math.min(page1, mPageCount - 1));
         }
         // 06-26 18:01:53.721: I///System.out(6298):
         // getFlipDuration(delta)111111111111111111111111111

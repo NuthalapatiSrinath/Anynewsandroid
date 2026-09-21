@@ -152,9 +152,21 @@ public final class SpecialGalleryFlipHelper {
         } catch (Exception ignored) {
         }
 
+        // FIT_XY (useContainFit=false): fill the page like live CardPager fitXY —
+        // FIT_CENTER letterboxed posters into a black bar with dots below content.
         GalleryImageFlipAdapter adapter =
-                new GalleryImageFlipAdapter(host.getContext(), urls, true);
-        flip.setAdapter(adapter);
+                new GalleryImageFlipAdapter(host.getContext(), urls, false);
+        try {
+            flip.setAdapter(adapter);
+        } catch (Exception e) {
+            android.util.Log.e("MagazineCrash", "nested FlipView setAdapter failed: "
+                    + e.getMessage());
+            if (pager != null) {
+                pager.setVisibility(View.VISIBLE);
+            }
+            flip.setVisibility(View.GONE);
+            return null;
+        }
         syncDots(dotsHost, 0, urls.size());
 
         final FlipView flipRef = flip;
@@ -185,17 +197,33 @@ public final class SpecialGalleryFlipHelper {
     /** If nested gallery is past page 0, flip back one page (consume system back). */
     public static boolean tryConsumeBack(@Nullable View root) {
         FlipView flip = findNestedGalleryFlip(root);
-        if (flip == null || flip.getPageCount() <= 0) {
+        if (flip == null) {
             return false;
         }
-        int cur = flip.getCurrentPage();
+        int pageCount;
+        try {
+            pageCount = flip.getPageCount();
+        } catch (Exception e) {
+            android.util.Log.e("MagazineCrash", "tryConsumeBack pageCount: " + e.getMessage());
+            return false;
+        }
+        if (pageCount <= 0) {
+            return false;
+        }
+        int cur;
+        try {
+            cur = flip.getCurrentPage();
+        } catch (Exception e) {
+            return false;
+        }
         if (cur <= 0) {
             return false;
         }
         try {
-            flip.smoothFlipTo(cur - 1);
+            flip.smoothFlipTo(Math.max(0, Math.min(cur - 1, pageCount - 1)));
             return true;
         } catch (Exception e) {
+            android.util.Log.e("MagazineCrash", "tryConsumeBack smoothFlip: " + e.getMessage());
             return false;
         }
     }

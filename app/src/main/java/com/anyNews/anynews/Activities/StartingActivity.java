@@ -2522,6 +2522,10 @@ public class StartingActivity extends AppCompatActivity {
         // Race List_All_Articles while Home inflates (no offline-pack first paint).
         OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
         Intent intent = new Intent(StartingActivity.this, HomePage.class);
+        // Avoid stacking a second HomePage on top of an existing one when a
+        // WhatsApp share re-enters via singleTask splash — that made magazine
+        // open then “automatically back” to the prior Home (or WhatsApp on crash).
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.putExtra("EXTRA_SESSION_ID", "0");
         intent.putExtra("TITLE", TITLE);
         intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
@@ -2631,6 +2635,7 @@ public class StartingActivity extends AppCompatActivity {
                             } else {
                                 showLog("CHECK POINT HOMEPAGE 8");
                                 Intent intent = new Intent(StartingActivity.this, HomePage.class);
+                                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                                 intent.putExtra("EXTRA_SESSION_ID", "0");
                                 intent.putExtra("TITLE", TITLE);
                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
@@ -2720,6 +2725,7 @@ public class StartingActivity extends AppCompatActivity {
                                             } else {
                                                 showLog("CHECK POINT HOMEPAGE 9");
                                                 Intent intent = new Intent(StartingActivity.this, HomePage.class);
+                                                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                                                 intent.putExtra("EXTRA_SESSION_ID", "0");
                                                 intent.putExtra("TITLE", TITLE);
                                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
