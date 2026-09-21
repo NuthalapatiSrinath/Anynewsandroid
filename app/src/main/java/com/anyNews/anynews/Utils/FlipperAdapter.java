@@ -4401,6 +4401,31 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void syncCommentCountFromServer(Long postId, Long subPostId, Integer serverComments) {
+        syncCommentCountFromServer(postId, subPostId, serverComments, false);
+    }
+
+    /**
+     * Update the in-memory comment badge from a list/add response.
+     * Never wipe a positive local count down to 0 unless {@code allowZero} —
+     * empty/failed sheet loads previously cleared the engagement row after close.
+     */
+    public void syncCommentCountFromServer(Long postId, Long subPostId,
+                                           Integer serverComments, boolean allowZero) {
+        if (serverComments == null) return;
+        if (!allowZero && serverComments <= 0) {
+            if (postId != null && list != null) {
+                for (int i = 0; i < list.size(); i++) {
+                    ModelClass.Datum item = list.get(i);
+                    if (item.getPostId() == null || !item.getPostId().equals(postId)) continue;
+                    Integer existing = item.getComments();
+                    if (existing != null && existing > 0) {
+                        applyCommentCountToRememberedView(postId, existing);
+                        return;
+                    }
+                    break;
+                }
+            }
+        }
         syncEngagementFromServer(postId, subPostId, null, serverComments, null);
     }
 

@@ -7279,6 +7279,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void OpenComments(Long post_id, Long sub_post_id) {
+        OpenComments(post_id, sub_post_id, false);
+    }
+
+    private void OpenComments(Long post_id, Long sub_post_id, boolean isRetry) {
 
             showProgress();
         setCommentArticleTitleFromCurrentPost();
@@ -7298,6 +7302,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     EncreptionRequest encreptionRequest = response.body();
                     if (encreptionRequest == null || encreptionRequest.getData() == null) {
                         hideProgress();
+                        refreshVisibleCommentCountChrome();
                         return;
                     }
                     String encrpt_data = null;
@@ -7307,44 +7312,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     ListOfCommentsResponse validateUserOtp = gsonObj.fromJson(encrpt_data, ListOfCommentsResponse.class);
 
                     hideProgress();
-                    if (validateUserOtp.getSuccess()) {
-                        if (adapter != null && validateUserOtp.getCount() != null) {
-                            adapter.syncCommentCountFromServer(post_id, sub_post_id, validateUserOtp.getCount());
-                        }
-                        if (validateUserOtp.getData().size() == 0) {
-                            comment_recycler_view.setVisibility(View.INVISIBLE);
-                            linear_no_comment_page.setVisibility(View.VISIBLE);
-
-                        } else {
-                            final boolean parentalOn = SharedPrefsData.getBool(
-                                    HomePage.this, Constants.PARENTAL_CONTROL, Constants.PREF_NAME, false);
-                            for (int i = 0; i < validateUserOtp.getData().size(); i++) {
-                                ListOfCommentsResponse.Datum src = validateUserOtp.getData().get(i);
-                                if (parentalOn && looksAbusiveComment(src != null ? src.getComment() : null)) {
-                                    continue;
-                                }
-                                comment_chooseLanguage_models.add(mapCommentDatum(src));
-                            }
-
-                            if (comment_chooseLanguage_models.isEmpty()) {
-                                comment_recycler_view.setVisibility(View.INVISIBLE);
-                                linear_no_comment_page.setVisibility(View.VISIBLE);
-                            } else {
-                                bindCommentsAdapter();
-                            }
-                        }
-
-
-                    } else {
-
-
-                    }
+                    applyCommentsListResponse(post_id, sub_post_id, validateUserOtp, isRetry);
 
                 }
 
                 @Override
                 public void onFailure(Call<EncreptionRequest> call, Throwable t) {
                     hideProgress();
+                    refreshVisibleCommentCountChrome();
 
 
                 }
@@ -7352,6 +7327,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         } catch (Exception e) {
             e.printStackTrace();
+            hideProgress();
+            refreshVisibleCommentCountChrome();
         }
     }
 
@@ -12686,9 +12663,95 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (item.getPostId() == null) return;
             Integer comments = item.getComments();
             if (comments == null) comments = 0;
-            adapter.syncCommentCountFromServer(item.getPostId(), item.getSubPostId(), comments);
+            adapter.syncCommentCountFromServer(
+                    item.getPostId(), item.getSubPostId(), comments, true);
         } catch (Exception e) {
             Logone.w(e, "refreshVisibleCommentCountChrome");
+        }
+    }
+
+    /**
+     * Apply list-of-comments API payload to the sheet + engagement badge.
+     * One light retry when the feed badge was &gt;0 but the sheet came back empty
+     * (transient / sync lag) — no polling loop.
+     */
+    private void applyCommentsListResponse(long post_id, long sub_post_id,
+                                           ListOfCommentsResponse validateUserOtp,
+                                           boolean isRetry) {
+        if (validateUserOtp == null || !Boolean.TRUE.equals(validateUserOtp.getSuccess())) {
+            return;
+        }
+        List<ListOfCommentsResponse.Datum> rows = validateUserOtp.getData();
+        int serverCount = validateUserOtp.getCount() != null
+                ? validateUserOtp.getCount()
+                : (rows != null ? rows.size() : 0);
+        int priorBadge = 0;
+        try {
+            if (list != null) {
+                for (int i = 0; i < list.size(); i++) {
+                    ModelClass.Datum item = list.get(i);
+                    if (item != null && item.getPostId() != null
+                            && item.getPostId() == post_id
+                            && item.getComments() != null) {
+                        priorBadge = item.getComments();
+                        break;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        comment_chooseLanguage_models = new ArrayList<>();
+        if (rows != null && !rows.isEmpty()) {
+            final boolean parentalOn = SharedPrefsData.getBool(
+                    HomePage.this, Constants.PARENTAL_CONTROL, Constants.PREF_NAME, false);
+            for (int i = 0; i < rows.size(); i++) {
+                ListOfCommentsResponse.Datum src = rows.get(i);
+                if (parentalOn && looksAbusiveComment(src != null ? src.getComment() : null)) {
+                    continue;
+                }
+                comment_chooseLanguage_models.add(mapCommentDatum(src));
+            }
+        }
+
+        boolean sheetEmpty = comment_chooseLanguage_models.isEmpty();
+        if (sheetEmpty && priorBadge > 0 && serverCount <= 0 && !isRetry) {
+            if (adapter != null) {
+                adapter.syncCommentCountFromServer(post_id, sub_post_id, priorBadge, true);
+            }
+            linear_no_comment_page.setVisibility(View.VISIBLE);
+            if (comment_recycler_view != null) {
+                comment_recycler_view.setVisibility(View.INVISIBLE);
+            }
+            if (comment_page != null) {
+                comment_page.postDelayed(() -> {
+                    if (comment_page != null && comment_page.isShown()) {
+                        OpenComments(post_id, sub_post_id, true);
+                    }
+                }, 700);
+            }
+            return;
+        }
+
+        if (adapter != null) {
+            boolean allowZero = sheetEmpty && (isRetry || priorBadge <= 0);
+            int paintCount;
+            if (!sheetEmpty) {
+                paintCount = Math.max(serverCount, comment_chooseLanguage_models.size());
+                allowZero = true;
+            } else if (allowZero) {
+                paintCount = Math.max(0, serverCount);
+            } else {
+                paintCount = priorBadge;
+            }
+            adapter.syncCommentCountFromServer(post_id, sub_post_id, paintCount, allowZero);
+        }
+
+        if (sheetEmpty) {
+            comment_recycler_view.setVisibility(View.INVISIBLE);
+            linear_no_comment_page.setVisibility(View.VISIBLE);
+        } else {
+            bindCommentsAdapter();
         }
     }
 
@@ -12770,7 +12833,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             adapter.syncCommentCountFromServer(
                                     post_id,
                                     sub_post_id,
-                                    validateUserOtp.getComments());
+                                    validateUserOtp.getComments(),
+                                    true);
                         }
                         // Keep existing list visible while refreshing — avoid blank flash.
                         OpenComment(post_id, sub_post_id);
@@ -12830,61 +12894,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     hideProgress();
                     EncreptionRequest encreptionRequest = response.body();
                     if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                        refreshVisibleCommentCountChrome();
                         return;
                     }
-                    String encrpt_data = null;
-                    /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        encrpt_data = decrypt(encreptionRequest.getData());
-                    }*/
-                    encrpt_data = decrypt(encreptionRequest.getData());
+                    String encrpt_data = decrypt(encreptionRequest.getData());
                     showLog("comments response:"+encrpt_data);
 
                     Gson gsonObj = new Gson();
                     ListOfCommentsResponse validateUserOtp = gsonObj.fromJson(encrpt_data, ListOfCommentsResponse.class);
-                    if (validateUserOtp.getSuccess()) {
-                        if (adapter != null && validateUserOtp.getCount() != null) {
-                            adapter.syncCommentCountFromServer(post_id, sub_post_id, validateUserOtp.getCount());
-                        }
-                        if (validateUserOtp.getData().size() == 0) {
-                            comment_recycler_view.setVisibility(View.INVISIBLE);
-                            linear_no_comment_page.setVisibility(View.VISIBLE);
-                        } else {
-                            final boolean parentalOn = SharedPrefsData.getBool(
-                                    HomePage.this, Constants.PARENTAL_CONTROL, Constants.PREF_NAME, false);
-                            for (int i = 0; i < validateUserOtp.getData().size(); i++) {
-                                ListOfCommentsResponse.Datum src = validateUserOtp.getData().get(i);
-                                if (parentalOn && looksAbusiveComment(src != null ? src.getComment() : null)) {
-                                    continue;
-                                }
-                                comment_chooseLanguage_models.add(mapCommentDatum(src));
-                            }
-
-                            if (comment_chooseLanguage_models.isEmpty()) {
-                                comment_recycler_view.setVisibility(View.INVISIBLE);
-                                linear_no_comment_page.setVisibility(View.VISIBLE);
-                            } else {
-                                bindCommentsAdapter();
-                            }
-                            //        leave_comment_white.setText(" " + languageModelResponse.getData().getLeaveAComment());
-                        }
-
-
-                    } else {
-
-
-                    }
-
+                    applyCommentsListResponse(post_id, sub_post_id, validateUserOtp, false);
                 }
 
                 @Override
                 public void onFailure(Call<EncreptionRequest> call, Throwable t) {
                     hideProgress();
-
-
+                    refreshVisibleCommentCountChrome();
                 }
             });
 
         } catch (Exception e) {
+            hideProgress();
+            refreshVisibleCommentCountChrome();
         }
 
 
