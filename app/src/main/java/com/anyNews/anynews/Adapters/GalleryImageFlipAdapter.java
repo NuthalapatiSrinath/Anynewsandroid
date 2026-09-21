@@ -11,9 +11,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.anyNews.anynews.R;
-import com.nostra13.universalimageloader.core.DisplayImageOptions;
-import com.nostra13.universalimageloader.core.ImageLoader;
-import com.nostra13.universalimageloader.core.ImageLoaderConfiguration;
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.Priority;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.request.RequestOptions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,14 +22,18 @@ import java.util.List;
 /**
  * Image pages for Special-tab nested horizontal {@link com.anyNews.anynews.flipview.FlipView}
  * (book page-turn instead of ViewPager slide).
+ *
+ * <p>Page 0 uses Glide {@link Priority#IMMEDIATE} and a sticky ImageView so FlipView
+ * recycling / neighbor loads cannot cancel the cover request (orange splash logo flash).
  */
 public final class GalleryImageFlipAdapter extends BaseAdapter {
 
     private final Context context;
     private final ArrayList<String> images = new ArrayList<>();
     private final boolean useContainFit;
-    private final ImageLoader imageLoader;
-    private final DisplayImageOptions options;
+    /** Sticky cover view — never recycled into another page index. */
+    @Nullable
+    private ImageView page0View;
 
     public GalleryImageFlipAdapter(
             @NonNull Context context,
@@ -44,20 +49,6 @@ public final class GalleryImageFlipAdapter extends BaseAdapter {
         if (images.isEmpty()) {
             images.add("");
         }
-        imageLoader = ImageLoader.getInstance();
-        try {
-            if (!imageLoader.isInited()) {
-                imageLoader.init(ImageLoaderConfiguration.createDefault(this.context));
-            }
-        } catch (Exception ignored) {
-        }
-        options = new DisplayImageOptions.Builder()
-                .showImageForEmptyUri(R.drawable.app_splash_logo)
-                .showImageOnLoading(R.drawable.trasparent_background)
-                .showImageOnFail(R.drawable.app_splash_logo)
-                .cacheInMemory(true)
-                .cacheOnDisk(true)
-                .build();
     }
 
     @Override
@@ -81,28 +72,63 @@ public final class GalleryImageFlipAdapter extends BaseAdapter {
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         ImageView imageView;
-        if (convertView instanceof ImageView) {
+        if (position == 0) {
+            if (page0View == null) {
+                page0View = newImageView(parent);
+            }
+            imageView = page0View;
+        } else if (convertView instanceof ImageView
+                && convertView != page0View) {
             imageView = (ImageView) convertView;
         } else {
-            imageView = new ImageView(parent.getContext());
-            imageView.setLayoutParams(new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT));
+            imageView = newImageView(parent);
         }
         imageView.setScaleType(
                 useContainFit ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.FIT_XY);
         if (useContainFit) {
             imageView.setBackgroundColor(Color.BLACK);
+        } else {
+            imageView.setBackgroundColor(Color.TRANSPARENT);
         }
+
         String url = "";
         if (position >= 0 && position < images.size()) {
             url = images.get(position);
         }
-        try {
-            imageLoader.displayImage(url != null ? url : "", imageView, options, null);
-        } catch (Exception e) {
-            imageView.setImageResource(R.drawable.app_splash_logo);
+        if (url == null) {
+            url = "";
         }
+
+        Priority priority = position == 0 ? Priority.IMMEDIATE : Priority.NORMAL;
+        RequestOptions opts = new RequestOptions()
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .priority(priority)
+                // Transparent while loading — never paint splash orange-N as the poster.
+                .placeholder(R.drawable.trasparent_background)
+                .error(R.drawable.trasparent_background)
+                .fallback(R.drawable.trasparent_background);
+
+        try {
+            if (url.isEmpty()) {
+                imageView.setImageResource(R.drawable.trasparent_background);
+            } else {
+                Glide.with(context)
+                        .load(url)
+                        .apply(opts)
+                        .into(imageView);
+            }
+        } catch (Exception e) {
+            imageView.setImageResource(R.drawable.trasparent_background);
+        }
+        return imageView;
+    }
+
+    @NonNull
+    private static ImageView newImageView(@NonNull ViewGroup parent) {
+        ImageView imageView = new ImageView(parent.getContext());
+        imageView.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
         return imageView;
     }
 }

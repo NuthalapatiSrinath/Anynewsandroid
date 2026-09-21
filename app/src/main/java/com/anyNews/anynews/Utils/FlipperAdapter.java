@@ -213,7 +213,7 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTube
 import com.pierfrancescosoffritti.youtubeplayer.player.YouTubePlayerFullScreenListener;
 import com.squareup.picasso.LruCache;
 import com.squareup.picasso.Picasso;
-import com.tbuonomo.viewpagerdotsindicator.DotsIndicator;
+import com.tbuonomo.viewpagerdotsindicator.WormDotsIndicator;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -5387,29 +5387,20 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             galleryFlipHost = imageGallaryHolder.galleryLayout;
                         }
                         if (isSpecialModeNow() && galleryFlipHost != null) {
-                            LinearLayout flipDotsHost =
-                                    convertView.findViewById(R.id.video_side_menu);
-                            if (flipDotsHost == null) {
-                                flipDotsHost = imageGallaryHolder.dotIndicatior;
-                            }
-                            if (flipDotsHost != null) {
-                                flipDotsHost.setOrientation(LinearLayout.HORIZONTAL);
-                                flipDotsHost.setGravity(android.view.Gravity.CENTER);
-                            }
+                            // Keep Play Store WormDotsIndicator visible; Flip helper
+                            // drives it via BaseDotsIndicator.Pager (no TextView dots).
                             if (imageGallaryHolder.indicator != null) {
-                                imageGallaryHolder.indicator.setVisibility(GONE);
+                                imageGallaryHolder.indicator.setVisibility(VISIBLE);
                             }
                             FlipView galFlip = SpecialGalleryFlipHelper.bind(
                                     galleryFlipHost,
                                     viewpager,
                                     image_gallary,
                                     gallerySwipeHint,
-                                    flipDotsHost,
+                                    imageGallaryHolder.indicator,
                                     null);
                             if (galFlip != null) {
                                 usedSpecialGalleryFlip = true;
-                            } else if (imageGallaryHolder.indicator != null) {
-                                imageGallaryHolder.indicator.setVisibility(VISIBLE);
                             }
                         }
                         if (!usedSpecialGalleryFlip) {
@@ -7010,7 +7001,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         imageGallaryHolder.image_gallary_share = customConvertView.findViewById(R.id.image_gallary_share);
         imageGallaryHolder.dotIndicatior = customConvertView.findViewById(R.id.dotIndicatior);
         imageGallaryHolder.image_gallary_scrip = customConvertView.findViewById(R.id.image_gallary_scrip);
-        RelativeLayout scrren_icon = customConvertView.findViewById(R.id.scrren_icon);
+        final RelativeLayout scrren_icon = customConvertView.findViewById(R.id.scrren_icon);
+        // Hide All/Single sheet immediately so the click feels instant; heavy capture runs after.
         if (imageGallaryHolder.relativeLayoutShareOpt != null) {
             imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
         }
@@ -7021,62 +7013,71 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
         }
 
-        String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " "
-                + mInvitationUrl;
-        countDownTimer = new CountDownTimer(2, 2) {
-
-            public void onTick(long millisUntilFinished) {
-
-            }
-            public void onFinish() {
-                try {
-                    Intent intent = new Intent(Intent.ACTION_SEND);
-                    intent.setType("image/*");
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
-                    intent.putExtra(Intent.EXTRA_TEXT, msg);
-                    final boolean galleryWhatsapp = from == 1 || fromWhatsapp;
-                    if (galleryWhatsapp) {
-                        intent.setPackage("com.whatsapp");
-                    }
-
-                    Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(scrren_icon);
-                    try {
-                        writeScreenshotPngAndAttach(intent, b);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                    if (imageGallaryHolder.image_gallary_scrip != null) {
-                        imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
-                    }
-                    if (imageGallaryHolder.image_gallary_share != null) {
-                        restoreOnPostMagazineShare(
-                                imageGallaryHolder.image_gallary_share,
-                                list.get(position),
-                                v -> {
-                                    fromWhatsapp = false;
-                                    shareGalleryScreenShotUI(customConvertView);
-                                });
-                    }
-                    if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        if (galleryWhatsapp) {
-                            context.startActivity(intent);
-                        } else {
-                            context.startActivity(Intent.createChooser(intent, "Share Link"));
-                        }
-                    }
-
-                    Share_Count_Value(shareCountProperty(galleryWhatsapp), list.get(position).getPostId());
-                    fromWhatsapp = false;
-                } finally {
-                    releaseShareLaunch();
+        final String mInvitationUrl = list.get(position).getShareLink();
+        final String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        final boolean galleryWhatsapp = from == 1 || fromWhatsapp;
+        // Defer past the click frame so the sheet dismiss paints first, then capture.
+        customConvertView.post(() -> {
+            Bitmap b = null;
+            try {
+                if (scrren_icon != null) {
+                    b = ScreenShott.getInstance().takeScreenShotOfView(scrren_icon);
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        }.start();
-
-
+            final Bitmap shot = b;
+            new Thread(() -> {
+                Intent intent = new Intent(Intent.ACTION_SEND);
+                intent.setType("image/*");
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                intent.putExtra(Intent.EXTRA_TEXT, msg);
+                if (galleryWhatsapp) {
+                    intent.setPackage("com.whatsapp");
+                }
+                try {
+                    if (shot != null) {
+                        writeScreenshotPngAndAttach(intent, shot);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    try {
+                        if (imageGallaryHolder != null
+                                && imageGallaryHolder.image_gallary_scrip != null) {
+                            imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
+                        }
+                        if (imageGallaryHolder != null
+                                && imageGallaryHolder.image_gallary_share != null) {
+                            restoreOnPostMagazineShare(
+                                    imageGallaryHolder.image_gallary_share,
+                                    list.get(position),
+                                    v -> {
+                                        fromWhatsapp = false;
+                                        shareGalleryScreenShotUI(customConvertView);
+                                    });
+                        }
+                        if (context != null
+                                && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                            if (galleryWhatsapp) {
+                                context.startActivity(intent);
+                            } else {
+                                context.startActivity(Intent.createChooser(intent, "Share Link"));
+                            }
+                        }
+                        Share_Count_Value(shareCountProperty(galleryWhatsapp),
+                                list.get(position).getPostId());
+                        fromWhatsapp = false;
+                    } finally {
+                        releaseShareLaunch();
+                    }
+                });
+            }, "gallery-share-shot").start();
+        });
     }
+
     public void shareMagazineScreenShot(ImageView imageViewShare, RelativeLayout relativeLayoutShareOpt, int position,RelativeLayout magzine_relative_slider) {
         if (!tryAcquireShareLaunch()) {
             return;
@@ -7087,31 +7088,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         hideOnPostMagazineShare(imageViewShare);
 
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " "
-                + mInvitationUrl;
-        countDownTimer = new CountDownTimer(2, 2) {
+        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        final boolean magazineWasWhatsapp = fromWhatsapp;
+        fromWhatsapp = false;
 
-            public void onTick(long millisUntilFinished) {
-
-            }
-            public void onFinish() {
-                try {
-                    Intent intent = new Intent(Intent.ACTION_SEND);
-                    intent.setType("image/*");
-                    intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
-                    intent.putExtra(Intent.EXTRA_TEXT, msg);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    final boolean magazineWasWhatsapp = fromWhatsapp;
-                    if (magazineWasWhatsapp) {
-                        intent.setPackage("com.whatsapp");
-                    }
-
-                    Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(magzine_relative_slider);
-                    try {
-                        writeScreenshotPngAndAttach(intent, b);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+        Intent base = new Intent();
+        base.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+        base.putExtra(Intent.EXTRA_TEXT, msg);
+        prepareAndLaunchScreenshotShare(
+                magzine_relative_slider,
+                base,
+                magazineWasWhatsapp,
+                () -> {
                     image_magazineHolder.magzine_ll_dots.setVisibility(VISIBLE);
                     if (imageViewShare != null) {
                         restoreOnPostMagazineShare(imageViewShare, list.get(position), v -> {
@@ -7119,23 +7107,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             openOnPostShareSheet(relativeLayoutShareOpt, imageViewShare);
                         });
                     }
-                    if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        if (magazineWasWhatsapp) {
-                            context.startActivity(intent);
-                        } else {
-                            context.startActivity(Intent.createChooser(intent, "Share Link"));
-                        }
-                    }
-                    fromWhatsapp = false;
-
-                    Share_Count_Value(shareCountProperty(magazineWasWhatsapp), list.get(position).getPostId());
-                } finally {
-                    releaseShareLaunch();
-                }
-            }
-        }.start();
-
-
+                },
+                () -> Share_Count_Value(
+                        shareCountProperty(magazineWasWhatsapp), list.get(position).getPostId()));
     }
 
     private void showFullVideoWithYoutube(int position, View convertView) {
@@ -8018,42 +7992,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                 final String mInvitationUrl = list.get(position).getShareLink();
                 final String msg = list.get(position).getTitle() + " " + mInvitationUrl;
-
-                countDownTimer = new CountDownTimer(2, 2) {
-
-                    public void onTick(long millisUntilFinished) {
-                    }
-
-                    public void onFinish() {
-                        try {
-                            Intent intent = new Intent(Intent.ACTION_SEND);
-                            intent.setType("image/*");
-                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
-                            intent.putExtra(Intent.EXTRA_TEXT, msg);
-
-                            Bitmap b = ScreenShott.getInstance()
-                                    .takeScreenShotOfView(fullImageActivity.full_image_view_details);
-                            try {
-                                writeScreenshotPngAndAttach(intent, b);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
+                Intent base = new Intent();
+                base.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
+                base.putExtra(Intent.EXTRA_TEXT, msg);
+                prepareAndLaunchScreenshotShare(
+                        fullImageActivity.full_image_view_details,
+                        base,
+                        false,
+                        () -> {
                             if (fullImageActivity.layout_strip_iconnew != null) {
                                 fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
                             }
-                            // Launch immediately with the cached share link — do not wait
-                            // for Update_Post_Counts before opening the system sheet.
-                            if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                                context.startActivity(Intent.createChooser(intent, "Share Link"));
-                            }
-                            Share_Count_Value("share", list.get(position).getPostId());
-                        } finally {
-                            releaseShareLaunch();
-                        }
-                    }
-                }.start();
-
+                        },
+                        () -> Share_Count_Value("share", list.get(position).getPostId()));
             }
         });
         bindSponsoredChrome(convertView, position);
@@ -8714,7 +8665,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 halfImageActivity.galleryImageLayout.setVisibility(VISIBLE);
                 halfImageActivity.new_half_image.setVisibility(GONE);
                 new_half_image.setVisibility(GONE);
-                DotsIndicator indicator = convertView.findViewById(R.id.indicator);
+                WormDotsIndicator indicator = convertView.findViewById(R.id.indicator);
 
                 // half gallery images — prefer offline files when pack warmed
                 halfImageGallery = new ArrayList<>();
@@ -10932,9 +10883,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Attach a FileProvider image URI for sharing without waiting on the network.
-     * Uses ClipData + querying the send Intent itself (not createChooser) so grants
-     * resolve quickly and the system sheet can open immediately.
+     * Attach a FileProvider image URI for sharing. ClipData + FLAG_GRANT_READ_URI_PERMISSION
+     * is enough for the system chooser — avoid querying every ResolveInfo (that blocked the UI).
      */
     private void putShareImageStream(Intent intent, Uri photoURI) {
         intent.putExtra(Intent.EXTRA_STREAM, photoURI);
@@ -10943,28 +10893,124 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             intent.setClipData(ClipData.newUri(context.getContentResolver(), "share", photoURI));
         } catch (Exception ignored) {
         }
-        try {
-            List<ResolveInfo> resInfoList = context.getPackageManager()
-                    .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
-            for (ResolveInfo resolveInfo : resInfoList) {
-                String packageName = resolveInfo.activityInfo.packageName;
-                context.grantUriPermission(packageName, photoURI,
-                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
+    /**
+     * Fast share attach: JPEG (not PNG@100) written off the critical path when possible.
+     * Kept name for call sites; format is JPEG for speed.
+     */
     private void writeScreenshotPngAndAttach(Intent intent, Bitmap bitmap) throws Exception {
-        File file = new File(context.getExternalCacheDir(), "sample.png");
+        if (bitmap == null || bitmap.isRecycled()) {
+            throw new IllegalArgumentException("empty screenshot");
+        }
+        File cacheDir = context.getExternalCacheDir();
+        if (cacheDir == null) {
+            cacheDir = context.getCacheDir();
+        }
+        File file = new File(cacheDir, "share_" + System.currentTimeMillis() + ".jpg");
         FileOutputStream fOut = new FileOutputStream(file);
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, fOut);
-        fOut.flush();
-        fOut.close();
-        file.setReadable(true, true);
+        try {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, fOut);
+            fOut.flush();
+        } finally {
+            fOut.close();
+        }
+        file.setReadable(true, false);
         Uri photoURI = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
+        intent.setType("image/jpeg");
         putShareImageStream(intent, photoURI);
+    }
+
+    /**
+     * Capture on UI, compress/attach on a worker, then open the system share sheet.
+     * Keeps Single Page / screenshot shares feeling instant (no PNG@100 on the main thread).
+     */
+    private void prepareAndLaunchScreenshotShare(
+            @Nullable View captureView,
+            @NonNull Intent baseIntent,
+            boolean whatsappDirect,
+            @Nullable Runnable restoreUi,
+            @Nullable Runnable onFinished) {
+        final Handler main = new Handler(Looper.getMainLooper());
+        final Runnable finish = () -> {
+            if (restoreUi != null) {
+                try {
+                    restoreUi.run();
+                } catch (Exception ignored) {
+                }
+            }
+            if (onFinished != null) {
+                try {
+                    onFinished.run();
+                } catch (Exception ignored) {
+                }
+            }
+            releaseShareLaunch();
+        };
+        if (captureView == null) {
+            finish.run();
+            return;
+        }
+        // Yield so the in-app share sheet / chrome hide paints before capture.
+        captureView.post(() -> {
+            Bitmap bitmap = null;
+            try {
+                bitmap = ScreenShott.getInstance().takeScreenShotOfView(captureView);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            final Bitmap shot = bitmap;
+            new Thread(() -> {
+                try {
+                    if (shot == null || shot.isRecycled()) {
+                        main.post(finish);
+                        return;
+                    }
+                    Intent intent = new Intent(Intent.ACTION_SEND);
+                    intent.setType("image/jpeg");
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    if (baseIntent.getStringExtra(Intent.EXTRA_SUBJECT) != null) {
+                        intent.putExtra(Intent.EXTRA_SUBJECT,
+                                baseIntent.getStringExtra(Intent.EXTRA_SUBJECT));
+                    }
+                    if (baseIntent.getStringExtra(Intent.EXTRA_TEXT) != null) {
+                        intent.putExtra(Intent.EXTRA_TEXT,
+                                baseIntent.getStringExtra(Intent.EXTRA_TEXT));
+                    }
+                    if (whatsappDirect) {
+                        intent.setPackage("com.whatsapp");
+                    }
+                    writeScreenshotPngAndAttach(intent, shot);
+                    try {
+                        if (!shot.isRecycled()) {
+                            shot.recycle();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    final Intent launchIntent = intent;
+                    main.post(() -> {
+                        try {
+                            if (context != null
+                                    && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                                if (whatsappDirect) {
+                                    context.startActivity(launchIntent);
+                                } else {
+                                    context.startActivity(
+                                            Intent.createChooser(launchIntent, "Share Link"));
+                                }
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        } finally {
+                            finish.run();
+                        }
+                    });
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    main.post(finish);
+                }
+            }, "share-screenshot").start();
+        });
     }
 
     @Override
@@ -11030,7 +11076,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public static class HalfImageActivityHolder {
         public LinearLayout layoutParentDate;
         public ViewPager viewPager;
-        DotsIndicator indicator;
+        WormDotsIndicator indicator;
         RelativeLayout galleryImageLayout;
         public TextView textViewPostDate;
         TextView half_content_title, half_content_description, test_folloew;
@@ -11094,7 +11140,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         RelativeLayout relativeLayoutShareOpt;
         TextView textViewAllPage,textViewSinglePage;
         RelativeLayout scrren_icon;
-        DotsIndicator indicator;
+        WormDotsIndicator indicator;
         ViewPager viewpager;
         ImageView image_gallary_share;
         LinearLayout dotIndicatior;
@@ -13867,7 +13913,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      */
     private void showVideoShareChooser(int position, VideoShareLayout layout, View convertView) {
         long now = SystemClock.elapsedRealtime();
-        if ((now - lastVideoShareUiAtMs) < SHARE_LAUNCH_GUARD_MS) {
+        // Short debounce only — do not reuse the 900ms share-launch guard or the sheet feels dead.
+        if ((now - lastVideoShareUiAtMs) < 280L) {
             return;
         }
         lastVideoShareUiAtMs = now;
@@ -13899,16 +13946,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             whatsappStatusOption.setVisibility(View.GONE);
         }
 
-        // Warm share cache while the sheet is open so Contact feels instant.
-        if (canShareVideoFile(position)) {
-            VideoShareHelper.prefetchVideo(context, resolveVideoShareUrl(position));
-        }
-
         View whatsappChatOption = sheetView.findViewById(R.id.option_whatsapp_chat);
-        // Primary Contact card: admin title/subtitle/colors/icon/bg (3.40.92+), half + full.
-        if (whatsappChatOption != null) {
-            FullVideoShareCardHelper.apply(context, whatsappChatOption);
-        }
 
         final boolean[] sheetActionTaken = {false};
         View.OnClickListener dismissAndShare = actionView -> {
@@ -13947,7 +13985,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             shareArticleOption.setOnClickListener(dismissAndShare);
         }
         sheetView.findViewById(R.id.option_other_apps).setOnClickListener(dismissAndShare);
+
+        // Show the sheet first — style / prefetch after paint so Share feels instant.
         bottomSheet.show();
+        sheetView.post(() -> {
+            if (whatsappChatOption != null) {
+                FullVideoShareCardHelper.apply(context, whatsappChatOption);
+            }
+            if (canShareVideoFile(position)) {
+                VideoShareHelper.prefetchVideo(context, resolveVideoShareUrl(position));
+            }
+        });
     }
 
     private void executeVideoShare(int position, VideoShareLayout layout, View convertView, VideoShareAction action) {
@@ -14379,6 +14427,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             return;
         }
+        // Android 13+: need POST_NOTIFICATIONS for our tap-to-open complete notification.
+        if (from != 0 && activity != null) {
+            VideoDownloadConfirmHelper.ensureNotificationPermission(activity);
+        }
         String downloadingTitle="Downloading magazine...";
         if(from==0){
              downloadingTitle="Downloading magazine...";
@@ -14388,18 +14440,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             Toast.makeText(context,"Your video is downloading",Toast.LENGTH_LONG).show();
         }
 
-//        ProgressDialog progressDialog = new ProgressDialog(context);
-//        progressDialog.setMessage("Downloading...");
-//        progressDialog.setIndeterminate(true);
-//        progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-//        progressDialog.setCancelable(true);
-//         DownloadManager.Request request = new DownloadManager.Request(Uri.parse("https://www.africau.edu/images/default/sample.pdf"));
-//        DownloadManager.Request request = new DownloadManager.Request(Uri.parse("https://d1rzlnq17mbuq9.cloudfront.net/magazines/exports/943613.pdf"));
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
         request.setTitle(title);
         request.setDescription(downloadingTitle);
-
-        //  request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+        // Keep DownloadManager's own status-bar entry visible after complete as a backup.
+        request.setNotificationVisibility(
+                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
         request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, title);
         DownloadManager downloadManager = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
         long downloadId = downloadManager.enqueue(request);
@@ -14407,61 +14453,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
         BroadcastReceiver onComplete = new BroadcastReceiver() {
-            public void onReceive(Context context, Intent intent1) {
-
-                try{
-
-                    context.getContentResolver().registerContentObserver(Uri.parse("content://downloads/my_downloads"),
-                            true, new ContentObserver(null) {
-                                @Override
-                                public void onChange(boolean selfChange, Uri uri) {
-                                    super.onChange(selfChange, uri);
-                                    if (uri.toString().matches(".*\\d+$")) {
-                                        long changedId = Long.parseLong(Objects.requireNonNull(uri.getLastPathSegment()));
-                                        if (changedId == downloadId) {
-                                            showLog("TAG"+ " :: onChange: " + uri.toString() + " " + changedId + " " + downloadId);
-
-                                            Cursor cursor = null;
-                                            try {
-                                                cursor = context.getContentResolver().query(uri, null, null, null, null);
-                                                if (cursor != null && cursor.moveToFirst()) {
-                                                    showLog("TAG"+ "onChange: running");
-                                                    isVideoDownloadCancel=false;
-                                                } else {
-                                                    isVideoDownloadCancel=true;
-                                                    showLog("TAG"+ "onChange: cancel");
-                                                }
-                                            } finally {
-                                                if (cursor != null) {
-                                                    cursor.close();
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            });
-
-                    showLog("REASON::::::1");
-
-                }catch (Exception e){
-                    e.printStackTrace();
+            public void onReceive(Context receiverContext, Intent intent1) {
+                long completedId = intent1 != null
+                        ? intent1.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+                        : -1L;
+                if (completedId != downloadId) {
+                    // Another download finished — keep listening for ours.
+                    return;
                 }
-
-                // progressDialog.dismiss();
-                showLog("ACTION:"+intent1.getAction());
-                showLog("ACTION2:"+intent1.getData());
-                //checkDownloadStatus(downloadId,downloadManager);
-                new Handler().postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        showPopupDownloadMessage(position,title,from);
-                    }
-                },1000);
-
-
-
-                context.unregisterReceiver(this);
-
+                try {
+                    receiverContext.unregisterReceiver(this);
+                } catch (Exception ignored) {
+                }
+                showLog("ACTION:"+ (intent1 != null ? intent1.getAction() : "null"));
+                // Confirm success via DownloadManager (do not trust flaky my_downloads ContentObserver).
+                new Handler(Looper.getMainLooper()).postDelayed(() ->
+                        showPopupDownloadMessage(position, title, from, downloadId), 400);
             }
         };
         IntentFilter downloadFilter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
@@ -14470,18 +14477,56 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } else {
             context.registerReceiver(onComplete, downloadFilter);
         }
-        //progressDialog.show();
     }
-    private void showPopupDownloadMessage(int position,String title,int from){
-        if(from==0){
-            Toast.makeText(context,"Your magazine is downloaded",Toast.LENGTH_LONG).show();
+
+    private boolean isDownloadManagerSuccessful(long downloadId) {
+        if (downloadId <= 0) {
+            return false;
+        }
+        DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+        if (dm == null) {
+            return false;
+        }
+        Cursor cursor = null;
+        try {
+            cursor = dm.query(new DownloadManager.Query().setFilterById(downloadId));
+            if (cursor != null && cursor.moveToFirst()) {
+                int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                int reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON));
+                showLog("DM status=" + status + " reason=" + reason + " id=" + downloadId);
+                if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                    isVideoDownloadCancel = false;
+                    return true;
+                }
+                if (status == DownloadManager.STATUS_FAILED
+                        || status == DownloadManager.STATUS_PAUSED) {
+                    isVideoDownloadCancel = true;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return false;
+    }
+
+    private void showPopupDownloadMessage(int position, String title, int from) {
+        showPopupDownloadMessage(position, title, from, -1L);
+    }
+
+    private void showPopupDownloadMessage(int position, String title, int from, long downloadId) {
+        if (from == 0) {
+            Toast.makeText(context, "Your magazine is downloaded", Toast.LENGTH_LONG).show();
             try {
                 String mInvitationUrl = list.get(position).getShareLink();
-                showLog("mInvitationUrl:"+mInvitationUrl);
+                showLog("mInvitationUrl:" + mInvitationUrl);
                 String msg = list.get(position).getTitle() + " " + mInvitationUrl;
-                showLog("msg:"+msg);
+                showLog("msg:" + msg);
                 File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), title);
-                showLog("file url:"+file.getAbsolutePath());
+                showLog("file url:" + file.getAbsolutePath());
                 if (!file.exists() || file.length() == 0) {
                     shareFullMagazine(position);
                     return;
@@ -14500,95 +14545,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 e.printStackTrace();
                 shareFullMagazine(position);
             }
-
-        }else{
-            if(isVideoDownloadCancel){
-                Toast.makeText(context,"Your video download is cancelled",Toast.LENGTH_LONG).show();
-            }else{
-                // Shared popup for every video download entry (half/full, Exo/YouTube, footer share).
-                VideoDownloadConfirmHelper.showDownloaded(context);
-                sendNotification(list.get(position).getPostId(),title);
-            }
+            return;
         }
-    }
 
-    private void sendNotification(long post_id,String title) {
-        showLog("sendNotification::@1");
-        try {
-            Intent resultIntent = new Intent(Intent.ACTION_SEND);
- //           resultIntent.setAction(Intent.ACTION_SEND);
-            resultIntent.setType("video/*");
-            resultIntent.setPackage("com.whatsapp");
-            File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), title);
-            file.setReadable(true, true);
-            Uri uriForFile = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);
-            showLog("file uri:"+uriForFile.getPath());
-            resultIntent.putExtra(Intent.EXTRA_STREAM, uriForFile);
-            List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(Intent.createChooser(resultIntent, title), PackageManager.MATCH_DEFAULT_ONLY);
-            for (ResolveInfo resolveInfo : resInfoList) {
-                String packageName = resolveInfo.activityInfo.packageName;
-                showLog("packageName:::::::"+packageName);
-                context.grantUriPermission(packageName, uriForFile, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            }
-            activity.grantUriPermission("com.whatsapp", uriForFile, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            resultIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            showLog("FLAG_GRANT_READ_URI_PERMISSION:");
-            showLog("sendNotification::");
-            PendingIntent pendingIntent;
-            if (Build.VERSION.SDK_INT >= 31) {
-                showLog("sendNotification::@2");
-                pendingIntent = PendingIntent.getActivity(
-                        getApplicationContext(),
-                        10,
-                        resultIntent,
-                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT // setting the mutability flag
-                );
-            } else {
-                showLog("sendNotification::@3");
-                pendingIntent = PendingIntent.getActivity(context,
-                        Integer.parseInt("10"), resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-
-            }
-            try {
-                String GROUP_KEY_WORK_EMAIL = "com.anyNews.anynews.Services.WORK_EMAIL";
-                RemoteViews collapsedView = new RemoteViews(context.getPackageName(), R.layout.download_video_notification);
-                showLog("sendNotification::@4");
-                final Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-                NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), Constants.Channel_ID)
-                        // use xxxhdpi
-                        .setSmallIcon(R.drawable.ic_arman_notificatio)
-                        .setCustomContentView(collapsedView)
-                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                        .setVibrate(new long[]{1000, 1000, 1000, 1000})
-                        .setSound(uri)
-                        .setShowWhen(true)
-                        .setGroup(GROUP_KEY_WORK_EMAIL)
-                        .setGroupSummary(false)
-                        .setStyle(new NotificationCompat.DecoratedCustomViewStyle())
-                        .setContentIntent(pendingIntent)
-                        .setAutoCancel(true);
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    showLog("sendNotification::@8");
-                    builder.setSmallIcon(R.drawable.ic_arman_notificatio);
-                    builder.setColor(context.getResources().getColor(R.color.colorPrimary));
-                } else {
-                    showLog("sendNotification::@7");
-                    builder.setSmallIcon(R.drawable.ic_arman_notificatio);
-                }
-                showLog("sendNotification::@6");
-                NotificationManagerCompat notificationManager = NotificationManagerCompat.from(getApplicationContext());
-
-                int m = (int) ((new Date().getTime() / 1000L) % Integer.MAX_VALUE);
-                //notificationManager.notify(random.nextInt(), builder.build());
-                notificationManager.notify(m, builder.build());
-            } catch (Exception e) {
-                Log.v("NotificationData", String.valueOf(e.getMessage()));
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
+        boolean success = downloadId > 0
+                ? isDownloadManagerSuccessful(downloadId)
+                : !isVideoDownloadCancel;
+        if (!success) {
+            // Fallback: file already on disk (observer race / STATUS lag).
+            File file = new File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    title);
+            success = file.exists() && file.length() > 0;
         }
+        if (!success) {
+            Toast.makeText(context, "Your video download is cancelled", Toast.LENGTH_LONG).show();
+            return;
+        }
+        // Dialog + NotificationCompat ACTION_VIEW (tap opens the saved video).
+        VideoDownloadConfirmHelper.showDownloaded(context, downloadId, title);
     }
 
 

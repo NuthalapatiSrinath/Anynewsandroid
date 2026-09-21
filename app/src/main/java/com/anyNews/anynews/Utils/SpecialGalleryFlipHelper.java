@@ -1,16 +1,13 @@
 package com.anyNews.anynews.Utils;
 
-import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.Html;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -20,6 +17,9 @@ import androidx.viewpager.widget.ViewPager;
 import com.anyNews.anynews.Adapters.GalleryImageFlipAdapter;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.flipview.FlipView;
+import com.tbuonomo.viewpagerdotsindicator.BaseDotsIndicator;
+import com.tbuonomo.viewpagerdotsindicator.OnPageChangeListenerHelper;
+import com.tbuonomo.viewpagerdotsindicator.WormDotsIndicator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +30,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * page-turn) instead of a ViewPager slide carousel. Also owns gesture isolation
  * so parent article FlipView / bottom tabs / system-back edge do not steal the
  * horizontal page-turn.
+ *
+ * <p>Dots: Play Store {@link WormDotsIndicator} (gallery_strip) driven via a
+ * custom {@link BaseDotsIndicator.Pager} — same widget/animation as July main,
+ * not invent-a-TextView dots.
  */
 public final class SpecialGalleryFlipHelper {
 
@@ -61,7 +65,7 @@ public final class SpecialGalleryFlipHelper {
             @Nullable ViewPager pager,
             @Nullable List<String> imageUrls,
             @Nullable TextView hintView,
-            @Nullable LinearLayout dotsHost,
+            @Nullable WormDotsIndicator wormDots,
             @Nullable Runnable onPageChanged) {
         ArrayList<String> urls = new ArrayList<>();
         if (imageUrls != null) {
@@ -167,18 +171,20 @@ public final class SpecialGalleryFlipHelper {
             flip.setVisibility(View.GONE);
             return null;
         }
-        syncDots(dotsHost, 0, urls.size());
 
         final FlipView flipRef = flip;
-        final LinearLayout dotsRef = dotsHost;
         final int pageCount = urls.size();
+        final FlipViewDotsPager dotsPager = bindWormDots(wormDots, flipRef, pageCount);
+
         flip.setOnFlipListener(new FlipView.OnFlipListener() {
             @Override
             public void onFlippedToPage(FlipView v, int position, long id) {
                 int safe = position;
                 if (safe < 0) safe = 0;
                 if (safe >= pageCount) safe = Math.max(0, pageCount - 1);
-                syncDots(dotsRef, safe, pageCount);
+                if (dotsPager != null) {
+                    dotsPager.onFlippedTo(safe);
+                }
                 if (onPageChanged != null) {
                     try {
                         onPageChanged.run();
@@ -192,6 +198,39 @@ public final class SpecialGalleryFlipHelper {
         // Guard last so it owns OnTouchListener (also dismisses hint on contact).
         installNestedSwipeGuard(flipRef, hintView);
         return flipRef;
+    }
+
+    /**
+     * Drive Play Store {@link WormDotsIndicator} from FlipView page index
+     * (same widget as ViewPager {@code setViewPager} path on News).
+     */
+    @Nullable
+    private static FlipViewDotsPager bindWormDots(
+            @Nullable WormDotsIndicator wormDots,
+            @NonNull FlipView flip,
+            int pageCount) {
+        if (wormDots == null) {
+            return null;
+        }
+        try {
+            wormDots.setVisibility(pageCount > 1 ? View.VISIBLE : View.GONE);
+            if (pageCount <= 1) {
+                wormDots.setPager(null);
+                return null;
+            }
+            View strip = wormDots.getParent() instanceof View
+                    ? (View) wormDots.getParent() : null;
+            if (strip != null) {
+                strip.setVisibility(View.VISIBLE);
+            }
+            FlipViewDotsPager pager = new FlipViewDotsPager(flip, pageCount);
+            wormDots.setPager(pager);
+            wormDots.refreshDots();
+            return pager;
+        } catch (Exception e) {
+            android.util.Log.e("MagazineCrash", "bindWormDots: " + e.getMessage());
+            return null;
+        }
     }
 
     /** If nested gallery is past page 0, flip back one page (consume system back). */
@@ -240,23 +279,88 @@ public final class SpecialGalleryFlipHelper {
         return null;
     }
 
-    private static void syncDots(@Nullable LinearLayout dotsHost, int selected, int count) {
-        if (dotsHost == null || count <= 1) {
-            if (dotsHost != null) {
-                dotsHost.removeAllViews();
+    /**
+     * Bridges FlipView → Play Store WormDotsIndicator (library {@link BaseDotsIndicator.Pager}).
+     */
+    private static final class FlipViewDotsPager implements BaseDotsIndicator.Pager {
+        private final FlipView flip;
+        private final int count;
+        private int current;
+        @Nullable
+        private OnPageChangeListenerHelper helper;
+
+        FlipViewDotsPager(@NonNull FlipView flip, int count) {
+            this.flip = flip;
+            this.count = Math.max(0, count);
+            int cur = 0;
+            try {
+                cur = flip.getCurrentPage();
+            } catch (Exception ignored) {
             }
-            return;
+            this.current = Math.max(0, Math.min(cur, Math.max(0, count - 1)));
         }
-        try {
-            dotsHost.removeAllViews();
-            for (int i = 0; i < count; i++) {
-                TextView dot = new TextView(dotsHost.getContext());
-                dot.setText(Html.fromHtml("&#9673;"));
-                dot.setTextSize(i == selected ? 28 : 16);
-                dot.setTextColor(i == selected ? Color.RED : Color.WHITE);
-                dotsHost.addView(dot);
+
+        void onFlippedTo(int position) {
+            current = Math.max(0, Math.min(position, Math.max(0, count - 1)));
+            if (helper != null) {
+                try {
+                    helper.onPageScrolled(current, 0f);
+                } catch (Exception ignored) {
+                }
             }
-        } catch (Exception ignored) {
+        }
+
+        @Override
+        public boolean isNotEmpty() {
+            return count > 0;
+        }
+
+        @Override
+        public int getCurrentItem() {
+            return current;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return count <= 0;
+        }
+
+        @Override
+        public int getCount() {
+            return count;
+        }
+
+        @Override
+        public void setCurrentItem(int item, boolean smoothScroll) {
+            int safe = Math.max(0, Math.min(item, Math.max(0, count - 1)));
+            current = safe;
+            try {
+                if (smoothScroll) {
+                    flip.smoothFlipTo(safe);
+                } else {
+                    flip.flipTo(safe);
+                }
+            } catch (Exception e) {
+                try {
+                    flip.flipTo(safe);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        @Override
+        public void removeOnPageChangeListener() {
+            helper = null;
+        }
+
+        @Override
+        public void addOnPageChangeListener(
+                @NonNull OnPageChangeListenerHelper onPageChangeListenerHelper) {
+            helper = onPageChangeListenerHelper;
+            try {
+                helper.onPageScrolled(current, 0f);
+            } catch (Exception ignored) {
+            }
         }
     }
 

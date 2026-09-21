@@ -3,6 +3,8 @@
 <!--    <external-path name="OctopusDriver" path="OctopusDriver/"/>-->
     <!-- App-scoped external files only (crop / share). Do not expose entire external storage. -->
     <external-path name="AnyNews" path="Android/data/com.anyNews.anynews/"/>
+    <!-- Public Downloads for tap-to-open after DownloadManager video save -->
+    <external-path name="external_downloads" path="Download/"/>
     <files-path path="Images/" name="Pictures" />
     <files-path path="Video/" name="Documents" />
     <files-path path="Videos/" name="Documents" />
