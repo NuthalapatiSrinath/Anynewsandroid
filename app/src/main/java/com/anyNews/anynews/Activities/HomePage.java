@@ -1985,10 +1985,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Search deck invariant: real hits only, then exactly one Continue-reading hub.
      * Zero ads/share/ratings. Never hub-first when hits exist. Hub-only only when
-     * paintables == 0. Single-article open ({@link #activeSearchSingleOnly}) →
-     * exactly {@code [chosen article, Continue-reading hub]} — no extra hits,
-     * no unlimited News pagination. Page 0 must be the article until the user
-     * swipes to the hub.
+     * paintables == 0. Suggestion / post_id open ({@link #activeSearchSingleOnly}) →
+     * {@code [chosen article, similar siblings…, Continue-reading hub]} — server
+     * already ranked exact then similar; never hub-first; no News pagination.
      */
     private void finalizeSearchFeedSeating(boolean landOnHits) {
         if (!searchFeedActive) return;
@@ -2013,11 +2012,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
-        // Count=1 suggestion / post_id open: exactly [chosen article, Continue-reading hub].
-        // Never soft-expanded multi stacks, never article-only (hub/redirection is OK).
-        // CRITICAL: never seat hub-only when the chosen article is missing — caller retries.
+        // Suggestion / post_id open: pin chosen article first, keep server-ranked
+        // similar siblings below, then Continue-reading hub. Never hub-only when
+        // the chosen article is missing — caller retries.
         if (activeSearchSingleOnly) {
             ModelClass.Datum keep = null;
+            ArrayList<ModelClass.Datum> siblings = new ArrayList<>();
             for (int i = 0; i < list.size(); i++) {
                 ModelClass.Datum d = list.get(i);
                 if (d == null || FeedEndHelper.isFeedEnd(d)) continue;
@@ -2026,14 +2026,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         && d.getPostId() != null
                         && d.getPostId() == activeSearchPostId) {
                     keep = d;
-                    break;
+                    continue;
                 }
-                if (keep == null) {
+                if (keep == null && activeSearchPostId <= 0L) {
                     keep = d;
-                    if (activeSearchPostId <= 0L) {
-                        break;
-                    }
+                    continue;
                 }
+                siblings.add(d);
+            }
+            // post_id not in payload yet — first strong hit is primary; rest similar.
+            if (keep == null && !siblings.isEmpty()) {
+                keep = siblings.remove(0);
             }
             list.clear();
             if (keep == null) {
@@ -2042,6 +2045,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 return;
             }
             list.add(keep);
+            // Cap similar seats so FlipView stays finite (server already ≤12).
+            int similarCap = 11;
+            for (int i = 0; i < siblings.size() && i < similarCap; i++) {
+                ModelClass.Datum s = siblings.get(i);
+                if (s == null || s.getPostId() == null) continue;
+                if (keep.getPostId() != null && s.getPostId().equals(keep.getPostId())) {
+                    continue;
+                }
+                list.add(s);
+            }
             // Pin context bar to the opened article title (not a stale keyword).
             try {
                 String title = keep.getTitle();
@@ -2062,15 +2075,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 requestPostition = Math.max(0, list.size()); // never == positionx on hub
             } catch (Exception ignored) {
             }
-            showLog("ANYNEWS_SEARCH single-only seat=[article,hub] postId="
+            showLog("ANYNEWS_SEARCH single seat=[primary,similar…,hub] postId="
                     + (keep.getPostId() != null ? keep.getPostId() : 0)
+                    + " hits=" + ReadArticleStore.countPaintableArticles(list)
                     + " listSize=" + list.size());
             try {
                 updateSearchContextBar();
             } catch (Exception ignored) {
             }
         } else {
-            // Keyword multi-hit: exactly one Continue-reading hub last.
+            // Keyword multi-hit: exact then similar (server order), one hub last.
             FeedEndHelper.ensureAtEnd(list, this);
             // Finite first Search_Stories page only — park cursors so a stale
             // News requestPostition cannot fire page-N into this deck.
@@ -14064,8 +14078,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (activeSearchPostId > 0L || activeSearchSingleOnly) {
                 requestModel.setSearch_post_id(
                         activeSearchPostId > 0L ? activeSearchPostId : null);
-                // Exact / single open: one card only — never soft keyword expansion.
-                requestModel.setLimit(1);
+                // Primary + similar siblings (server ranks exact then near matches).
+                // Old Play Store APKs still send limit=1; server stays backend-safe.
+                requestModel.setLimit(12);
                 // Keep search_text as fallback so a missed post_id still finds the
                 // title (server prefers post_id when present). Clearing it caused
                 // hub-only opens when the id was stale / language-mismatched.
