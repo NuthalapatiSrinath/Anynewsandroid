@@ -88,6 +88,8 @@
 
     <string name="stfEmptyMessage">There are no items</string>
     <string name="your_video_downloaded">Your Video is Downloaded</string>
+    <string name="video_download_confirm_message">Your video has been downloaded.</string>
+    <string name="video_download_confirm_ok">OK</string>
 
     <string name="ad_attribution" translatable="false">Ad</string>
     <string name="more_menu" translatable="false">More</string>

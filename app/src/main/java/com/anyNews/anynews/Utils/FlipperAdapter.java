@@ -13753,7 +13753,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Full-video "Download Video" option. Saves through the same DownloadManager
      * helper the magazine/video downloads already use, so progress, the
-     * "downloaded" toast and the share notification stay identical. Android 10+
+     * download confirmation popup and the share notification stay identical. Android 10+
      * writes to public Downloads without a permission; older builds ask for
      * WRITE_EXTERNAL_STORAGE first.
      */
@@ -14256,7 +14256,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if(isVideoDownloadCancel){
                 Toast.makeText(context,"Your video download is cancelled",Toast.LENGTH_LONG).show();
             }else{
-                Toast.makeText(context,"Your video is downloaded",Toast.LENGTH_LONG).show();
+                // Shared popup for every video download entry (half/full, Exo/YouTube, footer share).
+                VideoDownloadConfirmHelper.showDownloaded(context);
                 sendNotification(list.get(position).getPostId(),title);
             }
         }
