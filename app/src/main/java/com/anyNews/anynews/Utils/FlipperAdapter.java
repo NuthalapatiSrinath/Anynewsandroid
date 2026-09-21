@@ -4916,6 +4916,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         convertView = inflater.inflate(R.layout.activity_magazine_detailes, parent, false);
                         image_magazineHolder.magzine_viewPager_data = convertView.findViewById(R.id.magzine_viewPager_data);
                         image_magazineHolder.magzine_ll_dots = convertView.findViewById(R.id.magzine_ll_dots);
+                        image_magazineHolder.magzine_indicator = convertView.findViewById(R.id.magzine_indicator);
                         final RelativeLayout magzine_relative_slider = convertView.findViewById(R.id.magzine_relative_slider);
                         ImageView imageViewShareMag = convertView.findViewById(R.id.imageViewShare);
                         // Footer Calendar took the old center Share slot — restore blue blink
@@ -5049,51 +5050,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     }
                                 }
                             });
-                            image_magazineHolder.magzine_ll_dots.removeAllViews();
-                            dots = new TextView[mCardAdapter.getCount()];
-                            for (int i = 0; i < dots.length; i++) {
-                                dots[i] = new TextView(context);
-                                dots[i].setText(Html.fromHtml("&#9673;"));
-                                dots[i].setTextSize(18);
-                                dots[i].setTextColor(Color.WHITE);
-                                image_magazineHolder.magzine_ll_dots.addView(dots[i]);
+                            // Same Play Store WormDots + gallery_strip as image_gallery / half gallery.
+                            if (image_magazineHolder.magzine_ll_dots != null) {
+                                image_magazineHolder.magzine_ll_dots.setVisibility(
+                                        mCardAdapter.getCount() > 1 ? VISIBLE : GONE);
                             }
-                            if (dots.length > 0) {
-                                dots[0].setTextColor(Color.RED);
-                                dots[0].setTextSize(30);
+                            if (image_magazineHolder.magzine_indicator != null) {
+                                try {
+                                    image_magazineHolder.magzine_indicator.setViewPager(
+                                            image_magazineHolder.magzine_viewPager_data);
+                                    image_magazineHolder.magzine_indicator.setVisibility(
+                                            mCardAdapter.getCount() > 1 ? VISIBLE : GONE);
+                                } catch (Exception e) {
+                                    android.util.Log.e("MagazineCrash",
+                                            "magzine WormDots setViewPager: " + e.getMessage());
+                                }
                             }
-                            image_magazineHolder.magzine_viewPager_data.setOnPageChangeListener(new ViewPager.OnPageChangeListener() {
-                                @Override
-                                public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
-                                }
-
-                                @Override
-                                public void onPageSelected(int position) {
-                                    try {
-                                        dots = new TextView[mCardAdapter.getCount()];
-                                        image_magazineHolder.magzine_ll_dots.removeAllViews();
-                                        for (int i = 0; i < dots.length; i++) {
-                                            dots[i] = new TextView(context);
-                                            dots[i].setText(Html.fromHtml("&#9673;"));
-                                            dots[i].setTextSize(20);
-                                            dots[i].setTextColor(Color.WHITE);
-                                            image_magazineHolder.magzine_ll_dots.addView(dots[i]);
-                                        }
-                                        if (dots.length > 0) {
-                                            dots[position].setTextColor(Color.RED);
-                                            dots[position].setTextSize(40);
-                                        }
-                                    } catch (ArrayIndexOutOfBoundsException e) {
-                                        e.printStackTrace();
-                                    }
-
-
-                                }
-
-                                @Override
-                                public void onPageScrollStateChanged(int state) {
-                                }
-                            });
                             GallerySwipeHintHelper.bind(
                                     image_magazineHolder.magzine_viewPager_data,
                                     magSwipeHint,
@@ -11284,6 +11256,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public static class ImageMagazineHolder {
 
         LinearLayout magzine_ll_dots;
+        WormDotsIndicator magzine_indicator;
         ViewPager magzine_viewPager_data;
     }
 

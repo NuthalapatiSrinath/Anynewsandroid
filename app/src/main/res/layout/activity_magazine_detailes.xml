@@ -44,14 +44,36 @@
             android:layout_marginBottom="@dimen/eight" />
 
 
+        <!-- Play Store gallery_strip + WormDots (same as image_gallery / half gallery) -->
         <LinearLayout
             android:id="@+id/magzine_ll_dots"
             android:layout_width="match_parent"
-            android:layout_height="60dp"
+            android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
-            android:layout_marginLeft="@dimen/ten"
+            android:layout_marginBottom="@dimen/_10sdp"
             android:gravity="center"
             android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="@dimen/_150sdp"
+                android:layout_height="@dimen/_32sdp"
+                android:gravity="center"
+                android:background="@drawable/gallery_strip"
+                android:orientation="vertical"
+                android:visibility="visible">
+
+                <com.tbuonomo.viewpagerdotsindicator.WormDotsIndicator
+                    android:id="@+id/magzine_indicator"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    app:dotsColor="@color/colorPrimary"
+                    app:dotsCornerRadius="8dp"
+                    app:dotsSize="12dp"
+                    app:dotsSpacing="4dp"
+                    app:dotsStrokeColor="@color/white"
+                    app:dotsWidthFactor="2.5" />
+            </LinearLayout>
 
         </LinearLayout>
 
