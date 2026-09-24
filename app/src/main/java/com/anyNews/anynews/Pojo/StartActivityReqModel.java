@@ -516,6 +516,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean hideDistrictOnMainFeed;
 
+        /**
+         * District pill click opens Local/Main. Null on old servers → app default ON
+         * (Play Store July parity).
+         */
+        @SerializedName("location_pill_opens_local_feed")
+        @Expose
+        private Boolean locationPillOpensLocalFeed;
+
         /** Rewards feature master (Profile rewards + optional feed slot). Null on old servers. */
         @SerializedName("rewards_master")
         @Expose
@@ -1178,6 +1186,10 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getHideDistrictOnMainFeed() {
             return hideDistrictOnMainFeed;
+        }
+
+        public Boolean getLocationPillOpensLocalFeed() {
+            return locationPillOpensLocalFeed;
         }
 
         public Boolean getRewardsMaster() {

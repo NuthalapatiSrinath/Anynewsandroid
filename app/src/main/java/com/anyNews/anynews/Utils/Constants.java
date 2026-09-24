@@ -317,6 +317,12 @@ public class Constants {
      */
     public static String HIDE_DISTRICT_ON_MAIN_FEED = "hide_district_on_main_feed";
     /**
+     * District / location pill click opens Local (Main→Local, Local/category→Main).
+     * Play Store / July default ON. OFF = display-only pill (no feed navigation).
+     * Splash/session: {@code location_pill_opens_local_feed}.
+     */
+    public static String LOCATION_PILL_OPENS_LOCAL_FEED = "location_pill_opens_local_feed";
+    /**
      * Rewards feature master (Profile rewards row + optional main-feed slot).
      * Does NOT control Profile wallet — see {@link #SHOW_WALLET_IN_PROFILE}.
      * Default false. Splash/session: {@code rewards_master}.

@@ -2181,6 +2181,9 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getFlashNewsInMainFeedSlot(),
                                 startActivityReqModel.getData().getKeepRewardsAfterJoin(),
                                 startActivityReqModel.getData().getShowFlashAndRewardsTogether());
+                        DistrictPinVisibilityConfig.saveLocationPillOpensLocalFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getLocationPillOpensLocalFeed());
                         DistrictPinVisibilityConfig.saveWalletVisibilityFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getShowWalletInProfile());

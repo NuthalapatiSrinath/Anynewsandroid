@@ -137,6 +137,7 @@ import com.anyNews.anynews.Pojo.LikeSelectionRequest;
 import com.anyNews.anynews.Pojo.SurveyFeedbackResponse;
 import com.anyNews.anynews.Pojo.SurveyRequestFeedback;
 import com.anyNews.anynews.Pojo.UserProfileRequest;
+import com.anyNews.anynews.Pojo.WriterStripStyleConfig;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
@@ -3405,8 +3406,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             labelView.setMaxLines(1);
             labelView.setEllipsize(TextUtils.TruncateAt.END);
             // Undo promo chip textSize/typeface from a recycled Flash/Rewards bind.
-            // Use density (not R.dimen._12sdp) — sdp library dims are non-transitive for Java R.
-            labelView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f);
+            // Match Play Store / layout @dimen/_12sdp (or admin writer-strip location size).
+            applyDistrictPillLabelSize(labelView);
             try {
                 labelView.setTypeface(labelView.getTypeface(), android.graphics.Typeface.NORMAL);
             } catch (Exception ignored) {
@@ -3422,6 +3423,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         if (pinView != null) {
             pinView.setVisibility(View.VISIBLE);
+            restoreDistrictPinSize(pinView);
             if (categery_id == 0 || categery_id == -1) {
                 pinView.setBackgroundResource(ic_location_icon);
             } else {
@@ -3469,8 +3471,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * District pill → Local picker; Rewards chip → hub; Flash chip → Flash News
-     * (same experience as Daily Updates). Must run after legacy location listeners.
+     * District pill → Local/Main toggle (Play Store July / origin/main); Rewards → hub;
+     * Flash → Flash News. Gated by {@code location_pill_opens_local_feed} (default ON).
+     * Must run after legacy location listeners.
      */
     private void bindDistrictOrRewardsClick(View pill, @Nullable ModelClass.Datum post) {
         if (pill == null) return;
@@ -3481,9 +3484,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 categery_id > 0 && isUsableLocationLabel(my_feed_name);
         final boolean showingDistrict = showingCategoryFeedTitle
                 || isUsableLocationLabel(resolveLocationLabel(boundPost));
+        final boolean opensLocal =
+                DistrictPinVisibilityConfig.locationPillOpensLocalFeed(context);
         pill.setOnClickListener(v -> {
             if (showingDistrict) {
-                if (callbacks != null) {
+                // Play Store / July: Main → Local (−1); Local/category → Main (0).
+                // Admin OFF: district / ప్రధాన వార్తలు pill is display-only.
+                if (opensLocal && callbacks != null) {
                     callbacks.callLocationRequest(0);
                 }
                 return;
@@ -3500,7 +3507,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             } else if (DistrictPinVisibilityConfig.shouldShowFlashInDistrictSlot(
                     context, categery_id, boundPost)) {
                 openFlashNewsFromChip();
-            } else if (callbacks != null) {
+            } else if (opensLocal && callbacks != null) {
                 callbacks.callLocationRequest(0);
             }
         });
@@ -3961,6 +3968,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             restoreDistrictPillPadding(pill);
             if (pinView != null) {
                 pinView.setVisibility(View.VISIBLE);
+                restoreDistrictPinSize(pinView);
             }
         } catch (Exception ignored) {
         }
@@ -3969,18 +3977,71 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Play Store / July {@code ll_refer_and_earn_half}: paddingLeft/Right {@code _8sdp},
      * paddingTop/Bottom {@code _2sdp}. Must re-apply after {@link #applyRewardsChipVisual}
-     * zeroes L/R padding on recycle.
+     * zeroes L/R padding on recycle. Resolve via {@code getIdentifier} — sdp dims are
+     * non-transitive on {@code R.dimen} for Java.
      */
     private void restoreDistrictPillPadding(@Nullable View pill) {
         if (pill == null || context == null) return;
         try {
-            // Match layout _8sdp / _2sdp via density (sdp R dims are non-transitive for Java).
-            float density = context.getResources().getDisplayMetrics().density;
-            int padH = Math.round(8f * density);
-            int padV = Math.round(2f * density);
+            int padH = sdpPx(8);
+            int padV = sdpPx(2);
             pill.setPadding(padH, padV, padH, padV);
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Play Store pin: {@code _12sdp} × {@code _10sdp}, end margin {@code _8sdp}.
+     * Rewards pulse host can leave recycled layout params wrong.
+     */
+    private void restoreDistrictPinSize(@Nullable ImageView pinView) {
+        if (pinView == null || context == null) return;
+        try {
+            android.view.ViewGroup.LayoutParams lp = pinView.getLayoutParams();
+            if (lp == null) return;
+            lp.width = sdpPx(12);
+            lp.height = sdpPx(10);
+            if (lp instanceof android.view.ViewGroup.MarginLayoutParams) {
+                ((android.view.ViewGroup.MarginLayoutParams) lp).rightMargin = sdpPx(8);
+            }
+            pinView.setLayoutParams(lp);
+            pinView.setPadding(0, 0, 0, 0);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Label size: admin writer-strip location sdp, else Play Store {@code _12sdp}. */
+    private void applyDistrictPillLabelSize(@Nullable TextView labelView) {
+        if (labelView == null || context == null) return;
+        float sizeSdp = 12f;
+        try {
+            WriterStripStyleConfig cfg = WriterStripStyleHelper.load(context);
+            if (cfg != null) {
+                sizeSdp = cfg.getLocationSizeSdp();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            FontSettingsHelper.applyTextSize(context, labelView, sizeSdp);
+        } catch (Exception e) {
+            labelView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sizeSdp);
+        }
+    }
+
+    /** Resolve intuit {@code _Nsdp} px; approximate when the dimen is missing. */
+    private int sdpPx(int sdp) {
+        if (context == null) return sdp;
+        try {
+            int resId = context.getResources().getIdentifier(
+                    "_" + sdp + "sdp", "dimen", context.getPackageName());
+            if (resId != 0) {
+                return context.getResources().getDimensionPixelSize(resId);
+            }
+        } catch (Exception ignored) {
+        }
+        android.util.DisplayMetrics dm = context.getResources().getDisplayMetrics();
+        float swDp = Math.min(dm.widthPixels, dm.heightPixels) / dm.density;
+        return Math.round(sdp * (swDp / 360f) * dm.density);
     }
 
     /** Guest vs joined copy for the main-feed rewards slot. */

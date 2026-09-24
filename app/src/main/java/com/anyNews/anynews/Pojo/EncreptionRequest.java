@@ -219,6 +219,10 @@ public class EncreptionRequest {
     @Expose
     private Boolean hide_district_on_main_feed;
 
+    @SerializedName("location_pill_opens_local_feed")
+    @Expose
+    private Boolean location_pill_opens_local_feed;
+
     @SerializedName("rewards_master")
     @Expose
     private Boolean rewards_master;
@@ -540,6 +544,10 @@ public class EncreptionRequest {
 
     public Boolean getHide_district_on_main_feed() {
         return hide_district_on_main_feed;
+    }
+
+    public Boolean getLocation_pill_opens_local_feed() {
+        return location_pill_opens_local_feed;
     }
 
     public Boolean getRewards_master() {

@@ -8,7 +8,8 @@ import androidx.annotation.Nullable;
 /**
  * District pin / Rewards / Flash News chip visibility on half-article cards.
  * Values arrive via splash / session:
- * {@code hide_district_on_main_feed}, {@code rewards_master},
+ * {@code hide_district_on_main_feed}, {@code location_pill_opens_local_feed},
+ * {@code rewards_master},
  * {@code show_wallet_in_profile}, {@code rewards_in_main_feed_slot},
  * {@code keep_rewards_after_join},
  * {@code flash_news_in_main_feed_slot}, {@code show_flash_and_rewards_together},
@@ -36,6 +37,11 @@ public final class DistrictPinVisibilityConfig {
 
     /** Default ON: preferred product behavior. */
     public static final boolean DEFAULT_HIDE_ON_MAIN_FEED = true;
+    /**
+     * District pill click opens Local/Main (Play Store July / origin/main).
+     * Default ON. OFF = display-only (no {@code callLocationRequest}).
+     */
+    public static final boolean DEFAULT_LOCATION_PILL_OPENS_LOCAL = true;
     /** Rewards feature master — default OFF until product enables it. */
     public static final boolean DEFAULT_REWARDS_MASTER = false;
     /**
@@ -428,6 +434,35 @@ public final class DistrictPinVisibilityConfig {
     /** True when admin wants district hidden on main News (default true). */
     public static boolean hideOnMainFeed(@Nullable Context context) {
         return readBool(context, Constants.HIDE_DISTRICT_ON_MAIN_FEED, DEFAULT_HIDE_ON_MAIN_FEED);
+    }
+
+    /**
+     * District / location pill click opens Local feed (Main→Local; Local/category→Main).
+     * Play Store July / origin/main default ON. Missing key → ON.
+     */
+    public static boolean locationPillOpensLocalFeed(@Nullable Context context) {
+        return readBool(
+                context,
+                Constants.LOCATION_PILL_OPENS_LOCAL_FEED,
+                DEFAULT_LOCATION_PILL_OPENS_LOCAL);
+    }
+
+    /**
+     * Persist splash/session {@code location_pill_opens_local_feed}. Null = leave cache.
+     * @return true when the stored value changed.
+     */
+    public static boolean saveLocationPillOpensLocalFromServer(
+            @Nullable Context context, @Nullable Boolean opensLocal) {
+        if (context == null || opensLocal == null) return false;
+        Context app = context.getApplicationContext();
+        boolean prev = locationPillOpensLocalFeed(app);
+        if (prev == opensLocal) return false;
+        SharedPrefsData.putString(
+                app,
+                Constants.LOCATION_PILL_OPENS_LOCAL_FEED,
+                opensLocal ? "true" : "false",
+                Constants.PREF_NAME);
+        return true;
     }
 
     /**
