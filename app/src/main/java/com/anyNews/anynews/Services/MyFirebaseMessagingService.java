@@ -682,9 +682,17 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
         Intent resultIntent = new Intent(getApplicationContext(), StartingActivity.class);
         resultIntent.putExtra("notification", true);
+        // Legacy splash key (typo) + HomePage TITLE — both must carry this post_id.
         resultIntent.putExtra("TITILE", post_id);
+        resultIntent.putExtra("TITLE", post_id);
         resultIntent.putExtra("TITLE_REWARDS", title);
         resultIntent.putExtra("OBJECT", object);
+        // Unique data URI so multi-tray PendingIntents never share one extras blob
+        // under FLAG_UPDATE_CURRENT (OEM / same-component collisions).
+        try {
+            resultIntent.setData(Uri.parse("anynews://push/" + post_id));
+        } catch (Exception ignored) {
+        }
         resultIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         int notificationId = safeNotificationId(post_id);
@@ -832,8 +840,13 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             Intent resultIntent = new Intent(getApplicationContext(), StartingActivity.class);
             resultIntent.putExtra("notification", true);
             resultIntent.putExtra("TITILE", post_id);
+            resultIntent.putExtra("TITLE", post_id);
             resultIntent.putExtra("TITLE_REWARDS", actor);
             resultIntent.putExtra("OBJECT", object.toString());
+            try {
+                resultIntent.setData(Uri.parse("anynews://push/" + post_id));
+            } catch (Exception ignored) {
+            }
             resultIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
             int notificationId = safeNotificationId(post_id);

@@ -228,6 +228,13 @@ public class StartingActivity extends AppCompatActivity {
         showLog("CHECK POINT 1");
         Intent intent = getIntent();
         TITLE = "" + intent.getStringExtra("TITILE");
+        // FCM also writes TITLE (correct spelling); prefer non-empty either key.
+        if (TITLE == null || TITLE.isEmpty() || "null".equalsIgnoreCase(TITLE)) {
+            String titleAlt = intent.getStringExtra("TITLE");
+            if (titleAlt != null && !titleAlt.isEmpty() && !"null".equalsIgnoreCase(titleAlt)) {
+                TITLE = titleAlt;
+            }
+        }
         SharedPrefsData.putString(getApplicationContext(), Constants.REFERRER_POST, "0", Constants.PREF_NAME);
         // Clear any stale pending share post before parsing this launch's intent;
         // extractData() re-sets it only when this launch is an actual share link.
@@ -259,9 +266,13 @@ public class StartingActivity extends AppCompatActivity {
         if (intent.getData() != null) {
             Uri data = intent.getData();
             showLog("data%%::" + data.toString());
-            extractData(data);
-            maybeResolveLegacyPageLink(data);
-            maybeResolveShareShortCode(data);
+            // FCM PendingIntent uses anynews://push/{id} only for Intent uniqueness —
+            // never treat it as a share / DATAFROM2G deep link.
+            if (!isFcmPushIntentUri(data)) {
+                extractData(data);
+                maybeResolveLegacyPageLink(data);
+                maybeResolveShareShortCode(data);
+            }
         }
 
         // Instant open for returning users (after intent/deep-link parse so share ids pass through).
@@ -993,10 +1004,36 @@ public class StartingActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        if (intent != null && intent.getData() != null) {
-            extractData(intent.getData());
-            maybeResolveLegacyPageLink(intent.getData());
-            maybeResolveShareShortCode(intent.getData());
+        if (intent == null) {
+            return;
+        }
+        // FCM tray tap while splash singleTask is still alive: refresh TITLE and
+        // deliver to Home (share/App-Link path below is URI-only).
+        if (intent.getBooleanExtra("notification", false)
+                || intent.hasExtra("TITILE")
+                || intent.hasExtra("TITLE")) {
+            String pushTitle = intent.getStringExtra("TITILE");
+            if (pushTitle == null || pushTitle.isEmpty() || "null".equalsIgnoreCase(pushTitle)) {
+                pushTitle = intent.getStringExtra("TITLE");
+            }
+            if (pushTitle != null
+                    && !pushTitle.isEmpty()
+                    && !"null".equalsIgnoreCase(pushTitle)
+                    && !"0".equals(pushTitle.trim())) {
+                TITLE = pushTitle.trim();
+                TITLE_REWARDS = "" + intent.getStringExtra("TITLE_REWARDS");
+                OBJECT = "" + intent.getStringExtra("OBJECT");
+                deliverPushRedirectToHome(TITLE);
+                return;
+            }
+        }
+        if (intent.getData() != null) {
+            Uri data = intent.getData();
+            if (!isFcmPushIntentUri(data)) {
+                extractData(data);
+                maybeResolveLegacyPageLink(data);
+                maybeResolveShareShortCode(data);
+            }
             // Warm start: open Jobs hub immediately for job share App Links.
             if (jobId1 != null && !jobId1.isEmpty()) {
                 try {
@@ -1013,6 +1050,44 @@ public class StartingActivity extends AppCompatActivity {
                 // Warm share (app already on Home): pin the exact post / magazine.
                 deliverShareRedirectToHome(articleId1);
             }
+        }
+    }
+
+    /** True for FCM tray PendingIntent data ({@code anynews://push/{postId}}). */
+    private static boolean isFcmPushIntentUri(@Nullable Uri uri) {
+        if (uri == null) {
+            return false;
+        }
+        return "anynews".equalsIgnoreCase(uri.getScheme())
+                && "push".equalsIgnoreCase(uri.getHost());
+    }
+
+    /**
+     * Warm FCM open: Home already showing — pin via TITLE / push_post_id onNewIntent.
+     * Cold path still uses {@link #openHomeFromSplash()}.
+     */
+    private void deliverPushRedirectToHome(@Nullable String pushPostId) {
+        if (pushPostId == null || pushPostId.trim().isEmpty()
+                || "0".equals(pushPostId.trim())
+                || "null".equalsIgnoreCase(pushPostId.trim())) {
+            return;
+        }
+        try {
+            if (!homeOpenedFromSplash) {
+                OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, pushPostId, articleId1);
+                openHomeFromSplash();
+                return;
+            }
+            Intent intent = new Intent(StartingActivity.this, HomePage.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            intent.putExtra("TITLE", pushPostId.trim());
+            intent.putExtra("EXTRA_SESSION_ID", "0");
+            intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
+            intent.putExtra("DATAFROM2G", DATAFROM2G);
+            // Do not pass SHARE_REDIRECT_ID — push must use push_post_id only.
+            startActivity(intent);
+        } catch (Exception e) {
+            Logone.w(TAG, "deliverPushRedirectToHome failed", e);
         }
     }
 

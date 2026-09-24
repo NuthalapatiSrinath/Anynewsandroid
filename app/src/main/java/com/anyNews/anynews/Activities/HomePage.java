@@ -1729,9 +1729,75 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             applySearchQueryExtra(intent);
             applyCategorySessionExtra(intent);
             applyDailyUpdatesOpenExtra(intent);
-            // WhatsApp share → StartingActivity CLEAR_TOP|SINGLE_TOP reuses this
-            // HomePage; must consume SHARE_REDIRECT_ID here (onCreate already ran).
+            // Share first (owns seating when SHARE_REDIRECT_ID present).
             applyShareRedirectFromIntent(intent);
+            // FCM push: Home is CLEAR_TOP|SINGLE_TOP — must consume TITLE here
+            // (onCreate already ran). Share path returns early when SHARE set.
+            applyPushRedirectFromIntent(intent);
+        }
+    }
+
+    /**
+     * Warm push open (app already on Home): pin {@code TITLE} via push_post_id
+     * without stacking another HomePage. Mirrors onCreate TITLE / sticky wire.
+     */
+    private void applyPushRedirectFromIntent(@Nullable Intent intent) {
+        if (intent == null) {
+            return;
+        }
+        // Share deep-link owns seating when present.
+        if (SHARE_ID > 0) {
+            return;
+        }
+        String pushRaw = intent.getStringExtra("TITLE");
+        if (pushRaw == null || pushRaw.trim().isEmpty()
+                || "null".equalsIgnoreCase(pushRaw.trim())
+                || "0".equals(pushRaw.trim())) {
+            return;
+        }
+        long pushId;
+        try {
+            pushId = Long.parseLong(pushRaw.trim());
+        } catch (NumberFormatException e) {
+            showLog("push onNewIntent bad id=" + pushRaw);
+            return;
+        }
+        if (pushId <= 0) {
+            return;
+        }
+        pushUpdatedID = String.valueOf(pushId);
+        pushOpenWireConsumed = false;
+        TITLE_VALUE = 0;
+        deepLinkShareRescueAttempted = false;
+        SHARE_ID = 0;
+        SHARE_REDIRECT_ID = "0";
+        showLog("push onNewIntent TITLE=" + pushUpdatedID);
+        try {
+            intent.putExtra("TITLE", pushUpdatedID);
+        } catch (Exception ignored) {
+        }
+        try {
+            bookmarksModeSelected = false;
+            setFeedModeFlags(false, false);
+            applyHomeModeContentVisibility();
+            refreshHomeModeToggleUi();
+        } catch (Exception ignored) {
+        }
+        try {
+            clearPendingFlipRestore();
+        } catch (Exception ignored) {
+        }
+        try {
+            OpenPathCache.forceNextFeedNetwork(this);
+            last_post_id = 0;
+            skip = 0;
+            actual_skip = 0;
+            isApiRequested = true;
+            isDataParsed = true;
+            dummyResponse = null;
+            ShowNews_Data_Values(category_id, 0);
+        } catch (Exception e) {
+            showLog("push onNewIntent land failed: " + e.getMessage());
         }
     }
 
@@ -14081,6 +14147,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // maybeLand / consume so Flip can resolve the exact article. Do not clear
         // land id here — that used to leave push opens stuck at feed top without flip.
         TITLE_VALUE = 0;
+        long pushWireId = 0L;
         if (!pushOpenWireConsumed) {
             try {
                 if (pushUpdatedID != null) {
@@ -14088,17 +14155,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (!raw.isEmpty()
                             && !raw.equalsIgnoreCase("null")
                             && !raw.equals("0")) {
-                        TITLE_VALUE = Integer.parseInt(raw);
-                        if (TITLE_VALUE < 0) {
-                            TITLE_VALUE = 0;
+                        pushWireId = Long.parseLong(raw);
+                        if (pushWireId < 0) {
+                            pushWireId = 0L;
                         }
+                        // Cache / dedupe key still uses int-sized TITLE_VALUE.
+                        TITLE_VALUE = pushWireId > Integer.MAX_VALUE
+                                ? Integer.MAX_VALUE
+                                : (int) pushWireId;
                     }
                 }
             } catch (NumberFormatException e) {
                 showLog("not a number");
                 TITLE_VALUE = 0;
+                pushWireId = 0L;
             }
-            if (TITLE_VALUE > 0) {
+            if (pushWireId > 0) {
                 pushOpenWireConsumed = true;
             }
         }
@@ -14109,7 +14181,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
         requestModel.setSkip((long) skip);
         requestModel.setLastPostId((long) last_post_id);
-        requestModel.setPushPostId((long) TITLE_VALUE);
+        requestModel.setPushPostId(pushWireId);
         requestModel.setReferred_post_id(SharedPrefsData.getString(getApplicationContext(), Constants.REFERRER_POST,  Constants.PREF_NAME));
         requestModel.setSharePostId((long) SHARE_ID);
         requestModel.setActualSkip((long) actual_skip);
@@ -18652,18 +18724,18 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
             return;
         }
-        // Prefer shared card as the current (first) flip item when it arrived mid-list.
-        if (idx > 0 && SHARE_ID > 0) {
+        // Prefer shared/push card as the current (first) flip item when it arrived mid-list.
+        if (idx > 0) {
             try {
-                ModelClass.Datum shared = list.remove(idx);
-                list.add(0, shared);
+                ModelClass.Datum pinned = list.remove(idx);
+                list.add(0, pinned);
                 idx = 0;
                 if (adapter != null) {
                     adapter.notifyWhenFlipSettled();
                 }
-                showLog("deep-link moved share post to index 0 postId=" + targetId);
+                showLog("deep-link moved sticky post to index 0 postId=" + targetId);
             } catch (Exception e) {
-                showLog("deep-link reorder share failed: " + e.getMessage());
+                showLog("deep-link reorder sticky failed: " + e.getMessage());
             }
         }
         showLog("deep-link land → News flip postId=" + targetId + " idx=" + idx
