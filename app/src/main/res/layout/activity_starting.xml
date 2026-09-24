@@ -1,10 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".Activities.StartingActivity">
+
+    <!-- Full-bleed Opening Banner (FIT_XY stretch — all four edges, no crop). -->
+    <ImageView
+        android:id="@+id/logo_image_server"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:adjustViewBounds="false"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:visibility="visible" />
+
+    <ImageView
+        android:id="@+id/logo_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:visibility="gone" />
 
     <LinearLayout
         android:id="@+id/net_avilable"
@@ -13,53 +29,33 @@
         android:gravity="center"
         android:orientation="vertical"
         android:visibility="visible">
+
         <TextView
-            android:visibility="gone"
-            android:layout_marginTop="@dimen/_40sdp"
             android:id="@+id/welcome"
-            android:gravity="center"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_40sdp"
+            android:gravity="center"
             android:text=""
-            android:textColor="@color/red_one">
-
-        </TextView>
-
-        <ImageView
-            android:scaleType="fitXY"
-            android:id="@+id/logo_image"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="gone">
-
-        </ImageView>
-        <ImageView
-            android:scaleType="centerCrop"
-            android:id="@+id/logo_image_server"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
-
-        </ImageView>
+            android:textColor="@color/red_one"
+            android:visibility="gone" />
 
         <TextView
-            android:visibility="gone"
-            style="@style/TextStyle4"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_below="@+id/layout1"
-            android:layout_centerHorizontal="true"
             android:layout_gravity="center"
             android:layout_marginTop="70dp"
-            android:text="Loading..." />
-
+            style="@style/TextStyle4"
+            android:text="Loading..."
+            android:visibility="gone" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/net_not_avilable"
-        android:visibility="gone"
-        android:theme="@style/AppThemeBG"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-        <include layout="@layout/no_internet_scrren"></include>
+        android:layout_height="match_parent"
+        android:theme="@style/AppThemeBG"
+        android:visibility="gone">
+        <include layout="@layout/no_internet_scrren" />
     </LinearLayout>
-</RelativeLayout>
+</FrameLayout>

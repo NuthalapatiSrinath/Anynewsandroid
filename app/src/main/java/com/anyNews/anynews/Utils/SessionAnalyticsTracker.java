@@ -1248,12 +1248,14 @@ public final class SessionAnalyticsTracker {
                             || resBody.has("festival_splash_show_on_push")
                             || resBody.has("festival_splash_show_on_share")
                             || resBody.has("festival_splash_duration_seconds")
-                            || resBody.has("festival_splash_image_url")) {
+                            || resBody.has("festival_splash_image_url")
+                            || resBody.has("festival_splash_updated_at")) {
                         Boolean festEn = null;
                         Boolean festPush = null;
                         Boolean festShare = null;
                         Integer festDur = null;
                         String festUrl = null;
+                        Long festUpdated = null;
                         if (resBody.has("festival_splash_enabled")
                                 && !resBody.get("festival_splash_enabled").isJsonNull()) {
                             festEn = resBody.get("festival_splash_enabled").getAsBoolean();
@@ -1274,8 +1276,16 @@ public final class SessionAnalyticsTracker {
                                 && !resBody.get("festival_splash_image_url").isJsonNull()) {
                             festUrl = resBody.get("festival_splash_image_url").getAsString();
                         }
+                        if (resBody.has("festival_splash_updated_at")
+                                && !resBody.get("festival_splash_updated_at").isJsonNull()) {
+                            try {
+                                festUpdated = resBody.get("festival_splash_updated_at").getAsLong();
+                            } catch (Exception ignored) {
+                                festUpdated = null;
+                            }
+                        }
                         FestivalSplashHelper.saveFromServer(
-                                context, festEn, festPush, festShare, festDur, festUrl);
+                                context, festEn, festPush, festShare, festDur, festUrl, festUpdated);
                         FestivalSplashHelper.prefetchInBackground(context);
                     }
                 }

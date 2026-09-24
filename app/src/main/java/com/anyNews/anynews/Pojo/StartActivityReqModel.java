@@ -464,6 +464,11 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String festivalSplashImageUrl;
 
+        /** ms epoch from server — changes when admin replaces banner image. */
+        @SerializedName("festival_splash_updated_at")
+        @Expose
+        private Long festivalSplashUpdatedAt;
+
         /**
          * Offline News pack max articles (admin; default 24, range 8–50).
          * Null on old servers → Android keeps cached / default 24.
@@ -1151,6 +1156,11 @@ public class StartActivityReqModel implements Serializable {
 
         public String getFestivalSplashImageUrl() {
             return festivalSplashImageUrl;
+        }
+
+        /** Null → old server; caller keeps cached / 0. */
+        public Long getFestivalSplashUpdatedAt() {
+            return festivalSplashUpdatedAt;
         }
 
         /** Null → old server; caller keeps cached / default 24. */
