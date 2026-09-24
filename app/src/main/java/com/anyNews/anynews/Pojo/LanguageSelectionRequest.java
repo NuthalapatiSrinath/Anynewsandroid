@@ -57,6 +57,16 @@ public class LanguageSelectionRequest implements Serializable {
     @Expose
     private Boolean converted;
 
+    /** true when user tapped Don't allow on POST_NOTIFICATIONS. */
+    @SerializedName("denied")
+    @Expose
+    private Boolean denied;
+
+    /** Alias for converted; false means Don't allow for one-time send stats. */
+    @SerializedName("accepted")
+    @Expose
+    private Boolean accepted;
+
     @SerializedName("already_enabled")
     @Expose
     private Boolean alreadyEnabled;
@@ -117,6 +127,22 @@ public class LanguageSelectionRequest implements Serializable {
 
     public void setConverted(Boolean converted) {
         this.converted = converted;
+    }
+
+    public Boolean getDenied() {
+        return denied;
+    }
+
+    public void setDenied(Boolean denied) {
+        this.denied = denied;
+    }
+
+    public Boolean getAccepted() {
+        return accepted;
+    }
+
+    public void setAccepted(Boolean accepted) {
+        this.accepted = accepted;
     }
 
     public Boolean getAlreadyEnabled() {

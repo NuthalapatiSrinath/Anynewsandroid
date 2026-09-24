@@ -3663,8 +3663,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             requestModel.setDraftId(draftId);
             requestModel.setConverted(converted);
             requestModel.setAlreadyEnabled(alreadyEnabled);
+            // One-time send outcome: Allow → accepted; Don't allow → denied.
+            if (!alreadyEnabled) {
+                requestModel.setAccepted(converted);
+                requestModel.setDenied(!converted);
+            }
             if (notificationFlagOn || converted) {
                 requestModel.setNotificationFlag(true);
+            } else if (!converted && !alreadyEnabled) {
+                requestModel.setNotificationFlag(false);
             }
             if (screen != null && !screen.isEmpty()) {
                 requestModel.setScreen(screen);
