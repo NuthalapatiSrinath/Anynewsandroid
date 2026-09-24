@@ -1,8 +1,5 @@
 package com.anyNews.anynews.Utils;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ValueAnimator;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,7 +10,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
-import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -29,23 +25,16 @@ import com.anyNews.anynews.flipview.FlipView;
  * Horizontal swipe coach for multi-image feed pages
  * (image_gallery, magazine, half-image gallery).
  *
- * <p>Shows a small localized “Swipe left” label and a brief ViewPager
- * fake-drag peek toward the next image. Limited to a few total shows per
- * install (not unlimited). Single-image pagers are left untouched aside from
- * the nested-swipe guard that keeps FlipView / footer from stealing horizontal
- * gallery drags.
+ * <p>Shows a small localized “Swipe left” label only. ViewPager fake-drag peek was
+ * removed — peeking page-1 before page-0 Glide finished left the cover blank/white
+ * until the user swiped away and back (same class of bug as FlipView.peakNext).
  */
 public final class GallerySwipeHintHelper {
 
     /** Wait so the first magazine/gallery frame is clearly visible first. */
-    private static final long START_DELAY_MS = 900L;
-    private static final long NUDGE_DURATION_MS = 420L;
-    private static final long NUDGE_GAP_MS = 1600L;
-    /** One gentle peek — more caused flash / half-page logo on open. */
-    private static final int MAX_NUDGES = 1;
+    private static final long START_DELAY_MS = 650L;
     /** Total coach shows across the install lifetime (unlimited). */
     private static final int MAX_HINT_SHOWS = 999999;
-    private static final float PEEK_DP = 22f;
     private static final String PREF_HINT_SHOW_COUNT = "gallery_swipe_hint_show_count";
 
     private GallerySwipeHintHelper() {}
@@ -309,23 +298,15 @@ public final class GallerySwipeHintHelper {
         private final ViewPager pager;
         private final TextView hint;
         private final Handler handler = new Handler(Looper.getMainLooper());
-        private final float peekPx;
-        private ValueAnimator nudgeAnimator;
-        private int nudgeCount;
         private boolean dismissed;
         private boolean userSwiped;
         private boolean countedShow;
-        private float lastFakeDrag;
         @Nullable
         private ViewTreeObserver.OnGlobalLayoutListener layoutListener;
 
         Session(@NonNull ViewPager pager, @NonNull TextView hint) {
             this.pager = pager;
             this.hint = hint;
-            this.peekPx = TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP,
-                    PEEK_DP,
-                    pager.getResources().getDisplayMetrics());
         }
 
         void start() {
@@ -339,7 +320,7 @@ public final class GallerySwipeHintHelper {
             }
             if (pager.getWidth() > 0 && pager.getHeight() > 0
                     && pager.getChildCount() > 0) {
-                handler.postDelayed(this::showAndNudge, START_DELAY_MS);
+                handler.postDelayed(this::showLabelOnly, START_DELAY_MS);
                 return;
             }
             layoutListener = () -> {
@@ -348,15 +329,15 @@ public final class GallerySwipeHintHelper {
                 }
                 if (pager.getWidth() > 0 && pager.getHeight() > 0) {
                     removeLayoutListener();
-                    handler.postDelayed(this::showAndNudge, START_DELAY_MS);
+                    handler.postDelayed(this::showLabelOnly, START_DELAY_MS);
                 }
             };
             pager.getViewTreeObserver().addOnGlobalLayoutListener(layoutListener);
             // Fallback if layout never fires (recycled / detached).
             handler.postDelayed(() -> {
-                if (!dismissed && nudgeCount == 0 && !countedShow) {
+                if (!dismissed && !countedShow) {
                     removeLayoutListener();
-                    showAndNudge();
+                    showLabelOnly();
                 }
             }, START_DELAY_MS + 800L);
         }
@@ -376,7 +357,6 @@ public final class GallerySwipeHintHelper {
             dismissed = true;
             handler.removeCallbacksAndMessages(null);
             removeLayoutListener();
-            stopNudge(false);
             try {
                 pager.removeOnPageChangeListener(this);
             } catch (Exception ignored) {
@@ -389,7 +369,8 @@ public final class GallerySwipeHintHelper {
             }
         }
 
-        private void showAndNudge() {
+        /** Label coach only — never fakeDrag (that blanked page-0 before Glide finished). */
+        private void showLabelOnly() {
             if (dismissed || userSwiped || pager.getAdapter() == null
                     || pager.getAdapter().getCount() < 2
                     || pager.getCurrentItem() != 0) {
@@ -405,95 +386,13 @@ public final class GallerySwipeHintHelper {
                     .alpha(1f)
                     .setDuration(220)
                     .start();
-            runNudge();
-        }
-
-        private void runNudge() {
-            if (dismissed || userSwiped || nudgeCount >= MAX_NUDGES) {
-                if (!userSwiped && !dismissed) {
-                    finishSoft();
-                }
-                return;
-            }
-            if (pager.getCurrentItem() != 0) {
-                dismiss(true);
-                return;
-            }
-            stopNudge(false);
-            lastFakeDrag = 0f;
-            try {
-                cancelParentFlipPeak(pager);
-                if (!pager.isFakeDragging()) {
-                    pager.beginFakeDrag();
-                }
-            } catch (Exception e) {
-                finishSoft();
-                return;
-            }
-            nudgeCount++;
-            // Peek next (negative = next page in LTR), then spring back to page 0.
-            nudgeAnimator = ValueAnimator.ofFloat(0f, -peekPx, 0f);
-            nudgeAnimator.setDuration(NUDGE_DURATION_MS);
-            nudgeAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
-            nudgeAnimator.addUpdateListener(animation -> {
-                if (dismissed || userSwiped) {
-                    return;
-                }
-                float value = (Float) animation.getAnimatedValue();
-                float delta = value - lastFakeDrag;
-                lastFakeDrag = value;
-                try {
-                    if (pager.isFakeDragging()) {
-                        pager.fakeDragBy(delta);
-                    }
-                } catch (Exception ignored) {
-                }
-            });
-            nudgeAnimator.addListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    endFakeDragQuietly();
-                    if (dismissed || userSwiped) {
-                        return;
-                    }
-                    if (nudgeCount < MAX_NUDGES) {
-                        handler.postDelayed(Session.this::runNudge, NUDGE_GAP_MS);
-                    } else {
-                        finishSoft();
-                    }
-                }
-
-                @Override
-                public void onAnimationCancel(Animator animation) {
-                    endFakeDragQuietly();
-                }
-            });
-            nudgeAnimator.start();
+            handler.postDelayed(this::finishSoft, 2200L);
         }
 
         /** Fade label after the nudge loop; tear down listeners for this card bind. */
         private void finishSoft() {
             fadeHintOut();
             dismiss(false);
-        }
-
-        private void endFakeDragQuietly() {
-            try {
-                if (pager.isFakeDragging()) {
-                    pager.endFakeDrag();
-                }
-            } catch (Exception ignored) {
-            }
-        }
-
-        private void stopNudge(boolean endDrag) {
-            if (nudgeAnimator != null) {
-                nudgeAnimator.cancel();
-                nudgeAnimator = null;
-            }
-            if (endDrag) {
-                endFakeDragQuietly();
-            }
         }
 
         private void fadeHintOut() {
@@ -523,7 +422,6 @@ public final class GallerySwipeHintHelper {
             dismissed = true;
             handler.removeCallbacksAndMessages(null);
             removeLayoutListener();
-            stopNudge(true);
             try {
                 pager.removeOnPageChangeListener(this);
             } catch (Exception ignored) {
@@ -552,7 +450,7 @@ public final class GallerySwipeHintHelper {
 
         @Override
         public void onPageScrollStateChanged(int state) {
-            if (state == ViewPager.SCROLL_STATE_DRAGGING && !pager.isFakeDragging()) {
+            if (state == ViewPager.SCROLL_STATE_DRAGGING) {
                 userSwiped = true;
                 dismiss(true);
             }

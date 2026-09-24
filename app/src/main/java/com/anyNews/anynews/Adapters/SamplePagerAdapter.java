@@ -124,12 +124,48 @@ public class SamplePagerAdapter extends PagerAdapter {
             } else if (position == 0) {
                 // Cover wins the Glide pool over neighbor UIL loads.
                 try {
+                    int ow = imageView.getWidth();
+                    int oh = imageView.getHeight();
+                    if (ow <= 0 || oh <= 0) {
+                        try {
+                            DisplayMetrics dm = context.getResources().getDisplayMetrics();
+                            ow = Math.max(1, dm.widthPixels);
+                            oh = Math.max(1, dm.heightPixels);
+                        } catch (Exception ignored) {
+                            ow = 1080;
+                            oh = 1920;
+                        }
+                    }
+                    final ImageView targetView = imageView;
                     Glide.with(context)
                             .load(pageUrl)
                             .priority(com.bumptech.glide.Priority.IMMEDIATE)
                             .dontAnimate()
+                            .override(ow, oh)
                             .placeholder(R.drawable.trasparent_background)
                             .error(R.drawable.trasparent_background)
+                            .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                                @Override
+                                public boolean onLoadFailed(
+                                        @androidx.annotation.Nullable com.bumptech.glide.load.engine.GlideException e,
+                                        Object model,
+                                        com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                        boolean isFirstResource) {
+                                    targetView.postInvalidate();
+                                    return false;
+                                }
+
+                                @Override
+                                public boolean onResourceReady(
+                                        android.graphics.drawable.Drawable resource,
+                                        Object model,
+                                        com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                        com.bumptech.glide.load.DataSource dataSource,
+                                        boolean isFirstResource) {
+                                    targetView.postInvalidate();
+                                    return false;
+                                }
+                            })
                             .into(imageView);
                 } catch (Exception glideEx) {
                     imageLoader.displayImage(pageUrl, imageView, options, null);

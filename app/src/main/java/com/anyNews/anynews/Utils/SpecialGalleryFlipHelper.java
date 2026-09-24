@@ -191,6 +191,10 @@ public final class SpecialGalleryFlipHelper {
                 flipRef.flipTo(0);
             } catch (Exception ignored) {
             }
+            // First bind often runs before FlipView has non-zero size; Glide wait-for-layout
+            // then loses to scrap/detach and page-0 stays on transparent stub until the user
+            // leaves and returns. Re-kick cover once laid out and force FlipView redraw.
+            schedulePage0Ensure(flipRef, adapter);
         }
 
         final int pageCount = urls.size();
@@ -383,6 +387,30 @@ public final class SpecialGalleryFlipHelper {
                 helper.onPageScrolled(current, 0f);
             } catch (Exception ignored) {
             }
+        }
+    }
+
+    /**
+     * After nested FlipView layout, ensure page-0 Glide actually painted and invalidate
+     * FlipView (custom dispatchDraw does not always refresh from ImageView alone).
+     */
+    private static void schedulePage0Ensure(
+            @NonNull FlipView flip, @NonNull GalleryImageFlipAdapter adapter) {
+        final Runnable ensure = () -> {
+            if (flip.getWindowToken() == null) {
+                return;
+            }
+            try {
+                adapter.ensurePage0Bound(flip);
+                flip.invalidate();
+            } catch (Exception e) {
+                android.util.Log.e("MagazineCrash", "ensurePage0Bound: " + e.getMessage());
+            }
+        };
+        if (flip.getWidth() > 0 && flip.getHeight() > 0) {
+            flip.post(ensure);
+        } else {
+            flip.post(() -> flip.post(ensure));
         }
     }
 

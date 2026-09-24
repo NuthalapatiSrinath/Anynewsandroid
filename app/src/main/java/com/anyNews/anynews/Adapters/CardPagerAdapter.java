@@ -234,12 +234,18 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
                 url = "";
             }
             url = url.trim();
-            // Same URL already painted — skip restart (ViewPager rebind flash).
+            // Only skip when Glide finished — transparent placeholder is a drawable and
+            // used to permanently skip after a cancelled first page-0 load.
             Object prior = images.getTag(R.id.tag_gallery_image_url);
-            if (url.equals(prior) && images.getDrawable() != null && !url.isEmpty()) {
+            Object loaded = images.getTag(R.id.tag_gallery_image_loaded);
+            if (url.equals(prior)
+                    && Boolean.TRUE.equals(loaded)
+                    && images.getDrawable() != null
+                    && !url.isEmpty()) {
                 return;
             }
             images.setTag(R.id.tag_gallery_image_url, url);
+            images.setTag(R.id.tag_gallery_image_loaded, null);
             // Page 0 is on-screen first; neighbors also instantiate (offscreen=1) at the
             // same time as a background Glide load — without IMMEDIATE, cover can lose
             // the race to page 1 and look empty until leave/return hits cache.
@@ -249,15 +255,68 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
             if (url.isEmpty()) {
                 // Never paint splash orange-N as a magazine page.
                 images.setImageResource(R.drawable.trasparent_background);
+                images.setTag(R.id.tag_gallery_image_loaded, Boolean.TRUE);
                 return;
+            }
+            final ImageView targetView = images;
+            final String loadUrl = url;
+            int ow = images.getWidth();
+            int oh = images.getHeight();
+            if (ow <= 0 || oh <= 0) {
+                try {
+                    android.util.DisplayMetrics dm = context.getResources().getDisplayMetrics();
+                    ow = Math.max(1, dm.widthPixels);
+                    oh = Math.max(1, dm.heightPixels);
+                } catch (Exception ignored) {
+                    ow = 1080;
+                    oh = 1920;
+                }
             }
             Glide.with(context)
                     .load(url)
                     .priority(priority)
                     .dontAnimate()
+                    .override(ow, oh)
                     .placeholder(R.drawable.trasparent_background)
                     .error(R.drawable.trasparent_background)
                     .fallback(R.drawable.trasparent_background)
+                    .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                        @Override
+                        public boolean onLoadFailed(
+                                @androidx.annotation.Nullable com.bumptech.glide.load.engine.GlideException e,
+                                Object model,
+                                com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                boolean isFirstResource) {
+                            if (loadUrl.equals(targetView.getTag(R.id.tag_gallery_image_url))) {
+                                targetView.setTag(R.id.tag_gallery_image_loaded, null);
+                            }
+                            targetView.postInvalidate();
+                            return false;
+                        }
+
+                        @Override
+                        public boolean onResourceReady(
+                                android.graphics.drawable.Drawable resource,
+                                Object model,
+                                com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                com.bumptech.glide.load.DataSource dataSource,
+                                boolean isFirstResource) {
+                            if (loadUrl.equals(targetView.getTag(R.id.tag_gallery_image_url))) {
+                                targetView.setTag(R.id.tag_gallery_image_loaded, Boolean.TRUE);
+                            }
+                            targetView.postInvalidate();
+                            ViewGroup p = (ViewGroup) targetView.getParent();
+                            while (p != null) {
+                                p.postInvalidate();
+                                if (p.getParent() instanceof ViewGroup) {
+                                    p = (ViewGroup) p.getParent();
+                                } else {
+                                    break;
+                                }
+                            }
+                            return false;
+                        }
+                    })
                     .into(images);
         } catch (RuntimeException e) {
             e.printStackTrace();
