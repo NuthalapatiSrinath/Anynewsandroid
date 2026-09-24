@@ -2130,6 +2130,27 @@ public class StartingActivity extends AppCompatActivity {
                                     startActivityReqModel.getData().getNotificationRepromptWave(),
                                     Constants.PREF_NAME);
                         }
+                        // Both admin modes OFF, or server due=false → drop sticky
+                        // local due so Home cannot ask from a prior one-time window.
+                        boolean splashAskOnOpen = Boolean.TRUE.equals(
+                                startActivityReqModel.getData().getPromptNotificationsOnOpen());
+                        boolean splashCampaignOn = Boolean.TRUE.equals(
+                                startActivityReqModel.getData().getNotificationRepromptEnabled());
+                        if (!splashAskOnOpen && !splashCampaignOn) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.NOTIFICATION_REPROMPT_DUE,
+                                    false,
+                                    Constants.PREF_NAME);
+                        } else if (startActivityReqModel.getData().getNotificationRepromptDue() != null
+                                && !Boolean.TRUE.equals(
+                                        startActivityReqModel.getData().getNotificationRepromptDue())) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.NOTIFICATION_REPROMPT_DUE,
+                                    false,
+                                    Constants.PREF_NAME);
+                        }
                         // Notification opt-in: server true → local true. Server false only when
                         // user previously opted out / re-prompt path — do not force OFF on first
                         // open before OS permission was ever offered (legacy empty-FCM drafts).

@@ -3068,6 +3068,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (isSystemNotificationsEnabledSafe() && hasPostNotificationsPermission()) {
             return false;
         }
+        // Hard gate: one-time sending OFF → never treat as due (ignore sticky
+        // notification_reprompt_due prefs from a prior ON window).
+        boolean campaignActive = SharedPrefsData.getBool(
+                getApplicationContext(),
+                Constants.NOTIFICATION_REPROMPT_ENABLED,
+                Constants.PREF_NAME,
+                false);
+        if (!campaignActive) {
+            return false;
+        }
         int globalWave = SharedPrefsData.getInt(
                 getApplicationContext(),
                 Constants.NOTIFICATION_REPROMPT_WAVE,
@@ -3076,8 +3086,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 getApplicationContext(),
                 Constants.NOTIFICATION_REPROMPT_SHOWN_WAVE,
                 Constants.PREF_NAME);
-        // Local one-shot: already got a permission result / Settings handoff
-        // for this wave — never re-ask until admin bumps wave.
+        // Local one-shot: sheet already presented (or user responded) for this
+        // wave — never re-ask until admin bumps wave / new ON cycle.
         if (globalWave > 0 && shownWave >= globalWave) {
             return false;
         }
@@ -3091,12 +3101,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         // Campaign Active (splash/feed) + OS off + not yet shown this wave.
         // Covers drafts whose notification_flag is still true while the tray is OFF.
+        return globalWave > 0 && shownWave < globalWave;
+    }
+
+    /**
+     * When both admin ask modes are OFF, drop sticky local due so resume/feed
+     * cannot re-fire from a prior one-time window.
+     */
+    private void clearStaleNotificationAskPrefsIfModesOff() {
+        boolean askOnOpen = isPromptNotificationsOnOpenEnabled();
         boolean campaignActive = SharedPrefsData.getBool(
                 getApplicationContext(),
                 Constants.NOTIFICATION_REPROMPT_ENABLED,
                 Constants.PREF_NAME,
                 false);
-        return campaignActive && globalWave > 0 && shownWave < globalWave;
+        if (askOnOpen || campaignActive) {
+            return;
+        }
+        clearNotificationRepromptDueLocal();
     }
 
     /** Persist that this campaign wave was already shown (survives process death). */
@@ -3117,13 +3139,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Home open: (1) admin wave re-prompt when due, (2) continuous ask-on-open when
-     * admin flag ON and OS notifications still off, (3) first open after
-     * install/update for POST_NOTIFICATIONS. Location soft-ask remains
+     * admin flag ON and OS notifications still off. When both admin modes are OFF,
+     * never requestPermissions / open Settings / show any notification ask
+     * (including legacy install fallback). Location soft-ask remains
      * {@link #maybeSoftRequestDraftGpsPermission}.
      */
     private void maybeRequestInstallAndRepromptPermissions() {
         if (isFinishing() || isDestroyed()) return;
         maybeRecoverPrematureRepromptAck();
+        clearStaleNotificationAskPrefsIfModesOff();
         // Wave due wins once per process. If already handled (or feed already
         // showed it), fall through so ask-on-open is not permanently blocked
         // while notification_reprompt_due stays true in prefs.
@@ -3135,7 +3159,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             maybePromptNotificationsOnOpen();
             return;
         }
-        maybeRequestInstallNotificationPermission();
+        // Both admin flags OFF → never auto-ask (no install/update fallback).
+        // Align pref only if system already granted; do not open Settings.
+        if (hasPostNotificationsPermission() && isSystemNotificationsEnabledSafe()) {
+            ensureNotificationPrefAlignedWithSystem(false);
+            markNotificationRuntimeAskedVersion();
+        }
     }
 
     /**
@@ -3312,16 +3341,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void requestPostNotificationsPermission(final boolean viaAdminReprompt) {
         pendingNotifPermViaAdminReprompt = viaAdminReprompt;
 
+        // Without an active admin ask mode, never requestPermissions or Settings.
+        if (!viaAdminReprompt
+                && !isPromptNotificationsOnOpenEnabled()
+                && !isAdminNotificationRepromptDue()
+                && !pendingCampaignRepromptAck) {
+            return;
+        }
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            // Pre-13: no POST_NOTIFICATIONS system sheet — open system app
-            // notification Settings when tray is off (still system UI, not custom).
+            // Pre-13: no POST_NOTIFICATIONS system sheet. Never dump to Settings
+            // as the "ask" — soft in-app dialog; Settings only on explicit tap.
             if (isSystemNotificationsEnabledSafe()) {
                 finishPendingCampaignAck(true);
                 onNotificationPermissionGrantedFromReprompt(viaAdminReprompt);
             } else {
-                expectNotifSettingsOrPermReturn = true;
+                // Soft ask presented → consume one-time wave; Settings only on tap.
                 finishPendingCampaignAck(false);
-                openAppNotificationSettingsForReprompt();
+                showSoftNotificationEnableDialog();
             }
             return;
         }
@@ -3331,26 +3368,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 finishPendingCampaignAck(true);
                 onNotificationPermissionGrantedFromReprompt(viaAdminReprompt);
             } else {
-                // Tray master off with runtime granted: only system Settings can fix.
-                expectNotifSettingsOrPermReturn = true;
+                // Tray master off with runtime granted: soft dialog; Settings only
+                // if the user taps Allow / Open settings.
                 finishPendingCampaignAck(false);
-                openAppNotificationSettingsForReprompt();
+                showSoftNotificationEnableDialog();
             }
             return;
         }
 
-        // Permanent deny: OS will not show Allow/Don't allow again — open system
-        // app notification Settings (not a custom AlertDialog).
+        // Permanent deny: OS will not show Allow/Don't allow again. Soft dialog
+        // over the feed — never auto-open the system Allow notifications page.
         if (hasEverAskedPostNotifications()
                 && !ActivityCompat.shouldShowRequestPermissionRationale(
                         this, Manifest.permission.POST_NOTIFICATIONS)) {
-            expectNotifSettingsOrPermReturn = true;
+            markNotificationRuntimeAskedVersion();
             finishPendingCampaignAck(false);
-            openAppNotificationSettingsForReprompt();
+            showSoftNotificationEnableDialog();
             return;
         }
 
-        // Play Store / first-install system sheet.
+        // Play Store / first-install system sheet (Allow / Don't allow).
         launchPostNotificationsSystemDialog();
     }
 
@@ -3363,11 +3400,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     this,
                     new String[]{Manifest.permission.POST_NOTIFICATIONS},
                     REQ_POST_NOTIFICATIONS);
+            // One-time: sheet was presented → local never-again for this wave
+            // even if the process dies before the user responds.
+            markCampaignShownOnSheetPresented();
         } catch (Exception e) {
             showLog("request POST_NOTIFICATIONS failed: " + e.getMessage());
             expectNotifSettingsOrPermReturn = false;
             // Do not burn campaign wave — leave pending so next open can retry.
         }
+    }
+
+    /**
+     * One-time sending: once the OS sheet (or soft ask) is presented, burn local
+     * shown_wave immediately so reopen never re-asks until a new ON/wave cycle.
+     * Server ack with converted still waits for {@link #finishPendingCampaignAck}.
+     */
+    private void markCampaignShownOnSheetPresented() {
+        if (!pendingCampaignRepromptAck) {
+            return;
+        }
+        markNotificationRepromptShownLocally();
     }
 
     private void handlePostNotificationsPermissionResult(boolean granted) {
@@ -3501,7 +3553,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void showNotificationAlert(boolean showPopup){
         boolean due = isAdminNotificationRepromptDue();
         // showPopup is campaign-only from feed (legacy daily prompt removed server-side).
-        // Ignore feed showPopup when this wave was already shown locally.
+        // Ignore feed showPopup when this wave was already shown locally, or when
+        // one-time sending is OFF.
+        boolean campaignActive = SharedPrefsData.getBool(
+                getApplicationContext(),
+                Constants.NOTIFICATION_REPROMPT_ENABLED,
+                Constants.PREF_NAME,
+                false);
         int globalWave = SharedPrefsData.getInt(
                 getApplicationContext(),
                 Constants.NOTIFICATION_REPROMPT_WAVE,
@@ -3511,7 +3569,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 Constants.NOTIFICATION_REPROMPT_SHOWN_WAVE,
                 Constants.PREF_NAME);
         boolean alreadyShownThisWave = globalWave > 0 && shownWave >= globalWave;
-        boolean shouldConsider = due || (showPopup && !alreadyShownThisWave);
+        boolean shouldConsider =
+                due || (campaignActive && showPopup && !alreadyShownThisWave);
         if (!shouldConsider) {
             return;
         }
@@ -3528,7 +3587,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 true);
         boolean fullyOn = systemOn && prefOn && hasPostNotificationsPermission();
         // Feed campaign alert must ack even if local due pref was already cleared.
-        final boolean isAdminDue = due || (showPopup && !alreadyShownThisWave);
+        final boolean isAdminDue =
+                due || (campaignActive && showPopup && !alreadyShownThisWave);
 
         // Fully enabled: clear due without dialog (only once for this wave).
         if (fullyOn) {
@@ -3545,8 +3605,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         notificationRepromptHandledThisProcess = true;
         installNotificationPermHandledThisProcess = true;
-        // Do NOT mark shown_wave / server ack yet — only after OS sheet result
-        // (or Settings handoff). Premature ack was burning the wave with no UI.
+        // pending until sheet presented / soft dialog / result — then
+        // markCampaignShownOnSheetPresented or finishPendingCampaignAck.
         pendingCampaignRepromptAck = isAdminDue;
 
         // Keep draft flag aligned with OS OFF so server due matches next splash.
@@ -3560,7 +3620,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
 
         // Admin force: install-style OS dialog when Android can show it; else
-        // system app notification Settings (permanent deny / tray off).
+        // soft in-app dialog (never auto-open Settings as the ask).
         requestNotificationPermission(true);
     }
 
@@ -16693,10 +16753,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             serverDue,
                             Constants.PREF_NAME);
                 }
-                // Admin re-prompt can run even on cache paint; continuous ask is
-                // resume-only via prompt_notifications_on_open (not feed showPopup).
+                // Both modes OFF or server due=false → clear sticky local due.
+                boolean feedAskOnOpen = Boolean.TRUE.equals(
+                        encreptionRequest.getPrompt_notifications_on_open());
+                boolean feedCampaignOn = Boolean.TRUE.equals(
+                        encreptionRequest.getNotification_reprompt_enabled());
+                if (!feedAskOnOpen && !feedCampaignOn) {
+                    clearNotificationRepromptDueLocal();
+                } else if (encreptionRequest.getNotification_reprompt_due() != null
+                        && !Boolean.TRUE.equals(
+                                encreptionRequest.getNotification_reprompt_due())) {
+                    clearNotificationRepromptDueLocal();
+                }
+                clearStaleNotificationAskPrefsIfModesOff();
+                // Admin re-prompt only when campaign due; never from stale
+                // show_push_perm_alert while both modes OFF.
                 boolean duePreferPrefs = isAdminNotificationRepromptDue();
-                if (!fromCache || duePreferPrefs) {
+                if (duePreferPrefs) {
                     Boolean pushPermAlert = encreptionRequest.getShow_push_perm_alert();
                     boolean serverCampaignAlert =
                             pushPermAlert != null && pushPermAlert;
