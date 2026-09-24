@@ -18,6 +18,20 @@ public class EncreptionRequest {
     @SerializedName("show_push_perm_alert")
     @Expose
     private Boolean show_push_perm_alert;
+
+    /** Admin continuous ask-on-open (feed poll → prefs without cold splash). */
+    @SerializedName("prompt_notifications_on_open")
+    @Expose
+    private Boolean prompt_notifications_on_open;
+
+    public Boolean getPrompt_notifications_on_open() {
+        return prompt_notifications_on_open;
+    }
+
+    public void setPrompt_notifications_on_open(Boolean prompt_notifications_on_open) {
+        this.prompt_notifications_on_open = prompt_notifications_on_open;
+    }
+
     @SerializedName("data")
     @Expose
     private String data;

@@ -3014,7 +3014,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void maybeRequestInstallAndRepromptPermissions() {
         if (isFinishing() || isDestroyed()) return;
-        if (isAdminNotificationRepromptDue()) {
+        // Wave due wins once per process. If already handled (or feed already
+        // showed it), fall through so ask-on-open is not permanently blocked
+        // while notification_reprompt_due stays true in prefs.
+        if (isAdminNotificationRepromptDue() && !notificationRepromptHandledThisProcess) {
             showNotificationAlert(false);
             return;
         }
@@ -16212,6 +16215,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showReporterLogin=encreptionRequest.isShow_reporter_login();
                 showLog("showReporterLogin:"+showReporterLogin);
                 updateCenterFab();
+                // Live admin ask-on-open flag from feed poll (no cold splash wait).
+                if (encreptionRequest.getPrompt_notifications_on_open() != null) {
+                    SharedPrefsData.putBool(
+                            getApplicationContext(),
+                            Constants.PROMPT_NOTIFICATIONS_ON_OPEN,
+                            Boolean.TRUE.equals(
+                                    encreptionRequest.getPrompt_notifications_on_open()),
+                            Constants.PREF_NAME);
+                }
                 // Admin re-prompt can run even on cache paint; daily/legacy only when live.
                 boolean duePreferPrefs = SharedPrefsData.getBool(
                         getApplicationContext(),
