@@ -5,23 +5,8 @@
     android:layout_height="match_parent"
     tools:context=".Activities.StartingActivity">
 
-    <!-- Full-bleed Opening Banner (FIT_XY stretch — all four edges, no crop). -->
-    <ImageView
-        android:id="@+id/logo_image_server"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:adjustViewBounds="false"
-        android:contentDescription="@null"
-        android:scaleType="fitXY"
-        android:visibility="visible" />
-
-    <ImageView
-        android:id="@+id/logo_image"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="fitXY"
-        android:visibility="gone" />
-
+    <!-- Underlays first: Opening Banner ImageView must be last so FIT_XY
+         paint is never covered by net_avilable's black waiting plate. -->
     <LinearLayout
         android:id="@+id/net_avilable"
         android:layout_width="match_parent"
@@ -58,4 +43,21 @@
         android:visibility="gone">
         <include layout="@layout/no_internet_scrren" />
     </LinearLayout>
+
+    <ImageView
+        android:id="@+id/logo_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:visibility="gone" />
+
+    <!-- Full-bleed Opening Banner (FIT_XY — all four edges, no crop). Topmost. -->
+    <ImageView
+        android:id="@+id/logo_image_server"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:adjustViewBounds="false"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:visibility="visible" />
 </FrameLayout>

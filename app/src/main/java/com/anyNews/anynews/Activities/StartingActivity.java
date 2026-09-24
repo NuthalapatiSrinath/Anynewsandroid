@@ -302,6 +302,8 @@ public class StartingActivity extends AppCompatActivity {
                 if (root != null) {
                     root.setBackgroundColor(Color.BLACK);
                 }
+                // Waiting plate only — paintFestivalBannerAndHold clears this so
+                // the topmost banner ImageView is not covered.
                 if (net_avilable != null) {
                     net_avilable.setBackgroundColor(Color.BLACK);
                 }
@@ -2883,8 +2885,10 @@ public class StartingActivity extends AppCompatActivity {
             if (root != null) {
                 root.setBackgroundColor(Color.BLACK);
             }
+            // Never paint a black plate over the banner ImageView (z-order).
             if (net_avilable != null) {
-                net_avilable.setBackgroundColor(Color.BLACK);
+                net_avilable.setBackgroundColor(Color.TRANSPARENT);
+                net_avilable.setVisibility(View.GONE);
             }
         } catch (Exception ignored) {
         }
@@ -2893,6 +2897,10 @@ public class StartingActivity extends AppCompatActivity {
         logo_image_server.setBackgroundColor(Color.TRANSPARENT);
         logo_image_server.setImageBitmap(banner);
         logo_image_server.setVisibility(View.VISIBLE);
+        try {
+            logo_image_server.bringToFront();
+        } catch (Exception ignored) {
+        }
         logo_image.setVisibility(View.GONE);
         if (welcome != null) {
             welcome.setVisibility(View.GONE);

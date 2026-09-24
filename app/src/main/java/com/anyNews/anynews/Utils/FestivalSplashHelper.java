@@ -204,8 +204,9 @@ public final class FestivalSplashHelper {
                 ctx.getApplicationContext(),
                 Constants.FESTIVAL_SPLASH_CACHED_UPDATED_AT,
                 Constants.PREF_NAME);
-        // If server sent updated_at, local arm must match (URL ?v= alone may lag).
-        if (updatedAt > 0 && cachedAt > 0 && updatedAt != cachedAt) {
+        // Server version must match local arm — including legacy caches with
+        // cachedAt=0 after admin replace (same path, new updated_at / ?v=).
+        if (updatedAt > 0 && updatedAt != cachedAt) {
             return false;
         }
         return true;
