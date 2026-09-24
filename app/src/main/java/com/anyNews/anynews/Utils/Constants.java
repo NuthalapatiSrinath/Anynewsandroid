@@ -273,6 +273,12 @@ public class Constants {
     public static String SESSION_LIVE_ENABLED = "session_live_enabled";
     /** Presence window seconds (interval × 2) from splash — informational for client. */
     public static String SESSION_LIVE_WINDOW_SECONDS = "session_live_window_seconds";
+    /** Festival splash (admin). Default OFF — OpenPath unchanged until true. */
+    public static String FESTIVAL_SPLASH_ENABLED = "festival_splash_enabled";
+    public static String FESTIVAL_SPLASH_DURATION_SECONDS = "festival_splash_duration_seconds";
+    public static String FESTIVAL_SPLASH_IMAGE_URL = "festival_splash_image_url";
+    /** URL that matches the local filesDir cache file. */
+    public static String FESTIVAL_SPLASH_CACHED_URL = "festival_splash_cached_url";
     /**
      * Max articles for Offline News pack (splash/runtime; default 24, hard 8–50).
      * Used as MAIN_CAP + thrifty prefetch target.

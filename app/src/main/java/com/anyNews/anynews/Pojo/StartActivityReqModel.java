@@ -441,6 +441,22 @@ public class StartActivityReqModel implements Serializable {
         private Integer sessionLiveWindowSeconds;
 
         /**
+         * Festival / seasonal open splash (admin). Default OFF.
+         * Null on old servers → Android keeps cached / OFF.
+         */
+        @SerializedName("festival_splash_enabled")
+        @Expose
+        private Boolean festivalSplashEnabled;
+
+        @SerializedName("festival_splash_duration_seconds")
+        @Expose
+        private Integer festivalSplashDurationSeconds;
+
+        @SerializedName("festival_splash_image_url")
+        @Expose
+        private String festivalSplashImageUrl;
+
+        /**
          * Offline News pack max articles (admin; default 24, range 8–50).
          * Null on old servers → Android keeps cached / default 24.
          */
@@ -1082,6 +1098,19 @@ public class StartActivityReqModel implements Serializable {
 
         public Integer getSessionLiveWindowSeconds() {
             return sessionLiveWindowSeconds;
+        }
+
+        /** Null → old server; caller keeps cached / default OFF. */
+        public Boolean getFestivalSplashEnabled() {
+            return festivalSplashEnabled;
+        }
+
+        public Integer getFestivalSplashDurationSeconds() {
+            return festivalSplashDurationSeconds;
+        }
+
+        public String getFestivalSplashImageUrl() {
+            return festivalSplashImageUrl;
         }
 
         /** Null → old server; caller keeps cached / default 24. */

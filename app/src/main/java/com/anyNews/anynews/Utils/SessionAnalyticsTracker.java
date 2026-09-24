@@ -1234,6 +1234,27 @@ public final class SessionAnalyticsTracker {
                             });
                         }
                     }
+                    if (resBody.has("festival_splash_enabled")
+                            || resBody.has("festival_splash_duration_seconds")
+                            || resBody.has("festival_splash_image_url")) {
+                        Boolean festEn = null;
+                        Integer festDur = null;
+                        String festUrl = null;
+                        if (resBody.has("festival_splash_enabled")
+                                && !resBody.get("festival_splash_enabled").isJsonNull()) {
+                            festEn = resBody.get("festival_splash_enabled").getAsBoolean();
+                        }
+                        if (resBody.has("festival_splash_duration_seconds")
+                                && !resBody.get("festival_splash_duration_seconds").isJsonNull()) {
+                            festDur = resBody.get("festival_splash_duration_seconds").getAsInt();
+                        }
+                        if (resBody.has("festival_splash_image_url")
+                                && !resBody.get("festival_splash_image_url").isJsonNull()) {
+                            festUrl = resBody.get("festival_splash_image_url").getAsString();
+                        }
+                        FestivalSplashHelper.saveFromServer(context, festEn, festDur, festUrl);
+                        FestivalSplashHelper.prefetchInBackground(context);
+                    }
                 }
             }
         } catch (Exception e) {

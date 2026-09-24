@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -59,6 +60,7 @@ import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.StatusVideosDaysConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
+import com.anyNews.anynews.Utils.FestivalSplashHelper;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
 import com.anyNews.anynews.Utils.CategoriesDiskCache;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
@@ -183,6 +185,12 @@ public class StartingActivity extends AppCompatActivity {
     private int splashNetworkFailCount = 0;
     /** Avoid re-running getOSandDeviceId on every CONNECTIVITY_ACTION. */
     private boolean startupDeviceStarted = false;
+    /**
+     * Festival splash gate: when true, {@link #openHomeFromSplash} defers until
+     * the admin duration elapses. OFF / no cache → false (zero OpenPath cost).
+     */
+    private boolean festivalHoldHome = false;
+    private boolean pendingHomeAfterFestival = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -274,6 +282,10 @@ public class StartingActivity extends AppCompatActivity {
                 maybeResolveShareShortCode(data);
             }
         }
+
+        // Festival banner only when admin ON + local cache ready. OFF = no-op.
+        // After intent parse so push/share deep links skip the hold.
+        maybeArmFestivalSplash();
 
         // Instant open for returning users (after intent/deep-link parse so share ids pass through).
         // Config/FCM soft-refresh continues via getOSandDeviceId on the next tick.
@@ -2152,6 +2164,12 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getReporterPaymentBannerText(),
                                 startActivityReqModel.getData().getReporterPaymentHistoryNoticeActive(),
                                 startActivityReqModel.getData().getReporterPaymentHistoryNoticeText());
+                        FestivalSplashHelper.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getFestivalSplashEnabled(),
+                                startActivityReqModel.getData().getFestivalSplashDurationSeconds(),
+                                startActivityReqModel.getData().getFestivalSplashImageUrl());
+                        FestivalSplashHelper.prefetchInBackground(getApplicationContext());
                         com.anyNews.anynews.rewards.RewardsConfigHelper.saveProgramWindow(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsProgramStatus(),
@@ -2670,6 +2688,11 @@ public class StartingActivity extends AppCompatActivity {
             showLog("OpenPath: home already launched");
             return;
         }
+        if (festivalHoldHome) {
+            pendingHomeAfterFestival = true;
+            showLog("OpenPath: festival splash hold");
+            return;
+        }
         homeOpenedFromSplash = true;
         markOnboardingCompleteIfNeeded("main");
         showLog("CHECK POINT HOMEPAGE fallback");
@@ -2692,6 +2715,92 @@ public class StartingActivity extends AppCompatActivity {
             startActivity(intent);
             finish();
         }
+    }
+
+    /**
+     * When admin festival splash is ON and a local banner is cached, show it
+     * (FIT_CENTER — full image visible) for the admin duration, then release Home.
+     * Deep links / push / share skip the hold so open stays snappy.
+     * OFF or missing cache → immediate return (no OpenPath delay).
+     */
+    private void maybeArmFestivalSplash() {
+        try {
+            if (!FestivalSplashHelper.isEnabled(this)) {
+                return;
+            }
+            if (shouldSkipFestivalForDeepLink()) {
+                showLog("OpenPath: festival skip (deep link / push / share)");
+                return;
+            }
+            if (!FestivalSplashHelper.hasReadyLocalImage(this)) {
+                showLog("OpenPath: festival ON but no local cache — skip hold");
+                FestivalSplashHelper.prefetchInBackground(getApplicationContext());
+                return;
+            }
+            java.io.File local = FestivalSplashHelper.getLocalCacheFile(this);
+            if (local == null || !local.exists()) {
+                return;
+            }
+            logo_image_server.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            logo_image_server.setBackgroundColor(Color.BLACK);
+            logo_image_server.setImageURI(Uri.fromFile(local));
+            logo_image_server.setVisibility(View.VISIBLE);
+            logo_image.setVisibility(View.GONE);
+            festivalHoldHome = true;
+            final int durationMs = FestivalSplashHelper.getDurationMs(this);
+            showLog("OpenPath: festival splash armed ms=" + durationMs);
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    festivalHoldHome = false;
+                    if (pendingHomeAfterFestival && !homeOpenedFromSplash
+                            && !isFinishing() && !isDestroyed()) {
+                        openHomeFromSplash();
+                    }
+                }
+            }, durationMs);
+        } catch (Exception e) {
+            festivalHoldHome = false;
+            Logone.w("festival splash arm failed: " + (e.getMessage() != null ? e.getMessage() : e));
+        }
+    }
+
+    /** Push / share / job deep links should not wait on festival art. */
+    private boolean shouldSkipFestivalForDeepLink() {
+        if (TITLE != null && !TITLE.isEmpty() && !"null".equalsIgnoreCase(TITLE)
+                && !"0".equals(TITLE)) {
+            return true;
+        }
+        if (TITLE_REWARDS != null && !TITLE_REWARDS.isEmpty()
+                && !"null".equalsIgnoreCase(TITLE_REWARDS)
+                && !"0".equals(TITLE_REWARDS)) {
+            return true;
+        }
+        if (articleId1 != null && !articleId1.isEmpty() && !"null".equalsIgnoreCase(articleId1)
+                && !"0".equals(articleId1)) {
+            return true;
+        }
+        if (jobId1 != null && !jobId1.isEmpty() && !"null".equalsIgnoreCase(jobId1)
+                && !"0".equals(jobId1)) {
+            return true;
+        }
+        try {
+            Intent i = getIntent();
+            if (i != null && i.getData() != null) {
+                String host = i.getData().getHost();
+                String path = i.getData().getPath();
+                // FCM anynews://push/... uniqueness URIs are not article deep links.
+                if (host != null && "push".equalsIgnoreCase(host)) {
+                    return TITLE != null && !TITLE.isEmpty() && !"null".equalsIgnoreCase(TITLE)
+                            && !"0".equals(TITLE);
+                }
+                if (path != null && path.length() > 1) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     private JsonObject set_static_data() {
