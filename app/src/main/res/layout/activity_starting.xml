@@ -6,7 +6,7 @@
     tools:context=".Activities.StartingActivity">
 
     <!-- Underlays first: Opening Banner ImageView must be last so FIT_XY
-         paint is never covered by net_avilable's black waiting plate. -->
+         paint is never covered by net_avilable's waiting plate. -->
     <LinearLayout
         android:id="@+id/net_avilable"
         android:layout_width="match_parent"

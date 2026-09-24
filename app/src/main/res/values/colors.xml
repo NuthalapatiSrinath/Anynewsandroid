@@ -144,6 +144,8 @@
     <color name="splash_bg_code">#000000</color>
     <!-- Opening Banner system splash — never remap in night (unlike @color/white → #353535). -->
     <color name="splash_banner_solid_black">#000000</color>
+    <!-- Gap/fill behind Opening Banner (Android 12+ system splash + window wait). Brand orange. -->
+    <color name="splash_banner_theme_color">#EF4923</color>
     <color name="splash_logo_bg">#FFFFFF</color>
 
 

@@ -140,6 +140,8 @@
     <color name="title_color">#FFFFFF</color>
     <color name="splash_bg_code">#000000</color>
     <color name="splash_logo_bg">#353535</color>
+    <!-- Same brand orange day/night — Opening Banner gap must not go dark/black. -->
+    <color name="splash_banner_theme_color">#EF4923</color>
 
 
     <!-- COLOR Card News -->

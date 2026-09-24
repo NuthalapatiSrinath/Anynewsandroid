@@ -4,8 +4,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.net.Uri;
 import android.util.Log;
+
+import androidx.core.content.ContextCompat;
+
+import com.anyNews.anynews.R;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -25,7 +30,8 @@ import java.util.zip.CRC32;
  * Prefers a local file under filesDir so open never waits on the network.
  * Display uses FIT_XY stretch fill (entire image visible, all four edges meet
  * the screen — no centerCrop cutting, no letterbox bars).
- * When ON + image URL: suppress the default orange logo splash entirely.
+ * When ON + image URL: suppress the default orange logo splash; system/window
+ * gap uses theme color (or edge-sampled color from the cached banner).
  * Cache: server sends ?v=&lt;updated_at&gt;; URL/version/content-hash change
  * clears local file. Downloads use HttpURLConnection with caches disabled —
  * OCI serves festival_splash.png with max-age=604800 so Glide HTTP cache was
@@ -81,7 +87,7 @@ public final class FestivalSplashHelper {
 
     /**
      * Admin wants Opening Banner for this cold start (path toggle ON + image URL).
-     * Used to keep a blank black system splash so the orange logo never paints.
+     * Used to swap to theme-color system splash so the orange logo never paints.
      */
     public static boolean shouldSuppressLogoSplash(Context ctx, Intent launchIntent) {
         if (ctx == null) return false;
@@ -152,6 +158,113 @@ public final class FestivalSplashHelper {
         } catch (Exception ignored) {
         }
         return false;
+    }
+
+    /**
+     * Gap-fill color behind Opening Banner: last sampled banner edge average,
+     * else brand orange. Never black.
+     */
+    public static int getGapFillColor(Context ctx) {
+        int fallback = 0xFFEF4923;
+        if (ctx != null) {
+            try {
+                fallback = ContextCompat.getColor(
+                        ctx.getApplicationContext(), R.color.splash_banner_theme_color);
+            } catch (Exception ignored) {
+            }
+        }
+        if (ctx == null) return fallback;
+        int stored = SharedPrefsData.getInt(
+                ctx.getApplicationContext(),
+                Constants.FESTIVAL_SPLASH_GAP_COLOR,
+                Constants.PREF_NAME);
+        // 0 / fully transparent → unset. Reject near-black so we never restore the gap bug.
+        if (stored == 0) return fallback;
+        int r = Color.red(stored);
+        int g = Color.green(stored);
+        int b = Color.blue(stored);
+        if (r + g + b < 24) return fallback;
+        return 0xFF000000 | (stored & 0x00FFFFFF);
+    }
+
+    /** Persist gap color for the next cold start (commit so prefs are ready immediately). */
+    public static void storeGapFillColor(Context ctx, int color) {
+        if (ctx == null) return;
+        int opaque = 0xFF000000 | (color & 0x00FFFFFF);
+        int r = Color.red(opaque);
+        int g = Color.green(opaque);
+        int b = Color.blue(opaque);
+        if (r + g + b < 24) return; // never store near-black
+        SharedPrefsData.putIntImmediate(
+                ctx.getApplicationContext(),
+                Constants.FESTIVAL_SPLASH_GAP_COLOR,
+                opaque,
+                Constants.PREF_NAME);
+    }
+
+    /**
+     * Average opaque edge pixels (top/bottom/left/right) so the system/window
+     * gap blends into the FIT_XY banner. Stores result for the next cold start.
+     */
+    public static int sampleAndStoreGapColor(Context ctx, Bitmap bmp) {
+        int sampled = sampleEdgeAverage(bmp);
+        if (sampled != 0) {
+            storeGapFillColor(ctx, sampled);
+        }
+        return getGapFillColor(ctx);
+    }
+
+    /** Edge-average ARGB; 0 when bitmap unusable. */
+    public static int sampleEdgeAverage(Bitmap bmp) {
+        if (bmp == null || bmp.getWidth() < 2 || bmp.getHeight() < 2) return 0;
+        try {
+            final int w = bmp.getWidth();
+            final int h = bmp.getHeight();
+            final int stepX = Math.max(1, w / 48);
+            final int stepY = Math.max(1, h / 48);
+            long sumR = 0L;
+            long sumG = 0L;
+            long sumB = 0L;
+            int n = 0;
+            for (int x = 0; x < w; x += stepX) {
+                int top = bmp.getPixel(x, 0);
+                int bot = bmp.getPixel(x, h - 1);
+                if (Color.alpha(top) >= 128) {
+                    sumR += Color.red(top);
+                    sumG += Color.green(top);
+                    sumB += Color.blue(top);
+                    n++;
+                }
+                if (Color.alpha(bot) >= 128) {
+                    sumR += Color.red(bot);
+                    sumG += Color.green(bot);
+                    sumB += Color.blue(bot);
+                    n++;
+                }
+            }
+            for (int y = stepY; y < h - 1; y += stepY) {
+                int left = bmp.getPixel(0, y);
+                int right = bmp.getPixel(w - 1, y);
+                if (Color.alpha(left) >= 128) {
+                    sumR += Color.red(left);
+                    sumG += Color.green(left);
+                    sumB += Color.blue(left);
+                    n++;
+                }
+                if (Color.alpha(right) >= 128) {
+                    sumR += Color.red(right);
+                    sumG += Color.green(right);
+                    sumB += Color.blue(right);
+                    n++;
+                }
+            }
+            if (n < 4) return 0;
+            return Color.rgb((int) (sumR / n), (int) (sumG / n), (int) (sumB / n));
+        } catch (Exception e) {
+            Log.w(TAG, "sampleEdgeAverage failed: "
+                    + (e.getMessage() != null ? e.getMessage() : e));
+            return 0;
+        }
     }
 
     public static int getDurationMs(Context ctx) {
@@ -528,6 +641,17 @@ public final class FestivalSplashHelper {
                     + " hash=" + contentHash
                     + " ver=" + extractUrlVersion(getImageUrl(app))
                     + " updatedAt=" + getUpdatedAt(app));
+            // Warm gap color for next cold start (decode is cheap vs network).
+            try {
+                BitmapFactory.Options opts = new BitmapFactory.Options();
+                opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                Bitmap warm = BitmapFactory.decodeFile(dest.getAbsolutePath(), opts);
+                if (warm != null) {
+                    sampleAndStoreGapColor(app, warm);
+                    if (!warm.isRecycled()) warm.recycle();
+                }
+            } catch (Exception ignored) {
+            }
             return true;
         } catch (Exception e) {
             Log.w(TAG, "prefetch failed: " + (e.getMessage() != null ? e.getMessage() : e));

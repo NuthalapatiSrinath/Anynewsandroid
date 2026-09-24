@@ -292,6 +292,11 @@ public class Constants {
     /** CRC32:byteLength of the local cache file (debug / future content compare). */
     public static String FESTIVAL_SPLASH_CACHED_CONTENT_HASH = "festival_splash_cached_content_hash";
     /**
+     * ARGB edge/dominant color sampled from last cached Opening Banner bitmap.
+     * Used as window/splash gap fill on next cold start (0 = unset → brand orange).
+     */
+    public static String FESTIVAL_SPLASH_GAP_COLOR = "festival_splash_gap_color";
+    /**
      * Max articles for Offline News pack (splash/runtime; default 24, hard 8–50).
      * Used as MAIN_CAP + thrifty prefetch target.
      */

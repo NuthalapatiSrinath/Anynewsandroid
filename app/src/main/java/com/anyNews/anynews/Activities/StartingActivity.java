@@ -193,27 +193,35 @@ public class StartingActivity extends AppCompatActivity {
      */
     private boolean festivalHoldHome = false;
     private boolean pendingHomeAfterFestival = false;
-    /** True while downloading banner (blank splash kept; never show logo). */
+    /** True while downloading banner (theme-color splash kept; never show logo). */
     private boolean festivalAwaitingDownload = false;
     /**
-     * Keep AndroidX splash on-screen until Opening Banner is painted (or we
-     * decide not to show it) so the default logo theme never flashes first.
+     * Keep AndroidX splash only while waiting for a cold banner download.
+     * When the image is already cached, dismiss ASAP and paint the ImageView.
      */
     private boolean splashKeepUntilReady = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Before super + installSplashScreen: Opening Banner ON → black+blank
-        // splash theme so the orange logo (#353535 night) never paints.
+        // Before super + installSplashScreen: Opening Banner ON → theme-color
+        // + blank icon (never logo, never black). Banner OFF keeps Manifest
+        // classic logo splash (double_splash_screen / new_bg_sp).
         boolean suppressLogoSplash =
                 FestivalSplashHelper.shouldSuppressLogoSplash(this, getIntent());
+        final boolean bannerCached =
+                suppressLogoSplash && FestivalSplashHelper.hasReadyLocalImage(this);
         if (suppressLogoSplash) {
             setTheme(R.style.AppThemeSplashOpeningBanner);
         }
         // AndroidX requires installSplashScreen before super.onCreate.
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         if (suppressLogoSplash) {
-            splashScreen.setKeepOnScreenCondition(() -> splashKeepUntilReady);
+            // Cached → do not hold system splash (theme-color already set; banner paints next).
+            // Cold cache → hold theme-color splash until download/paint or timeout.
+            splashKeepUntilReady = !bannerCached;
+            if (splashKeepUntilReady) {
+                splashScreen.setKeepOnScreenCondition(() -> splashKeepUntilReady);
+            }
             splashScreen.setOnExitAnimationListener(provider -> {
                 try {
                     provider.remove();
@@ -292,20 +300,21 @@ public class StartingActivity extends AppCompatActivity {
         OBJECT = "" + intent.getStringExtra("OBJECT");
         TITLE_REWARDS = "" +intent.getStringExtra("TITLE_REWARDS");
         if (suppressLogoSplash) {
-            // Black canvas only until banner paints — never theme/logo drawables.
+            // Theme-color (or last sampled banner edge) until banner paints — never logo/black.
+            final int gapColor = FestivalSplashHelper.getGapFillColor(this);
             try {
-                getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+                getWindow().setBackgroundDrawable(new ColorDrawable(gapColor));
             } catch (Exception ignored) {
             }
             try {
                 View root = findViewById(android.R.id.content);
                 if (root != null) {
-                    root.setBackgroundColor(Color.BLACK);
+                    root.setBackgroundColor(gapColor);
                 }
                 // Waiting plate only — paintFestivalBannerAndHold clears this so
                 // the topmost banner ImageView is not covered.
                 if (net_avilable != null) {
-                    net_avilable.setBackgroundColor(Color.BLACK);
+                    net_avilable.setBackgroundColor(gapColor);
                 }
             } catch (Exception ignored) {
             }
@@ -316,15 +325,11 @@ public class StartingActivity extends AppCompatActivity {
                 welcome.setVisibility(View.GONE);
             }
         } else {
-            // Manifest splash is blank black — paint classic brand logo here only
-            // when Opening Banner is OFF for this launch path.
+            // Classic logo splash (Manifest + post theme). Reinforce new_bg_sp for
+            // a seamless handoff after AndroidX splash exit.
             try {
                 getWindow().setBackgroundDrawableResource(R.drawable.new_bg_sp);
-            } catch (Exception e) {
-                try {
-                    getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
-                } catch (Exception ignored) {
-                }
+            } catch (Exception ignored) {
             }
             try {
                 View root = findViewById(android.R.id.content);
@@ -2811,7 +2816,7 @@ public class StartingActivity extends AppCompatActivity {
     /**
      * When admin Opening Banner is ON for this launch path and image URL is set,
      * show ONLY the full-bleed banner stretched FIT_XY (never the orange logo theme splash).
-     * If local cache is cold, keep a blank black splash, download, then paint.
+     * If local cache is cold, keep theme-color splash, download, then paint.
      * OFF → immediate return (no OpenPath delay).
      */
     private void maybeArmFestivalSplash() {
@@ -2849,7 +2854,7 @@ public class StartingActivity extends AppCompatActivity {
 
     private void beginFestivalDownloadThenArm() {
         festivalAwaitingDownload = true;
-        showLog("OpenPath: opening banner ON — waiting for image (no logo)");
+        showLog("OpenPath: opening banner ON — waiting for image (theme-color hold, no logo)");
         FestivalSplashHelper.ensureLocalImageAsync(
                 this,
                 FestivalSplashHelper.ENSURE_TIMEOUT_MS,
@@ -2869,7 +2874,7 @@ public class StartingActivity extends AppCompatActivity {
                 releaseFestivalSplashKeep();
                 return;
             }
-            showLog("OpenPath: opening banner download/decode failed — black open, no logo");
+            showLog("OpenPath: opening banner download/decode failed — theme-color open, no logo");
             releaseFestivalSplashKeep();
             if (pendingHomeAfterFestival && !homeOpenedFromSplash) {
                 openHomeFromSplash();
@@ -2894,16 +2899,17 @@ public class StartingActivity extends AppCompatActivity {
             showLog("OpenPath: opening banner decode failed");
             return false;
         }
+        final int gapColor = FestivalSplashHelper.sampleAndStoreGapColor(this, banner);
         try {
-            getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+            getWindow().setBackgroundDrawable(new ColorDrawable(gapColor));
         } catch (Exception ignored) {
         }
         try {
             View root = findViewById(android.R.id.content);
             if (root != null) {
-                root.setBackgroundColor(Color.BLACK);
+                root.setBackgroundColor(gapColor);
             }
-            // Never paint a black plate over the banner ImageView (z-order).
+            // Never paint a solid plate over the banner ImageView (z-order).
             if (net_avilable != null) {
                 net_avilable.setBackgroundColor(Color.TRANSPARENT);
                 net_avilable.setVisibility(View.GONE);
@@ -2912,7 +2918,7 @@ public class StartingActivity extends AppCompatActivity {
         }
         logo_image_server.setScaleType(ImageView.ScaleType.FIT_XY);
         logo_image_server.setAdjustViewBounds(false);
-        logo_image_server.setBackgroundColor(Color.TRANSPARENT);
+        logo_image_server.setBackgroundColor(gapColor);
         logo_image_server.setImageBitmap(banner);
         logo_image_server.setVisibility(View.VISIBLE);
         try {
