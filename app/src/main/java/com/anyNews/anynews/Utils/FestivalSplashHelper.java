@@ -7,17 +7,16 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.util.Log;
 
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.signature.ObjectKey;
-
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.CRC32;
 
 /**
  * Opening Banner / festival splash — admin toggles + duration + banner.
@@ -27,7 +26,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Display uses FIT_XY stretch fill (entire image visible, all four edges meet
  * the screen — no centerCrop cutting, no letterbox bars).
  * When ON + image URL: suppress the default orange logo splash entirely.
- * Cache: server sends ?v=&lt;updated_at&gt;; URL/version change clears local + Glide.
+ * Cache: server sends ?v=&lt;updated_at&gt;; URL/version/content-hash change
+ * clears local file. Downloads use HttpURLConnection with caches disabled —
+ * OCI serves festival_splash.png with max-age=604800 so Glide HTTP cache was
+ * poisoning replaces when the path stayed the same.
  */
 public final class FestivalSplashHelper {
     private static final String TAG = "FestivalSplash";
@@ -37,6 +39,8 @@ public final class FestivalSplashHelper {
     private static final int MAX_DURATION_SEC = 8;
     /** Max wait on OpenPath when banner ON but cache cold (better than logo flash). */
     public static final long ENSURE_TIMEOUT_MS = 8_000L;
+    private static final int CONNECT_TIMEOUT_MS = 6_000;
+    private static final int READ_TIMEOUT_MS = 8_000;
 
     private FestivalSplashHelper() {}
 
@@ -77,15 +81,11 @@ public final class FestivalSplashHelper {
 
     /**
      * Admin wants Opening Banner for this cold start (path toggle ON + image URL).
-     * Used to swap to a blank black system splash so the orange logo never paints.
+     * Used to keep a blank black system splash so the orange logo never paints.
      */
     public static boolean shouldSuppressLogoSplash(Context ctx, Intent launchIntent) {
         if (ctx == null) return false;
         if (getImageUrl(ctx).isEmpty()) return false;
-        // Cached banner ready → always blank system splash for this path.
-        if (hasReadyLocalImage(ctx) && shouldShowForLaunchIntent(ctx, launchIntent)) {
-            return true;
-        }
         return shouldShowForLaunchIntent(ctx, launchIntent);
     }
 
@@ -188,26 +188,46 @@ public final class FestivalSplashHelper {
         return new File(ctx.getApplicationContext().getFilesDir(), LOCAL_NAME);
     }
 
+    /** Extract cache-bust token from URL (?v= / &amp;v= / t= / ver=). */
+    public static String extractUrlVersion(String url) {
+        if (url == null || url.isEmpty()) return "";
+        try {
+            Uri u = Uri.parse(url);
+            String v = u.getQueryParameter("v");
+            if (v == null || v.isEmpty()) v = u.getQueryParameter("t");
+            if (v == null || v.isEmpty()) v = u.getQueryParameter("ver");
+            return v != null ? v.trim() : "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     /** True when a non-empty local cache exists for the current URL (+ version). */
     public static boolean hasReadyLocalImage(Context ctx) {
         File f = getLocalCacheFile(ctx);
         if (f == null || !f.exists() || f.length() < 64) return false;
         String url = getImageUrl(ctx);
         if (url.isEmpty()) return false;
+        Context app = ctx.getApplicationContext();
         String cachedUrl = SharedPrefsData.getString(
-                ctx.getApplicationContext(),
-                Constants.FESTIVAL_SPLASH_CACHED_URL,
-                Constants.PREF_NAME);
+                app, Constants.FESTIVAL_SPLASH_CACHED_URL, Constants.PREF_NAME);
         if (cachedUrl == null || !url.equals(cachedUrl)) return false;
-        long updatedAt = getUpdatedAt(ctx);
+        long updatedAt = getUpdatedAt(app);
         long cachedAt = SharedPrefsData.getLong(
-                ctx.getApplicationContext(),
-                Constants.FESTIVAL_SPLASH_CACHED_UPDATED_AT,
-                Constants.PREF_NAME);
+                app, Constants.FESTIVAL_SPLASH_CACHED_UPDATED_AT, Constants.PREF_NAME);
         // Server version must match local arm — including legacy caches with
         // cachedAt=0 after admin replace (same path, new updated_at / ?v=).
         if (updatedAt > 0 && updatedAt != cachedAt) {
             return false;
+        }
+        // URL ?v= changed even when updated_at pref lagged / was 0.
+        String urlVer = extractUrlVersion(url);
+        String cachedVer = SharedPrefsData.getString(
+                app, Constants.FESTIVAL_SPLASH_CACHED_URL_VERSION, Constants.PREF_NAME);
+        if (urlVer.length() > 0) {
+            if (cachedVer == null || !urlVer.equals(cachedVer)) {
+                return false;
+            }
         }
         return true;
     }
@@ -241,18 +261,27 @@ public final class FestivalSplashHelper {
                 //noinspection ResultOfMethodCallIgnored
                 f.delete();
             }
+            File part = new File(app.getFilesDir(), LOCAL_NAME + ".part");
+            if (part.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                part.delete();
+            }
         } catch (Exception ignored) {
         }
         SharedPrefsData.putString(
                 app, Constants.FESTIVAL_SPLASH_CACHED_URL, "", Constants.PREF_NAME);
         SharedPrefsData.putLong(
                 app, Constants.FESTIVAL_SPLASH_CACHED_UPDATED_AT, 0L, Constants.PREF_NAME);
+        SharedPrefsData.putString(
+                app, Constants.FESTIVAL_SPLASH_CACHED_URL_VERSION, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(
+                app, Constants.FESTIVAL_SPLASH_CACHED_CONTENT_HASH, "", Constants.PREF_NAME);
     }
 
     /**
      * Persist splash/session fields. Always updates prefs (including OFF)
      * so the next cold start respects admin without blocking OpenPath.
-     * When image URL or updated_at changes, clears stale local + Glide arm.
+     * When image URL, ?v=, or updated_at changes, clears stale local arm.
      */
     public static void saveFromServer(
             Context ctx,
@@ -284,6 +313,7 @@ public final class FestivalSplashHelper {
         Context app = ctx.getApplicationContext();
         final String prevUrl = getImageUrl(app);
         final long prevUpdated = getUpdatedAt(app);
+        final String prevVer = extractUrlVersion(prevUrl);
         if (enabled != null) {
             SharedPrefsData.putBool(
                     app, Constants.FESTIVAL_SPLASH_ENABLED, enabled, Constants.PREF_NAME);
@@ -312,13 +342,23 @@ public final class FestivalSplashHelper {
         }
         final String nextUrl = getImageUrl(app);
         final long nextUpdated = getUpdatedAt(app);
+        final String nextVer = extractUrlVersion(nextUrl);
         boolean urlChanged = imageUrl != null && !nextUrl.equals(prevUrl);
         boolean versionChanged =
                 updatedAt != null && updatedAt > 0L && nextUpdated != prevUpdated;
-        if (urlChanged || versionChanged) {
+        boolean queryVerChanged =
+                nextVer.length() > 0 && !nextVer.equals(prevVer);
+        // Server healed from updated_at=0 → positive while URL path unchanged.
+        boolean healedFromZero =
+                prevUpdated <= 0L && nextUpdated > 0L && !nextUrl.isEmpty();
+        if (urlChanged || versionChanged || queryVerChanged || healedFromZero) {
             Log.i(TAG, "settings changed — invalidate local cache"
                     + " urlChanged=" + urlChanged
-                    + " versionChanged=" + versionChanged);
+                    + " versionChanged=" + versionChanged
+                    + " queryVerChanged=" + queryVerChanged
+                    + " healedFromZero=" + healedFromZero
+                    + " nextVer=" + nextVer
+                    + " nextUpdated=" + nextUpdated);
             invalidateLocalCache(app);
         }
     }
@@ -396,26 +436,67 @@ public final class FestivalSplashHelper {
         main.postDelayed(once, wait);
     }
 
+    /**
+     * Direct HTTP download — never Glide/OkHttp disk cache. OCI max-age=7d would
+     * otherwise keep serving the previous festival_splash.png bytes after replace.
+     */
     private static boolean downloadToCache(Context app, String url) {
+        HttpURLConnection conn = null;
+        InputStream in = null;
+        FileOutputStream out = null;
         try {
             if (url == null || url.trim().isEmpty()) return false;
             if (hasReadyLocalImage(app)) return true;
-            // Signature forces Glide to miss when ?v= / updated_at changes even if
-            // the path is still festival_splash.png.
-            String signatureKey = url + "|" + getUpdatedAt(app);
-            Future<File> future = Glide.with(app)
-                    .downloadOnly()
-                    .load(url)
-                    .signature(new ObjectKey(signatureKey))
-                    .diskCacheStrategy(DiskCacheStrategy.DATA)
-                    .submit();
-            File tmp = future.get(ENSURE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            if (tmp == null || !tmp.exists()) return false;
+            // Prefer busted URL; if server omitted ?v=, append updated_at ourselves.
+            String fetchUrl = url.trim();
+            long updatedAt = getUpdatedAt(app);
+            if (extractUrlVersion(fetchUrl).isEmpty() && updatedAt > 0L) {
+                fetchUrl = fetchUrl
+                        + (fetchUrl.contains("?") ? "&" : "?")
+                        + "v=" + updatedAt;
+            }
+            Log.i(TAG, "download start url=" + fetchUrl);
+            URL u = new URL(fetchUrl);
+            conn = (HttpURLConnection) u.openConnection();
+            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(READ_TIMEOUT_MS);
+            conn.setInstanceFollowRedirects(true);
+            conn.setUseCaches(false);
+            conn.setRequestProperty("Cache-Control", "no-cache, no-store");
+            conn.setRequestProperty("Pragma", "no-cache");
+            conn.connect();
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                Log.w(TAG, "download HTTP " + code);
+                return false;
+            }
             File dest = getLocalCacheFile(app);
             if (dest == null) return false;
-            // Replace atomically-ish: write to temp then rename.
             File part = new File(dest.getAbsolutePath() + ".part");
-            copyFile(tmp, part);
+            if (part.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                part.delete();
+            }
+            CRC32 crc = new CRC32();
+            long bytes = 0L;
+            in = new BufferedInputStream(conn.getInputStream());
+            out = new FileOutputStream(part);
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) >= 0) {
+                out.write(buf, 0, n);
+                crc.update(buf, 0, n);
+                bytes += n;
+            }
+            out.getFD().sync();
+            out.close();
+            out = null;
+            if (bytes < 64) {
+                //noinspection ResultOfMethodCallIgnored
+                part.delete();
+                Log.w(TAG, "download too small bytes=" + bytes);
+                return false;
+            }
             if (dest.exists()) {
                 //noinspection ResultOfMethodCallIgnored
                 dest.delete();
@@ -425,18 +506,47 @@ public final class FestivalSplashHelper {
                 //noinspection ResultOfMethodCallIgnored
                 part.delete();
             }
+            String contentHash = Long.toHexString(crc.getValue()) + ":" + bytes;
             SharedPrefsData.putString(
-                    app, Constants.FESTIVAL_SPLASH_CACHED_URL, url, Constants.PREF_NAME);
+                    app, Constants.FESTIVAL_SPLASH_CACHED_URL, getImageUrl(app), Constants.PREF_NAME);
             SharedPrefsData.putLong(
                     app,
                     Constants.FESTIVAL_SPLASH_CACHED_UPDATED_AT,
                     getUpdatedAt(app),
                     Constants.PREF_NAME);
-            Log.i(TAG, "prefetch ok bytes=" + dest.length() + " sig=" + signatureKey);
+            SharedPrefsData.putString(
+                    app,
+                    Constants.FESTIVAL_SPLASH_CACHED_URL_VERSION,
+                    extractUrlVersion(getImageUrl(app)),
+                    Constants.PREF_NAME);
+            SharedPrefsData.putString(
+                    app,
+                    Constants.FESTIVAL_SPLASH_CACHED_CONTENT_HASH,
+                    contentHash,
+                    Constants.PREF_NAME);
+            Log.i(TAG, "prefetch ok bytes=" + bytes
+                    + " hash=" + contentHash
+                    + " ver=" + extractUrlVersion(getImageUrl(app))
+                    + " updatedAt=" + getUpdatedAt(app));
             return true;
         } catch (Exception e) {
             Log.w(TAG, "prefetch failed: " + (e.getMessage() != null ? e.getMessage() : e));
             return false;
+        } finally {
+            try {
+                if (out != null) out.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                if (in != null) in.close();
+            } catch (Exception ignored) {
+            }
+            if (conn != null) {
+                try {
+                    conn.disconnect();
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 

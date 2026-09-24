@@ -23,12 +23,12 @@
 
     </style>
 
+    <!-- Post system-splash: keep black. Logo/banner painted by StartingActivity. -->
     <style name="AppThemeSplash_splash" parent="Theme.AppCompat.NoActionBar">
-        <!-- Customize your theme here. -->v
-        <!--<item name="android:windowBackground">@drawable/splash_bg</item>-->
-
-        <item name="android:background">@drawable/new_bg_sp</item>
-        <item name="android:adjustViewBounds">true</item>
+        <item name="android:windowBackground">@color/splash_banner_solid_black</item>
+        <item name="android:background">@color/splash_banner_solid_black</item>
+        <item name="android:statusBarColor">@color/splash_banner_solid_black</item>
+        <item name="android:navigationBarColor">@color/splash_banner_solid_black</item>
     </style>
 
 
@@ -259,19 +259,13 @@
     </style>
 
 
+    <!-- Default Manifest splash = black + blank icon (no orange N). Opening Banner
+         ON must never show logo even for one frame; banner-OFF paints logo in Activity. -->
     <style name="AppThemeSplash" parent="Theme.SplashScreen">
-        <!-- Set the splash screen background, animated icon, and animation
-        duration. -->
-        <item name="windowSplashScreenBackground">@color/white</item>
-
-        <!-- Use windowSplashScreenAnimatedIcon to add a drawable or an animated
-             drawable. One of these is required. -->
-        <item name="windowSplashScreenAnimatedIcon">@drawable/double_splash_screen</item>
-        <!-- Required for animated icons. -->
-        <item name="windowSplashScreenAnimationDuration">100</item>
-
-        <!-- Set the theme of the Activity that directly follows your splash
-        screen. This is required. -->
+        <item name="windowSplashScreenBackground">@color/splash_banner_solid_black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_blank</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_banner_solid_black</item>
+        <item name="windowSplashScreenAnimationDuration">0</item>
         <item name="postSplashScreenTheme">@style/AppThemeSplash_splash</item>
     </style>
 

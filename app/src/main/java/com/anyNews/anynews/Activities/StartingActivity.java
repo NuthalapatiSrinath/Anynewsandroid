@@ -316,7 +316,25 @@ public class StartingActivity extends AppCompatActivity {
                 welcome.setVisibility(View.GONE);
             }
         } else {
-            logo_image_server.setVisibility(View.VISIBLE);
+            // Manifest splash is blank black — paint classic brand logo here only
+            // when Opening Banner is OFF for this launch path.
+            try {
+                getWindow().setBackgroundDrawableResource(R.drawable.new_bg_sp);
+            } catch (Exception e) {
+                try {
+                    getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+                } catch (Exception ignored) {
+                }
+            }
+            try {
+                View root = findViewById(android.R.id.content);
+                if (root != null) {
+                    root.setBackgroundResource(R.drawable.new_bg_sp);
+                }
+            } catch (Exception ignored) {
+            }
+            logo_image_server.setImageDrawable(null);
+            logo_image_server.setVisibility(View.INVISIBLE);
             logo_image.setVisibility(View.GONE);
         }
         receiver = new NetworkChangeReceiver();

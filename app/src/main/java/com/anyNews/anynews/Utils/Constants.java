@@ -287,6 +287,10 @@ public class Constants {
     public static String FESTIVAL_SPLASH_UPDATED_AT = "festival_splash_updated_at";
     /** updated_at that matches the local filesDir cache file. */
     public static String FESTIVAL_SPLASH_CACHED_UPDATED_AT = "festival_splash_cached_updated_at";
+    /** ?v= (or t=/ver=) token that matches the local cache file. */
+    public static String FESTIVAL_SPLASH_CACHED_URL_VERSION = "festival_splash_cached_url_version";
+    /** CRC32:byteLength of the local cache file (debug / future content compare). */
+    public static String FESTIVAL_SPLASH_CACHED_CONTENT_HASH = "festival_splash_cached_content_hash";
     /**
      * Max articles for Offline News pack (splash/runtime; default 24, hard 8–50).
      * Used as MAIN_CAP + thrifty prefetch target.
