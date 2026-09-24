@@ -32,6 +32,19 @@ public class EncreptionRequest {
         this.prompt_notifications_on_open = prompt_notifications_on_open;
     }
 
+    /** Live campaign due from feed — clears stale local due after one-shot ack. */
+    @SerializedName("notification_reprompt_due")
+    @Expose
+    private Boolean notification_reprompt_due;
+
+    public Boolean getNotification_reprompt_due() {
+        return notification_reprompt_due;
+    }
+
+    public void setNotification_reprompt_due(Boolean notification_reprompt_due) {
+        this.notification_reprompt_due = notification_reprompt_due;
+    }
+
     @SerializedName("data")
     @Expose
     private String data;
