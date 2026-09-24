@@ -13163,7 +13163,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (category_id == 0 || category_id == -1) {
                     type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
                 } else {
-                    type = languageModelResponse.getData().getMyFeed().toString();
+                    // Location pill uses district/place — never My Feed ("ప్రధాన వార్తలు").
+                    type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
                 }
                 // Programmatic chrome only — avoid re-entering Special/Video/Reload open paths.
                 // Mutual exclusive: Special | Video News | News (home). Without Video branch,
@@ -15793,11 +15794,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if(isFromLocalArticles || fromCache || adapter == null){
                            isFromLocalArticles=false;
                            if (languageModelResponse != null && languageModelResponse.getData() != null) {
-                               if (category_id == 0) {
-                                   type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
-                               } else {
-                                   type = languageModelResponse.getData().getMyFeed().toString();
-                               }
+                               // Always prefer district for FlipperAdapter ctor / location pill.
+                               // Never pass My Feed ("ప్రధాన వార్తలు") as the chip label.
+                               type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
                            }
                            if (adapter == null || fromCache) {
                            adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());

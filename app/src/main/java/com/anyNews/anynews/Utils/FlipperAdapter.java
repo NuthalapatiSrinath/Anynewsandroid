@@ -3294,7 +3294,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Binds pin + district text and keeps them visible after scroll / theme rebind.
      * Call after {@link WriterStripStyleHelper#apply} so style does not wipe the label.
-     * Label is the <b>post</b> geo when {@code location_label} is present.
+     * <p>Play Store / July Main: black pill shows post geo or the user's selected
+     * district — never the My Feed / "ప్రధాన వార్తలు" feed title. Promo Flash/Rewards
+     * only fill the slot when no usable district/location label exists.
      */
     private void bindLocationPill(
             TextView labelView,
@@ -3307,8 +3309,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
-        boolean showDistrict =
-                DistrictPinVisibilityConfig.shouldShowDistrict(context, categery_id, post);
+        // Play Store: district/location wins whenever we have a real place name.
+        String districtLabel = sanitizeLocationPillLabel(resolveLocationLabel(post));
+        boolean hasDistrict = isUsableLocationLabel(districtLabel);
+        if (hasDistrict) {
+            hideCompanionFeedChip(pill);
+            restoreSingleChipRow(pill, labelView);
+            bindDistrictLocationChrome(labelView, pinView, pill, districtLabel);
+            return;
+        }
         if (DistrictPinVisibilityConfig.shouldBindDualFeedChips(context, categery_id, post)) {
             bindDualFeedChips(labelView, pinView, pill, post);
             return;
@@ -3323,17 +3332,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         context, categery_id, post);
         String label = "";
         boolean promoChipMode = false;
-        if (showDistrict) {
-            label = resolveLocationLabel(post);
-        } else if (showRewardsSlot) {
+        if (showRewardsSlot) {
             promoChipMode = true;
             label = resolveRewardsSlotLabel();
         } else if (showFlashSlot) {
-            promoChipMode = true;
-            label = FlashNewsChipHelper.chipLabel(context);
+            String flash = FlashNewsChipHelper.chipLabel(context);
+            // Misconfigured Flash copy that is really a feed title → hide slot.
+            if (!isFeedTitleLabel(flash)) {
+                promoChipMode = true;
+                label = flash;
+            }
         }
         boolean hasLabel = isUsableLocationLabel(label);
-        if ((!showDistrict && !promoChipMode) || !hasLabel) {
+        if (!promoChipMode || !hasLabel) {
             if (labelView != null) {
                 labelView.setText("");
                 labelView.setVisibility(View.GONE);
@@ -3351,9 +3362,51 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             labelView.setVisibility(View.VISIBLE);
             labelView.setAlpha(1f);
             labelView.setText(label);
+            labelView.setMaxLines(1);
+            labelView.setEllipsize(TextUtils.TruncateAt.END);
+        }
+        if (pinView != null) {
+            // Pulse host replaces district logo circle.
+            pinView.setVisibility(View.GONE);
+        }
+        if (pill != null) {
+            pill.setVisibility(View.VISIBLE);
+            pill.setAlpha(1f);
+            try {
+                pill.clearAnimation();
+            } catch (Exception ignored) {
+            }
+            // Pulse handled on the indicator; click bound later via
+            // bindDistrictOrRewardsClick (must win over Local-news listener).
+            applyRewardsChipVisual(labelView, pinView, pill);
+        }
+    }
+
+    /** District / location black-pill chrome (Play Store padding + pin + label). */
+    private void bindDistrictLocationChrome(
+            @Nullable TextView labelView,
+            @Nullable ImageView pinView,
+            @Nullable View pill,
+            @NonNull String label) {
+        if (labelView != null) {
+            labelView.setVisibility(View.VISIBLE);
+            labelView.setAlpha(1f);
+            labelView.setText(label);
             // Single-row footer: ellipsize long Telugu districts without crushing name/Follow.
             labelView.setMaxLines(1);
             labelView.setEllipsize(TextUtils.TruncateAt.END);
+            // Undo promo chip textSize/typeface from a recycled Flash/Rewards bind.
+            try {
+                labelView.setTextSize(
+                        android.util.TypedValue.COMPLEX_UNIT_PX,
+                        context.getResources().getDimension(R.dimen._12sdp));
+            } catch (Exception e) {
+                labelView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f);
+            }
+            try {
+                labelView.setTypeface(labelView.getTypeface(), android.graphics.Typeface.NORMAL);
+            } catch (Exception ignored) {
+            }
             try {
                 labelView.setTextColor(ContextCompat.getColor(context, R.color.black));
             } catch (Exception e) {
@@ -3363,39 +3416,75 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
             }
         }
-            if (pinView != null) {
-            if (promoChipMode) {
-                // Pulse host replaces district logo circle.
-                pinView.setVisibility(View.GONE);
+        if (pinView != null) {
+            pinView.setVisibility(View.VISIBLE);
+            if (categery_id == 0 || categery_id == -1) {
+                pinView.setBackgroundResource(ic_location_icon);
             } else {
-                pinView.setVisibility(View.VISIBLE);
-                if (categery_id == 0) {
-                    pinView.setBackgroundResource(ic_location_icon);
-                } else {
-                    pinView.setBackgroundResource(ic_news_icon);
-                }
+                pinView.setBackgroundResource(ic_news_icon);
             }
         }
         if (pill != null) {
             pill.setVisibility(View.VISIBLE);
             pill.setAlpha(1f);
-            if (promoChipMode) {
-                try {
-                    pill.clearAnimation();
-                } catch (Exception ignored) {
-                }
-                // Pulse handled on the indicator; click bound later via
-                // bindDistrictOrRewardsClick (must win over Local-news listener).
-                applyRewardsChipVisual(labelView, pinView, pill);
-            } else {
-                try {
-                    pill.clearAnimation();
-                } catch (Exception ignored) {
-                }
-                clearRewardsChipVisual(pinView, pill);
-                // District pill click bound later via bindDistrictOrRewardsClick.
+            try {
+                pill.clearAnimation();
+            } catch (Exception ignored) {
+            }
+            clearRewardsChipVisual(pinView, pill);
+        }
+    }
+
+    /**
+     * Drop My Feed / Main News titles that must never appear in the location pill
+     * (July category path used getMyFeed(); admin Flash copy can be mistyped the same way).
+     */
+    @Nullable
+    private String sanitizeLocationPillLabel(@Nullable String raw) {
+        if (!isUsableLocationLabel(raw)) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (isFeedTitleLabel(trimmed)) {
+            return "";
+        }
+        return trimmed;
+    }
+
+    /** True when {@code s} is a feed chrome title, not a district/place name. */
+    private boolean isFeedTitleLabel(@Nullable String s) {
+        if (!isUsableLocationLabel(s)) {
+            return false;
+        }
+        String t = s.trim();
+        if ("Main News".equalsIgnoreCase(t)
+                || "My Feed".equalsIgnoreCase(t)
+                || "MY FEED".equals(t)
+                || "News".equalsIgnoreCase(t)) {
+            return true;
+        }
+        // Localized Main News / My Feed titles (not districts).
+        if ("ప్రధాన వార్తలు".equals(t)
+                || "మెయిన్ వార్తలు".equals(t)
+                || "నా ఫీడ్".equals(t)
+                || "പ്രധാന വാർത്തകൾ".equals(t)
+                || "मुख्य खबरें".equals(t)
+                || "मेरा फ़ीड".equals(t)
+                || "முதன்மை செய்திகள்".equals(t)
+                || "ಮುಖ್ಯ ಸುದ್ದಿ".equals(t)
+                || "ମୁଖ୍ୟ ଖବର".equals(t)) {
+            return true;
+        }
+        // Category-feed ctor still passes getMyFeed() as my_feed_name — never paint it.
+        if (isUsableLocationLabel(my_feed_name)
+                && t.equalsIgnoreCase(my_feed_name.trim())
+                && !DistrictLabelHelper.matchesStoredName(context, t)) {
+            String selected = DistrictLabelHelper.resolveDisplayLabel(context);
+            if (!isUsableLocationLabel(selected) || !t.equalsIgnoreCase(selected.trim())) {
+                return true;
             }
         }
+        return false;
     }
 
     /**
@@ -3434,7 +3523,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void bindDistrictOrRewardsClick(View pill, @Nullable ModelClass.Datum post) {
         if (pill == null) return;
         final ModelClass.Datum boundPost = post;
+        // Clicks must match visible chrome: district label beats Flash/Rewards toggles.
+        final boolean showingDistrict = isUsableLocationLabel(
+                sanitizeLocationPillLabel(resolveLocationLabel(boundPost)));
         pill.setOnClickListener(v -> {
+            if (showingDistrict) {
+                if (callbacks != null) {
+                    callbacks.callLocationRequest(0);
+                }
+                return;
+            }
             if (DistrictPinVisibilityConfig.shouldShowFlashWhenBoth(
                     context, categery_id, boundPost)) {
                 openFlashNewsFromChip();
@@ -3451,7 +3549,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 callbacks.callLocationRequest(0);
             }
         });
-        if (DistrictPinVisibilityConfig.shouldShowFlashWhenBoth(context, categery_id, boundPost)
+        if (!showingDistrict
+                && DistrictPinVisibilityConfig.shouldShowFlashWhenBoth(
+                        context, categery_id, boundPost)
                 && DistrictPinVisibilityConfig.shouldShowRewardsWhenBoth(
                         context, categery_id, boundPost)) {
             View companion = findCompanionFeedChip(pill);
@@ -3895,10 +3995,41 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             com.anyNews.anynews.R.drawable.circle_article_location);
                 } catch (Exception ignored) {
                 }
+            } else if (pill != null) {
+                try {
+                    pill.setBackgroundResource(
+                            com.anyNews.anynews.R.drawable.circle_article_location);
+                } catch (Exception ignored) {
+                }
             }
+            // Promo path zeroes horizontal padding — restore Play Store / July inner spacing.
+            restoreDistrictPillPadding(pill);
             if (pinView != null) {
                 pinView.setVisibility(View.VISIBLE);
             }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Play Store / July {@code ll_refer_and_earn_half}: paddingLeft/Right {@code _8sdp},
+     * paddingTop/Bottom {@code _2sdp}. Must re-apply after {@link #applyRewardsChipVisual}
+     * zeroes L/R padding on recycle.
+     */
+    private void restoreDistrictPillPadding(@Nullable View pill) {
+        if (pill == null || context == null) return;
+        try {
+            int padH;
+            int padV;
+            try {
+                padH = context.getResources().getDimensionPixelSize(R.dimen._8sdp);
+                padV = context.getResources().getDimensionPixelSize(R.dimen._2sdp);
+            } catch (Exception e) {
+                float density = context.getResources().getDisplayMetrics().density;
+                padH = Math.round(8f * density);
+                padV = Math.round(2f * density);
+            }
+            pill.setPadding(padH, padV, padH, padV);
         } catch (Exception ignored) {
         }
     }
