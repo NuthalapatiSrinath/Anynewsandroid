@@ -184,6 +184,7 @@ import androidx.media3.common.util.Util;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.TimeBar;
+import com.google.android.gms.ads.MediaContent;
 import com.google.android.gms.ads.VideoController;
 import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.nativead.MediaView;
@@ -520,9 +521,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 bindPendingNativeAdMediaForPage(page);
                 return;
             }
+            // Flip-back often keeps the scrap NativeAdView (headline/CTA) while the
+            // MediaView video surface is dead, or after flip-away destroy left a
+            // zombie chrome. Do not treat "NativeAdView present" as healthy.
             if (isCurrentAdSeatShowingNativeCreative()) {
-                adShellAwaitingCreative.delete(page);
-                return;
+                if (ensureLandedAdMediaAlive(page)) {
+                    adShellAwaitingCreative.delete(page);
+                    return;
+                }
+                // Dead / destroyed creative stripped — fall through to house + reload.
             }
             // House / empty shell — arm parked fill; HomePage.scheduleSettledAdWork
             // owns the reliability AdLoader (avoid double-stack on land).
@@ -533,6 +540,169 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 tryPaintGoogleNativeInPlace(page);
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Flip-back restore for an ad seat that still shows NativeAdView chrome.
+     * @return true when the seat is healthy (video resumed or non-video creative OK);
+     *         false when dead chrome was stripped and a fresh fill is required.
+     */
+    private boolean ensureLandedAdMediaAlive(int page) {
+        try {
+            if (list == null || page < 0 || page >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum slot = list.get(page);
+            if (slot == null) {
+                return false;
+            }
+            Integer needReqPos = slot.getAd_req_position();
+            String adType = slot.getAd_type();
+            boolean fbSeat = adType != null
+                    && !adType.equalsIgnoreCase("google")
+                    && !adType.equalsIgnoreCase("admanager");
+            boolean livePacked = fbSeat
+                    ? hasLiveFbNativePackedForReqPos(needReqPos)
+                    : hasLiveGoogleNativePackedForReqPos(needReqPos);
+            if (!livePacked) {
+                // Flip-away destroy (or recycle) left zombie headline/CTA + black media.
+                stripDeadNativeCreativeFromCurrentPage();
+                showLog("AD flip-back: stripped dead creative, need fresh fill page=" + page
+                        + " reqPos=" + needReqPos);
+                return false;
+            }
+            if (fbSeat) {
+                return true;
+            }
+            NativeAd live = findGoogleNativeForSlot(slot);
+            if (live == null) {
+                stripDeadNativeCreativeFromCurrentPage();
+                return false;
+            }
+            // Seat-sticky keep: MediaView often loses its surface off-screen.
+            // Resume video and re-register media so flip-back matches first show.
+            return resumeGoogleNativeVideoOnCurrentPage(live);
+        } catch (Exception e) {
+            showLog("ensureLandedAdMediaAlive: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** Remove zombie NativeAdView / FB unit from the visible ad seat. */
+    private void stripDeadNativeCreativeFromCurrentPage() {
+        try {
+            if (!(context instanceof HomePage)) {
+                return;
+            }
+            View page = ((HomePage) context).getCurrentFlipPageView();
+            if (page == null) {
+                return;
+            }
+            View fl = page.findViewById(R.id.fl_adplaceholder);
+            if (fl instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) fl;
+                for (int i = group.getChildCount() - 1; i >= 0; i--) {
+                    View child = group.getChildAt(i);
+                    if (child instanceof NativeAdView
+                            || (child.getTag() != null
+                            && "ad_dark_underlay".equals(String.valueOf(child.getTag())))) {
+                        // Keep underlay; strip only NativeAdView. Re-add underlay after.
+                        if (child instanceof NativeAdView) {
+                            group.removeViewAt(i);
+                        }
+                    }
+                }
+                // Also drop nested native_ad_view shells.
+                View nested = group.findViewById(R.id.native_ad_view);
+                if (nested != null && nested.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) nested.getParent()).removeView(nested);
+                }
+                ensureDarkAdUnderlay(group);
+                tagAdSeatReqPos(page, null);
+            }
+            NativeAdLayout fb = page.findViewById(R.id.native_ad_container);
+            if (fb != null) {
+                try {
+                    View unit = fb.findViewById(R.id.ad_unit);
+                    if (unit != null && unit.getParent() instanceof ViewGroup) {
+                        ((ViewGroup) unit.getParent()).removeView(unit);
+                    }
+                } catch (Exception ignored) {
+                }
+                ensureDarkAdUnderlay(fb);
+                tagAdSeatReqPos(page, null);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Re-attach MediaView + play VideoController so flip-back video matches first show.
+     * @return true if chrome is usable; false if rebind failed (caller should reload).
+     */
+    private boolean resumeGoogleNativeVideoOnCurrentPage(@NonNull NativeAd ad) {
+        try {
+            if (!(context instanceof HomePage)) {
+                return true;
+            }
+            View page = ((HomePage) context).getCurrentFlipPageView();
+            if (page == null) {
+                return true;
+            }
+            NativeAdView adView = null;
+            View fl = page.findViewById(R.id.fl_adplaceholder);
+            if (fl instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) fl;
+                for (int i = 0; i < group.getChildCount(); i++) {
+                    if (group.getChildAt(i) instanceof NativeAdView) {
+                        adView = (NativeAdView) group.getChildAt(i);
+                        break;
+                    }
+                }
+            }
+            if (adView == null) {
+                View nav = page.findViewById(R.id.native_ad_view);
+                if (nav instanceof NativeAdView) {
+                    adView = (NativeAdView) nav;
+                }
+            }
+            if (adView == null) {
+                return false;
+            }
+            MediaView mediaView = adView.findViewById(R.id.ad_media);
+            if (mediaView == null) {
+                mediaView = adView.findViewById(R.id.media_view);
+            }
+            if (mediaView != null) {
+                try {
+                    mediaView.setVisibility(VISIBLE);
+                    adView.setMediaView(mediaView);
+                } catch (Exception ignored) {
+                }
+            }
+            // Re-register the same NativeAd so MediaView rebuilds its surface.
+            try {
+                adView.setNativeAd(ad);
+            } catch (Exception e) {
+                showLog("resume setNativeAd failed: " + e.getMessage());
+                return false;
+            }
+            try {
+                MediaContent mediaContent = ad.getMediaContent();
+                if (mediaContent != null && mediaContent.hasVideoContent()) {
+                    VideoController vc = mediaContent.getVideoController();
+                    if (vc != null) {
+                        vc.play();
+                        showLog("AD flip-back: VideoController.play()");
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            return true;
+        } catch (Exception e) {
+            showLog("resumeGoogleNativeVideoOnCurrentPage: " + e.getMessage());
+            return false;
         }
     }
 
@@ -920,12 +1090,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (placeholderHasNativeCreative(fl)
                     && isPaintedAdSeatForReqPos(convertView, needReqPos)
                     && hasLiveGoogleNativePackedForReqPos(needReqPos)) {
+                // Flip-back: resume video / re-register MediaView so black surface recovers.
+                if (position == currentFlipPage) {
+                    NativeAd live = findGoogleNativeForSlot(slot);
+                    if (live != null) {
+                        resumeGoogleNativeVideoOnCurrentPage(live);
+                    }
+                }
                 adShellAwaitingCreative.delete(position);
                 cancelAdShellFillTimeout(position);
                 if (position == parkedAdFillPage) {
                     cancelParkedAdFillWatchdog();
                 }
                 return true;
+            }
+            // Zombie chrome without a live packed ad — strip so house + reload can paint.
+            if (placeholderHasNativeCreative(fl)
+                    && !hasLiveGoogleNativePackedForReqPos(needReqPos)
+                    && position == currentFlipPage) {
+                stripDeadNativeCreativeFromCurrentPage();
             }
             NativeAd ad = findGoogleNativeForSlot(slot);
             if (ad == null) {
@@ -1317,10 +1500,35 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 && isPaintedAdSeatForReqPos(convertView, needReqPos)
                 && position == currentFlipPage
                 && hasLiveGoogleNativePackedForReqPos(needReqPos)) {
+            NativeAd liveKeep = findGoogleNativeForSlot(googleSlot);
+            if (liveKeep != null) {
+                resumeGoogleNativeVideoOnCurrentPage(liveKeep);
+            }
             rememberAdShellPlaceholder(position, fl_adplaceholder, 2);
             adShellAwaitingCreative.delete(position);
             cancelAdShellFillTimeout(position);
             return;
+        }
+        // Destroy-after-impression / recycle: scrap still has headline+CTA but no
+        // live packed NativeAd — strip zombie so house shell + fresh AdLoader run.
+        if (placeholderHasNativeCreative(fl_adplaceholder)
+                && position == currentFlipPage
+                && !hasLiveGoogleNativePackedForReqPos(needReqPos)) {
+            try {
+                for (int i = fl_adplaceholder.getChildCount() - 1; i >= 0; i--) {
+                    View child = fl_adplaceholder.getChildAt(i);
+                    if (child instanceof NativeAdView) {
+                        fl_adplaceholder.removeViewAt(i);
+                    }
+                }
+                View nested = fl_adplaceholder.findViewById(R.id.native_ad_view);
+                if (nested != null && nested.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) nested.getParent()).removeView(nested);
+                }
+                ensureDarkAdUnderlay(fl_adplaceholder);
+                tagAdSeatReqPos(convertView, null);
+            } catch (Exception ignored) {
+            }
         }
         int fromView = 2;
         View myView;
@@ -3305,8 +3513,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * <ul>
      *   <li>Local ({@code categery_id == -1}): post geo or selected district
      *       (e.g. Anakapalli).</li>
-     *   <li>Main continuum ({@code categery_id == 0}): {@code my_feed_name} from
-     *       translator {@code getMyFeed()} (e.g. "ప్రధాన వార్తలు" / Pradhana Varthalu).</li>
+     *   <li>Main continuum ({@code categery_id == 0}): selected district by default.
+     *       {@code my_feed_name} is getMyFeed() (ప్రధాన వార్తలు) only when HomePage
+     *       rebuilt after Local→Main pill toggle-back.</li>
      *   <li>Category feeds ({@code categery_id > 0}): {@code my_feed_name} is the
      *       selected category title (Politics, Sports, …) from HomePage.</li>
      *   <li>Promo Flash/Rewards only when no usable district/feed label remains.</li>
@@ -3330,16 +3539,25 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         hideCompanionFeedChip(pill);
         restoreSingleChipRow(pill, labelView);
 
-        // Main: ctor got getMyFeed(); category: ctor got category name — paint that.
-        // Local-only path below keeps district so the pill can toggle Local ↔ Main.
-        if (categery_id != -1 && isUsableLocationLabel(my_feed_name)) {
+        // Category: always paint category title from ctor.
+        if (categery_id > 0 && isUsableLocationLabel(my_feed_name)) {
+            bindDistrictLocationChrome(labelView, pinView, pill, my_feed_name.trim());
+            return;
+        }
+        // Main after Local→Main pill: ctor got getMyFeed() (Pradhana Varthalu).
+        // Normal Main keeps district / promo path below (my_feed_name = district).
+        if (categery_id == 0
+                && isUsableLocationLabel(my_feed_name)
+                && isMainFeedTitleLabel(my_feed_name)) {
             bindDistrictLocationChrome(labelView, pinView, pill, my_feed_name.trim());
             return;
         }
 
-        // Local: district/location when present.
+        // Local + normal Main: district/location when present (respect hide-district).
         String districtLabel = resolveLocationLabel(post);
-        boolean hasDistrict = isUsableLocationLabel(districtLabel);
+        boolean hasDistrict = isUsableLocationLabel(districtLabel)
+                && DistrictPinVisibilityConfig.shouldShowDistrict(
+                        context, categery_id, post);
         if (hasDistrict) {
             bindDistrictLocationChrome(labelView, pinView, pill, districtLabel);
             return;
@@ -3431,9 +3649,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (pinView != null) {
             pinView.setVisibility(View.VISIBLE);
             restoreDistrictPinSize(pinView);
-            // Location pin only on Local (district name); Main/category use news icon
-            // for getMyFeed titles like ప్రధాన వార్తలు.
-            if (categery_id == -1) {
+            // Location pin for Local district and Main district; news icon for
+            // Pradhana / category feed titles.
+            if (categery_id == -1
+                    || (categery_id == 0 && !isMainFeedTitleLabel(label))) {
                 pinView.setBackgroundResource(ic_location_icon);
             } else {
                 pinView.setBackgroundResource(ic_news_icon);
@@ -3448,6 +3667,47 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             clearRewardsChipVisual(pinView, pill);
         }
+    }
+
+    /**
+     * True when {@code s} is translator My Feed / Main News chrome (Pradhana Varthalu),
+     * not a district or category place name. Used so Main only paints this after
+     * Local→Main pill toggle (ctor my_feed_name = getMyFeed()).
+     */
+    private boolean isMainFeedTitleLabel(@Nullable String s) {
+        if (!isUsableLocationLabel(s)) {
+            return false;
+        }
+        String t = s.trim();
+        if ("Main News".equalsIgnoreCase(t)
+                || "My Feed".equalsIgnoreCase(t)
+                || "MY FEED".equals(t)) {
+            return true;
+        }
+        if ("ప్రధాన వార్తలు".equals(t)
+                || "మెయిన్ వార్తలు".equals(t)
+                || "నా ఫీడ్".equals(t)
+                || "പ്രധാന വാർത്തകൾ".equals(t)
+                || "मुख्य खबरें".equals(t)
+                || "मेरा फ़ीड".equals(t)
+                || "முதன்மை செய்திகள்".equals(t)
+                || "ಮುಖ್ಯ ಸುದ್ದಿ".equals(t)
+                || "ମୁଖ୍ୟ ଖବର".equals(t)) {
+            return true;
+        }
+        // Prefer live translator getMyFeed when available.
+        try {
+            if (languageModelResponse != null
+                    && languageModelResponse.getData() != null
+                    && languageModelResponse.getData().getMyFeed() != null) {
+                String myFeed = languageModelResponse.getData().getMyFeed().toString().trim();
+                if (isUsableLocationLabel(myFeed) && t.equalsIgnoreCase(myFeed)) {
+                    return !DistrictLabelHelper.matchesStoredName(context, t);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     /**
@@ -3487,16 +3747,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void bindDistrictOrRewardsClick(View pill, @Nullable ModelClass.Datum post) {
         if (pill == null) return;
         final ModelClass.Datum boundPost = post;
-        // Match visible chrome: Main getMyFeed / category title or Local district beats
-        // Flash/Rewards toggles. Click still toggles Local ↔ Main (category → Main).
-        final boolean showingMainOrCategoryFeedTitle =
-                categery_id != -1 && isUsableLocationLabel(my_feed_name);
+        // Match visible chrome: category title / Main Pradhana / Local or Main district
+        // beats Flash/Rewards toggles. Click still toggles Local ↔ Main (category → Main).
+        final boolean showingCategoryFeedTitle =
+                categery_id > 0 && isUsableLocationLabel(my_feed_name);
+        final boolean showingMainPradhana =
+                categery_id == 0 && isUsableLocationLabel(my_feed_name)
+                        && isMainFeedTitleLabel(my_feed_name);
         final boolean showingLocalDistrict =
                 categery_id == -1 && isUsableLocationLabel(resolveLocationLabel(boundPost));
+        final boolean showingMainDistrict =
+                categery_id == 0 && !showingMainPradhana
+                        && isUsableLocationLabel(
+                                DistrictLabelHelper.resolveDisplayLabel(context));
         final boolean showingTogglePill =
-                showingMainOrCategoryFeedTitle || showingLocalDistrict
-                        || (categery_id == 0 && isUsableLocationLabel(
-                                DistrictLabelHelper.resolveDisplayLabel(context)));
+                showingCategoryFeedTitle || showingMainPradhana
+                        || showingLocalDistrict || showingMainDistrict;
         final boolean opensLocal =
                 DistrictPinVisibilityConfig.locationPillOpensLocalFeed(context);
         pill.setOnClickListener(v -> {

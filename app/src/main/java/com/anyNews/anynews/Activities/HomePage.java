@@ -697,6 +697,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     int requestSize=0;
     boolean isFromLocalArticles=false;
     /**
+     * Session-only: after Local → Main via the location pill, Main paints
+     * translator {@code getMyFeed()} (ప్రధాన వార్తలు). Cleared on resume, Main→Local,
+     * category open, and any Main entry that is not that pill toggle-back.
+     */
+    private boolean locationPillShowPradhanaOnMain = false;
+    /**
      * When true, bottom-nav select/reselect listeners no-op so programmatic
      * {@code setSelectedItemId} (Special / Reload) does not re-enter feed open.
      */
@@ -3217,11 +3223,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Shared install + admin re-prompt path. Prefer the first-install style
-     * POST_NOTIFICATIONS OS dialog (Allow / Don't allow) over the feed.
-     * force=true (ask-on-open / wave): if the OS will not show that dialog again
-     * (permanent deny, pre-13 tray off, or runtime granted but tray master off),
-     * show a soft in-app dialog — never auto-navigate to system Settings.
+     * Shared install + admin ask path. Always use the first-install Play Store style
+     * POST_NOTIFICATIONS system sheet (Allow / Don't allow). Never the custom
+     * OPEN SETTINGS / NOT NOW / ALLOW AlertDialog.
      */
     private void requestNotificationPermission(boolean force) {
         requestPostNotificationsPermission(force);
@@ -3246,42 +3250,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         pendingNotifPermViaAdminReprompt = viaAdminReprompt;
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            // No runtime POST_NOTIFICATIONS — soft dialog only (user may open Settings).
-            if (viaAdminReprompt && !isSystemNotificationsEnabledSafe()) {
-                showSoftNotificationEnableDialog();
+            // Pre-13: no POST_NOTIFICATIONS system sheet — do not invent a custom dialog.
+            if (isSystemNotificationsEnabledSafe()) {
+                onNotificationPermissionGrantedFromReprompt(viaAdminReprompt);
             }
             return;
         }
 
         if (hasPostNotificationsPermission()) {
-            if (!isSystemNotificationsEnabledSafe()) {
-                // Runtime granted but tray master off — OS will not re-show POST_NOTIFICATIONS.
-                if (viaAdminReprompt) {
-                    showSoftNotificationEnableDialog();
-                }
-                return;
+            if (isSystemNotificationsEnabledSafe()) {
+                onNotificationPermissionGrantedFromReprompt(viaAdminReprompt);
             }
-            onNotificationPermissionGrantedFromReprompt(viaAdminReprompt);
+            // Tray master off with runtime granted: no custom dialog.
             return;
         }
 
-        // Prefer OS Allow / Don't allow whenever the system will still show it.
-        // Do NOT call requestPermissions on permanent deny — some OEMs route that
-        // straight to the app notification Settings screen (the harsh UX).
-        if (canShowPostNotificationsSystemDialog()) {
-            launchPostNotificationsSystemDialog();
-            return;
-        }
-
-        // Permanent deny: OS will not re-show the system dialog.
-        SharedPrefsData.putBool(
-                getApplicationContext(),
-                Constants.NOTIFICATION_ENABLED,
-                false,
-                Constants.PREF_NAME);
-        if (viaAdminReprompt) {
-            showSoftNotificationEnableDialog();
-        }
+        // Always the Play Store / first-install system sheet — never the custom
+        // OPEN SETTINGS / NOT NOW / ALLOW AlertDialog.
+        launchPostNotificationsSystemDialog();
     }
 
     /** Shows the install-style POST_NOTIFICATIONS system dialog over the feed. */
@@ -3294,10 +3280,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     REQ_POST_NOTIFICATIONS);
         } catch (Exception e) {
             showLog("request POST_NOTIFICATIONS failed: " + e.getMessage());
-            // Never auto-open Settings — soft dialog only for ask-on-open / wave.
-            if (pendingNotifPermViaAdminReprompt) {
-                showSoftNotificationEnableDialog();
-            }
+            // Never fall back to the custom AlertDialog.
         }
     }
 
@@ -6127,6 +6110,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
             if (category_id == 0) {
+                // Main → Local: never keep Pradhana latch on Local (district only).
+                locationPillShowPradhanaOnMain = false;
                 mFlipView.setVisibility(View.VISIBLE);
                 showHomeFeedLoadingReveal();
                 layout_with_data.setVisibility(View.GONE);
@@ -6165,6 +6150,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         last_post_id = 0;
                         skip = 0;
                         actual_skip = 0;
+                        // Only Local (−1) → Main pill toggle shows ప్రధాన వార్తలు.
+                        // Category → Main must keep district (not Pradhana).
+                        locationPillShowPradhanaOnMain = (category_id == -1);
                         category_id = 0;
 
                         requestSize=0;
@@ -13379,7 +13367,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 leave_comment_white.setHint("" + languageModelResponse.getData().getWriteComments());
                 applyMagazineShareFooterLabel();
 
-                // Local → district; Main → getMyFeed(); category → category name.
+                // Local → district; Main → district (or Pradhana only after Local→Main
+                // pill); category → category name.
                 type = resolveLocationPillTypeForCategory(category_id);
                 // Programmatic chrome only — avoid re-entering Special/Video/Reload open paths.
                 // Mutual exclusive: Special | Video News | News (home). Without Video branch,
@@ -13447,8 +13436,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Footer location-pill label passed into {@link FlipperAdapter}.
      * <ul>
      *   <li>Local ({@code -1}) → selected district name</li>
-     *   <li>Main ({@code 0}) → translator {@code getMyFeed()}
-     *       (e.g. ప్రధాన వార్తలు / Pradhana Varthalu)</li>
+     *   <li>Main ({@code 0}) → district by default (existing location/district
+     *       display settings). {@code getMyFeed()} / ప్రధాన వార్తలు only when
+     *       {@link #locationPillShowPradhanaOnMain} — set solely by Local→Main
+     *       pill toggle-back.</li>
      *   <li>Category ({@code > 0}) → that category's display name
      *       (intent extra / prefs / {@link CategoriesDiskCache})</li>
      * </ul>
@@ -13478,9 +13469,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             return type != null ? type : "";
         }
-        String myFeed = resolveTranslatorMyFeedLabel();
-        if (DistrictLabelHelper.isUsable(myFeed)) {
-            return myFeed;
+        // Main (0): Pradhana only after Local→Main pill; otherwise district.
+        if (locationPillShowPradhanaOnMain) {
+            String myFeed = resolveTranslatorMyFeedLabel();
+            if (DistrictLabelHelper.isUsable(myFeed)) {
+                return myFeed;
+            }
+        }
+        String district = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+        if (DistrictLabelHelper.isUsable(district)) {
+            return district;
+        }
+        String offline = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+        if (DistrictLabelHelper.isUsable(offline)) {
+            return offline;
         }
         return type != null ? type : "";
     }
@@ -13612,7 +13614,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     feedType = catName;
                     feedTypeBad = false;
                 }
-            } else if (catId != -1) {
+            } else if (catId == 0 && locationPillShowPradhanaOnMain) {
+                // Main after Local→Main pill only — Pradhana fallback.
                 String myFeed = resolveTranslatorMyFeedLabel();
                 if (DistrictLabelHelper.isUsable(myFeed)
                         && DistrictLabelHelper.labelCompatibleWithLanguage(myFeed, langId)) {
@@ -13620,6 +13623,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     feedTypeBad = false;
                 }
             }
+            // else Main/Local: fall through to district prefs below
             if (feedTypeBad) {
                 feedType = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
                 if (TextUtils.isEmpty(feedType)) {
@@ -14347,6 +14351,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void exitLocalFeedToMainNews() {
         showLog("exitLocalFeedToMainNews");
+        // Back-button / chrome exit is not the location-pill Local→Main toggle.
+        locationPillShowPradhanaOnMain = false;
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         try {
@@ -16188,11 +16194,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         //writeNewUser("User", type_firebase, current_time_firebase, draft_id_firebase, device_id_firebase, language_id_firebase, updated_post_id_firebase, positionx);
                         if(isFromLocalArticles || fromCache || adapter == null){
                            // Local↔Main toggle must rebuild the adapter so my_feed_name /
-                           // categery_id (district vs ప్రధాన వార్తలు) match the continuum.
+                           // categery_id (district vs ప్రధాన వార్తలు after Local→Main) match.
                            final boolean rebuildForLocalMainToggle = isFromLocalArticles;
                            isFromLocalArticles=false;
                            if (languageModelResponse != null && languageModelResponse.getData() != null) {
-                               // Local → district; Main → getMyFeed; category → category name.
+                               // Local → district; Main → district or Pradhana latch;
+                               // category → category name.
                                type = resolveLocationPillTypeForCategory(category_id);
                            }
                            if (adapter == null || fromCache || rebuildForLocalMainToggle) {
@@ -18458,7 +18465,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
      * Call on resume / after language prefs may have changed.
      */
     private void refreshDistrictLabelsForCurrentLanguage() {
-        // Keep pill type in sync: Local = district; Main = getMyFeed; category = name.
+        // Resume / language change: Main shows district again (not Pradhana latch).
+        locationPillShowPradhanaOnMain = false;
+        // Keep pill type in sync: Local = district; Main = district (or Pradhana
+        // only after Local→Main pill); category = name.
         String pill = resolveLocationPillTypeForCategory(category_id);
         if (DistrictLabelHelper.isUsable(pill)) {
             type = pill;
