@@ -18,16 +18,16 @@ import androidx.annotation.Nullable;
  *       (display only; opens Match Center when an active mini match exists).</li>
  *   <li>{@link Constants#CRICKET_MINI_PLAYER_POLL_INTERVAL_SECONDS} — live poll
  *       cadence (seconds). Server/admin is sole clamp; app does not invent floors.</li>
- *   <li>{@link Constants#CRICKET_MINI_PLAYER_IDLE_POLL_INTERVAL_SECONDS} — reserved
- *       idle cadence; Home does not idle-poll when no active mini match.</li>
+ *   <li>{@link Constants#CRICKET_MINI_PLAYER_IDLE_POLL_INTERVAL_SECONDS} — idle
+ *       cadence while mini master is ON but no active mini match (go-live detect).</li>
  * </ul>
  *
- * <p>HTTP rule: {@link #isCricketPollAllowed} (mini master ON) plus a real active
- * mini-player match. Footer ON alone → <b>zero</b> {@code cricket_active_match}.
- * No match with Mini Player ON → zero cricket polls.
+ * <p>HTTP rule: {@link #isCricketPollAllowed} (mini master ON). Footer ON alone
+ * → <b>zero</b> {@code cricket_active_match}. Master OFF → zero cricket polls.
+ * Mini ON + no match → idle interval; mini ON + match → live interval.
  *
  * <p>Cadence: if poll prefs are missing, return 0 so callers wait for splash/session
- * rather than inventing a client floor that ignores admin 10s.
+ * rather than inventing a client floor (e.g. the old Play Store 2.5s hardcode).
  */
 public final class CricketSurfaceConfigHelper {
 
@@ -210,7 +210,8 @@ public final class CricketSurfaceConfigHelper {
     /**
      * True when the app may run {@code cricket_active_match} background polls.
      * Master mini player only — footer tab is display-only and must not poll.
-     * Callers must also require a real active mini-player match (stop on null).
+     * When true with no active match, callers use idle interval; with a match,
+     * live interval.
      */
     public static boolean isCricketPollAllowed(@Nullable Context context) {
         return isMiniPlayerEnabled(context);

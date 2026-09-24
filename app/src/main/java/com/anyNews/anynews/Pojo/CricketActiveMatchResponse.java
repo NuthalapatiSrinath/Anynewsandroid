@@ -37,6 +37,16 @@ public class CricketActiveMatchResponse implements Serializable {
     @Expose
     private Boolean cricket_footer_tab_enabled;
 
+    /** Admin live poll seconds (splash/session/poll). Null → leave cached. */
+    @SerializedName("cricket_mini_player_poll_interval_seconds")
+    @Expose
+    private Integer cricket_mini_player_poll_interval_seconds;
+
+    /** Admin idle poll seconds. Null → leave cached. */
+    @SerializedName("cricket_mini_player_idle_poll_interval_seconds")
+    @Expose
+    private Integer cricket_mini_player_idle_poll_interval_seconds;
+
     public Boolean getSuccess() {
         return success;
     }
@@ -66,5 +76,13 @@ public class CricketActiveMatchResponse implements Serializable {
 
     public Boolean getCricket_footer_tab_enabled() {
         return cricket_footer_tab_enabled;
+    }
+
+    public Integer getCricket_mini_player_poll_interval_seconds() {
+        return cricket_mini_player_poll_interval_seconds;
+    }
+
+    public Integer getCricket_mini_player_idle_poll_interval_seconds() {
+        return cricket_mini_player_idle_poll_interval_seconds;
     }
 }

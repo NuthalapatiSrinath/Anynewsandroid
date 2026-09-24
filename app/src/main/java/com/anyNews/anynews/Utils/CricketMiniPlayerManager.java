@@ -43,12 +43,12 @@ import retrofit2.Response;
  * Match Center; the close button hides it and shows a "Live match closed"
  * snackbar with an orange UNDO to restore it for the session.
  *
- * <p><b>Poll gate (strict):</b> Home polls {@code /app/v3/cricket_active_match}
- * only while master mini player is admin-ON <b>and</b> a specific match has
- * Mini Player ON (non-null {@code active_match}). Footer tab ON alone must
- * <b>never</b> start interval polls. No active mini match / splash mini OFF /
- * API returns null → <b>zero</b> cricket HTTP. Footer may still paint from a
- * feed-seeded active match without polling.
+ * <p><b>Poll gate:</b> Home may call {@code /app/v3/cricket_active_match} only
+ * while master mini player is admin-ON. Cadence comes from splash/session
+ * (live vs idle seconds) — never hardcoded. Footer tab ON alone must
+ * <b>never</b> start interval polls. Master OFF → <b>zero</b> cricket HTTP.
+ * Mini ON + no active match → idle interval (go-live detect). Mini ON + active
+ * match → live interval.
  */
 public class CricketMiniPlayerManager {
 
@@ -92,7 +92,7 @@ public class CricketMiniPlayerManager {
     private boolean pollLoopArmed = false;
     /**
      * Whether the last successful poll (or feed seed) had a live active_match.
-     * Required together with mini master ON before any cricket_active_match HTTP.
+     * Selects live vs idle admin cadence; not a poll permission gate.
      */
     private boolean lastPollHadActiveMatch = false;
     /** Whole LIVE-pill opacity blink while the active match is live. */
@@ -129,15 +129,15 @@ public class CricketMiniPlayerManager {
         @Override
         public void run() {
             if (!shouldPollCricket()) {
-                // Hard gate: mini off or no active mini match → zero cricket HTTP.
+                // Hard gate: mini master off → zero cricket HTTP.
                 return;
             }
             Activity a = activityRef.get();
             if (a == null || a.isFinishing()) {
                 return;
             }
-            // Wait for splash/session cadence — do not invent client floors / 1s spam.
-            if (!CricketSurfaceConfigHelper.hasPollCadence(a)) {
+            // Wait for splash/session cadence — do not invent client floors / 2.5s spam.
+            if (!hasCadenceForCurrentMode(a)) {
                 handler.postDelayed(this, 1500L);
                 return;
             }
@@ -147,16 +147,25 @@ public class CricketMiniPlayerManager {
     };
 
     /**
-     * True only when master mini is ON and we already know an active mini-player
-     * match exists. Footer never qualifies. No active match → no polls.
+     * True when master mini is ON. Footer never qualifies. Cadence is live or
+     * idle depending on whether an active mini match is known.
      */
     private boolean shouldPollCricket() {
-        return miniPlayerEnabled && lastPollHadActiveMatch;
+        return miniPlayerEnabled;
+    }
+
+    /** Live interval when a match is active; idle interval while waiting for go-live. */
+    private boolean hasCadenceForCurrentMode(Activity a) {
+        if (lastPollHadActiveMatch) {
+            return CricketSurfaceConfigHelper.hasPollCadence(a);
+        }
+        return CricketSurfaceConfigHelper.getIdlePollIntervalSeconds(a) > 0
+                || CricketSurfaceConfigHelper.hasPollCadence(a);
     }
 
     /**
-     * Schedules next cricket_active_match poll from admin live interval only.
-     * Never schedules when mini is OFF or there is no active mini match.
+     * Schedules next cricket_active_match poll from admin live or idle interval.
+     * Never schedules when mini is OFF.
      */
     private void scheduleNextPoll() {
         if (!pollingEnabled || !shouldPollCricket()) {
@@ -166,7 +175,16 @@ public class CricketMiniPlayerManager {
         if (a == null || a.isFinishing()) {
             return;
         }
-        int sec = CricketSurfaceConfigHelper.getPollIntervalSeconds(a);
+        int sec;
+        if (lastPollHadActiveMatch) {
+            sec = CricketSurfaceConfigHelper.getPollIntervalSeconds(a);
+        } else {
+            sec = CricketSurfaceConfigHelper.getIdlePollIntervalSeconds(a);
+            if (sec <= 0) {
+                // Soft adaptive from live if idle not delivered yet.
+                sec = CricketSurfaceConfigHelper.getPollIntervalSeconds(a);
+            }
+        }
         if (sec <= 0) {
             // Cadence not delivered yet — recheck without HTTP.
             handler.postDelayed(pollRunnable, 1500L);
@@ -175,7 +193,7 @@ public class CricketMiniPlayerManager {
         handler.postDelayed(pollRunnable, sec * 1000L);
     }
 
-    /** Start the poll loop once when the strict gate first allows it. */
+    /** Start the poll loop once when the master mini gate first allows it. */
     private void ensurePollingLoop() {
         if (!pollingEnabled || !shouldPollCricket()) {
             return;
@@ -254,8 +272,8 @@ public class CricketMiniPlayerManager {
     /**
      * Re-read admin mini/footer prefs and start/stop poll accordingly.
      * Called from session open response broadcast and onResume.
-     * Footer alone never starts polls; mini ON without a known active match
-     * waits for feed seed / a later non-null active_match.
+     * Footer alone never starts polls. Mini ON without a known active match
+     * starts idle polls (admin idle interval) to detect go-live.
      */
     private void applySurfaceGateFromPrefs(Activity activity) {
         boolean wasPolling = shouldPollCricket();
@@ -275,7 +293,7 @@ public class CricketMiniPlayerManager {
             }
             return;
         }
-        // Mini ON: only poll when we already have an active mini match.
+        // Mini ON: paint cached match if any; always arm live or idle polls.
         if (lastKnownActive != null
                 && !TextUtils.isEmpty(lastKnownActive.getMatch_id())) {
             lastPollHadActiveMatch = true;
@@ -286,14 +304,14 @@ public class CricketMiniPlayerManager {
                 bind(lastKnownActive);
             }
             notifyPollListener(lastKnownActive);
-            if (!wasPolling) {
-                ensurePollingLoop();
-            }
         } else {
             lastPollHadActiveMatch = false;
-            stopPollingCompletely();
             hide();
             notifyPollListener(null);
+        }
+        if (!wasPolling || !pollLoopArmed) {
+            pollLoopArmed = false;
+            ensurePollingLoop();
         }
     }
 
@@ -305,8 +323,8 @@ public class CricketMiniPlayerManager {
     }
 
     /**
-     * Host became visible. Polls only when mini is ON and an active mini match
-     * is already known. Footer alone: zero cricket HTTP.
+     * Host became visible. Polls while mini is ON (live or idle cadence).
+     * Footer alone: zero cricket HTTP.
      */
     public void onResume() {
         Activity activity = activityRef.get();
@@ -372,8 +390,7 @@ public class CricketMiniPlayerManager {
     }
 
     /**
-     * Immediate one-shot refresh. No-ops unless mini is ON and an active match
-     * is already known (never probes just because footer is ON).
+     * Immediate one-shot refresh. No-ops unless mini is ON.
      */
     public void refreshNow() {
         if (!shouldPollCricket()) return;
@@ -383,9 +400,9 @@ public class CricketMiniPlayerManager {
     /**
      * Main entry point. Called by the host screen on every feed load with the
      * active_match from the feed config (may be null). Does not issue cricket
-     * HTTP by itself. Seeds mini/footer UI. Starts background polls only when
-     * mini master is ON and {@code match} is a real active mini-player match.
-     * Null match → stop all cricket polls (zero HTTP until a match is seeded).
+     * HTTP by itself. Seeds mini/footer UI. Starts background polls when mini
+     * master is ON (live cadence if {@code match} is set, else idle).
+     * Null match + mini ON → idle polls (go-live detect). Mini OFF → zero HTTP.
      */
     public void update(ActiveMatch match) {
         Activity activity = activityRef.get();
@@ -410,8 +427,6 @@ public class CricketMiniPlayerManager {
         }
 
         if (match == null || TextUtils.isEmpty(match.getMatch_id())) {
-            // No LIVE mini player active → zero cricket HTTP.
-            stopPollingCompletely();
             if (!TextUtils.isEmpty(lastServerActiveId)) {
                 dismissedForSession.remove(lastServerActiveId);
                 lastServerActiveId = null;
@@ -421,6 +436,12 @@ public class CricketMiniPlayerManager {
             lastPollHadActiveMatch = false;
             hide();
             notifyPollListener(null);
+            if (miniPlayerEnabled) {
+                // Idle discover — do not stop the loop.
+                ensurePollingLoop();
+            } else {
+                stopPollingCompletely();
+            }
             return;
         }
 
@@ -746,7 +767,7 @@ public class CricketMiniPlayerManager {
 
     /**
      * Only Home path that hits {@code cricket_active_match}.
-     * Hard-gated by mini master ON + known active mini match (not footer).
+     * Hard-gated by mini master ON (not footer). Live vs idle cadence elsewhere.
      */
     private void refreshFromServer() {
         if (!shouldPollCricket()) return;
@@ -764,8 +785,8 @@ public class CricketMiniPlayerManager {
                     pollInFlight = false;
                     if (response.body() != null) {
                         CricketActiveMatchResponse body = response.body();
+                        Activity host = activityRef.get();
                         if (body.getMini_player_position() != null) {
-                            Activity host = activityRef.get();
                             CricketMiniPlayerPosition pos = body.getMini_player_position();
                             String posJson = String.valueOf(pos.isUseDefault())
                                     + "|" + pos.getXPercent() + "|" + pos.getYPercent();
@@ -779,8 +800,6 @@ public class CricketMiniPlayerManager {
                                 lastAppliedPositionJson = posJson;
                             }
                         }
-                        // Cache + apply the two independent surface toggles live.
-                        Activity host = activityRef.get();
                         if (body.getCricket_mini_player_enabled() != null) {
                             miniPlayerEnabled = body.isMiniPlayerEnabled();
                             CricketSurfaceConfigHelper.saveMiniPlayerEnabled(host, miniPlayerEnabled);
@@ -789,22 +808,37 @@ public class CricketMiniPlayerManager {
                             footerTabEnabled = body.isFooterTabEnabled();
                             CricketSurfaceConfigHelper.saveFooterTabEnabled(host, footerTabEnabled);
                         }
+                        if (body.getCricket_mini_player_poll_interval_seconds() != null) {
+                            CricketSurfaceConfigHelper.savePollIntervalSeconds(
+                                    host, body.getCricket_mini_player_poll_interval_seconds());
+                        }
+                        if (body.getCricket_mini_player_idle_poll_interval_seconds() != null) {
+                            CricketSurfaceConfigHelper.saveIdlePollIntervalSeconds(
+                                    host, body.getCricket_mini_player_idle_poll_interval_seconds());
+                        }
                         ActiveMatch am = body.getActive_match();
                         boolean hadMatch = am != null && !TextUtils.isEmpty(am.getMatch_id());
-                        // Mini OFF or no active mini match → stop all cricket HTTP.
-                        if (!miniPlayerEnabled || !hadMatch) {
+                        if (!miniPlayerEnabled) {
                             lastPollHadActiveMatch = false;
                             stopPollingCompletely();
-                            update(am); // clears UI / footer when null
+                            update(am);
                             return;
                         }
                         boolean wasActive = lastPollHadActiveMatch;
-                        lastPollHadActiveMatch = true;
+                        lastPollHadActiveMatch = hadMatch;
+                        if (!hadMatch) {
+                            update(null);
+                            if (wasActive) {
+                                handler.removeCallbacks(pollRunnable);
+                                pollLoopArmed = true;
+                                scheduleNextPoll();
+                            }
+                            return;
+                        }
                         update(am);
-                        if (wasActive != lastPollHadActiveMatch
-                                && pollingEnabled
-                                && shouldPollCricket()) {
+                        if (!wasActive && pollingEnabled && shouldPollCricket()) {
                             handler.removeCallbacks(pollRunnable);
+                            pollLoopArmed = true;
                             scheduleNextPoll();
                         }
                     }
@@ -813,8 +847,6 @@ public class CricketMiniPlayerManager {
                 @Override
                 public void onFailure(@NonNull Call<CricketActiveMatchResponse> call, @NonNull Throwable t) {
                     pollInFlight = false;
-                    // Offline / transient — keep last known state, don't crash.
-                    // Stay on current adaptive cadence (do not accelerate).
                 }
             });
         } catch (Exception ignored) {
