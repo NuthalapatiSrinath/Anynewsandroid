@@ -832,6 +832,22 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Object becomeAReporterNotHiringMessages;
 
+        @SerializedName("become_a_reporter_hiring_messages")
+        @Expose
+        private Object becomeAReporterHiringMessages;
+
+        @SerializedName("become_a_reporter_language_ids")
+        @Expose
+        private Object becomeAReporterLanguageIds;
+
+        @SerializedName("become_a_reporter_state_ids")
+        @Expose
+        private Object becomeAReporterStateIds;
+
+        @SerializedName("become_a_reporter_dist_ids")
+        @Expose
+        private Object becomeAReporterDistIds;
+
         @SerializedName("profile_show_bookmarks")
         @Expose
         private Boolean profileShowBookmarks;
@@ -1399,6 +1415,22 @@ public class StartActivityReqModel implements Serializable {
 
         public Object getBecomeAReporterNotHiringMessages() {
             return becomeAReporterNotHiringMessages;
+        }
+
+        public Object getBecomeAReporterHiringMessages() {
+            return becomeAReporterHiringMessages;
+        }
+
+        public Object getBecomeAReporterLanguageIds() {
+            return becomeAReporterLanguageIds;
+        }
+
+        public Object getBecomeAReporterStateIds() {
+            return becomeAReporterStateIds;
+        }
+
+        public Object getBecomeAReporterDistIds() {
+            return becomeAReporterDistIds;
         }
 
         public Boolean getProfileShowBookmarks() {

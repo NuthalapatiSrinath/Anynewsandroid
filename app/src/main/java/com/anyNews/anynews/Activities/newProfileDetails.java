@@ -3144,8 +3144,9 @@ public class newProfileDetails extends AppCompatActivity {
         }
         View becomeReporter = findViewById(R.id.layout_become_a_reporter);
         if (becomeReporter != null) {
-            // Guests + normal users always see the row; hide only for reporters.
-            becomeReporter.setVisibility(isReporter ? View.GONE : View.VISIBLE);
+            becomeReporter.setVisibility(
+                    ProfileHubConfigHelper.shouldShowBecomeAReporterEntry(this, isReporter)
+                            ? View.VISIBLE : View.GONE);
         }
         if (settingsRow != null) {
             if (isReporter) {
@@ -4328,7 +4329,7 @@ public class newProfileDetails extends AppCompatActivity {
         // Rewards — visible when admin rewards_master is ON (splash/session prefs).
         bindProfileRewardsRow(menuSp);
 
-        // Become a Reporter — always visible for non-reporters; hiring controls form vs message
+        // Become a Reporter — matching audience only; hiring controls form vs message
         View layoutBecome = findViewById(R.id.layout_become_a_reporter);
         TextView becomeLabel = findViewById(R.id.profile_become_a_reporter_label);
         if (becomeLabel != null) {
@@ -4338,7 +4339,9 @@ public class newProfileDetails extends AppCompatActivity {
         if (layoutBecome != null) {
             boolean alreadyReporter = SharedPrefsData.getBool(
                     this, Constants.is_reporter, Constants.PREF_NAME);
-            layoutBecome.setVisibility(alreadyReporter ? View.GONE : View.VISIBLE);
+            layoutBecome.setVisibility(
+                    ProfileHubConfigHelper.shouldShowBecomeAReporterEntry(this, alreadyReporter)
+                            ? View.VISIBLE : View.GONE);
             layoutBecome.setOnClickListener(v -> openBecomeAReporterFlow());
         }
 

@@ -466,6 +466,18 @@ public class Constants {
     /** JSON map of language_id → not-hiring message (splash). */
     public static String BECOME_A_REPORTER_NOT_HIRING_MESSAGES =
             "become_a_reporter_not_hiring_messages";
+    /** JSON map of language_id → hiring-ON banner (splash). Empty = no banner. */
+    public static String BECOME_A_REPORTER_HIRING_MESSAGES =
+            "become_a_reporter_hiring_messages";
+    /** CSV of language ids for Become a Reporter audience (empty = all). */
+    public static String BECOME_A_REPORTER_LANGUAGE_IDS =
+            "become_a_reporter_language_ids";
+    /** CSV of state ids for Become a Reporter audience (empty = all). */
+    public static String BECOME_A_REPORTER_STATE_IDS =
+            "become_a_reporter_state_ids";
+    /** CSV of district ids for Become a Reporter audience (empty = all). */
+    public static String BECOME_A_REPORTER_DIST_IDS =
+            "become_a_reporter_dist_ids";
     /** Login source flag: reopen applicant flow after OTP. */
     public static String LOGIN_SOURCE_BECOME_REPORTER = "login_source_become_a_reporter";
     /** Profile hub: hide Status Videos "New" badge after user opens Status Videos once. */

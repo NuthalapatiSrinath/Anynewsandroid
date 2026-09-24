@@ -16577,6 +16577,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 ProfileHubConfigHelper.saveBirthdaySpecialEnabled(
                         this, enc.getEnable_birthday_special());
             }
+            if (enc.hasEnable_become_a_reporter()) {
+                ProfileHubConfigHelper.saveBecomeAReporterEnabled(
+                        this, enc.getEnable_become_a_reporter());
+            }
+            if (enc.getBecome_a_reporter_not_hiring_messages() != null) {
+                ProfileHubConfigHelper.saveNotHiringMessages(
+                        this, enc.getBecome_a_reporter_not_hiring_messages());
+            }
+            if (enc.getBecome_a_reporter_hiring_messages() != null) {
+                ProfileHubConfigHelper.saveHiringMessages(
+                        this, enc.getBecome_a_reporter_hiring_messages());
+            }
+            if (enc.getBecome_a_reporter_language_ids() != null
+                    || enc.getBecome_a_reporter_state_ids() != null
+                    || enc.getBecome_a_reporter_dist_ids() != null) {
+                ProfileHubConfigHelper.saveBecomeReporterTargeting(
+                        this,
+                        enc.getBecome_a_reporter_language_ids(),
+                        enc.getBecome_a_reporter_state_ids(),
+                        enc.getBecome_a_reporter_dist_ids());
+            }
             LocalUpdatesConfigHelper.saveMasterEnabledFromPoll(
                     this,
                     enc.getWeather_enabled(),

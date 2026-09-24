@@ -170,6 +170,30 @@ public class EncreptionRequest {
     @Expose
     private Boolean enable_birthday_special;
 
+    @SerializedName("enable_become_a_reporter")
+    @Expose
+    private Boolean enable_become_a_reporter;
+
+    @SerializedName("become_a_reporter_not_hiring_messages")
+    @Expose
+    private Object become_a_reporter_not_hiring_messages;
+
+    @SerializedName("become_a_reporter_hiring_messages")
+    @Expose
+    private Object become_a_reporter_hiring_messages;
+
+    @SerializedName("become_a_reporter_language_ids")
+    @Expose
+    private Object become_a_reporter_language_ids;
+
+    @SerializedName("become_a_reporter_state_ids")
+    @Expose
+    private Object become_a_reporter_state_ids;
+
+    @SerializedName("become_a_reporter_dist_ids")
+    @Expose
+    private Object become_a_reporter_dist_ids;
+
     @SerializedName("weather_enabled")
     @Expose
     private Boolean weather_enabled;
@@ -568,6 +592,34 @@ public class EncreptionRequest {
 
     public boolean hasEnable_birthday_special() {
         return enable_birthday_special != null;
+    }
+
+    public Boolean getEnable_become_a_reporter() {
+        return enable_become_a_reporter;
+    }
+
+    public boolean hasEnable_become_a_reporter() {
+        return enable_become_a_reporter != null;
+    }
+
+    public Object getBecome_a_reporter_not_hiring_messages() {
+        return become_a_reporter_not_hiring_messages;
+    }
+
+    public Object getBecome_a_reporter_hiring_messages() {
+        return become_a_reporter_hiring_messages;
+    }
+
+    public Object getBecome_a_reporter_language_ids() {
+        return become_a_reporter_language_ids;
+    }
+
+    public Object getBecome_a_reporter_state_ids() {
+        return become_a_reporter_state_ids;
+    }
+
+    public Object getBecome_a_reporter_dist_ids() {
+        return become_a_reporter_dist_ids;
     }
 
     public Boolean getWeather_enabled() {

@@ -58,6 +58,7 @@ public class BecomeAReporterActivity extends AppCompatActivity {
     private static final String PREF_APPLICANT_PHOTO_URL = "become_reporter_applicant_photo_url";
 
     private TextView statusView;
+    private TextView hiringBanner;
     private EditText nameInput;
     private EditText phoneInput;
     private EditText emailInput;
@@ -89,6 +90,7 @@ public class BecomeAReporterActivity extends AppCompatActivity {
         if (title != null) title.setText(ProfileHubLabels.becomeAReporter(this));
 
         statusView = findViewById(R.id.become_reporter_status);
+        hiringBanner = findViewById(R.id.become_reporter_hiring_banner);
         nameInput = findViewById(R.id.become_reporter_name);
         phoneInput = findViewById(R.id.become_reporter_phone);
         emailInput = findViewById(R.id.become_reporter_email);
@@ -125,6 +127,11 @@ public class BecomeAReporterActivity extends AppCompatActivity {
 
         // Paint last known photo immediately (before network) so reopen is never a blank cradle.
         restoreCachedPhotoPreview();
+        // Hiring banner only after login (splash-cached; refreshed by applicant API).
+        boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
+        if (loggedIn && ProfileHubConfigHelper.isBecomeAReporterEnabled(this)) {
+            bindHiringBanner(null);
+        }
         loadApplicant();
     }
 
@@ -415,6 +422,7 @@ public class BecomeAReporterActivity extends AppCompatActivity {
                         }
                     }
                     if (data.optBoolean("already_reporter", false)) {
+                        if (hiringBanner != null) hiringBanner.setVisibility(View.GONE);
                         statusView.setText("You are already an AnyNews reporter.");
                         if (profileCard != null) profileCard.setVisibility(View.GONE);
                         if (postsSection != null) postsSection.setVisibility(View.GONE);
@@ -422,6 +430,7 @@ public class BecomeAReporterActivity extends AppCompatActivity {
                         return;
                     }
                     if (!data.optBoolean("hiring_enabled", true)) {
+                        if (hiringBanner != null) hiringBanner.setVisibility(View.GONE);
                         String msg = data.optString("not_hiring_message", "").trim();
                         if (TextUtils.isEmpty(msg)) {
                             msg = ProfileHubConfigHelper.getNotHiringMessage(
@@ -443,9 +452,12 @@ public class BecomeAReporterActivity extends AppCompatActivity {
                         return;
                     }
                     if (!data.optBoolean("logged_in", false)) {
+                        if (hiringBanner != null) hiringBanner.setVisibility(View.GONE);
                         statusView.setText(R.string.become_reporter_login_required);
                         return;
                     }
+                    // Hiring ON + logged in — show admin banner (splash-cached or API).
+                    bindHiringBanner(data);
                     JSONObject a = data.optJSONObject("applicant");
                     applyApplicant(a);
                 } catch (Exception e) {
@@ -459,6 +471,36 @@ public class BecomeAReporterActivity extends AppCompatActivity {
                 statusView.setText("Network error");
             }
         });
+    }
+
+    private void bindHiringBanner(@Nullable JSONObject data) {
+        if (hiringBanner == null) return;
+        String msg = "";
+        if (data != null) {
+            msg = data.optString("hiring_message", "").trim();
+            try {
+                ProfileHubConfigHelper.saveHiringMessages(
+                        this, data.optJSONObject("hiring_messages"));
+            } catch (Exception ignored) {
+            }
+            try {
+                ProfileHubConfigHelper.saveBecomeReporterTargeting(
+                        this,
+                        data.opt("language_ids"),
+                        data.opt("state_ids"),
+                        data.opt("dist_ids"));
+            } catch (Exception ignored) {
+            }
+        }
+        if (TextUtils.isEmpty(msg)) {
+            msg = ProfileHubConfigHelper.getHiringMessage(this);
+        }
+        if (TextUtils.isEmpty(msg)) {
+            hiringBanner.setVisibility(View.GONE);
+            return;
+        }
+        hiringBanner.setText(msg);
+        hiringBanner.setVisibility(View.VISIBLE);
     }
 
     private void applyApplicant(@Nullable JSONObject a) {

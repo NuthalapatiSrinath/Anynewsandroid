@@ -157,8 +157,8 @@ public final class ProfileHubConfigHelper {
 
     /**
      * Become a Reporter hiring flag from splash ({@code enable_become_a_reporter}).
-     * When false the Profile row still shows (except for reporters); tap shows
-     * the localized not-hiring message after login instead of the application form.
+     * When false the Profile row still shows for matching audience (except reporters);
+     * tap shows the localized not-hiring message after login instead of the form.
      */
     public static void saveBecomeAReporterEnabled(
             @Nullable Context context, @Nullable Boolean enabled) {
@@ -169,6 +169,120 @@ public final class ProfileHubConfigHelper {
 
     public static boolean isBecomeAReporterEnabled(@Nullable Context context) {
         return readBool(context, Constants.ENABLE_BECOME_A_REPORTER, true);
+    }
+
+    /**
+     * Persist hiring-ON banner messages from splash JSON object/map.
+     * Null leaves cache; empty object still overwrites so admin clears work.
+     */
+    public static void saveHiringMessages(
+            @Nullable Context context, @Nullable Object raw) {
+        saveJsonMapPref(context, Constants.BECOME_A_REPORTER_HIRING_MESSAGES, raw);
+    }
+
+    /**
+     * Persist audience id lists (language / state / district) as CSV.
+     * Null leaves cache; empty list clears to "" (= all).
+     */
+    public static void saveBecomeReporterTargeting(
+            @Nullable Context context,
+            @Nullable Object languageIds,
+            @Nullable Object stateIds,
+            @Nullable Object distIds) {
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        if (languageIds != null) {
+            SharedPrefsData.putString(app, Constants.BECOME_A_REPORTER_LANGUAGE_IDS,
+                    idListToCsv(languageIds), Constants.PREF_NAME);
+        }
+        if (stateIds != null) {
+            SharedPrefsData.putString(app, Constants.BECOME_A_REPORTER_STATE_IDS,
+                    idListToCsv(stateIds), Constants.PREF_NAME);
+        }
+        if (distIds != null) {
+            SharedPrefsData.putString(app, Constants.BECOME_A_REPORTER_DIST_IDS,
+                    idListToCsv(distIds), Constants.PREF_NAME);
+        }
+    }
+
+    /**
+     * Local audience filter using splash-cached targeting + current lang/state/district.
+     * Empty lists = unrestricted. AND across non-empty dimensions.
+     * Does not check hiring ON/OFF — callers combine with {@link #isBecomeAReporterEnabled}.
+     */
+    public static boolean matchesBecomeReporterAudience(@Nullable Context context) {
+        if (context == null) return true;
+        Context app = context.getApplicationContext();
+        int langId = 0;
+        int stateId = 0;
+        int distId = 0;
+        try {
+            langId = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        try {
+            stateId = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        try {
+            distId = SharedPrefsData.getInt(app, Constants.Selected_Distric_Id, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        if (!csvContainsOrEmpty(app, Constants.BECOME_A_REPORTER_LANGUAGE_IDS, langId)) {
+            return false;
+        }
+        if (!csvContainsOrEmpty(app, Constants.BECOME_A_REPORTER_STATE_IDS, stateId)) {
+            return false;
+        }
+        if (!csvContainsOrEmpty(app, Constants.BECOME_A_REPORTER_DIST_IDS, distId)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Show Become a Reporter Profile row for non-reporters in the targeted audience.
+     * Hiring ON/OFF only changes form vs not-hiring copy — not row visibility.
+     */
+    public static boolean shouldShowBecomeAReporterEntry(
+            @Nullable Context context, boolean isReporter) {
+        if (isReporter) return false;
+        return matchesBecomeReporterAudience(context);
+    }
+
+    @NonNull
+    public static String getHiringMessage(@Nullable Context context) {
+        if (context == null) return "";
+        int langId = 0;
+        try {
+            langId = SharedPrefsData.getInt(
+                    context.getApplicationContext(),
+                    Constants.LanguageID,
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        return getHiringMessage(context, langId);
+    }
+
+    @NonNull
+    public static String getHiringMessage(@Nullable Context context, int languageId) {
+        if (context == null) return "";
+        try {
+            String raw = SharedPrefsData.getString(
+                    context.getApplicationContext(),
+                    Constants.BECOME_A_REPORTER_HIRING_MESSAGES,
+                    Constants.PREF_NAME);
+            if (TextUtils.isEmpty(raw)) return "";
+            org.json.JSONObject map = new org.json.JSONObject(raw);
+            String byId = map.optString(String.valueOf(languageId), "").trim();
+            if (!byId.isEmpty()) return byId;
+            String en = map.optString("en", "").trim();
+            if (!en.isEmpty()) return en;
+            String zero = map.optString("0", "").trim();
+            if (!zero.isEmpty()) return zero;
+        } catch (Exception ignored) {
+        }
+        return "";
     }
 
     /**
@@ -196,6 +310,11 @@ public final class ProfileHubConfigHelper {
      */
     public static void saveNotHiringMessages(
             @Nullable Context context, @Nullable Object raw) {
+        saveJsonMapPref(context, Constants.BECOME_A_REPORTER_NOT_HIRING_MESSAGES, raw);
+    }
+
+    private static void saveJsonMapPref(
+            @Nullable Context context, @NonNull String key, @Nullable Object raw) {
         if (context == null || raw == null) return;
         try {
             String json;
@@ -207,18 +326,93 @@ public final class ProfileHubConfigHelper {
             } else if (raw instanceof java.util.Map) {
                 json = new org.json.JSONObject((java.util.Map<?, ?>) raw).toString();
             } else {
-                // Gson LinkedTreeMap / JsonObject-like
                 json = String.valueOf(raw);
                 if (json.isEmpty() || "null".equalsIgnoreCase(json)) return;
-                // Ensure it parses as object
                 new org.json.JSONObject(json);
             }
             SharedPrefsData.putString(
                     context.getApplicationContext(),
-                    Constants.BECOME_A_REPORTER_NOT_HIRING_MESSAGES,
+                    key,
                     json,
                     Constants.PREF_NAME);
         } catch (Exception ignored) {
+        }
+    }
+
+    @NonNull
+    private static String idListToCsv(@Nullable Object raw) {
+        if (raw == null) return "";
+        StringBuilder csv = new StringBuilder();
+        try {
+            if (raw instanceof org.json.JSONArray) {
+                org.json.JSONArray arr = (org.json.JSONArray) raw;
+                for (int i = 0; i < arr.length(); i++) {
+                    int id = splashNumberFromArray(arr, i);
+                    if (id <= 0) continue;
+                    if (csv.length() > 0) csv.append(',');
+                    csv.append(id);
+                }
+                return csv.toString();
+            }
+            if (raw instanceof java.util.Collection) {
+                for (Object o : (java.util.Collection<?>) raw) {
+                    int id = splashNumber(o);
+                    if (id <= 0) continue;
+                    if (csv.length() > 0) csv.append(',');
+                    csv.append(id);
+                }
+                return csv.toString();
+            }
+            if (raw instanceof String) {
+                String s = ((String) raw).trim();
+                if (s.isEmpty() || "null".equalsIgnoreCase(s)) return "";
+                if (s.startsWith("[")) {
+                    return idListToCsv(new org.json.JSONArray(s));
+                }
+                // Already CSV
+                return s.replaceAll("[^0-9,]", "");
+            }
+            // Gson may deliver ArrayList via Object field
+            String as = String.valueOf(raw).trim();
+            if (as.startsWith("[")) {
+                return idListToCsv(new org.json.JSONArray(as));
+            }
+        } catch (Exception ignored) {
+        }
+        return csv.toString();
+    }
+
+    private static int splashNumber(@Nullable Object o) {
+        if (o == null) return 0;
+        if (o instanceof Number) return ((Number) o).intValue();
+        try {
+            return (int) Double.parseDouble(String.valueOf(o).trim());
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private static int splashNumberFromArray(@NonNull org.json.JSONArray arr, int index) {
+        try {
+            return splashNumber(arr.opt(index));
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    /** Empty CSV = unrestricted; otherwise require positive id membership. */
+    private static boolean csvContainsOrEmpty(
+            @NonNull Context app, @NonNull String key, int id) {
+        try {
+            String csv = SharedPrefsData.getString(app, key, Constants.PREF_NAME);
+            if (TextUtils.isEmpty(csv)) return true;
+            String needle = String.valueOf(id);
+            for (String part : csv.split(",")) {
+                if (needle.equals(part.trim())) return true;
+            }
+            return false;
+        } catch (Exception ignored) {
+            return true;
         }
     }
 

@@ -52,6 +52,18 @@
             android:textColor="@color/profile_way2_guest_sub"
             android:textSize="13sp" />
 
+        <TextView
+            android:id="@+id/become_reporter_hiring_banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_reporter_desk_card"
+            android:includeFontPadding="false"
+            android:padding="12dp"
+            android:textColor="@color/profile_way2_menu_text"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
         <!-- Profile card -->
         <LinearLayout
             android:id="@+id/become_reporter_profile_card"

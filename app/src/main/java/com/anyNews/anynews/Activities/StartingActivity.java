@@ -1957,6 +1957,18 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData()
                                         .getBecomeAReporterNotHiringMessages());
+                        ProfileHubConfigHelper.saveHiringMessages(
+                                getApplicationContext(),
+                                startActivityReqModel.getData()
+                                        .getBecomeAReporterHiringMessages());
+                        ProfileHubConfigHelper.saveBecomeReporterTargeting(
+                                getApplicationContext(),
+                                startActivityReqModel.getData()
+                                        .getBecomeAReporterLanguageIds(),
+                                startActivityReqModel.getData()
+                                        .getBecomeAReporterStateIds(),
+                                startActivityReqModel.getData()
+                                        .getBecomeAReporterDistIds());
                         // Contact Us mailto target from Root_Settings (null/blank keeps cache).
                         ProfileHubConfigHelper.saveContactEmail(
                                 getApplicationContext(),
