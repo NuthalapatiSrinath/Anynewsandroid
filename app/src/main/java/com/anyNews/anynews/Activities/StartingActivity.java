@@ -14,7 +14,9 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -191,6 +193,11 @@ public class StartingActivity extends AppCompatActivity {
      */
     private boolean festivalHoldHome = false;
     private boolean pendingHomeAfterFestival = false;
+    /**
+     * Keep AndroidX splash on-screen until Opening Banner is painted (or we
+     * decide not to show it) so the default logo theme never flashes first.
+     */
+    private boolean splashKeepUntilReady = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -206,6 +213,15 @@ public class StartingActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+        // Only hold the system splash when a cached Opening Banner may replace the
+        // logo screen — OFF / no cache keeps today's fast open unchanged.
+        boolean mayShowOpeningBanner = FestivalSplashHelper.isAnyShowPathEnabled(this)
+                && FestivalSplashHelper.hasReadyLocalImage(this);
+        if (mayShowOpeningBanner) {
+            splashScreen.setKeepOnScreenCondition(() -> splashKeepUntilReady);
+        } else {
+            splashKeepUntilReady = false;
+        }
 //        showLog("android.os.Build.VERSION.SDK_INT::::"+android.os.Build.VERSION.SDK_INT);
 //        showLog("Build.VERSION_CODES.M::::::::"+Build.VERSION_CODES.M);
 //        if(android.os.Build.VERSION.SDK_INT<Build.VERSION_CODES.S){
@@ -286,6 +302,17 @@ public class StartingActivity extends AppCompatActivity {
         // Opening banner only when admin ON for this path + local cache ready.
         // After intent parse so push/share can apply their own toggles.
         maybeArmFestivalSplash();
+        if (festivalHoldHome) {
+            // Instant cut to full-bleed banner — no logo→banner crossfade.
+            splashScreen.setOnExitAnimationListener(provider -> {
+                try {
+                    provider.remove();
+                } catch (Exception ignored) {
+                }
+            });
+        }
+        // Always release AndroidX keep after arm attempt — OFF path stays fast.
+        splashKeepUntilReady = false;
 
         // Instant open for returning users (after intent/deep-link parse so share ids pass through).
         // Config/FCM soft-refresh continues via getOSandDeviceId on the next tick.
@@ -2733,8 +2760,9 @@ public class StartingActivity extends AppCompatActivity {
 
     /**
      * When admin Opening Banner is ON for this launch path and a local banner
-     * is cached, show it (FIT_CENTER) for the admin duration, then release Home.
-     * Push / share respect separate admin toggles (default OFF = skip hold).
+     * is cached, replace the default logo splash with a full-bleed
+     * ({@link ImageView.ScaleType#CENTER_CROP}) banner for the admin duration,
+     * then release Home. Push / share respect separate admin toggles (default OFF).
      * OFF or missing cache → immediate return (no OpenPath delay).
      */
     private void maybeArmFestivalSplash() {
@@ -2751,15 +2779,36 @@ public class StartingActivity extends AppCompatActivity {
                 FestivalSplashHelper.prefetchInBackground(getApplicationContext());
                 return;
             }
-            java.io.File local = FestivalSplashHelper.getLocalCacheFile(this);
-            if (local == null || !local.exists()) {
+            Bitmap banner = FestivalSplashHelper.decodeLocalBitmap(this);
+            if (banner == null || banner.getWidth() < 1 || banner.getHeight() < 1) {
+                showLog("OpenPath: opening banner decode failed — skip hold");
+                FestivalSplashHelper.prefetchInBackground(getApplicationContext());
                 return;
             }
-            logo_image_server.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            logo_image_server.setBackgroundColor(Color.BLACK);
-            logo_image_server.setImageURI(Uri.fromFile(local));
+            // Kill theme logo (new_bg_sp / night #353535) so only the banner shows.
+            try {
+                getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+            } catch (Exception ignored) {
+            }
+            try {
+                View root = findViewById(android.R.id.content);
+                if (root != null) {
+                    root.setBackgroundColor(Color.BLACK);
+                }
+                if (net_avilable != null) {
+                    net_avilable.setBackgroundColor(Color.BLACK);
+                }
+            } catch (Exception ignored) {
+            }
+            // Cover: fill all four sides (crop edges if needed) — no letterbox bars.
+            logo_image_server.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            logo_image_server.setBackgroundColor(Color.TRANSPARENT);
+            logo_image_server.setImageBitmap(banner);
             logo_image_server.setVisibility(View.VISIBLE);
             logo_image.setVisibility(View.GONE);
+            if (welcome != null) {
+                welcome.setVisibility(View.GONE);
+            }
             festivalHoldHome = true;
             final int durationMs = FestivalSplashHelper.getDurationMs(this);
             showLog("OpenPath: festival splash armed ms=" + durationMs);

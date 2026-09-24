@@ -1,6 +1,8 @@
 package com.anyNews.anynews.Utils;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import com.bumptech.glide.Glide;
@@ -16,6 +18,7 @@ import java.util.concurrent.Future;
  * Paths: normal ({@link #isEnabled}), push ({@link #shouldShowOnPush}),
  * share/deep-link ({@link #shouldShowOnShare}). All default OFF.
  * Prefers a local file under filesDir so open never waits on the network.
+ * Display uses CENTER_CROP full-bleed (no letterbox bars).
  */
 public final class FestivalSplashHelper {
     private static final String TAG = "FestivalSplash";
@@ -98,6 +101,25 @@ public final class FestivalSplashHelper {
                 Constants.FESTIVAL_SPLASH_CACHED_URL,
                 Constants.PREF_NAME);
         return url.equals(cachedUrl);
+    }
+
+    /**
+     * Sync-decode the cached banner so the first activity frame can show it
+     * (avoids a flash of the default logo splash before {@code setImageURI} finishes).
+     */
+    public static Bitmap decodeLocalBitmap(Context ctx) {
+        if (!hasReadyLocalImage(ctx)) return null;
+        File f = getLocalCacheFile(ctx);
+        if (f == null || !f.exists()) return null;
+        try {
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            return BitmapFactory.decodeFile(f.getAbsolutePath(), opts);
+        } catch (Exception e) {
+            Log.w(TAG, "decodeLocalBitmap failed: "
+                    + (e.getMessage() != null ? e.getMessage() : e));
+            return null;
+        }
     }
 
     /**
