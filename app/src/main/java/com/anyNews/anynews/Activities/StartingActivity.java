@@ -884,7 +884,7 @@ public class StartingActivity extends AppCompatActivity {
         return null;
     }
 
-    /** Production + development Firebase-style share hosts. */
+    /** Production share host + legacy sharedev (old inbound links only). */
     private static boolean isShareShortHost(@Nullable String host) {
         if (host == null || host.isEmpty()) {
             return false;
@@ -1955,7 +1955,7 @@ public class StartingActivity extends AppCompatActivity {
                                     startActivityReqModel.getData().getFullVideoShareCard()
                             );
                         }
-                        // Admin share domain (sharedev / share.anynews.co.in / …).
+                        // Admin share domain (share.anynews.co.in).
                         SharePublicBaseHelper.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getSharePublicBaseUrl());

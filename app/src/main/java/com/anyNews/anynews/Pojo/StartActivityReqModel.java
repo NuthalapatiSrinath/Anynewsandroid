@@ -471,7 +471,7 @@ public class StartActivityReqModel implements Serializable {
 
         /**
          * Admin share link base URL (Configuration → Share domain).
-         * e.g. https://sharedev.anynews.co.in or https://share.anynews.co.in
+         * e.g. https://share.anynews.co.in (Admin share_public_base_url)
          */
         @SerializedName("share_public_base_url")
         @Expose

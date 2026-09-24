@@ -306,7 +306,7 @@
                     android:host="share.anynews.co.in"
                     android:pathPattern="/.*" />
             </intent-filter>
-            <!-- Development short share host (sharedev) — same shapes as production -->
+            <!-- Legacy short share host (old inbound links only; do not use for new shares) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

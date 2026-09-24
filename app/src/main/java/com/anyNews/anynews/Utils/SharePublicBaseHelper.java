@@ -10,16 +10,16 @@ import androidx.annotation.Nullable;
 /**
  * Admin {@code share_public_base_url} from splash (Root_Settings).
  *
- * <p>Same APK for development and production — Admin Configuration → Share domain
- * selects sharedev / share.anynews.co.in / API host / anws.in. Outbound
- * {@code share_link} on each post is already built server-side from this value;
- * this helper is the client-side cache for fallbacks and owned-host checks.
+ * <p>One stable production share domain for admin/testing and live
+ * ({@code share.anynews.co.in}). Outbound {@code share_link} on each post is
+ * already built server-side from Admin; this helper caches that value for
+ * fallbacks and owned-host checks.
  */
 public final class SharePublicBaseHelper {
 
     /** Safe fallback only when splash has never delivered a base. */
     private static final String FALLBACK_BASE =
-            "https://anynewsdevelopmentapi.anynews.co.in";
+            "https://share.anynews.co.in";
 
     private SharePublicBaseHelper() {
     }

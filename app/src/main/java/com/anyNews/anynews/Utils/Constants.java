@@ -714,7 +714,7 @@ public class Constants {
     public static String PENDING_SHARE_JOB = "pending_share_job_id";
     /**
      * Admin share link base URL from splash ({@code share_public_base_url}).
-     * e.g. https://sharedev.anynews.co.in or https://share.anynews.co.in
+     * e.g. https://share.anynews.co.in
      */
     public static String SHARE_PUBLIC_BASE_URL = "share_public_base_url";
     public static String PROFILE_CACHE = "reporter_profile_cache_json";
