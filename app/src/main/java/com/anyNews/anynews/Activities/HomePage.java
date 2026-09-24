@@ -3332,7 +3332,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 Constants.NOTIFICATION_REPROMPT_DUE,
                 Constants.PREF_NAME,
                 false);
-        // Admin wave (due) takes priority; legacy daily flag still works when showPopup true.
+        // showPopup is campaign-only from feed (legacy daily prompt removed server-side).
         boolean shouldConsider = due || showPopup;
         if (!shouldConsider) {
             return;
@@ -3349,7 +3349,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 Constants.PREF_NAME,
                 true);
         boolean fullyOn = systemOn && prefOn && hasPostNotificationsPermission();
-        final boolean isAdminDue = due;
+        // Feed campaign alert must ack even if local due pref was already cleared.
+        final boolean isAdminDue = due || showPopup;
 
         // Fully enabled: clear due without dialog (only once for this wave).
         if (fullyOn) {
@@ -3373,7 +3374,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
 
         // Admin force: install-style OS dialog when can ask; soft in-app dialog if permanent deny.
-        requestNotificationPermission(isAdminDue || showPopup);
+        requestNotificationPermission(true);
     }
 
     private void clearNotificationRepromptDueLocal() {
@@ -16215,7 +16216,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showReporterLogin=encreptionRequest.isShow_reporter_login();
                 showLog("showReporterLogin:"+showReporterLogin);
                 updateCenterFab();
-                // Live admin ask-on-open flag from feed poll (no cold splash wait).
+// Live admin ask-on-open flag from feed poll (no cold splash wait).
+                // Always apply false so a prior ON cannot stick after admin turns OFF.
                 if (encreptionRequest.getPrompt_notifications_on_open() != null) {
                     SharedPrefsData.putBool(
                             getApplicationContext(),
@@ -16224,7 +16226,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     encreptionRequest.getPrompt_notifications_on_open()),
                             Constants.PREF_NAME);
                 }
-                // Admin re-prompt can run even on cache paint; daily/legacy only when live.
+                // Sync campaign due from live feed so one-shot ack clears the next open.
+                if (encreptionRequest.getNotification_reprompt_due() != null) {
+                    SharedPrefsData.putBool(
+                            getApplicationContext(),
+                            Constants.NOTIFICATION_REPROMPT_DUE,
+                            Boolean.TRUE.equals(
+                                    encreptionRequest.getNotification_reprompt_due()),
+                            Constants.PREF_NAME);
+                }
+                // Admin re-prompt can run even on cache paint; continuous ask is
+                // resume-only via prompt_notifications_on_open (not feed showPopup).
                 boolean duePreferPrefs = SharedPrefsData.getBool(
                         getApplicationContext(),
                         Constants.NOTIFICATION_REPROMPT_DUE,
@@ -16232,9 +16244,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         false);
                 if (!fromCache || duePreferPrefs) {
                     Boolean pushPermAlert = encreptionRequest.getShow_push_perm_alert();
-                    showNotificationAlert(
-                            (pushPermAlert != null && pushPermAlert) || duePreferPrefs);
-                }
+                    boolean serverCampaignAlert =
+                            pushPermAlert != null && pushPermAlert;
+                    showNotificationAlert(serverCampaignAlert || duePreferPrefs);
+
             }else if (!fromCache){
                 isDataParsed=true;
                 showLog("response body null");
