@@ -306,6 +306,38 @@
                     android:host="share.anynews.co.in"
                     android:pathPattern="/.*" />
             </intent-filter>
+            <!-- Development short share host (sharedev) — same shapes as production -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="sharedev.anynews.co.in"
+                    android:pathPrefix="/p/" />
+                <data
+                    android:scheme="https"
+                    android:host="sharedev.anynews.co.in"
+                    android:pathPattern="/.*" />
+            </intent-filter>
+            <!-- Development API host App Links (default share_public_base on development) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="anynewsdevelopmentapi.anynews.co.in"
+                    android:pathPrefix="/p/" />
+                <data
+                    android:scheme="https"
+                    android:host="anynewsdevelopmentapi.anynews.co.in"
+                    android:pathPrefix="/job/" />
+                <data
+                    android:scheme="https"
+                    android:host="anynewsdevelopmentapi.anynews.co.in"
+                    android:pathPrefix="/job-" />
+            </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

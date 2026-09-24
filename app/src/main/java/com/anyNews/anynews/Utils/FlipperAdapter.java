@@ -4911,6 +4911,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         }
                         break;
                     case "magazine":
+                    case "magazines":
                         pauseVideo();
                         image_magazineHolder = new ImageMagazineHolder();
                         convertView = inflater.inflate(R.layout.activity_magazine_detailes, parent, false);

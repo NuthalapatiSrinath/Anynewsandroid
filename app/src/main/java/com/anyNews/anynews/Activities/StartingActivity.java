@@ -2,6 +2,7 @@ package com.anyNews.anynews.Activities;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.splashscreen.SplashScreen;
@@ -170,6 +171,12 @@ public class StartingActivity extends AppCompatActivity {
     private  String facebookReferrelKey="";
     /** Prevents double Home launches (fast path + splash callback race). */
     private boolean homeOpenedFromSplash = false;
+    /**
+     * True while {@link #maybeResolveShareShortCode} is in flight for a bare
+     * {@code /{code}} share URL. Blocks OpenPath fast-home until resolved so
+     * magazines/articles do not land on feed page-0 without SHARE_REDIRECT_ID.
+     */
+    private boolean shareShortCodeResolvePending = false;
     /** One splash network attempt per process open (dedupe + throttle). */
     private boolean splashNetworkInFlight = false;
     /** Splash_Screen failures (prevents infinite re-enqueue on offline first install). */
@@ -259,8 +266,32 @@ public class StartingActivity extends AppCompatActivity {
 
         // Instant open for returning users (after intent/deep-link parse so share ids pass through).
         // Config/FCM soft-refresh continues via getOSandDeviceId on the next tick.
+        // Wait for short-code HTTP resolve so SHARE_REDIRECT_ID is set before Home
+        // (otherwise magazines land on feed page-0 / first unrelated news).
         try {
-            if (OpenPathCache.canFastOpenHome(getApplicationContext())) {
+            if (shareShortCodeResolvePending
+                    && OpenPathCache.canFastOpenHome(getApplicationContext())) {
+                showLog("OpenPath: defer fast home until share short-code resolves");
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    try {
+                        if (!startupDeviceStarted) {
+                            getOSandDeviceId();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                });
+                // Fail-open: if resolve hangs, still enter Home (PENDING may arrive later).
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try {
+                        if (!homeOpenedFromSplash) {
+                            OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
+                            openHomeFromSplash();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }, 2500);
+                return;
+            } else if (OpenPathCache.canFastOpenHome(getApplicationContext())) {
                 showLog("OpenPath: immediate home after intent parse");
                 // Kick List_All_Articles before Home binds — coalesce with Home page-0.
                 OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
@@ -695,7 +726,7 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     /** Parse post id from /p/{id}, /post/{id}, anynews://post/{id}, /{id} (anws.in), or /p/{id} on share host.
-     * Alphanumeric short codes on share.anynews.co.in are resolved async via maybeResolveShareShortCode. */
+     * Alphanumeric short codes on share hosts are resolved async via maybeResolveShareShortCode. */
     private String articleIdFromPath(Uri uri) {
         if (uri == null) {
             return null;
@@ -740,8 +771,8 @@ public class StartingActivity extends AppCompatActivity {
                 }
             }
         }
-        // share.anynews.co.in/{digits} only — alphanumeric codes need HTTP resolve
-        if (host != null && host.equalsIgnoreCase("share.anynews.co.in")) {
+        // share.anynews.co.in|sharedev…/{digits} only — alphanumeric codes need HTTP resolve
+        if (isShareShortHost(host)) {
             for (String seg : segments) {
                 if (seg != null && seg.matches("\\d+")) {
                     return seg;
@@ -751,8 +782,18 @@ public class StartingActivity extends AppCompatActivity {
         return null;
     }
 
+    /** Production + development Firebase-style share hosts. */
+    private static boolean isShareShortHost(@Nullable String host) {
+        if (host == null || host.isEmpty()) {
+            return false;
+        }
+        String h = host.toLowerCase(java.util.Locale.US);
+        return h.equals("share.anynews.co.in")
+                || h.equals("sharedev.anynews.co.in");
+    }
+
     /**
-     * Resolve https://share.anynews.co.in/{code} → numeric post_id via ?format=json.
+     * Resolve https://share*.anynews.co.in/{code} → numeric post_id via ?format=json.
      * App Links open the short URL directly; landing HTML is not loaded.
      */
     private void maybeResolveShareShortCode(Uri data) {
@@ -760,7 +801,7 @@ public class StartingActivity extends AppCompatActivity {
             return;
         }
         String host = data.getHost();
-        if (host == null || !host.equalsIgnoreCase("share.anynews.co.in")) {
+        if (!isShareShortHost(host)) {
             return;
         }
         if (articleId1 != null && !articleId1.isEmpty()) {
@@ -783,7 +824,9 @@ public class StartingActivity extends AppCompatActivity {
             return;
         }
         final String shortCode = code;
-        final String resolveUrl = "https://share.anynews.co.in/" + shortCode + "?format=json";
+        final String resolveHost = host.toLowerCase(java.util.Locale.US);
+        final String resolveUrl = "https://" + resolveHost + "/" + shortCode + "?format=json";
+        shareShortCodeResolvePending = true;
         backgroundExecutor.execute(() -> {
             String resolvedId = null;
             HttpURLConnection conn = null;
@@ -822,16 +865,50 @@ public class StartingActivity extends AppCompatActivity {
                     conn.disconnect();
                 }
             }
-            if (resolvedId != null && !resolvedId.isEmpty()) {
-                final String id = resolvedId;
-                new Handler(Looper.getMainLooper()).post(() -> {
+            final String id = resolvedId;
+            new Handler(Looper.getMainLooper()).post(() -> {
+                shareShortCodeResolvePending = false;
+                if (id != null && !id.isEmpty()) {
                     articleId1 = id;
                     SharedPrefsData.putString(getApplicationContext(),
                             Constants.PENDING_SHARE_POST, id, Constants.PREF_NAME);
-                    showLog("CHECK POINT share.anynews resolved articleId:" + id);
-                });
-            }
+                    showLog("CHECK POINT share short-code resolved articleId:" + id
+                            + " host=" + resolveHost);
+                    deliverShareRedirectToHome(id);
+                }
+            });
         });
+    }
+
+    /**
+     * After short-code / warm-start resolve: open or update Home with
+     * SHARE_REDIRECT_ID so magazines pin via share_post_id (never page-0 alone).
+     */
+    private void deliverShareRedirectToHome(@Nullable String shareId) {
+        if (shareId == null || shareId.trim().isEmpty()
+                || "0".equals(shareId.trim())
+                || "null".equalsIgnoreCase(shareId.trim())) {
+            return;
+        }
+        try {
+            if (!homeOpenedFromSplash) {
+                OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, shareId);
+                openHomeFromSplash();
+                return;
+            }
+            // Home already showing — push sticky via onNewIntent (CLEAR_TOP|SINGLE_TOP).
+            Intent intent = new Intent(StartingActivity.this, HomePage.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            intent.putExtra("SHARE_REDIRECT_ID", shareId.trim());
+            intent.putExtra("EXTRA_SESSION_ID", "0");
+            intent.putExtra("TITLE", TITLE);
+            intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
+            intent.putExtra("JOB_REDIRECT_ID", jobId1);
+            intent.putExtra("DATAFROM2G", DATAFROM2G);
+            startActivity(intent);
+        } catch (Exception e) {
+            Logone.w(TAG, "deliverShareRedirectToHome failed", e);
+        }
     }
 
     private void applyDeepLinkParams(Uri uri) {
@@ -906,6 +983,7 @@ public class StartingActivity extends AppCompatActivity {
                     SharedPrefsData.putString(getApplicationContext(),
                             Constants.PENDING_SHARE_POST, id, Constants.PREF_NAME);
                     showLog("CHECK POINT page.link resolved articleId:" + id);
+                    deliverShareRedirectToHome(id);
                 });
             }
         });
@@ -931,6 +1009,9 @@ public class StartingActivity extends AppCompatActivity {
                     }
                 } catch (Exception ignored) {
                 }
+            } else if (articleId1 != null && !articleId1.isEmpty()) {
+                // Warm share (app already on Home): pin the exact post / magazine.
+                deliverShareRedirectToHome(articleId1);
             }
         }
     }
