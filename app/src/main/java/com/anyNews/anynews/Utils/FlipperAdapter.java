@@ -3405,13 +3405,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             labelView.setMaxLines(1);
             labelView.setEllipsize(TextUtils.TruncateAt.END);
             // Undo promo chip textSize/typeface from a recycled Flash/Rewards bind.
-            try {
-                labelView.setTextSize(
-                        android.util.TypedValue.COMPLEX_UNIT_PX,
-                        context.getResources().getDimension(R.dimen._12sdp));
-            } catch (Exception e) {
-                labelView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f);
-            }
+            // Use density (not R.dimen._12sdp) — sdp library dims are non-transitive for Java R.
+            labelView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f);
             try {
                 labelView.setTypeface(labelView.getTypeface(), android.graphics.Typeface.NORMAL);
             } catch (Exception ignored) {
@@ -3979,16 +3974,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void restoreDistrictPillPadding(@Nullable View pill) {
         if (pill == null || context == null) return;
         try {
-            int padH;
-            int padV;
-            try {
-                padH = context.getResources().getDimensionPixelSize(R.dimen._8sdp);
-                padV = context.getResources().getDimensionPixelSize(R.dimen._2sdp);
-            } catch (Exception e) {
-                float density = context.getResources().getDisplayMetrics().density;
-                padH = Math.round(8f * density);
-                padV = Math.round(2f * density);
-            }
+            // Match layout _8sdp / _2sdp via density (sdp R dims are non-transitive for Java).
+            float density = context.getResources().getDisplayMetrics().density;
+            int padH = Math.round(8f * density);
+            int padV = Math.round(2f * density);
             pill.setPadding(padH, padV, padH, padV);
         } catch (Exception ignored) {
         }
