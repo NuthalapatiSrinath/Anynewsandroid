@@ -19,6 +19,8 @@ import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.NotificationAllNotificationsResponse;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Utils.AppHelper;
+import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.models.SearchModel;
 
 import org.jetbrains.annotations.NotNull;
@@ -79,6 +81,24 @@ public class FlexboxAdapter extends RecyclerView.Adapter<FlexboxAdapter.ViewHold
 
             Intent intent=new Intent(context, HomePage.class);
             intent.putExtra("EXTRA_SESSION_ID", ""+searchModel.getCategoryId());
+            String catName = searchModel.getName();
+            if (catName != null && !catName.trim().isEmpty()) {
+                intent.putExtra(HomePage.EXTRA_CATEGORY_NAME, catName.trim());
+                try {
+                    SharedPrefsData.putInt(
+                            context,
+                            Constants.CategoryID,
+                            searchModel.getCategoryId() != null
+                                    ? searchModel.getCategoryId() : 0,
+                            Constants.PREF_NAME);
+                    SharedPrefsData.putString(
+                            context,
+                            Constants.CategoryName,
+                            catName.trim(),
+                            Constants.PREF_NAME);
+                } catch (Exception ignored) {
+                }
+            }
             if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                 context.startActivity(intent);
             }

@@ -4950,10 +4950,17 @@ public class newProfileDetails extends AppCompatActivity {
                 try {
                     SharedPrefsData.putInt(newProfileDetails.this, Constants.CategoryID,
                             cat.getCategoryId(), Constants.PREF_NAME);
+                    if (!TextUtils.isEmpty(name)) {
+                        SharedPrefsData.putString(newProfileDetails.this, Constants.CategoryName,
+                                name, Constants.PREF_NAME);
+                    }
                 } catch (Exception ignored) {
                 }
                 Intent intent = new Intent(newProfileDetails.this, HomePage.class);
                 intent.putExtra("EXTRA_SESSION_ID", "" + cat.getCategoryId());
+                if (!TextUtils.isEmpty(name)) {
+                    intent.putExtra(HomePage.EXTRA_CATEGORY_NAME, name);
+                }
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 if (getApplicationContext() != null
                         && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {

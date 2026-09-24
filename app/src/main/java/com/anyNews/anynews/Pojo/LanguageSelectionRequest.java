@@ -65,6 +65,20 @@ public class LanguageSelectionRequest implements Serializable {
     @Expose
     private Boolean notificationFlag;
 
+    /** UI surface where the permission ask was shown (e.g. HomePage). */
+    @SerializedName("screen")
+    @Expose
+    private String screen;
+
+    /** campaign | ask_on_open | install | settings | other */
+    @SerializedName("reason")
+    @Expose
+    private String reason;
+
+    @SerializedName("wave")
+    @Expose
+    private Integer wave;
+
     public Integer getRegion_id() {
         return region_id;
     }
@@ -119,6 +133,30 @@ public class LanguageSelectionRequest implements Serializable {
 
     public void setNotificationFlag(Boolean notificationFlag) {
         this.notificationFlag = notificationFlag;
+    }
+
+    public String getScreen() {
+        return screen;
+    }
+
+    public void setScreen(String screen) {
+        this.screen = screen;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
+    }
+
+    public Integer getWave() {
+        return wave;
+    }
+
+    public void setWave(Integer wave) {
+        this.wave = wave;
     }
 
     public Integer getDistId() {

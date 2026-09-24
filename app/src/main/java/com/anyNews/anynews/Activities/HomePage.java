@@ -150,6 +150,7 @@ import com.anyNews.anynews.Utils.AdPreloader;
 import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.CategoriesDiskCache;
 import com.anyNews.anynews.Utils.CricketFooterLabel;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
@@ -285,6 +286,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /** Open this footer tab after CLEAR_TOP from Profile / login (menu item id). */
     public static final String EXTRA_FOOTER_TAB = "extra_footer_tab";
+    /**
+     * Optional display name for a Profile/Search category open
+     * ({@code EXTRA_SESSION_ID} = category id &gt; 0). Used for the location pill.
+     */
+    public static final String EXTRA_CATEGORY_NAME = "EXTRA_CATEGORY_NAME";
     /** In-app Search → FlipView keyword mode (from InAppSearchActivity). */
     public static final String EXTRA_SEARCH_QUERY = "extra_search_query";
     /**
@@ -1450,6 +1456,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 actual_skip = 0;
                 category_id = parsedSessionId;
                 isFromLocalArticles=false;
+                // Profile / Search category open (catId > 0): never re-seat mid-feed
+                // from a prior flip checkpoint (persisted on every settle + CLEAR_TOP
+                // recreate). Main feed (0) still honors theme-recreate restore.
+                if (parsedSessionId > 0) {
+                    clearPendingFlipRestore();
+                    positionx = 0;
+                    lastSettledFlipIndex = -1;
+                    rememberCategoryFeedNameFromIntent(getIntent(), parsedSessionId);
+                    try {
+                        if (mFlipView != null) {
+                            mFlipView.resetSeatForNewFeed();
+                            // Seat is already page 0; drop force-lock so later ad/pagination
+                            // notifies do not snap a gesture flip back to first.
+                            mFlipView.releaseForcedPage0Seat();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
                 showLog("inlist from oncreate 2:" + category_id + " special=" + openAsSpecial);
                 inlist(parsedSessionId);
             } else {
@@ -2411,7 +2435,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Profile / in-app Search category strip → open that category feed.
      * Cold open uses EXTRA_SESSION_ID in {@code onCreate}; this handles
-     * {@link #onNewIntent} when HomePage is already SINGLE_TOP.
+     * {@link #onNewIntent} when HomePage is already alive (CLEAR_TOP / SINGLE_TOP).
+     * <p>
+     * Always seats at the <b>first</b> article (page 0) — including when the
+     * user was mid-feed on the same category before opening Profile. Clears
+     * flip-restore checkpoints and FlipView continuum anchors so settle-persist
+     * / CLEAR_TOP recreate cannot re-land mid-list.
      */
     private void applyCategorySessionExtra(@Nullable Intent intent) {
         if (intent == null || !intent.hasExtra("EXTRA_SESSION_ID")) {
@@ -2437,24 +2466,48 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         if (catId <= 0) return;
-        if (category_id == catId && list != null && !list.isEmpty()
-                && ReadArticleStore.countPaintableArticles(list) > 0
-                && !isSearchFeedActive()) {
-            return;
-        }
+        // Intentional category pick from Profile/Search: always restart at item 0
+        // (do not keep mid-feed when catId is unchanged).
         clearSearchFeedMode();
+        rememberCategoryFeedNameFromIntent(intent, catId);
+        try {
+            bookmarksModeSelected = false;
+            setFeedModeFlags(false, false);
+            applyHomeModeContentVisibility();
+            refreshHomeModeToggleUi();
+        } catch (Exception ignored) {
+        }
+        try {
+            clearPendingFlipRestore();
+        } catch (Exception ignored) {
+        }
         try {
             SharedPrefsData.putInt(this, Constants.CategoryID, catId, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
+        feedModeEpoch++;
         positionx = 0;
         last_post_id = 0;
         skip = 0;
         actual_skip = 0;
+        lastSettledFlipIndex = -1;
+        requestPostition = 1;
+        requestSize = 0;
+        isApiRequested = false;
+        isDataParsed = true;
+        isFromLocalArticles = true;
         list = new ArrayList<>();
         dummyResponse = null;
         category_id = catId;
-        feedModeEpoch++;
+        try {
+            if (mFlipView != null) {
+                mFlipView.resetSeatForNewFeed();
+                // Seat is already page 0; drop force-lock so later ad/pagination
+                // notifies do not snap a gesture flip back to first.
+                mFlipView.releaseForcedPage0Seat();
+            }
+        } catch (Exception ignored) {
+        }
         try {
             OpenPathCache.forceNextFeedNetwork(this);
         } catch (Exception ignored) {
@@ -2998,12 +3051,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private boolean isAdminNotificationRepromptDue() {
+        int globalWave = SharedPrefsData.getInt(
+                getApplicationContext(),
+                Constants.NOTIFICATION_REPROMPT_WAVE,
+                Constants.PREF_NAME);
+        int shownWave = SharedPrefsData.getInt(
+                getApplicationContext(),
+                Constants.NOTIFICATION_REPROMPT_SHOWN_WAVE,
+                Constants.PREF_NAME);
+        // Local one-shot: already showed/acked this wave — never re-ask.
+        if (globalWave > 0 && shownWave >= globalWave) {
+            return false;
+        }
         // Server computes due from wave; do not gate on legacy master pref.
         return SharedPrefsData.getBool(
                 getApplicationContext(),
                 Constants.NOTIFICATION_REPROMPT_DUE,
                 Constants.PREF_NAME,
                 false);
+    }
+
+    /** Persist that this campaign wave was already shown (survives process death). */
+    private void markNotificationRepromptShownLocally() {
+        int globalWave = SharedPrefsData.getInt(
+                getApplicationContext(),
+                Constants.NOTIFICATION_REPROMPT_WAVE,
+                Constants.PREF_NAME);
+        if (globalWave > 0) {
+            SharedPrefsData.putInt(
+                    getApplicationContext(),
+                    Constants.NOTIFICATION_REPROMPT_SHOWN_WAVE,
+                    globalWave,
+                    Constants.PREF_NAME);
+        }
+        clearNotificationRepromptDueLocal();
     }
 
     /**
@@ -3065,6 +3146,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             // force=true → OS dialog if allowed; else soft in-app dialog (no Settings jump).
             requestNotificationPermission(true);
+            logNotificationPermissionAsk("HomePage", "ask_on_open", false);
         }, 450L);
     }
 
@@ -3101,6 +3183,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 return;
             }
             requestNotificationPermission(false /* force / viaAdminReprompt */);
+            logNotificationPermissionAsk("HomePage", "install", false);
         }, 450L);
     }
 
@@ -3327,13 +3410,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     public void showNotificationAlert(boolean showPopup){
-        boolean due = SharedPrefsData.getBool(
-                getApplicationContext(),
-                Constants.NOTIFICATION_REPROMPT_DUE,
-                Constants.PREF_NAME,
-                false);
+        boolean due = isAdminNotificationRepromptDue();
         // showPopup is campaign-only from feed (legacy daily prompt removed server-side).
-        boolean shouldConsider = due || showPopup;
+        // Ignore feed showPopup when this wave was already shown locally.
+        int globalWave = SharedPrefsData.getInt(
+                getApplicationContext(),
+                Constants.NOTIFICATION_REPROMPT_WAVE,
+                Constants.PREF_NAME);
+        int shownWave = SharedPrefsData.getInt(
+                getApplicationContext(),
+                Constants.NOTIFICATION_REPROMPT_SHOWN_WAVE,
+                Constants.PREF_NAME);
+        boolean alreadyShownThisWave = globalWave > 0 && shownWave >= globalWave;
+        boolean shouldConsider = due || (showPopup && !alreadyShownThisWave);
         if (!shouldConsider) {
             return;
         }
@@ -3350,7 +3439,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 true);
         boolean fullyOn = systemOn && prefOn && hasPostNotificationsPermission();
         // Feed campaign alert must ack even if local due pref was already cleared.
-        final boolean isAdminDue = due || showPopup;
+        final boolean isAdminDue = due || (showPopup && !alreadyShownThisWave);
 
         // Fully enabled: clear due without dialog (only once for this wave).
         if (fullyOn) {
@@ -3358,8 +3447,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             installNotificationPermHandledThisProcess = true;
             markNotificationRuntimeAskedVersion();
             if (isAdminDue) {
-                clearNotificationRepromptDueLocal();
-                ackNotificationReprompt(false, true, true);
+                markNotificationRepromptShownLocally();
+                ackNotificationReprompt(false, true, true, "HomePage", "campaign");
             }
             ensureNotificationPrefAlignedWithSystem(isAdminDue);
             return;
@@ -3369,8 +3458,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         installNotificationPermHandledThisProcess = true;
         // Ack immediately so same wave never re-asks after this open (even if user denies).
         if (isAdminDue) {
-            clearNotificationRepromptDueLocal();
-            ackNotificationReprompt(false, false, false);
+            markNotificationRepromptShownLocally();
+            ackNotificationReprompt(false, false, false, "HomePage", "campaign");
         }
 
         // Admin force: install-style OS dialog when can ask; soft in-app dialog if permanent deny.
@@ -3397,13 +3486,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 true,
                 Constants.PREF_NAME);
         if (viaAdminReprompt) {
-            ackNotificationReprompt(true, false, true);
+            // Only campaign path sets notificationRepromptHandledThisProcess.
+            // Ask-on-open / install use force=true but must not re-ack as campaign.
+            if (notificationRepromptHandledThisProcess) {
+                ackNotificationReprompt(true, false, true, "HomePage", "campaign");
+            }
         }
         // Sync app opt-in flag (also marks converted when due/shown on server).
         syncNotificationFlagAfterReprompt(true, viaAdminReprompt);
     }
 
-    private void ackNotificationReprompt(boolean converted, boolean alreadyEnabled, boolean notificationFlagOn) {
+    private void ackNotificationReprompt(
+            boolean converted,
+            boolean alreadyEnabled,
+            boolean notificationFlagOn,
+            String screen,
+            String reason) {
         try {
             int draftId = SharedPrefsData.getInt(
                     getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
@@ -3414,6 +3512,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             requestModel.setAlreadyEnabled(alreadyEnabled);
             if (notificationFlagOn || converted) {
                 requestModel.setNotificationFlag(true);
+            }
+            if (screen != null && !screen.isEmpty()) {
+                requestModel.setScreen(screen);
+            }
+            if (reason != null && !reason.isEmpty()) {
+                requestModel.setReason(reason);
+            }
+            int wave = SharedPrefsData.getInt(
+                    getApplicationContext(),
+                    Constants.NOTIFICATION_REPROMPT_WAVE,
+                    Constants.PREF_NAME);
+            if (wave > 0) {
+                requestModel.setWave(wave);
             }
             String jsonString = new Gson().toJson(requestModel);
             String encrpt_data = encrypt(jsonString);
@@ -3432,6 +3543,44 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             });
         } catch (Exception e) {
             showLog("ack reprompt failed: " + e.getMessage());
+        }
+    }
+
+    /** Best-effort analytics for non-campaign permission prompts (hub by-screen stats). */
+    private void logNotificationPermissionAsk(String screen, String reason, boolean converted) {
+        try {
+            int draftId = SharedPrefsData.getInt(
+                    getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
+            if (draftId <= 0) return;
+            LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
+            requestModel.setDraftId(draftId);
+            requestModel.setScreen(screen != null ? screen : "HomePage");
+            requestModel.setReason(reason != null ? reason : "other");
+            requestModel.setConverted(converted);
+            int wave = SharedPrefsData.getInt(
+                    getApplicationContext(),
+                    Constants.NOTIFICATION_REPROMPT_WAVE,
+                    Constants.PREF_NAME);
+            if (wave > 0) {
+                requestModel.setWave(wave);
+            }
+            String jsonString = new Gson().toJson(requestModel);
+            String encrpt_data = encrypt(jsonString);
+            EncritonRequestData body = new EncritonRequestData();
+            body.setData(encrpt_data);
+            JsonObject payload = new Gson().toJsonTree(body).getAsJsonObject();
+            APIService apiService = RestApiClient.getClient().create(APIService.class);
+            apiService.log_notification_permission_ask("v3", payload).enqueue(new Callback<EncreptionRequest>() {
+                @Override
+                public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                }
+
+                @Override
+                public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                }
+            });
+        } catch (Exception e) {
+            showLog("log notif ask failed: " + e.getMessage());
         }
     }
 
@@ -13230,13 +13379,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 leave_comment_white.setHint("" + languageModelResponse.getData().getWriteComments());
                 applyMagazineShareFooterLabel();
 
-                // Play Store July: Main/Local → selected district; category → getMyFeed()
-                // (e.g. "ప్రధాన వార్తలు") for the footer pill.
-                if (category_id == 0 || category_id == -1) {
-                    type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
-                } else {
-                    type = languageModelResponse.getData().getMyFeed().toString();
-                }
+                // Local → district; Main → getMyFeed(); category → category name.
+                type = resolveLocationPillTypeForCategory(category_id);
                 // Programmatic chrome only — avoid re-entering Special/Video/Reload open paths.
                 // Mutual exclusive: Special | Video News | News (home). Without Video branch,
                 // inlist after performVideoFeedOpen forced navigation_home (re-tap → News).
@@ -13268,7 +13412,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 // Translator prefs not ready: still attach adapter so network/cache paint works.
                 showLog("inlist: languageModelResponse null — binding adapter without chrome labels");
                 if (type == null || type.isEmpty() || "null".equalsIgnoreCase(String.valueOf(type).trim())) {
-                    type = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+                    type = resolveLocationPillTypeForCategory(category_id);
+                    if (TextUtils.isEmpty(type)) {
+                        type = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+                    }
                     if (TextUtils.isEmpty(type)) {
                         type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
                     }
@@ -13281,7 +13428,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             // Guarantee adapter exists even if translator parse fails.
             try {
                 if (type == null || type.isEmpty() || "null".equalsIgnoreCase(String.valueOf(type).trim())) {
-                    type = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+                    type = resolveLocationPillTypeForCategory(category_id);
+                    if (TextUtils.isEmpty(type)) {
+                        type = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+                    }
                     if (TextUtils.isEmpty(type)) {
                         type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
                     }
@@ -13294,6 +13444,148 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
+     * Footer location-pill label passed into {@link FlipperAdapter}.
+     * <ul>
+     *   <li>Local ({@code -1}) → selected district name</li>
+     *   <li>Main ({@code 0}) → translator {@code getMyFeed()}
+     *       (e.g. ప్రధాన వార్తలు / Pradhana Varthalu)</li>
+     *   <li>Category ({@code > 0}) → that category's display name
+     *       (intent extra / prefs / {@link CategoriesDiskCache})</li>
+     * </ul>
+     */
+    @NonNull
+    private String resolveLocationPillTypeForCategory(int catId) {
+        if (catId == -1) {
+            String district = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+            if (DistrictLabelHelper.isUsable(district)) {
+                return district;
+            }
+            String offline = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+            if (DistrictLabelHelper.isUsable(offline)) {
+                return offline;
+            }
+            return type != null ? type : "";
+        }
+        if (catId > 0) {
+            String categoryName = resolveCategoryFeedLabel(catId);
+            if (DistrictLabelHelper.isUsable(categoryName)) {
+                return categoryName;
+            }
+            // Prefer an already-bound category title over wrongly showing Main's getMyFeed.
+            if (DistrictLabelHelper.isUsable(type)
+                    && !isTranslatorMyFeedLabel(type)) {
+                return type;
+            }
+            return type != null ? type : "";
+        }
+        String myFeed = resolveTranslatorMyFeedLabel();
+        if (DistrictLabelHelper.isUsable(myFeed)) {
+            return myFeed;
+        }
+        return type != null ? type : "";
+    }
+
+    /**
+     * Persist / read the human category title for {@code catId > 0} feeds so the
+     * location pill can show Politics / Sports / etc. instead of getMyFeed().
+     */
+    private void rememberCategoryFeedNameFromIntent(@Nullable Intent intent, int catId) {
+        if (catId <= 0) return;
+        String fromExtra = null;
+        try {
+            if (intent != null && intent.hasExtra(EXTRA_CATEGORY_NAME)) {
+                fromExtra = intent.getStringExtra(EXTRA_CATEGORY_NAME);
+                intent.removeExtra(EXTRA_CATEGORY_NAME);
+            }
+        } catch (Exception ignored) {
+        }
+        if (DistrictLabelHelper.isUsable(fromExtra)) {
+            persistCategoryFeedName(catId, fromExtra.trim());
+            return;
+        }
+        // Warm disk list from Profile/Search so pill is correct even without the extra.
+        String fromCache = resolveCategoryNameFromDisk(catId);
+        if (DistrictLabelHelper.isUsable(fromCache)) {
+            persistCategoryFeedName(catId, fromCache.trim());
+        }
+    }
+
+    private void persistCategoryFeedName(int catId, @NonNull String name) {
+        try {
+            SharedPrefsData.putInt(this, Constants.CategoryID, catId, Constants.PREF_NAME);
+            SharedPrefsData.putString(this, Constants.CategoryName, name, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Nullable
+    private String resolveCategoryFeedLabel(int catId) {
+        if (catId <= 0) return null;
+        try {
+            Intent intent = getIntent();
+            if (intent != null) {
+                String fromExtra = intent.getStringExtra(EXTRA_CATEGORY_NAME);
+                if (DistrictLabelHelper.isUsable(fromExtra)) {
+                    return fromExtra.trim();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            int storedId = SharedPrefsData.getInt(this, Constants.CategoryID, Constants.PREF_NAME);
+            if (storedId == catId) {
+                String stored = SharedPrefsData.getString(
+                        this, Constants.CategoryName, Constants.PREF_NAME);
+                if (DistrictLabelHelper.isUsable(stored)) {
+                    return stored.trim();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return resolveCategoryNameFromDisk(catId);
+    }
+
+    @Nullable
+    private String resolveCategoryNameFromDisk(int catId) {
+        try {
+            int langId = SharedPrefsData.getInt(
+                    this, Constants.LanguageID, Constants.PREF_NAME);
+            return CategoriesDiskCache.lookupName(this, langId, catId);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private boolean isTranslatorMyFeedLabel(@Nullable String label) {
+        if (!DistrictLabelHelper.isUsable(label)) return false;
+        String myFeed = resolveTranslatorMyFeedLabel();
+        if (!DistrictLabelHelper.isUsable(myFeed)) return false;
+        return label.trim().equalsIgnoreCase(myFeed.trim());
+    }
+
+    @Nullable
+    private String resolveTranslatorMyFeedLabel() {
+        try {
+            if (languageModelResponse != null
+                    && languageModelResponse.getData() != null
+                    && languageModelResponse.getData().getMyFeed() != null) {
+                return languageModelResponse.getData().getMyFeed().toString();
+            }
+            String translation = allsharedpreference.getShared_String(Allsharedpreference.Translator);
+            if (translation != null && !translation.isEmpty()) {
+                LanguageModelResponse parsed =
+                        new Gson().fromJson(translation, LanguageModelResponse.class);
+                if (parsed != null && parsed.getData() != null
+                        && parsed.getData().getMyFeed() != null) {
+                    return parsed.getData().getMyFeed().toString();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
      * Attach FlipperAdapter to mFlipView and re-bind any articles already in
      * {@link #list} (e.g. OpenPathCache disk paint before this method ran).
      */
@@ -13301,12 +13593,38 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (mFlipView == null) {
             return;
         }
-        if (feedType == null || feedType.isEmpty() || "null".equalsIgnoreCase(feedType.trim())
-                || !DistrictLabelHelper.labelCompatibleWithLanguage(
-                        feedType, SharedPrefsData.getInt(HomePage.this, Constants.LanguageID, Constants.PREF_NAME))) {
-            feedType = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
-            if (TextUtils.isEmpty(feedType)) {
-                feedType = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+        int langId = SharedPrefsData.getInt(HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
+        // Category titles come from List_All_Categories for this LanguageID — do not
+        // apply district-script compatibility (that used to swap Politics → getMyFeed).
+        boolean feedTypeBad;
+        if (catId > 0) {
+            feedTypeBad = feedType == null || feedType.isEmpty()
+                    || "null".equalsIgnoreCase(feedType.trim());
+        } else {
+            feedTypeBad = feedType == null || feedType.isEmpty()
+                    || "null".equalsIgnoreCase(feedType.trim())
+                    || !DistrictLabelHelper.labelCompatibleWithLanguage(feedType, langId);
+        }
+        if (feedTypeBad) {
+            if (catId > 0) {
+                String catName = resolveCategoryFeedLabel(catId);
+                if (DistrictLabelHelper.isUsable(catName)) {
+                    feedType = catName;
+                    feedTypeBad = false;
+                }
+            } else if (catId != -1) {
+                String myFeed = resolveTranslatorMyFeedLabel();
+                if (DistrictLabelHelper.isUsable(myFeed)
+                        && DistrictLabelHelper.labelCompatibleWithLanguage(myFeed, langId)) {
+                    feedType = myFeed;
+                    feedTypeBad = false;
+                }
+            }
+            if (feedTypeBad) {
+                feedType = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+                if (TextUtils.isEmpty(feedType)) {
+                    feedType = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+                }
             }
         }
         if (feedType != null && !feedType.isEmpty() && !"null".equalsIgnoreCase(feedType.trim())) {
@@ -15869,17 +16187,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         showLog("response body not null:"+isFromLocalArticles);
                         //writeNewUser("User", type_firebase, current_time_firebase, draft_id_firebase, device_id_firebase, language_id_firebase, updated_post_id_firebase, positionx);
                         if(isFromLocalArticles || fromCache || adapter == null){
+                           // Local↔Main toggle must rebuild the adapter so my_feed_name /
+                           // categery_id (district vs ప్రధాన వార్తలు) match the continuum.
+                           final boolean rebuildForLocalMainToggle = isFromLocalArticles;
                            isFromLocalArticles=false;
                            if (languageModelResponse != null && languageModelResponse.getData() != null) {
-                               // Play Store July: Main → district; category → getMyFeed()
-                               // ("ప్రధాన వార్తలు") for the footer pill.
-                               if (category_id == 0 || category_id == -1) {
-                                   type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
-                               } else {
-                                   type = languageModelResponse.getData().getMyFeed().toString();
-                               }
+                               // Local → district; Main → getMyFeed; category → category name.
+                               type = resolveLocationPillTypeForCategory(category_id);
                            }
-                           if (adapter == null || fromCache) {
+                           if (adapter == null || fromCache || rebuildForLocalMainToggle) {
                            adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());
                            adapter.setCallback(this);
                            adapter.setCurrentFlipPage(positionx);
@@ -15898,7 +16214,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if (adapter == null && mFlipView != null) {
                             showLog("adapter null after articles — creating for flip restore");
                             if (type == null || type.isEmpty() || "null".equalsIgnoreCase(String.valueOf(type).trim())) {
-                                type = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+                                type = resolveLocationPillTypeForCategory(category_id);
+                                if (TextUtils.isEmpty(type)) {
+                                    type = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
+                                }
                                 if (TextUtils.isEmpty(type)) {
                                     type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
                                 }
@@ -16216,7 +16535,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showReporterLogin=encreptionRequest.isShow_reporter_login();
                 showLog("showReporterLogin:"+showReporterLogin);
                 updateCenterFab();
-// Live admin ask-on-open flag from feed poll (no cold splash wait).
+                // Live admin ask-on-open flag from feed poll (no cold splash wait).
                 // Always apply false so a prior ON cannot stick after admin turns OFF.
                 if (encreptionRequest.getPrompt_notifications_on_open() != null) {
                     SharedPrefsData.putBool(
@@ -16227,12 +16546,34 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             Constants.PREF_NAME);
                 }
                 // Sync campaign due from live feed so one-shot ack clears the next open.
+                if (encreptionRequest.getNotification_reprompt_wave() != null) {
+                    SharedPrefsData.putInt(
+                            getApplicationContext(),
+                            Constants.NOTIFICATION_REPROMPT_WAVE,
+                            Math.max(
+                                    0,
+                                    encreptionRequest.getNotification_reprompt_wave()),
+                            Constants.PREF_NAME);
+                }
                 if (encreptionRequest.getNotification_reprompt_due() != null) {
+                    boolean serverDue = Boolean.TRUE.equals(
+                            encreptionRequest.getNotification_reprompt_due());
+                    int globalWave = SharedPrefsData.getInt(
+                            getApplicationContext(),
+                            Constants.NOTIFICATION_REPROMPT_WAVE,
+                            Constants.PREF_NAME);
+                    int shownWave = SharedPrefsData.getInt(
+                            getApplicationContext(),
+                            Constants.NOTIFICATION_REPROMPT_SHOWN_WAVE,
+                            Constants.PREF_NAME);
+                    // Never re-open due for a wave we already showed locally.
+                    if (serverDue && globalWave > 0 && shownWave >= globalWave) {
+                        serverDue = false;
+                    }
                     SharedPrefsData.putBool(
                             getApplicationContext(),
                             Constants.NOTIFICATION_REPROMPT_DUE,
-                            Boolean.TRUE.equals(
-                                    encreptionRequest.getNotification_reprompt_due()),
+                            serverDue,
                             Constants.PREF_NAME);
                 }
                 // Admin re-prompt can run even on cache paint; continuous ask is
@@ -16247,7 +16588,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     boolean serverCampaignAlert =
                             pushPermAlert != null && pushPermAlert;
                     showNotificationAlert(serverCampaignAlert || duePreferPrefs);
-
+                }
             }else if (!fromCache){
                 isDataParsed=true;
                 showLog("response body null");
@@ -18117,9 +18458,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
      * Call on resume / after language prefs may have changed.
      */
     private void refreshDistrictLabelsForCurrentLanguage() {
-        String label = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
-        if (category_id == 0 && DistrictLabelHelper.isUsable(label)) {
-            type = label;
+        // Keep pill type in sync: Local = district; Main = getMyFeed; category = name.
+        String pill = resolveLocationPillTypeForCategory(category_id);
+        if (DistrictLabelHelper.isUsable(pill)) {
+            type = pill;
         }
         DistrictLabelHelper.applyTo(HomePage.this, local_distic_name, selelcted_local_distic_name);
     }

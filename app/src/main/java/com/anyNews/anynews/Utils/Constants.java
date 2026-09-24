@@ -39,6 +39,8 @@ public class Constants {
     public static  String NOT_FIRST_TIME_LOGIN = "FIRST_TIME_LOGIN";
 
     public static String CategoryID = "CategoryID";
+    /** Display name for the last Profile/Search category feed (matches {@link #CategoryID}). */
+    public static String CategoryName = "CategoryName";
 
     public static String Search_icon = "SearchIcon";
 
@@ -106,6 +108,12 @@ public class Constants {
     public static String NOTIFICATION_REPROMPT_DUE = "notification_reprompt_due";
     public static String NOTIFICATION_REPROMPT_ENABLED = "notification_reprompt_enabled";
     public static String NOTIFICATION_REPROMPT_WAVE = "notification_reprompt_wave";
+    /**
+     * Last campaign wave this device already showed/acked locally.
+     * Blocks re-ask even if a stuck server due=true comes back for the same wave.
+     */
+    public static String NOTIFICATION_REPROMPT_SHOWN_WAVE =
+            "notification_reprompt_shown_wave";
     /** Admin: ask OS notification permission on every app open while ON (default false). */
     public static String PROMPT_NOTIFICATIONS_ON_OPEN = "prompt_notifications_on_open";
 

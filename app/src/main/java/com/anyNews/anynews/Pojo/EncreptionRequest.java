@@ -45,6 +45,19 @@ public class EncreptionRequest {
         this.notification_reprompt_due = notification_reprompt_due;
     }
 
+    /** Live campaign wave from feed — keeps local one-shot prefs in sync. */
+    @SerializedName("notification_reprompt_wave")
+    @Expose
+    private Integer notification_reprompt_wave;
+
+    public Integer getNotification_reprompt_wave() {
+        return notification_reprompt_wave;
+    }
+
+    public void setNotification_reprompt_wave(Integer notification_reprompt_wave) {
+        this.notification_reprompt_wave = notification_reprompt_wave;
+    }
+
     @SerializedName("data")
     @Expose
     private String data;

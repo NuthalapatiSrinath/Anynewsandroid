@@ -378,6 +378,9 @@ public interface APIService {
     @POST("app/{version}/ack_notification_reprompt")
     Call<EncreptionRequest>ack_notification_reprompt(@Path("version") String version, @Body JsonObject body);
 
+    @POST("app/{version}/log_notification_permission_ask")
+    Call<EncreptionRequest>log_notification_permission_ask(@Path("version") String version, @Body JsonObject body);
+
 
     @POST("app/{version}/get_static_data")
     Call<JsonObject> get_static_data(@Path("version") String version, @Body JsonObject langgg);

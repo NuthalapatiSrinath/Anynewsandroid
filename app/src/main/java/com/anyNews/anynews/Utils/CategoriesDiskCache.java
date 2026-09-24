@@ -5,6 +5,9 @@ import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 
+import com.anyNews.anynews.models.SearchModel;
+import com.google.gson.Gson;
+
 /**
  * Disk cache for {@code List_All_Categories} keyed by language_id.
  * Invalidates automatically when the stored language no longer matches.
@@ -42,6 +45,33 @@ public final class CategoriesDiskCache {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * Localized category title from the cached {@code List_All_Categories} payload
+     * (same list Profile / Search use).
+     */
+    @Nullable
+    public static String lookupName(
+            @Nullable Context context, int languageId, int categoryId) {
+        if (context == null || languageId <= 0 || categoryId <= 0) return null;
+        try {
+            String json = loadIfMatches(context, languageId);
+            if (TextUtils.isEmpty(json)) return null;
+            SearchModel model = new Gson().fromJson(json, SearchModel.class);
+            if (model == null || model.getData() == null) return null;
+            for (SearchModel.Datum d : model.getData()) {
+                if (d == null || d.getCategoryId() == null) continue;
+                if (d.getCategoryId() != categoryId) continue;
+                String name = d.getName();
+                if (!TextUtils.isEmpty(name) && !"null".equalsIgnoreCase(name.trim())) {
+                    return name.trim();
+                }
+                return null;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     public static void invalidate(@Nullable Context context) {

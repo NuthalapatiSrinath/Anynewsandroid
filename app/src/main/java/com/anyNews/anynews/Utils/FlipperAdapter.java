@@ -3231,7 +3231,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             || DistrictLabelHelper.matchesStoredName(context, trimmed)
                             || (postDistId > 0
                             && postDistId == DistrictLabelHelper.getStoredDistId(context)))) {
-                        my_feed_name = selected;
+                        // Only Local may stamp selected district into my_feed_name;
+                        // Main keeps getMyFeed(); category keeps its category title.
+                        if (categery_id == -1) {
+                            my_feed_name = selected;
+                        }
                         return selected;
                     }
                     // Neutral Latin is still better than a blank pin.
@@ -3249,14 +3253,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return fromPostGeo.trim();
             }
         }
-        // National / no-geo posts on Main: previous behavior used the selected district.
-        // On Local, never stamp Anakapalli (etc.) onto national Main cards — that made
-        // Main bleed look like genuine Local district content.
-        if (selectedUsable && categery_id != -1) {
+        // National / no-geo: Local keeps selected district for the pill; Main/category
+        // leave my_feed_name alone (getMyFeed or category title from ctor).
+        if (selectedUsable && categery_id == -1) {
             my_feed_name = selected;
             return selected;
         }
-        my_feed_name = "";
+        if (selectedUsable && categery_id != -1) {
+            // Caller may still want the district string; do not overwrite feed title.
+            return selected;
+        }
         return "";
     }
 
@@ -3295,13 +3301,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Binds pin + district / feed text and keeps them visible after scroll / theme rebind.
      * Call after {@link WriterStripStyleHelper#apply} so style does not wipe the label.
-     * <p>Play Store July parity:
+     * <p>Local ↔ Main district-pill toggle:
      * <ul>
-     *   <li>Category feed ({@code categery_id > 0}): always {@code my_feed_name}
-     *       from translator {@code getMyFeed()} (e.g. "ప్రధాన వార్తలు").</li>
-     *   <li>Main / Local: post geo or selected district (e.g. Markapuram). National
-     *       Main without post geo still used the selected district — not My Feed.</li>
-     *   <li>Promo Flash/Rewards only when no usable district/location label remains.</li>
+     *   <li>Local ({@code categery_id == -1}): post geo or selected district
+     *       (e.g. Anakapalli).</li>
+     *   <li>Main continuum ({@code categery_id == 0}): {@code my_feed_name} from
+     *       translator {@code getMyFeed()} (e.g. "ప్రధాన వార్తలు" / Pradhana Varthalu).</li>
+     *   <li>Category feeds ({@code categery_id > 0}): {@code my_feed_name} is the
+     *       selected category title (Politics, Sports, …) from HomePage.</li>
+     *   <li>Promo Flash/Rewards only when no usable district/feed label remains.</li>
      * </ul>
      */
     private void bindLocationPill(
@@ -3322,15 +3330,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         hideCompanionFeedChip(pill);
         restoreSingleChipRow(pill, labelView);
 
-        // Play Store July category path: FlipperAdapter ctor got getMyFeed() and
-        // painted it on every card (news icon). Restore that — do not replace with district.
-        if (categery_id > 0 && isUsableLocationLabel(my_feed_name)) {
+        // Main: ctor got getMyFeed(); category: ctor got category name — paint that.
+        // Local-only path below keeps district so the pill can toggle Local ↔ Main.
+        if (categery_id != -1 && isUsableLocationLabel(my_feed_name)) {
             bindDistrictLocationChrome(labelView, pinView, pill, my_feed_name.trim());
             return;
         }
 
-        // Main / Local: district/location when present (Play Store Main always showed
-        // Selected_Distric_Name — never getMyFeed for national cards).
+        // Local: district/location when present.
         String districtLabel = resolveLocationLabel(post);
         boolean hasDistrict = isUsableLocationLabel(districtLabel);
         if (hasDistrict) {
@@ -3424,7 +3431,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (pinView != null) {
             pinView.setVisibility(View.VISIBLE);
             restoreDistrictPinSize(pinView);
-            if (categery_id == 0 || categery_id == -1) {
+            // Location pin only on Local (district name); Main/category use news icon
+            // for getMyFeed titles like ప్రధాన వార్తలు.
+            if (categery_id == -1) {
                 pinView.setBackgroundResource(ic_location_icon);
             } else {
                 pinView.setBackgroundResource(ic_news_icon);
@@ -3478,17 +3487,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void bindDistrictOrRewardsClick(View pill, @Nullable ModelClass.Datum post) {
         if (pill == null) return;
         final ModelClass.Datum boundPost = post;
-        // Match visible chrome from bindLocationPill: category getMyFeed / district
-        // beats Flash/Rewards toggles.
-        final boolean showingCategoryFeedTitle =
-                categery_id > 0 && isUsableLocationLabel(my_feed_name);
-        final boolean showingDistrict = showingCategoryFeedTitle
-                || isUsableLocationLabel(resolveLocationLabel(boundPost));
+        // Match visible chrome: Main getMyFeed / category title or Local district beats
+        // Flash/Rewards toggles. Click still toggles Local ↔ Main (category → Main).
+        final boolean showingMainOrCategoryFeedTitle =
+                categery_id != -1 && isUsableLocationLabel(my_feed_name);
+        final boolean showingLocalDistrict =
+                categery_id == -1 && isUsableLocationLabel(resolveLocationLabel(boundPost));
+        final boolean showingTogglePill =
+                showingMainOrCategoryFeedTitle || showingLocalDistrict
+                        || (categery_id == 0 && isUsableLocationLabel(
+                                DistrictLabelHelper.resolveDisplayLabel(context)));
         final boolean opensLocal =
                 DistrictPinVisibilityConfig.locationPillOpensLocalFeed(context);
         pill.setOnClickListener(v -> {
-            if (showingDistrict) {
-                // Play Store / July: Main → Local (−1); Local/category → Main (0).
+            if (showingTogglePill) {
+                // Main → Local (−1); Local/category → Main (0).
                 // Admin OFF: district / ప్రధాన వార్తలు pill is display-only.
                 if (opensLocal && callbacks != null) {
                     callbacks.callLocationRequest(0);
@@ -3511,7 +3524,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 callbacks.callLocationRequest(0);
             }
         });
-        if (!showingDistrict
+        if (!showingTogglePill
                 && DistrictPinVisibilityConfig.shouldShowFlashWhenBoth(
                         context, categery_id, boundPost)
                 && DistrictPinVisibilityConfig.shouldShowRewardsWhenBoth(
