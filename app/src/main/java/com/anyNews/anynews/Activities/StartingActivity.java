@@ -2115,21 +2115,8 @@ public class StartingActivity extends AppCompatActivity {
                         if (startActivityReqModel.getData().getNotificationRepromptDue() != null) {
                             boolean serverDue = Boolean.TRUE.equals(
                                     startActivityReqModel.getData().getNotificationRepromptDue());
-                            int globalWave = SharedPrefsData.getInt(
-                                    getApplicationContext(),
-                                    Constants.NOTIFICATION_REPROMPT_WAVE,
-                                    Constants.PREF_NAME);
-                            // Wave may be updated just below — prefer splash payload wave when present.
-                            if (startActivityReqModel.getData().getNotificationRepromptWave() != null) {
-                                globalWave = startActivityReqModel.getData().getNotificationRepromptWave();
-                            }
-                            int shownWave = SharedPrefsData.getInt(
-                                    getApplicationContext(),
-                                    Constants.NOTIFICATION_REPROMPT_SHOWN_WAVE,
-                                    Constants.PREF_NAME);
-                            if (serverDue && globalWave > 0 && shownWave >= globalWave) {
-                                serverDue = false;
-                            }
+                            // Prefer splash due; isAdminNotificationRepromptDue also
+                            // gates on local shown_wave + OS off.
                             SharedPrefsData.putBool(
                                     getApplicationContext(),
                                     Constants.NOTIFICATION_REPROMPT_DUE,

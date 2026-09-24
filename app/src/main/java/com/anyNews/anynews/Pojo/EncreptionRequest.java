@@ -45,6 +45,22 @@ public class EncreptionRequest {
         this.notification_reprompt_due = notification_reprompt_due;
     }
 
+    /**
+     * Campaign Active (toggle ON + start ≤ now). Client uses this with OS-off
+     * to ask even when draft notification_flag is still true.
+     */
+    @SerializedName("notification_reprompt_enabled")
+    @Expose
+    private Boolean notification_reprompt_enabled;
+
+    public Boolean getNotification_reprompt_enabled() {
+        return notification_reprompt_enabled;
+    }
+
+    public void setNotification_reprompt_enabled(Boolean notification_reprompt_enabled) {
+        this.notification_reprompt_enabled = notification_reprompt_enabled;
+    }
+
     /** Live campaign wave from feed — keeps local one-shot prefs in sync. */
     @SerializedName("notification_reprompt_wave")
     @Expose
