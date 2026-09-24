@@ -2,11 +2,9 @@ package com.anyNews.anynews.Utils;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
@@ -143,9 +141,11 @@ public final class FullVideoShareCardHelper {
             return false;
         }
         try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(cfg.getActionUrl()));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
+            String url = cfg.getActionUrl();
+            // Owned share/API hosts must stay in-app — bare ACTION_VIEW opens Chrome.
+            if (!OwnedHttpsOpener.open(context, url)) {
+                Toast.makeText(context, "Could not open link", Toast.LENGTH_SHORT).show();
+            }
             return true;
         } catch (Exception e) {
             Log.e(TAG, "openActionUrl failed", e);

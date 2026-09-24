@@ -10918,14 +10918,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 @Override
                                 public void onClick(View widget) {
                                     try {
-                                        Intent i =
-                                                new Intent(
-                                                        Intent.ACTION_VIEW, Uri.parse(url));
                                         if (context != null
                                                 && context
                                                         .getPackageName()
                                                         .equals(BuildConfig.APPLICATION_ID)) {
-                                            context.startActivity(i);
+                                            // Owned AnyNews https → in-app only (no Chrome).
+                                            OwnedHttpsOpener.open(context, url);
                                         }
                                     } catch (Exception e) {
                                         showLog("sponsored link: " + e.getMessage());
@@ -12469,8 +12467,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             try{
                 showLog("  request.getUrl()::"+  request.getUrl());
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(request.getUrl().toString()));
-                context.startActivity( intent );
+                // Owned share/API hosts stay in-app; other ad clicks still use external VIEW.
+                OwnedHttpsOpener.open(context, request.getUrl());
             }catch (Exception e){
                 e.printStackTrace();
             }

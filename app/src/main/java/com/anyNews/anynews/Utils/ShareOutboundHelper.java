@@ -13,8 +13,9 @@ import android.text.TextUtils;
  *
  * <p>True skip-Chrome for raw https still requires verified Digital Asset Links
  * (colon SHA-256 including Play App Signing cert) — see server
- * {@code docs/APP_LINKS_SHARE.md}. Landing uses {@code intent://…;package=} when
- * Chrome does load the https URL.
+ * {@code docs/APP_LINKS_SHARE.md}. Landing uses an opaque package-scoped
+ * {@code intent://…;package=} handoff when Chrome does load the https URL.
+ * In-app opens of owned https hosts use {@link OwnedHttpsOpener} (never Chrome).
  */
 public final class ShareOutboundHelper {
 
