@@ -83,6 +83,7 @@ import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.FullVideoShareCardHelper;
 import com.anyNews.anynews.Utils.MagazineShareIconHelper;
 import com.anyNews.anynews.Utils.PollOptionStyleHelper;
+import com.anyNews.anynews.Utils.SharePublicBaseHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.NetworkCallDeduper;
 import com.anyNews.anynews.Utils.OpenPathCache;
@@ -1954,6 +1955,10 @@ public class StartingActivity extends AppCompatActivity {
                                     startActivityReqModel.getData().getFullVideoShareCard()
                             );
                         }
+                        // Admin share domain (sharedev / share.anynews.co.in / …).
+                        SharePublicBaseHelper.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getSharePublicBaseUrl());
                         if (startActivityReqModel.getData().getPollSurveyColors() != null) {
                             PollOptionStyleHelper.save(
                                     getApplicationContext(),

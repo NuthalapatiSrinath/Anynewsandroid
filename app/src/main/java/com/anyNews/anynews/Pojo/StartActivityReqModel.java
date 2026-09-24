@@ -470,6 +470,14 @@ public class StartActivityReqModel implements Serializable {
         private Long festivalSplashUpdatedAt;
 
         /**
+         * Admin share link base URL (Configuration → Share domain).
+         * e.g. https://sharedev.anynews.co.in or https://share.anynews.co.in
+         */
+        @SerializedName("share_public_base_url")
+        @Expose
+        private String sharePublicBaseUrl;
+
+        /**
          * Offline News pack max articles (admin; default 24, range 8–50).
          * Null on old servers → Android keeps cached / default 24.
          */
@@ -1161,6 +1169,11 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / 0. */
         public Long getFestivalSplashUpdatedAt() {
             return festivalSplashUpdatedAt;
+        }
+
+        /** Null / empty → old server; caller keeps cached fallback. */
+        public String getSharePublicBaseUrl() {
+            return sharePublicBaseUrl;
         }
 
         /** Null → old server; caller keeps cached / default 24. */

@@ -14,9 +14,10 @@ import com.anyNews.anynews.Activities.StartingActivity;
 /**
  * Opens AnyNews-owned https / custom-scheme URLs inside the app only.
  *
- * <p>Bare {@link Intent#ACTION_VIEW} on {@code https://share*.anynews.co.in/…} lets the
- * OS pick Chrome when App Links are unverified — that is the Chrome+blank-app
- * switcher bug. Package-scoped intents keep the hop in AnyNews.
+ * <p>Bare {@link Intent#ACTION_VIEW} on share/API hosts lets the OS pick Chrome when
+ * App Links are unverified. Package-scoped intents keep the hop in AnyNews.
+ * Known App Link hosts plus the Admin splash {@code share_public_base_url} host
+ * are treated as owned.
  */
 public final class OwnedHttpsOpener {
 
@@ -25,8 +26,8 @@ public final class OwnedHttpsOpener {
     private OwnedHttpsOpener() {
     }
 
-    /** True for hosts this app claims via App Links / share landing. */
-    public static boolean isOwnedHost(@Nullable String host) {
+    /** Built-in App Link / share hosts (manifest-claimed). */
+    public static boolean isKnownOwnedHost(@Nullable String host) {
         if (host == null || host.isEmpty()) {
             return false;
         }
@@ -42,7 +43,19 @@ public final class OwnedHttpsOpener {
                 || h.equals("admin.anynews.co.in");
     }
 
-    public static boolean isOwnedUri(@Nullable Uri uri) {
+    /** Known hosts plus Admin-configured share base host from splash prefs. */
+    public static boolean isOwnedHost(@Nullable Context context, @Nullable String host) {
+        if (isKnownOwnedHost(host)) {
+            return true;
+        }
+        if (host == null || host.isEmpty() || context == null) {
+            return false;
+        }
+        String adminHost = SharePublicBaseHelper.getHostname(context);
+        return adminHost != null && adminHost.equalsIgnoreCase(host);
+    }
+
+    public static boolean isOwnedUri(@Nullable Context context, @Nullable Uri uri) {
         if (uri == null) {
             return false;
         }
@@ -56,15 +69,15 @@ public final class OwnedHttpsOpener {
         if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
             return false;
         }
-        return isOwnedHost(uri.getHost());
+        return isOwnedHost(context, uri.getHost());
     }
 
-    public static boolean isOwnedUrl(@Nullable String url) {
+    public static boolean isOwnedUrl(@Nullable Context context, @Nullable String url) {
         if (TextUtils.isEmpty(url)) {
             return false;
         }
         try {
-            return isOwnedUri(Uri.parse(url.trim()));
+            return isOwnedUri(context, Uri.parse(url.trim()));
         } catch (Exception e) {
             return false;
         }
@@ -95,7 +108,7 @@ public final class OwnedHttpsOpener {
             return false;
         }
         try {
-            if (isOwnedUri(uri)) {
+            if (isOwnedUri(context, uri)) {
                 return openInApp(context, uri);
             }
             Intent view = new Intent(Intent.ACTION_VIEW, uri);

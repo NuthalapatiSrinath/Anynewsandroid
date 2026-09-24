@@ -16,6 +16,8 @@ import android.text.TextUtils;
  * {@code docs/APP_LINKS_SHARE.md}. Landing uses an opaque package-scoped
  * {@code intent://…;package=} handoff when Chrome does load the https URL.
  * In-app opens of owned https hosts use {@link OwnedHttpsOpener} (never Chrome).
+ * Admin {@code share_public_base_url} (splash) drives which https host is preferred;
+ * see {@link SharePublicBaseHelper}.
  */
 public final class ShareOutboundHelper {
 
@@ -141,5 +143,16 @@ public final class ShareOutboundHelper {
     /** Title + https share link (no body, no custom-scheme line). */
     public static String formatCaption(String title, String httpsShareLink, Long postId) {
         return formatCaption(title, null, httpsShareLink, postId);
+    }
+
+    /**
+     * Prefer server {@code share_link}; if empty, build from Admin splash base.
+     */
+    public static String resolveHttpsShareLink(
+            android.content.Context context, String shareLink, Long postId) {
+        if (!TextUtils.isEmpty(shareLink)) {
+            return shareLink.trim();
+        }
+        return SharePublicBaseHelper.buildFallbackShareUrl(context, postId, null);
     }
 }

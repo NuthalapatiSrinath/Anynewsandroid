@@ -712,6 +712,11 @@ public class Constants {
     public static String PENDING_SHARE_POST = "pending_share_post_id";
     /** One-shot job id from /job/{id} or legacy /job-{base64} share deep links. */
     public static String PENDING_SHARE_JOB = "pending_share_job_id";
+    /**
+     * Admin share link base URL from splash ({@code share_public_base_url}).
+     * e.g. https://sharedev.anynews.co.in or https://share.anynews.co.in
+     */
+    public static String SHARE_PUBLIC_BASE_URL = "share_public_base_url";
     public static String PROFILE_CACHE = "reporter_profile_cache_json";
     /** Last active key for {@link ReporterProfileCache} (draft+phone/email scoped). */
     public static String PROFILE_CACHE_KEY = "reporter_profile_cache_key";
