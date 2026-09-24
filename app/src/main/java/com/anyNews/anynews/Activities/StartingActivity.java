@@ -283,8 +283,8 @@ public class StartingActivity extends AppCompatActivity {
             }
         }
 
-        // Festival banner only when admin ON + local cache ready. OFF = no-op.
-        // After intent parse so push/share deep links skip the hold.
+        // Opening banner only when admin ON for this path + local cache ready.
+        // After intent parse so push/share can apply their own toggles.
         maybeArmFestivalSplash();
 
         // Instant open for returning users (after intent/deep-link parse so share ids pass through).
@@ -2167,6 +2167,8 @@ public class StartingActivity extends AppCompatActivity {
                         FestivalSplashHelper.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getFestivalSplashEnabled(),
+                                startActivityReqModel.getData().getFestivalSplashShowOnPush(),
+                                startActivityReqModel.getData().getFestivalSplashShowOnShare(),
                                 startActivityReqModel.getData().getFestivalSplashDurationSeconds(),
                                 startActivityReqModel.getData().getFestivalSplashImageUrl());
                         FestivalSplashHelper.prefetchInBackground(getApplicationContext());
@@ -2718,22 +2720,22 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     /**
-     * When admin festival splash is ON and a local banner is cached, show it
-     * (FIT_CENTER — full image visible) for the admin duration, then release Home.
-     * Deep links / push / share skip the hold so open stays snappy.
+     * When admin Opening Banner is ON for this launch path and a local banner
+     * is cached, show it (FIT_CENTER) for the admin duration, then release Home.
+     * Push / share respect separate admin toggles (default OFF = skip hold).
      * OFF or missing cache → immediate return (no OpenPath delay).
      */
     private void maybeArmFestivalSplash() {
         try {
-            if (!FestivalSplashHelper.isEnabled(this)) {
-                return;
-            }
-            if (shouldSkipFestivalForDeepLink()) {
-                showLog("OpenPath: festival skip (deep link / push / share)");
+            if (!shouldShowFestivalForThisOpen()) {
+                if (FestivalSplashHelper.isAnyShowPathEnabled(this)
+                        && !FestivalSplashHelper.hasReadyLocalImage(this)) {
+                    FestivalSplashHelper.prefetchInBackground(getApplicationContext());
+                }
                 return;
             }
             if (!FestivalSplashHelper.hasReadyLocalImage(this)) {
-                showLog("OpenPath: festival ON but no local cache — skip hold");
+                showLog("OpenPath: opening banner ON for path but no local cache — skip hold");
                 FestivalSplashHelper.prefetchInBackground(getApplicationContext());
                 return;
             }
@@ -2765,8 +2767,32 @@ public class StartingActivity extends AppCompatActivity {
         }
     }
 
-    /** Push / share / job deep links should not wait on festival art. */
-    private boolean shouldSkipFestivalForDeepLink() {
+    /**
+     * Admin path toggles: normal ({@link FestivalSplashHelper#isEnabled}),
+     * push ({@link FestivalSplashHelper#shouldShowOnPush}),
+     * share/deep-link ({@link FestivalSplashHelper#shouldShowOnShare}).
+     */
+    private boolean shouldShowFestivalForThisOpen() {
+        if (isPushOpenForFestival()) {
+            boolean on = FestivalSplashHelper.shouldShowOnPush(this);
+            if (!on) {
+                showLog("OpenPath: festival skip (push; admin show_on_push OFF)");
+            }
+            return on;
+        }
+        if (isShareOrDeepLinkOpenForFestival()) {
+            boolean on = FestivalSplashHelper.shouldShowOnShare(this);
+            if (!on) {
+                showLog("OpenPath: festival skip (share/deep link; admin show_on_share OFF)");
+            }
+            return on;
+        }
+        boolean on = FestivalSplashHelper.isEnabled(this);
+        return on;
+    }
+
+    /** FCM / rewards push sticky (TITLE / TITLE_REWARDS / anynews://push/...). */
+    private boolean isPushOpenForFestival() {
         if (TITLE != null && !TITLE.isEmpty() && !"null".equalsIgnoreCase(TITLE)
                 && !"0".equals(TITLE)) {
             return true;
@@ -2776,6 +2802,24 @@ public class StartingActivity extends AppCompatActivity {
                 && !"0".equals(TITLE_REWARDS)) {
             return true;
         }
+        try {
+            Intent i = getIntent();
+            if (i != null && i.getData() != null) {
+                String host = i.getData().getHost();
+                if (host != null && "push".equalsIgnoreCase(host)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Share / App Link / job / DATAFROM2G deep links (not push). */
+    private boolean isShareOrDeepLinkOpenForFestival() {
+        if (isPushOpenForFestival()) {
+            return false;
+        }
         if (articleId1 != null && !articleId1.isEmpty() && !"null".equalsIgnoreCase(articleId1)
                 && !"0".equals(articleId1)) {
             return true;
@@ -2784,15 +2828,16 @@ public class StartingActivity extends AppCompatActivity {
                 && !"0".equals(jobId1)) {
             return true;
         }
+        if (DATAFROM2G != null && !DATAFROM2G.isEmpty() && !"null".equalsIgnoreCase(DATAFROM2G)) {
+            return true;
+        }
         try {
             Intent i = getIntent();
             if (i != null && i.getData() != null) {
                 String host = i.getData().getHost();
                 String path = i.getData().getPath();
-                // FCM anynews://push/... uniqueness URIs are not article deep links.
                 if (host != null && "push".equalsIgnoreCase(host)) {
-                    return TITLE != null && !TITLE.isEmpty() && !"null".equalsIgnoreCase(TITLE)
-                            && !"0".equals(TITLE);
+                    return false;
                 }
                 if (path != null && path.length() > 1) {
                     return true;

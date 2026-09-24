@@ -12,8 +12,9 @@ import java.io.InputStream;
 import java.util.concurrent.Future;
 
 /**
- * Festival / seasonal open splash — admin ON/OFF + duration + banner.
- * Default OFF: {@link #isEnabled} is false until splash/session delivers true.
+ * Opening Banner / festival splash — admin toggles + duration + banner.
+ * Paths: normal ({@link #isEnabled}), push ({@link #shouldShowOnPush}),
+ * share/deep-link ({@link #shouldShowOnShare}). All default OFF.
  * Prefers a local file under filesDir so open never waits on the network.
  */
 public final class FestivalSplashHelper {
@@ -25,6 +26,7 @@ public final class FestivalSplashHelper {
 
     private FestivalSplashHelper() {}
 
+    /** Show on normal launcher / Recents open (no push or share target). */
     public static boolean isEnabled(Context ctx) {
         if (ctx == null) return false;
         return SharedPrefsData.getBool(
@@ -32,6 +34,31 @@ public final class FestivalSplashHelper {
                 Constants.FESTIVAL_SPLASH_ENABLED,
                 Constants.PREF_NAME,
                 false);
+    }
+
+    /** Show when opening from a push notification. Default OFF. */
+    public static boolean shouldShowOnPush(Context ctx) {
+        if (ctx == null) return false;
+        return SharedPrefsData.getBool(
+                ctx.getApplicationContext(),
+                Constants.FESTIVAL_SPLASH_SHOW_ON_PUSH,
+                Constants.PREF_NAME,
+                false);
+    }
+
+    /** Show when opening from share / App Link / job deep link. Default OFF. */
+    public static boolean shouldShowOnShare(Context ctx) {
+        if (ctx == null) return false;
+        return SharedPrefsData.getBool(
+                ctx.getApplicationContext(),
+                Constants.FESTIVAL_SPLASH_SHOW_ON_SHARE,
+                Constants.PREF_NAME,
+                false);
+    }
+
+    /** True when any launch path may show the banner (prefetch gate). */
+    public static boolean isAnyShowPathEnabled(Context ctx) {
+        return isEnabled(ctx) || shouldShowOnPush(ctx) || shouldShowOnShare(ctx);
     }
 
     public static int getDurationMs(Context ctx) {
@@ -82,11 +109,29 @@ public final class FestivalSplashHelper {
             Boolean enabled,
             Integer durationSeconds,
             String imageUrl) {
+        saveFromServer(ctx, enabled, null, null, durationSeconds, imageUrl);
+    }
+
+    public static void saveFromServer(
+            Context ctx,
+            Boolean enabled,
+            Boolean showOnPush,
+            Boolean showOnShare,
+            Integer durationSeconds,
+            String imageUrl) {
         if (ctx == null) return;
         Context app = ctx.getApplicationContext();
         if (enabled != null) {
             SharedPrefsData.putBool(
                     app, Constants.FESTIVAL_SPLASH_ENABLED, enabled, Constants.PREF_NAME);
+        }
+        if (showOnPush != null) {
+            SharedPrefsData.putBool(
+                    app, Constants.FESTIVAL_SPLASH_SHOW_ON_PUSH, showOnPush, Constants.PREF_NAME);
+        }
+        if (showOnShare != null) {
+            SharedPrefsData.putBool(
+                    app, Constants.FESTIVAL_SPLASH_SHOW_ON_SHARE, showOnShare, Constants.PREF_NAME);
         }
         if (durationSeconds != null && durationSeconds > 0) {
             int sec = Math.max(MIN_DURATION_SEC, Math.min(MAX_DURATION_SEC, durationSeconds));
@@ -100,11 +145,11 @@ public final class FestivalSplashHelper {
         }
     }
 
-    /** Background download into local filesDir when enabled + URL present. */
+    /** Background download into local filesDir when any show path + URL present. */
     public static void prefetchInBackground(Context ctx) {
         if (ctx == null) return;
         final Context app = ctx.getApplicationContext();
-        if (!isEnabled(app)) return;
+        if (!isAnyShowPathEnabled(app)) return;
         final String url = getImageUrl(app);
         if (url.isEmpty()) return;
         if (hasReadyLocalImage(app)) return;

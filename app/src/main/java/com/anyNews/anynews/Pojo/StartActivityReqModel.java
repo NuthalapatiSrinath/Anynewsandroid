@@ -441,12 +441,20 @@ public class StartActivityReqModel implements Serializable {
         private Integer sessionLiveWindowSeconds;
 
         /**
-         * Festival / seasonal open splash (admin). Default OFF.
+         * Opening Banner / festival splash (admin). Default OFF per path.
          * Null on old servers → Android keeps cached / OFF.
          */
         @SerializedName("festival_splash_enabled")
         @Expose
         private Boolean festivalSplashEnabled;
+
+        @SerializedName("festival_splash_show_on_push")
+        @Expose
+        private Boolean festivalSplashShowOnPush;
+
+        @SerializedName("festival_splash_show_on_share")
+        @Expose
+        private Boolean festivalSplashShowOnShare;
 
         @SerializedName("festival_splash_duration_seconds")
         @Expose
@@ -1103,6 +1111,14 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / default OFF. */
         public Boolean getFestivalSplashEnabled() {
             return festivalSplashEnabled;
+        }
+
+        public Boolean getFestivalSplashShowOnPush() {
+            return festivalSplashShowOnPush;
+        }
+
+        public Boolean getFestivalSplashShowOnShare() {
+            return festivalSplashShowOnShare;
         }
 
         public Integer getFestivalSplashDurationSeconds() {

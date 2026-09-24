@@ -273,8 +273,12 @@ public class Constants {
     public static String SESSION_LIVE_ENABLED = "session_live_enabled";
     /** Presence window seconds (interval × 2) from splash — informational for client. */
     public static String SESSION_LIVE_WINDOW_SECONDS = "session_live_window_seconds";
-    /** Festival splash (admin). Default OFF — OpenPath unchanged until true. */
+    /** Opening Banner (admin). Default OFF — OpenPath unchanged until true. */
     public static String FESTIVAL_SPLASH_ENABLED = "festival_splash_enabled";
+    /** Show banner when opening from push. Default OFF (fast push). */
+    public static String FESTIVAL_SPLASH_SHOW_ON_PUSH = "festival_splash_show_on_push";
+    /** Show banner when opening from share / deep link. Default OFF. */
+    public static String FESTIVAL_SPLASH_SHOW_ON_SHARE = "festival_splash_show_on_share";
     public static String FESTIVAL_SPLASH_DURATION_SECONDS = "festival_splash_duration_seconds";
     public static String FESTIVAL_SPLASH_IMAGE_URL = "festival_splash_image_url";
     /** URL that matches the local filesDir cache file. */
