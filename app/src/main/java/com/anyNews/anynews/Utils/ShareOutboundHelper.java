@@ -7,13 +7,14 @@ import android.text.TextUtils;
  * Formats outbound share captions so recipients open AnyNews when possible.
  *
  * <p>WhatsApp / most messengers only reliably linkify {@code https://} (needed for OG
- * preview). Custom scheme {@code anynews://post/{id}} is listed first so Android
- * clients that make it tappable open the app with no Chrome chooser. The https
- * share host remains the preview / fallback link.
+ * preview). Captions use <strong>title + https share URL only</strong> — custom-scheme
+ * {@code anynews://} lines look broken in WhatsApp and are unnecessary when the share
+ * host serves a package-scoped intent handoff + verified App Links.
  *
- * <p>True skip-chooser for raw https still requires verified Digital Asset Links
+ * <p>True skip-Chrome for raw https still requires verified Digital Asset Links
  * (colon SHA-256 including Play App Signing cert) — see server
- * {@code docs/APP_LINKS_SHARE.md}.
+ * {@code docs/APP_LINKS_SHARE.md}. Landing uses {@code intent://…;package=} when
+ * Chrome does load the https URL.
  */
 public final class ShareOutboundHelper {
 
@@ -102,8 +103,11 @@ public final class ShareOutboundHelper {
     }
 
     /**
-     * Caption for article shares: title, optional body, {@code anynews://} first,
-     * then https for link preview.
+     * Caption for article shares: title, optional body, then https only
+     * (WhatsApp OG preview). No {@code anynews://} line in outbound text.
+     *
+     * @param postId unused in caption text; kept so call sites can pass the id
+     *               (landing / App Links use the https URL to open the post).
      */
     public static String formatCaption(String title, String description, String httpsShareLink,
                                        Long postId) {
@@ -113,8 +117,6 @@ public final class ShareOutboundHelper {
             safeDesc = safeDesc.substring(0, 3500).trim() + "…";
         }
         String https = httpsShareLink != null ? httpsShareLink.trim() : "";
-        String id = extractPostId(https, postId);
-        String custom = customSchemePostUrl(id);
 
         StringBuilder sb = new StringBuilder();
         if (!safeTitle.isEmpty()) {
@@ -126,22 +128,16 @@ public final class ShareOutboundHelper {
             }
             sb.append(safeDesc);
         }
-        if (!custom.isEmpty()) {
-            if (sb.length() > 0) {
-                sb.append("\n\n");
-            }
-            sb.append(custom);
-        }
         if (!https.isEmpty()) {
             if (sb.length() > 0) {
-                sb.append('\n');
+                sb.append("\n\n");
             }
             sb.append(https);
         }
         return sb.toString();
     }
 
-    /** Title + dual links (no body). */
+    /** Title + https share link (no body, no custom-scheme line). */
     public static String formatCaption(String title, String httpsShareLink, Long postId) {
         return formatCaption(title, null, httpsShareLink, postId);
     }

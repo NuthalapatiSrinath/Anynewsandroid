@@ -402,7 +402,7 @@ public class VideoShareHelper {
     }
 
     /**
-     * Title + optional article body + dual share links (anynews:// first, https preview).
+     * Title + optional article body + https share link (no {@code anynews://} in caption).
      * Prefer {@link #buildShareMessage(String, String, String, Long)} when post id is known.
      */
     public static String buildShareMessage(String title, String description, String shareLink) {
