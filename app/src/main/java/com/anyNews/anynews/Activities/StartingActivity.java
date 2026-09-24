@@ -193,6 +193,8 @@ public class StartingActivity extends AppCompatActivity {
      */
     private boolean festivalHoldHome = false;
     private boolean pendingHomeAfterFestival = false;
+    /** True while downloading banner (blank splash kept; never show logo). */
+    private boolean festivalAwaitingDownload = false;
     /**
      * Keep AndroidX splash on-screen until Opening Banner is painted (or we
      * decide not to show it) so the default logo theme never flashes first.
@@ -201,6 +203,26 @@ public class StartingActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Before super + installSplashScreen: Opening Banner ON → black+blank
+        // splash theme so the orange logo (#353535 night) never paints.
+        boolean suppressLogoSplash =
+                FestivalSplashHelper.shouldSuppressLogoSplash(this, getIntent());
+        if (suppressLogoSplash) {
+            setTheme(R.style.AppThemeSplashOpeningBanner);
+        }
+        // AndroidX requires installSplashScreen before super.onCreate.
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+        if (suppressLogoSplash) {
+            splashScreen.setKeepOnScreenCondition(() -> splashKeepUntilReady);
+            splashScreen.setOnExitAnimationListener(provider -> {
+                try {
+                    provider.remove();
+                } catch (Exception ignored) {
+                }
+            });
+        } else {
+            splashKeepUntilReady = false;
+        }
         super.onCreate(savedInstanceState);
         // Ensure previous session's viewed cards are committed before Home News loads
         // (also runs from AppController; once-per-process is a no-op if already done).
@@ -211,16 +233,6 @@ public class StartingActivity extends AppCompatActivity {
         try {
             FeedAdConfig.warmFromPrefs(getApplicationContext());
         } catch (Exception ignored) {
-        }
-        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
-        // Only hold the system splash when a cached Opening Banner may replace the
-        // logo screen — OFF / no cache keeps today's fast open unchanged.
-        boolean mayShowOpeningBanner = FestivalSplashHelper.isAnyShowPathEnabled(this)
-                && FestivalSplashHelper.hasReadyLocalImage(this);
-        if (mayShowOpeningBanner) {
-            splashScreen.setKeepOnScreenCondition(() -> splashKeepUntilReady);
-        } else {
-            splashKeepUntilReady = false;
         }
 //        showLog("android.os.Build.VERSION.SDK_INT::::"+android.os.Build.VERSION.SDK_INT);
 //        showLog("Build.VERSION_CODES.M::::::::"+Build.VERSION_CODES.M);
@@ -279,8 +291,32 @@ public class StartingActivity extends AppCompatActivity {
 
         OBJECT = "" + intent.getStringExtra("OBJECT");
         TITLE_REWARDS = "" +intent.getStringExtra("TITLE_REWARDS");
-        logo_image_server.setVisibility(View.VISIBLE);
-        logo_image.setVisibility(View.GONE);
+        if (suppressLogoSplash) {
+            // Black canvas only until banner paints — never theme/logo drawables.
+            try {
+                getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+            } catch (Exception ignored) {
+            }
+            try {
+                View root = findViewById(android.R.id.content);
+                if (root != null) {
+                    root.setBackgroundColor(Color.BLACK);
+                }
+                if (net_avilable != null) {
+                    net_avilable.setBackgroundColor(Color.BLACK);
+                }
+            } catch (Exception ignored) {
+            }
+            logo_image_server.setImageDrawable(null);
+            logo_image_server.setVisibility(View.INVISIBLE);
+            logo_image.setVisibility(View.GONE);
+            if (welcome != null) {
+                welcome.setVisibility(View.GONE);
+            }
+        } else {
+            logo_image_server.setVisibility(View.VISIBLE);
+            logo_image.setVisibility(View.GONE);
+        }
         receiver = new NetworkChangeReceiver();
         networkStatus = (TextView) findViewById(R.id.networkStatus);
         if(intent.getAction()!=null){
@@ -299,20 +335,10 @@ public class StartingActivity extends AppCompatActivity {
             }
         }
 
-        // Opening banner only when admin ON for this path + local cache ready.
+        // Opening banner when admin ON for this path (+ wait download if needed).
         // After intent parse so push/share can apply their own toggles.
         maybeArmFestivalSplash();
-        if (festivalHoldHome) {
-            // Instant cut to full-bleed banner — no logo→banner crossfade.
-            splashScreen.setOnExitAnimationListener(provider -> {
-                try {
-                    provider.remove();
-                } catch (Exception ignored) {
-                }
-            });
-        }
-        // Always release AndroidX keep after arm attempt — OFF path stays fast.
-        splashKeepUntilReady = false;
+        // Keep stays true while festivalAwaitingDownload; OFF path already released.
 
         // Instant open for returning users (after intent/deep-link parse so share ids pass through).
         // Config/FCM soft-refresh continues via getOSandDeviceId on the next tick.
@@ -2212,7 +2238,8 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getFestivalSplashShowOnPush(),
                                 startActivityReqModel.getData().getFestivalSplashShowOnShare(),
                                 startActivityReqModel.getData().getFestivalSplashDurationSeconds(),
-                                startActivityReqModel.getData().getFestivalSplashImageUrl());
+                                startActivityReqModel.getData().getFestivalSplashImageUrl(),
+                                startActivityReqModel.getData().getFestivalSplashUpdatedAt());
                         FestivalSplashHelper.prefetchInBackground(getApplicationContext());
                         com.anyNews.anynews.rewards.RewardsConfigHelper.saveProgramWindow(
                                 getApplicationContext(),
@@ -2732,7 +2759,7 @@ public class StartingActivity extends AppCompatActivity {
             showLog("OpenPath: home already launched");
             return;
         }
-        if (festivalHoldHome) {
+        if (festivalHoldHome || festivalAwaitingDownload) {
             pendingHomeAfterFestival = true;
             showLog("OpenPath: festival splash hold");
             return;
@@ -2762,11 +2789,10 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     /**
-     * When admin Opening Banner is ON for this launch path and a local banner
-     * is cached, replace the default logo splash with a full-bleed
-     * ({@link ImageView.ScaleType#CENTER_CROP}) banner for the admin duration,
-     * then release Home. Push / share respect separate admin toggles (default OFF).
-     * OFF or missing cache → immediate return (no OpenPath delay).
+     * When admin Opening Banner is ON for this launch path and image URL is set,
+     * show ONLY the full-bleed banner stretched FIT_XY (never the orange logo theme splash).
+     * If local cache is cold, keep a blank black splash, download, then paint.
+     * OFF → immediate return (no OpenPath delay).
      */
     private void maybeArmFestivalSplash() {
         try {
@@ -2775,60 +2801,120 @@ public class StartingActivity extends AppCompatActivity {
                         && !FestivalSplashHelper.hasReadyLocalImage(this)) {
                     FestivalSplashHelper.prefetchInBackground(getApplicationContext());
                 }
+                releaseFestivalSplashKeep();
                 return;
             }
-            if (!FestivalSplashHelper.hasReadyLocalImage(this)) {
-                showLog("OpenPath: opening banner ON for path but no local cache — skip hold");
-                FestivalSplashHelper.prefetchInBackground(getApplicationContext());
+            if (FestivalSplashHelper.getImageUrl(this).isEmpty()) {
+                showLog("OpenPath: opening banner ON but empty image url — skip");
+                releaseFestivalSplashKeep();
                 return;
             }
-            Bitmap banner = FestivalSplashHelper.decodeLocalBitmap(this);
-            if (banner == null || banner.getWidth() < 1 || banner.getHeight() < 1) {
-                showLog("OpenPath: opening banner decode failed — skip hold");
-                FestivalSplashHelper.prefetchInBackground(getApplicationContext());
+            if (FestivalSplashHelper.hasReadyLocalImage(this)) {
+                if (paintFestivalBannerAndHold()) {
+                    releaseFestivalSplashKeep();
+                } else {
+                    // Decode failed — try download once more rather than logo.
+                    beginFestivalDownloadThenArm();
+                }
                 return;
             }
-            // Kill theme logo (new_bg_sp / night #353535) so only the banner shows.
-            try {
-                getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
-            } catch (Exception ignored) {
-            }
-            try {
-                View root = findViewById(android.R.id.content);
-                if (root != null) {
-                    root.setBackgroundColor(Color.BLACK);
-                }
-                if (net_avilable != null) {
-                    net_avilable.setBackgroundColor(Color.BLACK);
-                }
-            } catch (Exception ignored) {
-            }
-            // Cover: fill all four sides (crop edges if needed) — no letterbox bars.
-            logo_image_server.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            logo_image_server.setBackgroundColor(Color.TRANSPARENT);
-            logo_image_server.setImageBitmap(banner);
-            logo_image_server.setVisibility(View.VISIBLE);
-            logo_image.setVisibility(View.GONE);
-            if (welcome != null) {
-                welcome.setVisibility(View.GONE);
-            }
-            festivalHoldHome = true;
-            final int durationMs = FestivalSplashHelper.getDurationMs(this);
-            showLog("OpenPath: festival splash armed ms=" + durationMs);
-            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    festivalHoldHome = false;
-                    if (pendingHomeAfterFestival && !homeOpenedFromSplash
-                            && !isFinishing() && !isDestroyed()) {
-                        openHomeFromSplash();
-                    }
-                }
-            }, durationMs);
+            beginFestivalDownloadThenArm();
         } catch (Exception e) {
             festivalHoldHome = false;
+            festivalAwaitingDownload = false;
+            releaseFestivalSplashKeep();
             Logone.w("festival splash arm failed: " + (e.getMessage() != null ? e.getMessage() : e));
         }
+    }
+
+    private void beginFestivalDownloadThenArm() {
+        festivalAwaitingDownload = true;
+        showLog("OpenPath: opening banner ON — waiting for image (no logo)");
+        FestivalSplashHelper.ensureLocalImageAsync(
+                this,
+                FestivalSplashHelper.ENSURE_TIMEOUT_MS,
+                this::onFestivalDownloadAttemptFinished);
+    }
+
+    private void onFestivalDownloadAttemptFinished() {
+        try {
+            if (isFinishing() || isDestroyed()) {
+                festivalAwaitingDownload = false;
+                releaseFestivalSplashKeep();
+                return;
+            }
+            festivalAwaitingDownload = false;
+            if (FestivalSplashHelper.hasReadyLocalImage(this)
+                    && paintFestivalBannerAndHold()) {
+                releaseFestivalSplashKeep();
+                return;
+            }
+            showLog("OpenPath: opening banner download/decode failed — black open, no logo");
+            releaseFestivalSplashKeep();
+            if (pendingHomeAfterFestival && !homeOpenedFromSplash) {
+                openHomeFromSplash();
+            }
+        } catch (Exception e) {
+            festivalAwaitingDownload = false;
+            festivalHoldHome = false;
+            releaseFestivalSplashKeep();
+            Logone.w("festival splash after download: "
+                    + (e.getMessage() != null ? e.getMessage() : e));
+            if (pendingHomeAfterFestival && !homeOpenedFromSplash
+                    && !isFinishing() && !isDestroyed()) {
+                openHomeFromSplash();
+            }
+        }
+    }
+
+    /** @return true when banner painted and Home hold armed */
+    private boolean paintFestivalBannerAndHold() {
+        Bitmap banner = FestivalSplashHelper.decodeLocalBitmap(this);
+        if (banner == null || banner.getWidth() < 1 || banner.getHeight() < 1) {
+            showLog("OpenPath: opening banner decode failed");
+            return false;
+        }
+        try {
+            getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+        } catch (Exception ignored) {
+        }
+        try {
+            View root = findViewById(android.R.id.content);
+            if (root != null) {
+                root.setBackgroundColor(Color.BLACK);
+            }
+            if (net_avilable != null) {
+                net_avilable.setBackgroundColor(Color.BLACK);
+            }
+        } catch (Exception ignored) {
+        }
+        logo_image_server.setScaleType(ImageView.ScaleType.FIT_XY);
+        logo_image_server.setAdjustViewBounds(false);
+        logo_image_server.setBackgroundColor(Color.TRANSPARENT);
+        logo_image_server.setImageBitmap(banner);
+        logo_image_server.setVisibility(View.VISIBLE);
+        logo_image.setVisibility(View.GONE);
+        if (welcome != null) {
+            welcome.setVisibility(View.GONE);
+        }
+        festivalHoldHome = true;
+        final int durationMs = FestivalSplashHelper.getDurationMs(this);
+        showLog("OpenPath: festival splash armed ms=" + durationMs);
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                festivalHoldHome = false;
+                if (pendingHomeAfterFestival && !homeOpenedFromSplash
+                        && !isFinishing() && !isDestroyed()) {
+                    openHomeFromSplash();
+                }
+            }
+        }, durationMs);
+        return true;
+    }
+
+    private void releaseFestivalSplashKeep() {
+        splashKeepUntilReady = false;
     }
 
     /**

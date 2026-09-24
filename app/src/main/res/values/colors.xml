@@ -142,6 +142,8 @@
 
     <color name="colorTextSecondary">#656565</color>
     <color name="splash_bg_code">#000000</color>
+    <!-- Opening Banner system splash — never remap in night (unlike @color/white → #353535). -->
+    <color name="splash_banner_solid_black">#000000</color>
     <color name="splash_logo_bg">#FFFFFF</color>
 
 

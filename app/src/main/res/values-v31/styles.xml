@@ -274,4 +274,20 @@
         screen. This is required. -->
         <item name="postSplashScreenTheme">@style/AppThemeSplash_splash</item>
     </style>
+
+    <!-- Opening Banner ON: black + blank icon — never the orange AnyNews logo. -->
+    <style name="AppThemeSplashOpeningBanner" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_banner_solid_black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_blank</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_banner_solid_black</item>
+        <item name="windowSplashScreenAnimationDuration">0</item>
+        <item name="postSplashScreenTheme">@style/AppThemeSplashOpeningBanner_post</item>
+    </style>
+
+    <style name="AppThemeSplashOpeningBanner_post" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/splash_banner_solid_black</item>
+        <item name="android:background">@color/splash_banner_solid_black</item>
+        <item name="android:statusBarColor">@color/splash_banner_solid_black</item>
+        <item name="android:navigationBarColor">@color/splash_banner_solid_black</item>
+    </style>
 </resources>

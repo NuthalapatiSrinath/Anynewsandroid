@@ -382,4 +382,22 @@
         screen. This is required. -->
         <item name="postSplashScreenTheme">@style/AppThemeSplash</item>
     </style>
+
+    <!-- Pre-31 / fallback: Opening Banner ON — black window, no logo drawable. -->
+    <!-- Opening Banner ON (API &lt; 31): solid black — never new_bg_sp / orange logo. -->
+    <style name="AppThemeSplashOpeningBanner" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/splash_banner_solid_black</item>
+        <item name="android:background">@color/splash_banner_solid_black</item>
+        <item name="android:statusBarColor">@color/splash_banner_solid_black</item>
+        <item name="android:navigationBarColor">@color/splash_banner_solid_black</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+
+    <style name="AppThemeSplashOpeningBanner_post" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/splash_banner_solid_black</item>
+        <item name="android:background">@color/splash_banner_solid_black</item>
+        <item name="android:statusBarColor">@color/splash_banner_solid_black</item>
+        <item name="android:navigationBarColor">@color/splash_banner_solid_black</item>
+    </style>
 </resources>
