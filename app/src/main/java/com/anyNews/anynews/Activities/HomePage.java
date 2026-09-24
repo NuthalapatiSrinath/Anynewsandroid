@@ -699,7 +699,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Session-only: after Local → Main via the location pill, Main paints
      * translator {@code getMyFeed()} (ప్రధాన వార్తలు). Cleared on resume, Main→Local,
-     * category open, and any Main entry that is not that pill toggle-back.
+     * category open, footer News refresh ({@link #performFeedReload}), and any Main
+     * entry that is not that pill toggle-back.
      */
     private boolean locationPillShowPradhanaOnMain = false;
     /**
@@ -6303,25 +6304,34 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     selected_my_feed.setVisibility(View.VISIBLE);
                     selected_local.setVisibility(View.GONE);*/
 
-
-
+                // Leave Daily Updates / Mana Zilla Local session immediately so the
+                // delayed Main fetch cannot still probe FEED_MODE_LOCAL or keep Local
+                // chrome (Pradhana + Local re-entry / LTR lag). Pradhana latch only
+                // when this toggle is from Local (−1), not category → Main.
+                final boolean fromLocalFeed = (category_id == -1);
+                locationPillShowPradhanaOnMain = fromLocalFeed;
+                localFeedFromDailyUpdates = false;
+                hideLocalFeedChrome();
+                // Flip category now so in-flight Local responses are dropped
+                // (categoryAtEnqueue mismatch) before Main inlist runs.
+                category_id = 0;
+                feedModeEpoch++;
+                try {
+                    showHomeFeedLoadingReveal();
+                    if (layout_with_data != null) layout_with_data.setVisibility(View.GONE);
+                    if (comment_page != null) comment_page.setVisibility(View.GONE);
+                } catch (Exception ignored) {
+                }
 
                 new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        showHomeFeedLoadingReveal();
-                        layout_with_data.setVisibility(View.GONE);
-                        comment_page.setVisibility(View.GONE);
-
                         /*linear_home_image.setImageResource(R.drawable.ic_new_home);*/
                         /*linear_home_text.setText("" + languageModelResponse.getData().getHome());*/
                         list=new ArrayList<>();
                         last_post_id = 0;
                         skip = 0;
                         actual_skip = 0;
-                        // Only Local (−1) → Main pill toggle shows ప్రధాన వార్తలు.
-                        // Category → Main must keep district (not Pradhana).
-                        locationPillShowPradhanaOnMain = (category_id == -1);
                         category_id = 0;
 
                         requestSize=0;
@@ -14336,6 +14346,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         // Leaving any Mana Zilla local path when Reload / News main is requested.
+        // Footer refresh = cold-start Main label (district), not Pradhana latch.
+        locationPillShowPradhanaOnMain = false;
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         hideHomeCalendarMode();
