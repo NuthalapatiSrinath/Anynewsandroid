@@ -13160,11 +13160,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 leave_comment_white.setHint("" + languageModelResponse.getData().getWriteComments());
                 applyMagazineShareFooterLabel();
 
+                // Play Store July: Main/Local → selected district; category → getMyFeed()
+                // (e.g. "ప్రధాన వార్తలు") for the footer pill.
                 if (category_id == 0 || category_id == -1) {
                     type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
                 } else {
-                    // Location pill uses district/place — never My Feed ("ప్రధాన వార్తలు").
-                    type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+                    type = languageModelResponse.getData().getMyFeed().toString();
                 }
                 // Programmatic chrome only — avoid re-entering Special/Video/Reload open paths.
                 // Mutual exclusive: Special | Video News | News (home). Without Video branch,
@@ -15794,9 +15795,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if(isFromLocalArticles || fromCache || adapter == null){
                            isFromLocalArticles=false;
                            if (languageModelResponse != null && languageModelResponse.getData() != null) {
-                               // Always prefer district for FlipperAdapter ctor / location pill.
-                               // Never pass My Feed ("ప్రధాన వార్తలు") as the chip label.
-                               type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+                               // Play Store July: Main → district; category → getMyFeed()
+                               // ("ప్రధాన వార్తలు") for the footer pill.
+                               if (category_id == 0 || category_id == -1) {
+                                   type = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
+                               } else {
+                                   type = languageModelResponse.getData().getMyFeed().toString();
+                               }
                            }
                            if (adapter == null || fromCache) {
                            adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());

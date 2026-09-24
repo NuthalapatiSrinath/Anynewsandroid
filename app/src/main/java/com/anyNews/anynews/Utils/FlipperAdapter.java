@@ -3292,11 +3292,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Binds pin + district text and keeps them visible after scroll / theme rebind.
+     * Binds pin + district / feed text and keeps them visible after scroll / theme rebind.
      * Call after {@link WriterStripStyleHelper#apply} so style does not wipe the label.
-     * <p>Play Store / July Main: black pill shows post geo or the user's selected
-     * district — never the My Feed / "ప్రధాన వార్తలు" feed title. Promo Flash/Rewards
-     * only fill the slot when no usable district/location label exists.
+     * <p>Play Store July parity:
+     * <ul>
+     *   <li>Category feed ({@code categery_id > 0}): always {@code my_feed_name}
+     *       from translator {@code getMyFeed()} (e.g. "ప్రధాన వార్తలు").</li>
+     *   <li>Main / Local: post geo or selected district (e.g. Markapuram). National
+     *       Main without post geo still used the selected district — not My Feed.</li>
+     *   <li>Promo Flash/Rewards only when no usable district/location label remains.</li>
+     * </ul>
      */
     private void bindLocationPill(
             TextView labelView,
@@ -3309,21 +3314,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
-        // Play Store: district/location wins whenever we have a real place name.
-        String districtLabel = sanitizeLocationPillLabel(resolveLocationLabel(post));
-        boolean hasDistrict = isUsableLocationLabel(districtLabel);
-        if (hasDistrict) {
-            hideCompanionFeedChip(pill);
-            restoreSingleChipRow(pill, labelView);
-            bindDistrictLocationChrome(labelView, pinView, pill, districtLabel);
-            return;
-        }
         if (DistrictPinVisibilityConfig.shouldBindDualFeedChips(context, categery_id, post)) {
             bindDualFeedChips(labelView, pinView, pill, post);
             return;
         }
         hideCompanionFeedChip(pill);
         restoreSingleChipRow(pill, labelView);
+
+        // Play Store July category path: FlipperAdapter ctor got getMyFeed() and
+        // painted it on every card (news icon). Restore that — do not replace with district.
+        if (categery_id > 0 && isUsableLocationLabel(my_feed_name)) {
+            bindDistrictLocationChrome(labelView, pinView, pill, my_feed_name.trim());
+            return;
+        }
+
+        // Main / Local: district/location when present (Play Store Main always showed
+        // Selected_Distric_Name — never getMyFeed for national cards).
+        String districtLabel = resolveLocationLabel(post);
+        boolean hasDistrict = isUsableLocationLabel(districtLabel);
+        if (hasDistrict) {
+            bindDistrictLocationChrome(labelView, pinView, pill, districtLabel);
+            return;
+        }
+
         boolean showRewardsSlot =
                 DistrictPinVisibilityConfig.shouldShowRewardsInDistrictSlot(
                         context, categery_id, post);
@@ -3336,12 +3349,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             promoChipMode = true;
             label = resolveRewardsSlotLabel();
         } else if (showFlashSlot) {
-            String flash = FlashNewsChipHelper.chipLabel(context);
-            // Misconfigured Flash copy that is really a feed title → hide slot.
-            if (!isFeedTitleLabel(flash)) {
-                promoChipMode = true;
-                label = flash;
-            }
+            promoChipMode = true;
+            label = FlashNewsChipHelper.chipLabel(context);
         }
         boolean hasLabel = isUsableLocationLabel(label);
         if (!promoChipMode || !hasLabel) {
@@ -3436,58 +3445,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Drop My Feed / Main News titles that must never appear in the location pill
-     * (July category path used getMyFeed(); admin Flash copy can be mistyped the same way).
-     */
-    @Nullable
-    private String sanitizeLocationPillLabel(@Nullable String raw) {
-        if (!isUsableLocationLabel(raw)) {
-            return "";
-        }
-        String trimmed = raw.trim();
-        if (isFeedTitleLabel(trimmed)) {
-            return "";
-        }
-        return trimmed;
-    }
-
-    /** True when {@code s} is a feed chrome title, not a district/place name. */
-    private boolean isFeedTitleLabel(@Nullable String s) {
-        if (!isUsableLocationLabel(s)) {
-            return false;
-        }
-        String t = s.trim();
-        if ("Main News".equalsIgnoreCase(t)
-                || "My Feed".equalsIgnoreCase(t)
-                || "MY FEED".equals(t)
-                || "News".equalsIgnoreCase(t)) {
-            return true;
-        }
-        // Localized Main News / My Feed titles (not districts).
-        if ("ప్రధాన వార్తలు".equals(t)
-                || "మెయిన్ వార్తలు".equals(t)
-                || "నా ఫీడ్".equals(t)
-                || "പ്രധാന വാർത്തകൾ".equals(t)
-                || "मुख्य खबरें".equals(t)
-                || "मेरा फ़ीड".equals(t)
-                || "முதன்மை செய்திகள்".equals(t)
-                || "ಮುಖ್ಯ ಸುದ್ದಿ".equals(t)
-                || "ମୁଖ୍ୟ ଖବର".equals(t)) {
-            return true;
-        }
-        // Category-feed ctor still passes getMyFeed() as my_feed_name — never paint it.
-        if (isUsableLocationLabel(my_feed_name)
-                && t.equalsIgnoreCase(my_feed_name.trim())
-                && !DistrictLabelHelper.matchesStoredName(context, t)) {
-            String selected = DistrictLabelHelper.resolveDisplayLabel(context);
-            if (!isUsableLocationLabel(selected) || !t.equalsIgnoreCase(selected.trim())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
      * Opens Rewards hub; guests go through login first, then Rewards.
      * Never routes to Local news.
      */
@@ -3523,9 +3480,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void bindDistrictOrRewardsClick(View pill, @Nullable ModelClass.Datum post) {
         if (pill == null) return;
         final ModelClass.Datum boundPost = post;
-        // Clicks must match visible chrome: district label beats Flash/Rewards toggles.
-        final boolean showingDistrict = isUsableLocationLabel(
-                sanitizeLocationPillLabel(resolveLocationLabel(boundPost)));
+        // Match visible chrome from bindLocationPill: category getMyFeed / district
+        // beats Flash/Rewards toggles.
+        final boolean showingCategoryFeedTitle =
+                categery_id > 0 && isUsableLocationLabel(my_feed_name);
+        final boolean showingDistrict = showingCategoryFeedTitle
+                || isUsableLocationLabel(resolveLocationLabel(boundPost));
         pill.setOnClickListener(v -> {
             if (showingDistrict) {
                 if (callbacks != null) {
