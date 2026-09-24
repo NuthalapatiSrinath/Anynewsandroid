@@ -6988,7 +6988,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
 
         final String mInvitationUrl = list.get(position).getShareLink();
-        final String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        final String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         final boolean galleryWhatsapp = from == 1 || fromWhatsapp;
         // Defer past the click frame so the sheet dismiss paints first, then capture.
         customConvertView.post(() -> {
@@ -7062,7 +7062,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         hideOnPostMagazineShare(imageViewShare);
 
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         final boolean magazineWasWhatsapp = fromWhatsapp;
         fromWhatsapp = false;
 
@@ -7366,7 +7366,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
 
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         side_menu.setVisibility(View.INVISIBLE);
         youTubePlayerView.setVisibility(GONE);
         newFullImageView1.setVisibility(VISIBLE);
@@ -7751,7 +7751,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         simpleExoPlayerViewFull.setVisibility(GONE);
         thaumbnail_for_video.setVisibility(VISIBLE);
         imageViewExoVideoPlayVideo.setVisibility(VISIBLE);
@@ -7965,7 +7965,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
 
                 final String mInvitationUrl = list.get(position).getShareLink();
-                final String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+                final String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
                 Intent base = new Intent();
                 base.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl);
                 base.putExtra(Intent.EXTRA_TEXT, msg);
@@ -8008,7 +8008,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
 
         final String mInvitationUrl = list.get(position).getShareLink();
-        final String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        final String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
 
         countDownTimer = new CountDownTimer(2, 2) {
 
@@ -8070,7 +8070,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         final View screenshotView = shareTarget;
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         countDownTimer = new CountDownTimer(2, 2) {
             public void onTick(long millisUntilFinished) {
             }
@@ -8737,7 +8737,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return;
             }
             String mInvitationUrl = list.get(customPosition).getShareLink();
-            String msg = list.get(customPosition).getTitle() + " " + mInvitationUrl;
+            String msg = ShareOutboundHelper.formatCaption(list.get(customPosition).getTitle(), mInvitationUrl, list.get(customPosition).getPostId());
             countDownTimer = new CountDownTimer(2, 2) {
                 public void onTick(long millisUntilFinished) {
                 }
@@ -10302,9 +10302,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         try {
             Intent send = new Intent(Intent.ACTION_SEND);
             send.setType("text/plain");
-            String body =
-                    (item.getTitle() != null ? item.getTitle() + "\n" : "")
-                            + link;
+            String body = ShareOutboundHelper.formatCaption(item.getTitle(), link, item.getPostId());
             send.putExtra(Intent.EXTRA_TEXT, body);
             context.startActivity(Intent.createChooser(send, context.getString(R.string.ad_center_share)));
         } catch (Exception e) {
@@ -13851,7 +13849,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return VideoShareHelper.buildShareMessage(
                 list.get(position).getTitle(),
                 list.get(position).getDescription(),
-                list.get(position).getShareLink());
+                list.get(position).getShareLink(),
+                list.get(position).getPostId());
     }
 
     private enum VideoShareLayout {
@@ -14301,7 +14300,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     private void launchMagazinePdfShareIntent(int position, Uri pdfUri) {
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("application/pdf");
         intent.putExtra(Intent.EXTRA_STREAM, pdfUri);
@@ -14317,7 +14316,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     private void launchMagazineImagesShareIntent(int position, ArrayList<Uri> uris) {
         String mInvitationUrl = list.get(position).getShareLink();
-        String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+        String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         Intent intent = new Intent();
         if (uris.size() == 1) {
             intent.setAction(Intent.ACTION_SEND);
@@ -14499,7 +14498,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             try {
                 String mInvitationUrl = list.get(position).getShareLink();
                 showLog("mInvitationUrl:" + mInvitationUrl);
-                String msg = list.get(position).getTitle() + " " + mInvitationUrl;
+                String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
                 showLog("msg:" + msg);
                 File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), title);
                 showLog("file url:" + file.getAbsolutePath());

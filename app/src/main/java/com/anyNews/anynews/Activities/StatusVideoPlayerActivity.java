@@ -51,6 +51,7 @@ import com.anyNews.anynews.Utils.AvatarImageHelper;
 import com.anyNews.anynews.Utils.AutoNewsBylineHelper;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.ModelClass;
+import com.anyNews.anynews.Utils.ShareOutboundHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.StatusVideoMedia;
 import com.anyNews.anynews.Utils.YouTubeIdHelper;
@@ -860,7 +861,7 @@ public class StatusVideoPlayerActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(link)) {
             link = "https://anws.in/" + item.getPostId();
         }
-        String msg = (item.getTitle() != null ? item.getTitle() + " " : "") + link;
+        String msg = ShareOutboundHelper.formatCaption(item.getTitle(), link, item.getPostId());
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_SUBJECT, link);

@@ -401,36 +401,21 @@ public class VideoShareHelper {
         progressDialog = null;
     }
 
-    /** Title + optional article body + share link for WhatsApp / system share captions. */
+    /**
+     * Title + optional article body + dual share links (anynews:// first, https preview).
+     * Prefer {@link #buildShareMessage(String, String, String, Long)} when post id is known.
+     */
     public static String buildShareMessage(String title, String description, String shareLink) {
-        String safeTitle = title != null ? title.trim() : "";
-        String safeDesc = description != null ? description.trim() : "";
-        String safeLink = shareLink != null ? shareLink.trim() : "";
-        // Keep captions usable in WhatsApp; still include a full readable body when present.
-        if (safeDesc.length() > 3500) {
-            safeDesc = safeDesc.substring(0, 3500).trim() + "…";
-        }
-        StringBuilder sb = new StringBuilder();
-        if (!safeTitle.isEmpty()) {
-            sb.append(safeTitle);
-        }
-        if (!safeDesc.isEmpty()) {
-            if (sb.length() > 0) {
-                sb.append("\n\n");
-            }
-            sb.append(safeDesc);
-        }
-        if (!safeLink.isEmpty()) {
-            if (sb.length() > 0) {
-                sb.append("\n\n");
-            }
-            sb.append(safeLink);
-        }
-        return sb.toString();
+        return buildShareMessage(title, description, shareLink, null);
+    }
+
+    public static String buildShareMessage(String title, String description, String shareLink,
+                                           Long postId) {
+        return ShareOutboundHelper.formatCaption(title, description, shareLink, postId);
     }
 
     private static String buildShareMessage(String title, String shareLink) {
-        return buildShareMessage(title, null, shareLink);
+        return buildShareMessage(title, null, shareLink, null);
     }
 
     private static String resolveMimeType(File videoFile, String videoUrl) {

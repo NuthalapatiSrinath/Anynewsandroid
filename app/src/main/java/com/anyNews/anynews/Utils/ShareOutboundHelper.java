@@ -1,0 +1,148 @@
+package com.anyNews.anynews.Utils;
+
+import android.net.Uri;
+import android.text.TextUtils;
+
+/**
+ * Formats outbound share captions so recipients open AnyNews when possible.
+ *
+ * <p>WhatsApp / most messengers only reliably linkify {@code https://} (needed for OG
+ * preview). Custom scheme {@code anynews://post/{id}} is listed first so Android
+ * clients that make it tappable open the app with no Chrome chooser. The https
+ * share host remains the preview / fallback link.
+ *
+ * <p>True skip-chooser for raw https still requires verified Digital Asset Links
+ * (colon SHA-256 including Play App Signing cert) — see server
+ * {@code docs/APP_LINKS_SHARE.md}.
+ */
+public final class ShareOutboundHelper {
+
+    public static final String PACKAGE_NAME = "com.anyNews.anynews";
+
+    private static final String PLAY_STORE_BASE =
+            "https://play.google.com/store/apps/details?id=" + PACKAGE_NAME + "&hl=en_IN";
+
+    private ShareOutboundHelper() {
+    }
+
+    /** Custom-scheme deep link — opens StartingActivity when AnyNews is installed. */
+    public static String customSchemePostUrl(String postId) {
+        return customSchemePostUrl(postId, "share");
+    }
+
+    public static String customSchemePostUrl(String postId, String type) {
+        if (TextUtils.isEmpty(postId)) {
+            return "";
+        }
+        String t = TextUtils.isEmpty(type) ? "share" : type.trim();
+        return "anynews://post/" + postId.trim() + "?type=" + Uri.encode(t);
+    }
+
+    /**
+     * Package-scoped Chrome Intent URL — opens AnyNews only (no disambiguation)
+     * when the package is installed; otherwise Play Store via browser_fallback.
+     */
+    public static String customSchemeIntentUrl(String postId) {
+        return customSchemeIntentUrl(postId, "share");
+    }
+
+    public static String customSchemeIntentUrl(String postId, String type) {
+        if (TextUtils.isEmpty(postId)) {
+            return "";
+        }
+        String t = TextUtils.isEmpty(type) ? "share" : type.trim();
+        String play = PLAY_STORE_BASE + "&articleId=" + Uri.encode(postId.trim());
+        return "intent://post/" + postId.trim()
+                + "?type=" + Uri.encode(t)
+                + "#Intent;scheme=anynews;package=" + PACKAGE_NAME
+                + ";action=android.intent.action.VIEW"
+                + ";S.browser_fallback_url=" + Uri.encode(play)
+                + ";end";
+    }
+
+    /**
+     * Prefer explicit post id; else parse {@code /p/{id}} from an https share URL.
+     * Short codes without a numeric id return empty (caller keeps https only).
+     */
+    public static String extractPostId(String httpsShareLink, Long postId) {
+        if (postId != null && postId > 0L) {
+            return String.valueOf(postId);
+        }
+        if (TextUtils.isEmpty(httpsShareLink)) {
+            return "";
+        }
+        try {
+            Uri uri = Uri.parse(httpsShareLink.trim());
+            String path = uri.getPath();
+            if (path == null || path.isEmpty()) {
+                return "";
+            }
+            String[] segments = path.split("/");
+            for (int i = 0; i < segments.length; i++) {
+                String seg = segments[i];
+                if (seg == null || seg.isEmpty()) {
+                    continue;
+                }
+                if (("p".equals(seg) || "post".equals(seg)) && i + 1 < segments.length) {
+                    String next = segments[i + 1];
+                    if (next != null && next.matches("\\d+")) {
+                        return next;
+                    }
+                }
+            }
+            // Bare host/{digits} (anws.in / share host numeric path)
+            for (String seg : segments) {
+                if (seg != null && seg.matches("\\d+")) {
+                    return seg;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    /**
+     * Caption for article shares: title, optional body, {@code anynews://} first,
+     * then https for link preview.
+     */
+    public static String formatCaption(String title, String description, String httpsShareLink,
+                                       Long postId) {
+        String safeTitle = title != null ? title.trim() : "";
+        String safeDesc = description != null ? description.trim() : "";
+        if (safeDesc.length() > 3500) {
+            safeDesc = safeDesc.substring(0, 3500).trim() + "…";
+        }
+        String https = httpsShareLink != null ? httpsShareLink.trim() : "";
+        String id = extractPostId(https, postId);
+        String custom = customSchemePostUrl(id);
+
+        StringBuilder sb = new StringBuilder();
+        if (!safeTitle.isEmpty()) {
+            sb.append(safeTitle);
+        }
+        if (!safeDesc.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append("\n\n");
+            }
+            sb.append(safeDesc);
+        }
+        if (!custom.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append("\n\n");
+            }
+            sb.append(custom);
+        }
+        if (!https.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(https);
+        }
+        return sb.toString();
+    }
+
+    /** Title + dual links (no body). */
+    public static String formatCaption(String title, String httpsShareLink, Long postId) {
+        return formatCaption(title, null, httpsShareLink, postId);
+    }
+}
