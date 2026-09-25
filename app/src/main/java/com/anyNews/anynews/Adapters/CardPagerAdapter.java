@@ -10,18 +10,23 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.Nullable;
 import androidx.cardview.widget.CardView;
 import androidx.core.content.FileProvider;
 import androidx.viewpager.widget.PagerAdapter;
+import androidx.viewpager.widget.ViewPager;
 
 import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.CardItem;
@@ -61,6 +66,9 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
     String strik_name;
     static shareMagazine shareMagazine;
     ImageView imageView1;
+    /** Inflated cover page root — used to re-kick Glide if first bind was cancelled. */
+    @Nullable
+    private View page0Root;
     int LanguageId= SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
     public CardPagerAdapter(Context context,String strik_name,shareMagazine shareMagazine) {
         this.context=context;
@@ -116,6 +124,9 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
         bind(mData.get(position), view, position);
         CardView cardView = (CardView) view.findViewById(R.id.cardView);
         ImageView images=(ImageView)view.findViewById(R.id.images);
+        if (position == 0) {
+            page0Root = view;
+        }
         imageView1=(ImageView)view.findViewById(R.id.imageView1);
         imageView1.setVisibility(View.GONE);
         TextView strip_text_name=(TextView)view.findViewById(R.id.strip_text_name);
@@ -177,6 +188,110 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
         if (mViews != null && position >= 0 && position < mViews.size()) {
             mViews.set(position, null);
         }
+    }
+
+    /** True after Glide finished for magazine cover (not the transparent placeholder). */
+    public boolean isPage0Loaded() {
+        if (page0Root == null) {
+            return false;
+        }
+        ImageView images = page0Root.findViewById(R.id.images);
+        if (images == null) {
+            return false;
+        }
+        Object loaded = images.getTag(R.id.tag_gallery_image_loaded);
+        return Boolean.TRUE.equals(loaded) && images.getDrawable() != null;
+    }
+
+    /**
+     * Re-kick cover Glide after ViewPager layout — first instantiate often races with
+     * neighbor loads / scrap and leaves page-0 on the transparent stub while pages 1+
+     * already sit in memory (same class of bug as Special FlipView page-0).
+     */
+    public void ensurePage0Bound() {
+        if (page0Root == null || mData == null || mData.isEmpty()) {
+            return;
+        }
+        ImageView images = page0Root.findViewById(R.id.images);
+        if (images == null) {
+            return;
+        }
+        if (isPage0Loaded()) {
+            images.invalidate();
+            return;
+        }
+        images.setTag(R.id.tag_gallery_image_loaded, null);
+        images.setTag(R.id.tag_gallery_image_url, null);
+        bind(mData.get(0), page0Root, 0);
+    }
+
+    /**
+     * Schedule cover re-bind after magazine ViewPager is attached/laid out.
+     * Retries until {@link #isPage0Loaded()} or attempts are exhausted.
+     */
+    public static void schedulePage0Ensure(
+            @Nullable ViewPager pager, @Nullable CardPagerAdapter adapter) {
+        if (pager == null || adapter == null) {
+            return;
+        }
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final int[] attempts = {0};
+        final int maxAttempts = 6;
+        final Runnable[] ensureHolder = new Runnable[1];
+        ensureHolder[0] = () -> {
+            if (adapter.isPage0Loaded()) {
+                return;
+            }
+            if (pager.getWindowToken() == null) {
+                if (attempts[0] < maxAttempts) {
+                    attempts[0]++;
+                    handler.postDelayed(ensureHolder[0], 50L);
+                }
+                return;
+            }
+            try {
+                adapter.ensurePage0Bound();
+            } catch (Exception e) {
+                android.util.Log.e("MagazineCrash", "CardPager ensurePage0: " + e.getMessage());
+            }
+            if (!adapter.isPage0Loaded() && attempts[0] < maxAttempts) {
+                attempts[0]++;
+                long delay = attempts[0] <= 2 ? 50L : (attempts[0] <= 4 ? 200L : 400L);
+                handler.postDelayed(ensureHolder[0], delay);
+            }
+        };
+        final Runnable ensure = ensureHolder[0];
+        if (pager.getWidth() > 0 && pager.getHeight() > 0 && pager.getChildCount() > 0) {
+            pager.post(ensure);
+            return;
+        }
+        final ViewTreeObserver.OnGlobalLayoutListener[] layoutListener =
+                new ViewTreeObserver.OnGlobalLayoutListener[1];
+        layoutListener[0] = () -> {
+            if (pager.getWidth() <= 0 || pager.getHeight() <= 0) {
+                return;
+            }
+            try {
+                pager.getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener[0]);
+            } catch (Exception ignored) {
+            }
+            ensure.run();
+        };
+        try {
+            pager.getViewTreeObserver().addOnGlobalLayoutListener(layoutListener[0]);
+        } catch (Exception e) {
+            handler.postDelayed(ensure, 100L);
+            return;
+        }
+        handler.postDelayed(() -> {
+            try {
+                pager.getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener[0]);
+            } catch (Exception ignored) {
+            }
+            if (!adapter.isPage0Loaded()) {
+                ensure.run();
+            }
+        }, 300L);
     }
 
     private void Share_Count_Value(String share,long post_id){

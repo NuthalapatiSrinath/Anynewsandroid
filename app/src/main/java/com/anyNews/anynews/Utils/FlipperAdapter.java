@@ -3469,11 +3469,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             || DistrictLabelHelper.matchesStoredName(context, trimmed)
                             || (postDistId > 0
                             && postDistId == DistrictLabelHelper.getStoredDistId(context)))) {
-                        // Only Local may stamp selected district into my_feed_name;
-                        // Main keeps getMyFeed(); category keeps its category title.
-                        if (categery_id == -1) {
-                            my_feed_name = selected;
-                        }
+                        // Never stamp district into my_feed_name — Local pill is
+                        // Pradhana redirect; Main/category keep ctor titles.
                         return selected;
                     }
                     // Neutral Latin is still better than a blank pin.
@@ -3491,14 +3488,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 return fromPostGeo.trim();
             }
         }
-        // National / no-geo: Local keeps selected district for the pill; Main/category
-        // leave my_feed_name alone (getMyFeed or category title from ctor).
-        if (selectedUsable && categery_id == -1) {
-            my_feed_name = selected;
-            return selected;
-        }
-        if (selectedUsable && categery_id != -1) {
-            // Caller may still want the district string; do not overwrite feed title.
+        // National / no-geo: return selected district for callers that need it;
+        // never overwrite Local Pradhana / Main / category my_feed_name.
+        if (selectedUsable) {
             return selected;
         }
         return "";
@@ -3539,15 +3531,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Binds pin + district / feed text and keeps them visible after scroll / theme rebind.
      * Call after {@link WriterStripStyleHelper#apply} so style does not wipe the label.
-     * <p>Local ↔ Main district-pill toggle:
+     * <p>Location pill shows the <em>redirection destination</em>:
      * <ul>
-     *   <li>Local ({@code categery_id == -1}): post geo or selected district
-     *       (e.g. Anakapalli).</li>
-     *   <li>Main continuum ({@code categery_id == 0}): selected district by default.
-     *       {@code my_feed_name} is getMyFeed() (ప్రధాన వార్తలు) only when HomePage
-     *       rebuilt after Local→Main pill toggle-back.</li>
-     *   <li>Category feeds ({@code categery_id > 0}): {@code my_feed_name} is the
-     *       selected category title (Politics, Sports, …) from HomePage.</li>
+     *   <li>Local ({@code categery_id == -1}): {@code my_feed_name} / getMyFeed()
+     *       (ప్రధాన వార్తలు) → click opens Main.</li>
+     *   <li>Main ({@code categery_id == 0}): selected district (e.g. Anakapalli)
+     *       → click opens Local.</li>
+     *   <li>Category feeds ({@code categery_id > 0}): category title
+     *       (Politics, Sports, …) from HomePage.</li>
      *   <li>Promo Flash/Rewards only when no usable district/feed label remains.</li>
      * </ul>
      */
@@ -3574,16 +3565,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             bindDistrictLocationChrome(labelView, pinView, pill, my_feed_name.trim());
             return;
         }
-        // Main after Local→Main pill: ctor got getMyFeed() (Pradhana Varthalu).
-        // Normal Main keeps district / promo path below (my_feed_name = district).
-        if (categery_id == 0
-                && isUsableLocationLabel(my_feed_name)
-                && isMainFeedTitleLabel(my_feed_name)) {
-            bindDistrictLocationChrome(labelView, pinView, pill, my_feed_name.trim());
-            return;
+        // Local: redirection pill = Main (Pradhana Varthalu).
+        if (categery_id == -1) {
+            String pradhana = resolvePradhanaRedirectLabel();
+            if (isUsableLocationLabel(pradhana)) {
+                bindDistrictLocationChrome(labelView, pinView, pill, pradhana.trim());
+                return;
+            }
         }
 
-        // Local + normal Main: district/location when present (respect hide-district).
+        // Main: district/location when present (respect hide-district). Never Pradhana.
         String districtLabel = resolveLocationLabel(post);
         boolean hasDistrict = isUsableLocationLabel(districtLabel)
                 && DistrictPinVisibilityConfig.shouldShowDistrict(
@@ -3679,10 +3670,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (pinView != null) {
             pinView.setVisibility(View.VISIBLE);
             restoreDistrictPinSize(pinView);
-            // Location pin for Local district and Main district; news icon for
-            // Pradhana / category feed titles.
-            if (categery_id == -1
-                    || (categery_id == 0 && !isMainFeedTitleLabel(label))) {
+            // Location pin for Main district; news icon for Local Pradhana /
+            // category feed titles.
+            if (categery_id == 0 && !isMainFeedTitleLabel(label)) {
                 pinView.setBackgroundResource(ic_location_icon);
             } else {
                 pinView.setBackgroundResource(ic_news_icon);
@@ -3701,8 +3691,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     /**
      * True when {@code s} is translator My Feed / Main News chrome (Pradhana Varthalu),
-     * not a district or category place name. Used so Main only paints this after
-     * Local→Main pill toggle (ctor my_feed_name = getMyFeed()).
+     * not a district or category place name. Used so Local paints this as the
+     * redirection pill (click → Main).
      */
     private boolean isMainFeedTitleLabel(@Nullable String s) {
         if (!isUsableLocationLabel(s)) {
@@ -3738,6 +3728,29 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } catch (Exception ignored) {
         }
         return false;
+    }
+
+    /**
+     * Local-feed redirection label: ctor {@code my_feed_name} when it is Pradhana,
+     * else live translator {@code getMyFeed()}.
+     */
+    @Nullable
+    private String resolvePradhanaRedirectLabel() {
+        if (isUsableLocationLabel(my_feed_name) && isMainFeedTitleLabel(my_feed_name)) {
+            return my_feed_name.trim();
+        }
+        try {
+            if (languageModelResponse != null
+                    && languageModelResponse.getData() != null
+                    && languageModelResponse.getData().getMyFeed() != null) {
+                String myFeed = languageModelResponse.getData().getMyFeed().toString().trim();
+                if (isUsableLocationLabel(myFeed)) {
+                    return myFeed;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     /**
@@ -3777,22 +3790,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void bindDistrictOrRewardsClick(View pill, @Nullable ModelClass.Datum post) {
         if (pill == null) return;
         final ModelClass.Datum boundPost = post;
-        // Match visible chrome: category title / Main Pradhana / Local or Main district
+        // Match visible chrome: category title / Local Pradhana / Main district
         // beats Flash/Rewards toggles. Click still toggles Local ↔ Main (category → Main).
         final boolean showingCategoryFeedTitle =
                 categery_id > 0 && isUsableLocationLabel(my_feed_name);
-        final boolean showingMainPradhana =
-                categery_id == 0 && isUsableLocationLabel(my_feed_name)
-                        && isMainFeedTitleLabel(my_feed_name);
-        final boolean showingLocalDistrict =
-                categery_id == -1 && isUsableLocationLabel(resolveLocationLabel(boundPost));
+        final boolean showingLocalPradhana =
+                categery_id == -1 && isUsableLocationLabel(resolvePradhanaRedirectLabel());
         final boolean showingMainDistrict =
-                categery_id == 0 && !showingMainPradhana
-                        && isUsableLocationLabel(
-                                DistrictLabelHelper.resolveDisplayLabel(context));
+                categery_id == 0 && isUsableLocationLabel(
+                        DistrictLabelHelper.resolveDisplayLabel(context));
         final boolean showingTogglePill =
-                showingCategoryFeedTitle || showingMainPradhana
-                        || showingLocalDistrict || showingMainDistrict;
+                showingCategoryFeedTitle || showingLocalPradhana || showingMainDistrict;
         final boolean opensLocal =
                 DistrictPinVisibilityConfig.locationPillOpensLocalFeed(context);
         pill.setOnClickListener(v -> {
@@ -5499,6 +5507,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     }
                                 }
                             });
+                            // Cover Glide can lose the first-open race (transparent stub);
+                            // neighbors often already in memory — re-kick page-0 after layout.
+                            CardPagerAdapter.schedulePage0Ensure(magPager, magPagerAdapter);
                             // Same Play Store WormDots + gallery_strip as image_gallery / half gallery.
                             if (image_magazineHolder.magzine_ll_dots != null) {
                                 image_magazineHolder.magzine_ll_dots.setVisibility(
@@ -5828,14 +5839,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             }
                         }
                         if (!usedSpecialGalleryFlip) {
-                            viewpager.setAdapter(
-                                    new SamplePagerAdapter(context, image_gallary, 0, false));
+                            SamplePagerAdapter galleryPagerAdapter =
+                                    new SamplePagerAdapter(context, image_gallary, 0, false);
+                            viewpager.setAdapter(galleryPagerAdapter);
                             // Keep 1–2 neighbors warm (default offscreen is also 1).
                             viewpager.setOffscreenPageLimit(
                                     Math.max(1, Math.min(2, image_gallary.size() - 1)));
                             if (imageGallaryHolder.indicator != null) {
                                 imageGallaryHolder.indicator.setViewPager(viewpager);
                             }
+                            SamplePagerAdapter.schedulePage0Ensure(viewpager, galleryPagerAdapter);
                             GallerySwipeHintHelper.bind(
                                     viewpager, gallerySwipeHint, image_gallary.size());
                         }
@@ -7485,14 +7498,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         }
                         if (context != null
                                 && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                            final long galleryPostId = list.get(position).getPostId();
+                            final boolean countAsWhatsapp = galleryWhatsapp;
                             if (galleryWhatsapp) {
                                 context.startActivity(intent);
+                                Share_Count_Value(shareCountProperty(true), galleryPostId);
                             } else {
-                                context.startActivity(Intent.createChooser(intent, "Share Link"));
+                                // Count only when user picks an app — not on sheet open/dismiss.
+                                ShareOutboundHelper.launchChooserOnTargetChosen(
+                                        context,
+                                        intent,
+                                        "Share Link",
+                                        () -> Share_Count_Value(
+                                                shareCountProperty(false), galleryPostId));
                             }
                         }
-                        Share_Count_Value(shareCountProperty(galleryWhatsapp),
-                                list.get(position).getPostId());
                         fromWhatsapp = false;
                     } finally {
                         releaseShareLaunch();
@@ -7848,8 +7868,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     newFullImageView1.setVisibility(VISIBLE);
                     imageViewYoutubePlayVideo.setVisibility(VISIBLE);
                 }
-                launchScreenshotShareIntent(intent, from);
-                Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
+                launchScreenshotShareIntent(intent, from,
+                        () -> Share_Count_Value(
+                                shareCountProperty(from == 1 || from == 2),
+                                list.get(position).getPostId()));
 
             }
         }.start();
@@ -8236,8 +8258,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
                 }
-                launchScreenshotShareIntent(intent, from);
-                Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
+                launchScreenshotShareIntent(intent, from,
+                        () -> Share_Count_Value(
+                                shareCountProperty(from == 1 || from == 2),
+                                list.get(position).getPostId()));
             }
         }.start();
 
@@ -9104,19 +9128,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     OfflineImageStore.enqueueArticle(context, list.get(position));
                 } catch (Exception ignored) {
                 }
-                halfImageActivity.viewPager.setAdapter(
-                        new SamplePagerAdapter(
-                                context,
-                                halfImageGallery,
-                                layoutHeight,
-                                true,
-                                list.get(position).usesContainFeedImage()));
+                SamplePagerAdapter halfGalleryAdapter = new SamplePagerAdapter(
+                        context,
+                        halfImageGallery,
+                        layoutHeight,
+                        true,
+                        list.get(position).usesContainFeedImage());
+                halfImageActivity.viewPager.setAdapter(halfGalleryAdapter);
 
                 // added to increase speed in view pager
                 halfImageActivity.viewPager.setOffscreenPageLimit(Math.max(1, Math.min(2, listSample.size() - 1)));
                 if (indicator != null) {
                     indicator.setViewPager(halfImageActivity.viewPager);
                 }
+                SamplePagerAdapter.schedulePage0Ensure(
+                        halfImageActivity.viewPager, halfGalleryAdapter);
                 TextView halfSwipeHint =
                         convertView.findViewById(R.id.gallery_swipe_left_hint);
                 GallerySwipeHintHelper.bind(
@@ -9222,13 +9248,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         }
                         if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                             showLog("Halfshare"+ context + "First" + context.getPackageName() + "Second" + BuildConfig.APPLICATION_ID);
+                            final long halfPostId = list.get(customPosition).getPostId();
                             if (from == 1) {
                                 context.startActivity(intent);
+                                Share_Count_Value(shareCountProperty(true), halfPostId);
                             } else {
-                                context.startActivity(Intent.createChooser(intent, "Share Link"));
+                                ShareOutboundHelper.launchChooserOnTargetChosen(
+                                        context,
+                                        intent,
+                                        "Share Link",
+                                        () -> Share_Count_Value(
+                                                shareCountProperty(false), halfPostId));
                             }
                         }
-                        Share_Count_Value(shareCountProperty(from == 1), list.get(customPosition).getPostId());
                     } finally {
                         releaseShareLaunch();
                     }
@@ -11347,31 +11379,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Capture on UI, compress/attach on a worker, then open the system share sheet.
      * Keeps Single Page / screenshot shares feeling instant (no PNG@100 on the main thread).
+     * {@code onShareConfirmed} runs for WhatsApp-direct launch, or when the user picks
+     * a target from the system chooser — never merely because the sheet opened.
      */
     private void prepareAndLaunchScreenshotShare(
             @Nullable View captureView,
             @NonNull Intent baseIntent,
             boolean whatsappDirect,
             @Nullable Runnable restoreUi,
-            @Nullable Runnable onFinished) {
+            @Nullable Runnable onShareConfirmed) {
         final Handler main = new Handler(Looper.getMainLooper());
-        final Runnable finish = () -> {
+        final Runnable finishUi = () -> {
             if (restoreUi != null) {
                 try {
                     restoreUi.run();
                 } catch (Exception ignored) {
                 }
             }
-            if (onFinished != null) {
-                try {
-                    onFinished.run();
-                } catch (Exception ignored) {
-                }
-            }
             releaseShareLaunch();
         };
         if (captureView == null) {
-            finish.run();
+            finishUi.run();
             return;
         }
         // Yield so the in-app share sheet / chrome hide paints before capture.
@@ -11386,7 +11414,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             new Thread(() -> {
                 try {
                     if (shot == null || shot.isRecycled()) {
-                        main.post(finish);
+                        main.post(finishUi);
                         return;
                     }
                     Intent intent = new Intent(Intent.ACTION_SEND);
@@ -11417,20 +11445,26 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                                 if (whatsappDirect) {
                                     context.startActivity(launchIntent);
+                                    if (onShareConfirmed != null) {
+                                        onShareConfirmed.run();
+                                    }
                                 } else {
-                                    context.startActivity(
-                                            Intent.createChooser(launchIntent, "Share Link"));
+                                    ShareOutboundHelper.launchChooserOnTargetChosen(
+                                            context,
+                                            launchIntent,
+                                            "Share Link",
+                                            onShareConfirmed);
                                 }
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
                         } finally {
-                            finish.run();
+                            finishUi.run();
                         }
                     });
                 } catch (Exception e) {
                     e.printStackTrace();
-                    main.post(finish);
+                    main.post(finishUi);
                 }
             }, "share-screenshot").start();
         });
@@ -14282,9 +14316,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     item.getVideoUrl(),
                     item.getTitle(),
                     item.getDescription(), item.getShareLink(), mode,
-                    () -> {
-                        Share_Count_Value(shareCountProperty(waShare), item.getPostId());
-                        releaseShareLaunch();
+                    new VideoShareHelper.OnShareCompleteListener() {
+                        @Override
+                        public void onShareStarted() {
+                            releaseShareLaunch();
+                        }
+
+                        @Override
+                        public void onShareConfirmed() {
+                            Share_Count_Value(shareCountProperty(waShare), item.getPostId());
+                        }
                     });
         } catch (Exception e) {
             e.printStackTrace();
@@ -14572,7 +14613,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
-    private void launchScreenshotShareIntent(Intent intent, int whatsappMode) {
+    private void launchScreenshotShareIntent(
+            Intent intent, int whatsappMode, @Nullable Runnable onShareConfirmed) {
         try {
             if (whatsappMode == 1) {
                 if (!appInstalledOrNot("com.whatsapp")) {
@@ -14582,6 +14624,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 intent.putExtra("jid", "status@broadcast");
                 intent.setPackage("com.whatsapp");
                 context.startActivity(intent);
+                if (onShareConfirmed != null) {
+                    onShareConfirmed.run();
+                }
             } else if (whatsappMode == 2) {
                 if (!appInstalledOrNot("com.whatsapp")) {
                     Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show();
@@ -14589,8 +14634,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 intent.setPackage("com.whatsapp");
                 context.startActivity(intent);
+                if (onShareConfirmed != null) {
+                    onShareConfirmed.run();
+                }
             } else if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                context.startActivity(Intent.createChooser(intent, "Share Link"));
+                ShareOutboundHelper.launchChooserOnTargetChosen(
+                        context, intent, "Share Link", onShareConfirmed);
             }
         } finally {
             releaseShareLaunch();
@@ -14763,8 +14812,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         boolean pdfWasWhatsapp = fromWhatsapp;
         applyWhatsappTarget(intent);
         grantShareUriPermissions(intent, Collections.singletonList(pdfUri));
-        startShareActivity(intent, "Share Magazine");
-        Share_Count_Value(shareCountProperty(pdfWasWhatsapp), list.get(position).getPostId());
+        final long pdfPostId = list.get(position).getPostId();
+        startShareActivity(intent, "Share Magazine",
+                () -> Share_Count_Value(shareCountProperty(pdfWasWhatsapp), pdfPostId));
         fromWhatsapp = false;
     }
 
@@ -14786,8 +14836,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         boolean imagesWasWhatsapp = fromWhatsapp;
         applyWhatsappTarget(intent);
         grantShareUriPermissions(intent, uris);
-        startShareActivity(intent, "Share Magazine");
-        Share_Count_Value(shareCountProperty(imagesWasWhatsapp), list.get(position).getPostId());
+        final long imagesPostId = list.get(position).getPostId();
+        startShareActivity(intent, "Share Magazine",
+                () -> Share_Count_Value(shareCountProperty(imagesWasWhatsapp), imagesPostId));
         fromWhatsapp = false;
     }
 
@@ -14803,15 +14854,28 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         intent.setPackage("com.whatsapp");
     }
 
-    private void startShareActivity(Intent intent, String chooserTitle) {
+    private void startShareActivity(
+            Intent intent, String chooserTitle, @Nullable Runnable onShareConfirmed) {
         try {
-            Intent chooser = Intent.createChooser(intent, chooserTitle);
-            if (activity != null && !activity.isFinishing()) {
-                activity.startActivity(chooser);
-            } else if (context != null) {
-                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                context.startActivity(chooser);
+            // Direct package (e.g. WhatsApp) = confirmed outbound; system chooser waits for pick.
+            if (intent.getPackage() != null && !intent.getPackage().isEmpty()) {
+                if (activity != null && !activity.isFinishing()) {
+                    activity.startActivity(intent);
+                } else if (context != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(intent);
+                }
+                if (onShareConfirmed != null) {
+                    onShareConfirmed.run();
+                }
+                return;
             }
+            Context launchCtx = (activity != null && !activity.isFinishing()) ? activity : context;
+            if (launchCtx == null) {
+                return;
+            }
+            ShareOutboundHelper.launchChooserOnTargetChosen(
+                    launchCtx, intent, chooserTitle, onShareConfirmed);
         } catch (ActivityNotFoundException e) {
             Toast.makeText(context, "No app available to share", Toast.LENGTH_SHORT).show();
         }
@@ -14968,7 +15032,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 intent.putExtra(Intent.EXTRA_STREAM, uri);
                 applyWhatsappTarget(intent);
                 grantShareUriPermissions(intent, Collections.singletonList(uri));
-                startShareActivity(intent, "Share Magazine");
+                startShareActivity(intent, "Share Magazine", null);
                 fromWhatsapp = false;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -15127,8 +15191,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         imageViewItems.setVisibility(View.VISIBLE);
                     }
                 }
-                launchScreenshotShareIntent(intent, from);
-                Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
+                launchScreenshotShareIntent(intent, from,
+                        () -> Share_Count_Value(
+                                shareCountProperty(from == 1 || from == 2),
+                                list.get(position).getPostId()));
 
             }
         }.start();
@@ -15193,8 +15259,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
                 }
-                launchScreenshotShareIntent(intent, from);
-                Share_Count_Value(shareCountProperty(from == 1 || from == 2), list.get(position).getPostId());
+                launchScreenshotShareIntent(intent, from,
+                        () -> Share_Count_Value(
+                                shareCountProperty(from == 1 || from == 2),
+                                list.get(position).getPostId()));
 
             }
         }.start();

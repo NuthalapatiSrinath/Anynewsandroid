@@ -8,6 +8,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.ViewTreeObserver;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -195,6 +196,14 @@ public final class SpecialGalleryFlipHelper {
             // then loses to scrap/detach and page-0 stays on transparent stub until the user
             // leaves and returns. Re-kick cover once laid out and force FlipView redraw.
             schedulePage0Ensure(flipRef, adapter);
+        } else if (flipRef.getAdapter() instanceof GalleryImageFlipAdapter) {
+            // Same URLs skipped setAdapter — but cover may still be the transparent stub
+            // from a cancelled first open. Re-kick until Glide actually paints.
+            GalleryImageFlipAdapter priorAdapter =
+                    (GalleryImageFlipAdapter) flipRef.getAdapter();
+            if (!priorAdapter.isPage0Loaded()) {
+                schedulePage0Ensure(flipRef, priorAdapter);
+            }
         }
 
         final int pageCount = urls.size();
@@ -393,11 +402,30 @@ public final class SpecialGalleryFlipHelper {
     /**
      * After nested FlipView layout, ensure page-0 Glide actually painted and invalidate
      * FlipView (custom dispatchDraw does not always refresh from ImageView alone).
+     *
+     * <p>Prior double-{@code post} no-op'd when {@code windowToken} was still null (common
+     * on first Special open) and never retried — cover stayed on the transparent stub
+     * while pages 1+ loaded after size existed. Retry until loaded or attempts exhausted.
      */
     private static void schedulePage0Ensure(
             @NonNull FlipView flip, @NonNull GalleryImageFlipAdapter adapter) {
-        final Runnable ensure = () -> {
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final int[] attempts = {0};
+        final int maxAttempts = 6;
+        final Runnable[] ensureHolder = new Runnable[1];
+        ensureHolder[0] = () -> {
+            if (adapter.isPage0Loaded()) {
+                try {
+                    flip.invalidate();
+                } catch (Exception ignored) {
+                }
+                return;
+            }
             if (flip.getWindowToken() == null) {
+                if (attempts[0] < maxAttempts) {
+                    attempts[0]++;
+                    handler.postDelayed(ensureHolder[0], 50L);
+                }
                 return;
             }
             try {
@@ -406,12 +434,45 @@ public final class SpecialGalleryFlipHelper {
             } catch (Exception e) {
                 android.util.Log.e("MagazineCrash", "ensurePage0Bound: " + e.getMessage());
             }
+            if (!adapter.isPage0Loaded() && attempts[0] < maxAttempts) {
+                attempts[0]++;
+                long delay = attempts[0] <= 2 ? 50L : (attempts[0] <= 4 ? 200L : 400L);
+                handler.postDelayed(ensureHolder[0], delay);
+            }
         };
+        final Runnable ensure = ensureHolder[0];
         if (flip.getWidth() > 0 && flip.getHeight() > 0) {
             flip.post(ensure);
-        } else {
-            flip.post(() -> flip.post(ensure));
+            return;
         }
+        final ViewTreeObserver.OnGlobalLayoutListener[] layoutListener =
+                new ViewTreeObserver.OnGlobalLayoutListener[1];
+        layoutListener[0] = () -> {
+            if (flip.getWidth() <= 0 || flip.getHeight() <= 0) {
+                return;
+            }
+            try {
+                flip.getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener[0]);
+            } catch (Exception ignored) {
+            }
+            ensure.run();
+        };
+        try {
+            flip.getViewTreeObserver().addOnGlobalLayoutListener(layoutListener[0]);
+        } catch (Exception e) {
+            handler.postDelayed(ensure, 100L);
+            return;
+        }
+        // Fallback if layout never fires (recycled / detached host).
+        handler.postDelayed(() -> {
+            try {
+                flip.getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener[0]);
+            } catch (Exception ignored) {
+            }
+            if (!adapter.isPage0Loaded()) {
+                ensure.run();
+            }
+        }, 300L);
     }
 
     /** Label-only swipe coach — no FlipView.peakNext (avoids blank/half-black open). */

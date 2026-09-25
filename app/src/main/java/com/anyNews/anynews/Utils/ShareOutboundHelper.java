@@ -1,7 +1,21 @@
 package com.anyNews.anynews.Utils;
 
+import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Formats outbound share captions so recipients open AnyNews when possible.
@@ -26,7 +40,96 @@ public final class ShareOutboundHelper {
     private static final String PLAY_STORE_BASE =
             "https://play.google.com/store/apps/details?id=" + PACKAGE_NAME + "&hl=en_IN";
 
+    private static final AtomicInteger CHOOSER_REQ = new AtomicInteger(1);
+    private static final long CHOOSER_RECEIVER_TTL_MS = 120_000L;
+
     private ShareOutboundHelper() {
+    }
+
+    /**
+     * Opens the system share sheet. {@code onTargetChosen} runs only when the user
+     * picks an app — dismiss / back without choosing does <strong>not</strong> count.
+     * Android cannot confirm the user pressed Send inside the target app.
+     */
+    public static void launchChooserOnTargetChosen(
+            @NonNull Context context,
+            @NonNull Intent sendIntent,
+            @Nullable CharSequence title,
+            @Nullable Runnable onTargetChosen) {
+        final Context app = context.getApplicationContext();
+        final int req = CHOOSER_REQ.getAndIncrement() & 0x7fffffff;
+        final String action = app.getPackageName() + ".SHARE_TARGET_CHOSEN." + req;
+        final BroadcastReceiver[] holder = new BroadcastReceiver[1];
+        final Handler main = new Handler(Looper.getMainLooper());
+        final Runnable cleanup = () -> {
+            BroadcastReceiver r = holder[0];
+            if (r == null) {
+                return;
+            }
+            holder[0] = null;
+            try {
+                app.unregisterReceiver(r);
+            } catch (Exception ignored) {
+            }
+        };
+
+        holder[0] = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, Intent intent) {
+                cleanup.run();
+                if (onTargetChosen != null) {
+                    try {
+                        onTargetChosen.run();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        };
+
+        IntentFilter filter = new IntentFilter(action);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                app.registerReceiver(holder[0], filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                app.registerReceiver(holder[0], filter);
+            }
+        } catch (Exception e) {
+            // Fallback: open chooser without callback rather than blocking share.
+            startChooserPlain(context, sendIntent, title);
+            return;
+        }
+
+        main.postDelayed(cleanup, CHOOSER_RECEIVER_TTL_MS);
+
+        Intent callback = new Intent(action).setPackage(app.getPackageName());
+        int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // System fills EXTRA_CHOSEN_COMPONENT — must be mutable on API 31+.
+            piFlags |= PendingIntent.FLAG_MUTABLE;
+        }
+        PendingIntent pending = PendingIntent.getBroadcast(app, req, callback, piFlags);
+        Intent chooser = Intent.createChooser(
+                sendIntent,
+                title != null ? title : "Share",
+                pending.getIntentSender());
+        if (!(context instanceof Activity)) {
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        try {
+            context.startActivity(chooser);
+        } catch (Exception e) {
+            cleanup.run();
+            throw e;
+        }
+    }
+
+    private static void startChooserPlain(
+            Context context, Intent sendIntent, CharSequence title) {
+        Intent chooser = Intent.createChooser(sendIntent, title != null ? title : "Share");
+        if (!(context instanceof Activity)) {
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        context.startActivity(chooser);
     }
 
     /** Custom-scheme deep link — opens StartingActivity when AnyNews is installed. */

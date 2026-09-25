@@ -866,28 +866,29 @@ public class StatusVideoPlayerActivity extends AppCompatActivity {
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_SUBJECT, link);
         intent.putExtra(Intent.EXTRA_TEXT, msg);
-        startActivity(Intent.createChooser(intent, "Share"));
+        final ModelClass.Datum shareItem = item;
+        ShareOutboundHelper.launchChooserOnTargetChosen(this, intent, "Share", () -> {
+            int shares = shareItem.getShares() != null ? shareItem.getShares() : 0;
+            shareItem.setShares(shares + 1);
+            notifyActiveEngagement();
 
-        int shares = item.getShares() != null ? item.getShares() : 0;
-        item.setShares(shares + 1);
-        notifyActiveEngagement();
+            if (shareItem.getPostId() != null) {
+                JsonObject jsonObject = new JsonObject();
+                jsonObject.addProperty("draft_id",
+                        SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+                jsonObject.addProperty("post_id", shareItem.getPostId());
+                jsonObject.addProperty("property", "share");
+                api.update_post_count("v3", jsonObject).enqueue(new Callback<EncreptionRequest>() {
+                    @Override
+                    public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                    }
 
-        if (item.getPostId() != null) {
-            JsonObject jsonObject = new JsonObject();
-            jsonObject.addProperty("draft_id",
-                    SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
-            jsonObject.addProperty("post_id", item.getPostId());
-            jsonObject.addProperty("property", "share");
-            api.update_post_count("v3", jsonObject).enqueue(new Callback<EncreptionRequest>() {
-                @Override
-                public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-                }
-
-                @Override
-                public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-                }
-            });
-        }
+                    @Override
+                    public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                    }
+                });
+            }
+        });
     }
 
     /** Comments live on the feed drawer — jump to this post and let user open comments. */

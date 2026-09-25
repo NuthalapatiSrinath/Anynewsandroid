@@ -3122,7 +3122,6 @@ public class newProfileDetails extends AppCompatActivity {
         View statusVideos = findViewById(R.id.layout_status_videos);
         View settingsRow = findViewById(R.id.layout_profile_settings_row);
         View contact = findViewById(R.id.layout_profile_contact);
-        View menuLang = findViewById(R.id.layout_menu_change_language);
         TextView statusVideosBadge = findViewById(R.id.profile_status_videos_new_badge);
 
         int rep = isReporter ? View.VISIBLE : View.GONE;
@@ -3132,7 +3131,6 @@ public class newProfileDetails extends AppCompatActivity {
         if (verified != null) verified.setVisibility(rep);
         if (progressMainLayout != null) progressMainLayout.setVisibility(rep);
         if (shortcuts != null) shortcuts.setVisibility(rep);
-        if (menuLang != null) menuLang.setVisibility(rep);
 
         // Categories strip: guest / user / reporter — visibility owned by
         // setupProfileHubExtras / loadProfileCategories (not reporter chrome).
@@ -3828,9 +3826,6 @@ public class newProfileDetails extends AppCompatActivity {
         setTextSafe((TextView) findViewById(R.id.complete_profile_label), resolveCompleteProfileLabel());
         // Re-apply completion % wording for current LanguageID (EN/TE/…).
         paintAchievedFromLocalPrefs();
-        setTextSafe((TextView) findViewById(R.id.profile_menu_change_language_label),
-                packString(d != null ? d.getSelectLanguage() : null,
-                        ProfileHubLabels.selectLanguage(this)));
         TextView role = findViewById(R.id.reporter_role_pill);
         if (role != null) {
             String r = TranslatorPackHelper.packMatchesLanguage(this) && d != null
@@ -3937,11 +3932,6 @@ public class newProfileDetails extends AppCompatActivity {
         View earnings = findViewById(R.id.tile_earnings);
         // Total earnings → article amount history (page-0 get_article_transactions, cached)
         if (earnings != null) earnings.setOnClickListener(v -> openWalletHistory(1));
-        View menuLang = findViewById(R.id.layout_menu_change_language);
-        if (menuLang != null) {
-            menuLang.setOnClickListener(v ->
-                    startActivity(LanguageActivity.createChangeLanguageIntent(newProfileDetails.this)));
-        }
     }
 
     /** Followers of this reporter — list_followers API + disk cache. */

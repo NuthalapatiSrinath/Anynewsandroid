@@ -69,6 +69,15 @@ public final class GalleryImageFlipAdapter extends BaseAdapter {
         return GalleryImageUrls.fingerprint(images);
     }
 
+    /** True after Glide {@code onResourceReady} for the cover (not the transparent stub). */
+    public boolean isPage0Loaded() {
+        if (page0View == null) {
+            return false;
+        }
+        Object loaded = page0View.getTag(TAG_LOADED);
+        return Boolean.TRUE.equals(loaded) && page0View.getDrawable() != null;
+    }
+
     /**
      * Re-kick page-0 Glide once the nested FlipView has a real size (first open often
      * bound at 0×0, then Glide wait-for-layout was cancelled by FlipView scrap churn).
@@ -85,8 +94,7 @@ public final class GalleryImageFlipAdapter extends BaseAdapter {
             return;
         }
         if (page0View != null) {
-            Object loaded = page0View.getTag(TAG_LOADED);
-            if (Boolean.TRUE.equals(loaded) && page0View.getDrawable() != null) {
+            if (isPage0Loaded()) {
                 invalidateFlipAncestors(page0View);
                 return;
             }

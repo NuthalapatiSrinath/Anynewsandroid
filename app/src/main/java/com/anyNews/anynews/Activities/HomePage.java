@@ -697,13 +697,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     int requestSize=0;
     boolean isFromLocalArticles=false;
     /**
-     * Session-only: after Local → Main via the location pill, Main paints
-     * translator {@code getMyFeed()} (ప్రధాన వార్తలు). Cleared on resume, Main→Local,
-     * category open, footer News refresh ({@link #performFeedReload}), and any Main
-     * entry that is not that pill toggle-back.
-     */
-    private boolean locationPillShowPradhanaOnMain = false;
-    /**
      * When true, bottom-nav select/reselect listeners no-op so programmatic
      * {@code setSelectedItemId} (Special / Reload) does not re-enter feed open.
      */
@@ -3010,6 +3003,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * result (or Settings handoff). Never burn the wave before the sheet appears.
      */
     private boolean pendingCampaignRepromptAck = false;
+    /**
+     * After a campaign soft/shown-only burn, Soft-Allow may still open the OS
+     * sheet — keep this so Accepted / Don't allow can be reported without a
+     * live pendingCampaignRepromptAck. Cleared on OS result or soft Not now.
+     */
+    private boolean campaignSoftAwaitingOsOutcome = false;
     /** Avoid stacking multiple soft notification enable dialogs. */
     private boolean notificationSettingsDialogShowing = false;
     /**
@@ -3140,9 +3139,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Home open: (1) admin wave re-prompt when due, (2) continuous ask-on-open when
-     * admin flag ON and OS notifications still off. When both admin modes are OFF,
-     * never requestPermissions / open Settings / show any notification ask
-     * (including legacy install fallback). Location soft-ask remains
+     * admin flag ON and OS notifications still off, (3) first-install
+     * POST_NOTIFICATIONS system sheet once if never requested yet — even when
+     * both admin modes are OFF. After that decision, both modes OFF → no
+     * Settings / soft re-ask spam. Location soft-ask remains
      * {@link #maybeSoftRequestDraftGpsPermission}.
      */
     private void maybeRequestInstallAndRepromptPermissions() {
@@ -3160,12 +3160,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             maybePromptNotificationsOnOpen();
             return;
         }
-        // Both admin flags OFF → never auto-ask (no install/update fallback).
-        // Align pref only if system already granted; do not open Settings.
-        if (hasPostNotificationsPermission() && isSystemNotificationsEnabledSafe()) {
-            ensureNotificationPrefAlignedWithSystem(false);
-            markNotificationRuntimeAskedVersion();
-        }
+        // Both admin flags OFF → still show the OS sheet once on first install
+        // (never asked). After Don't allow / decided, no further auto-ask.
+        maybeRequestInstallNotificationPermission();
     }
 
     /**
@@ -3250,7 +3247,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Once per versionCode if POST_NOTIFICATIONS not granted. Opt-in default true after grant.
+     * First install / never requested POST_NOTIFICATIONS: show the OS Allow /
+     * Don't allow sheet once. Independent of admin ask-on-open / one-time.
+     * After that decision, admin campaigns own any re-prompt.
      */
     private void maybeRequestInstallNotificationPermission() {
         if (installNotificationPermHandledThisProcess || notificationRepromptHandledThisProcess) {
@@ -3266,11 +3265,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             markNotificationRuntimeAskedVersion();
             return;
         }
-        int askedVersion = SharedPrefsData.getInt(
-                getApplicationContext(),
-                Constants.NOTIFICATION_RUNTIME_ASK_VERSION,
-                Constants.PREF_NAME);
-        if (askedVersion >= BuildConfig.VERSION_CODE) {
+        // Already showed the system sheet (Allow or Don't allow) → do not
+        // re-ask via install when admin modes are OFF (no soft/Settings spam).
+        if (hasEverAskedPostNotifications()) {
             return;
         }
         installNotificationPermHandledThisProcess = true;
@@ -3279,6 +3276,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (hasPostNotificationsPermission()) {
                 ensureNotificationPrefAlignedWithSystem(false);
                 markNotificationRuntimeAskedVersion();
+                return;
+            }
+            if (hasEverAskedPostNotifications()) {
                 return;
             }
             requestNotificationPermission(false /* force / viaAdminReprompt */);
@@ -3342,11 +3342,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void requestPostNotificationsPermission(final boolean viaAdminReprompt) {
         pendingNotifPermViaAdminReprompt = viaAdminReprompt;
 
-        // Without an active admin ask mode, never requestPermissions or Settings.
+        // First-ever POST_NOTIFICATIONS (fresh install) always allowed — same
+        // as location. Admin ask-on-open / one-time are separate re-prompt paths.
+        // When both admin modes are OFF and we already asked once, do not
+        // requestPermissions or drop into soft/Settings.
+        final boolean firstInstallNeverAsked =
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                        && !hasPostNotificationsPermission()
+                        && !hasEverAskedPostNotifications();
         if (!viaAdminReprompt
                 && !isPromptNotificationsOnOpenEnabled()
                 && !isAdminNotificationRepromptDue()
-                && !pendingCampaignRepromptAck) {
+                && !pendingCampaignRepromptAck
+                && !firstInstallNeverAsked) {
             return;
         }
 
@@ -3354,11 +3362,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             // Pre-13: no POST_NOTIFICATIONS system sheet. Never dump to Settings
             // as the "ask" — soft in-app dialog; Settings only on explicit tap.
             if (isSystemNotificationsEnabledSafe()) {
-                finishPendingCampaignAck(true);
+                finishPendingCampaignAckAccepted();
                 onNotificationPermissionGrantedFromReprompt(viaAdminReprompt);
             } else {
-                // Soft ask presented → consume one-time wave; Settings only on tap.
-                finishPendingCampaignAck(false);
+                // Soft ask presented → burn wave as shown-only (not Don't allow).
+                finishPendingCampaignAckShownOnly();
                 showSoftNotificationEnableDialog();
             }
             return;
@@ -3366,12 +3374,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         if (hasPostNotificationsPermission()) {
             if (isSystemNotificationsEnabledSafe()) {
-                finishPendingCampaignAck(true);
+                finishPendingCampaignAckAccepted();
                 onNotificationPermissionGrantedFromReprompt(viaAdminReprompt);
             } else {
                 // Tray master off with runtime granted: soft dialog; Settings only
                 // if the user taps Allow / Open settings.
-                finishPendingCampaignAck(false);
+                finishPendingCampaignAckShownOnly();
                 showSoftNotificationEnableDialog();
             }
             return;
@@ -3379,11 +3387,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         // Permanent deny: OS will not show Allow/Don't allow again. Soft dialog
         // over the feed — never auto-open the system Allow notifications page.
+        // Burn wave as shown-only; Don't allow is only OS POST_NOTIFICATIONS deny.
         if (hasEverAskedPostNotifications()
                 && !ActivityCompat.shouldShowRequestPermissionRationale(
                         this, Manifest.permission.POST_NOTIFICATIONS)) {
             markNotificationRuntimeAskedVersion();
-            finishPendingCampaignAck(false);
+            finishPendingCampaignAckShownOnly();
             showSoftNotificationEnableDialog();
             return;
         }
@@ -3414,7 +3423,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * One-time sending: once the OS sheet (or soft ask) is presented, burn local
      * shown_wave immediately so reopen never re-asks until a new ON/wave cycle.
-     * Server ack with converted still waits for {@link #finishPendingCampaignAck}.
+     * Server ack with converted / Don't allow waits for
+     * {@link #finishPendingCampaignAckOutcome} or shown-only burn.
      */
     private void markCampaignShownOnSheetPresented() {
         if (!pendingCampaignRepromptAck) {
@@ -3430,14 +3440,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Permission UI always causes pause/resume — keep ask-on-open settled so
         // we cannot immediately reappear after Allow/Deny.
         askOnOpenHandledThisResume = true;
-        // Wave is consumed only after the OS returned a result (sheet was shown
-        // or OS denied without UI). Never before requestPermissions.
-        finishPendingCampaignAck(granted);
+        // Source-only Don't allow / Accepted: OS POST_NOTIFICATIONS result only.
         if (granted) {
+            finishPendingCampaignAckAccepted();
             notificationSoftAllowSettledThisOpen = false;
             onNotificationPermissionGrantedFromReprompt(viaAdmin);
             return;
         }
+        finishPendingCampaignAckDontAllow();
         SharedPrefsData.putBool(
                 getApplicationContext(),
                 Constants.NOTIFICATION_ENABLED,
@@ -3450,19 +3460,61 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         notificationSoftAllowSettledThisOpen = true;
     }
 
-    /** Persist campaign one-shot only after sheet/Settings was actually offered. */
-    private void finishPendingCampaignAck(boolean convertedOrEnabled) {
+    /** One-time: user Allowed (or already fully ON). */
+    private void finishPendingCampaignAckAccepted() {
+        finishPendingCampaignAckOutcome(/*accepted*/ true, /*dontAllow*/ false);
+    }
+
+    /** One-time: user tapped Don't allow on the OS POST_NOTIFICATIONS sheet. */
+    private void finishPendingCampaignAckDontAllow() {
+        finishPendingCampaignAckOutcome(/*accepted*/ false, /*dontAllow*/ true);
+    }
+
+    /**
+     * Soft / permanent-deny / pre-13: burn the wave so we do not re-ask, but do
+     * not count as Accepted or Don't allow (no OS Allow/Don't allow answer).
+     */
+    private void finishPendingCampaignAckShownOnly() {
         if (!pendingCampaignRepromptAck) {
             return;
         }
         pendingCampaignRepromptAck = false;
+        // Soft Allow may still present the OS sheet — keep outcome reporting armed.
+        campaignSoftAwaitingOsOutcome = true;
         markNotificationRepromptShownLocally();
         ackNotificationReprompt(
-                convertedOrEnabled,
-                convertedOrEnabled,
-                convertedOrEnabled,
+                false,
+                false,
+                false,
                 "HomePage",
-                "campaign");
+                "campaign",
+                /*reportOutcome*/ false,
+                /*dontAllow*/ false);
+    }
+
+    /**
+     * Persist campaign outcome after OS Allow / Don't allow.
+     * Soft-Allow may have already burned the wave as shown-only; still report
+     * Accepted / Don't allow when the OS sheet returns for that campaign.
+     */
+    private void finishPendingCampaignAckOutcome(boolean accepted, boolean dontAllow) {
+        final boolean report =
+                pendingCampaignRepromptAck || campaignSoftAwaitingOsOutcome;
+        pendingCampaignRepromptAck = false;
+        campaignSoftAwaitingOsOutcome = false;
+        if (!report) {
+            // Ask-on-open / install OS deny — do not write one-time hub outcomes.
+            return;
+        }
+        markNotificationRepromptShownLocally();
+        ackNotificationReprompt(
+                accepted,
+                false,
+                accepted,
+                "HomePage",
+                "campaign",
+                /*reportOutcome*/ true,
+                dontAllow);
     }
 
     /**
@@ -3498,17 +3550,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 askOnOpenHandledThisResume = true;
                                 if (needSettingsForTray) {
                                     expectNotifSettingsOrPermReturn = true;
+                                    campaignSoftAwaitingOsOutcome = false;
                                     openAppNotificationSettingsForReprompt();
                                     return;
                                 }
                                 if (canShowPostNotificationsSystemDialog()) {
                                     expectNotifSettingsOrPermReturn = true;
                                     pendingNotifPermViaAdminReprompt = true;
+                                    // Keep campaignSoftAwaitingOsOutcome if set by
+                                    // shown-only burn so OS Deny/Allow is counted.
                                     launchPostNotificationsSystemDialog();
                                     return;
                                 }
                                 // OS will not show POST_NOTIFICATIONS again — open
                                 // Settings once from this user tap (not a loop).
+                                campaignSoftAwaitingOsOutcome = false;
                                 expectNotifSettingsOrPermReturn = true;
                                 openAppNotificationSettingsForReprompt();
                             })
@@ -3517,6 +3573,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             (dialog, which) -> {
                                 notificationSoftAllowSettledThisOpen = true;
                                 askOnOpenHandledThisResume = true;
+                                // Leaving for Settings — not an OS Don't allow.
+                                campaignSoftAwaitingOsOutcome = false;
                                 expectNotifSettingsOrPermReturn = true;
                                 openAppNotificationSettingsForReprompt();
                             })
@@ -3524,6 +3582,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             "Not now",
                             (dialog, which) -> {
                                 // Dismiss until next open/resume — do not settle Allow.
+                                // Shown-only burn already sent; no Don't allow.
+                                campaignSoftAwaitingOsOutcome = false;
                                 askOnOpenHandledThisResume = true;
                             })
                     .setOnDismissListener(d -> notificationSettingsDialogShowing = false);
@@ -3607,7 +3667,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         notificationRepromptHandledThisProcess = true;
         installNotificationPermHandledThisProcess = true;
         // pending until sheet presented / soft dialog / result — then
-        // markCampaignShownOnSheetPresented or finishPendingCampaignAck.
+        // markCampaignShownOnSheetPresented or finishPendingCampaignAck*.
         pendingCampaignRepromptAck = isAdminDue;
 
         // Keep draft flag aligned with OS OFF so server due matches next splash.
@@ -3644,7 +3704,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 Constants.switchNotification,
                 true,
                 Constants.PREF_NAME);
-        // Campaign ack is handled in finishPendingCampaignAck / fullyOn path.
+        // Campaign ack is handled in finishPendingCampaignAck* / fullyOn path.
         // Sync app opt-in flag (also marks converted when due/shown on server).
         syncNotificationFlagAfterReprompt(true, viaAdminReprompt);
     }
@@ -3655,6 +3715,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             boolean notificationFlagOn,
             String screen,
             String reason) {
+        ackNotificationReprompt(
+                converted,
+                alreadyEnabled,
+                notificationFlagOn,
+                screen,
+                reason,
+                /*reportOutcome*/ false,
+                /*dontAllow*/ false);
+    }
+
+    /**
+     * @param reportOutcome when true, send accepted/denied for hub Accepted /
+     *     Don't allow counts (OS sheet only). Shown-only burns omit outcomes.
+     */
+    private void ackNotificationReprompt(
+            boolean converted,
+            boolean alreadyEnabled,
+            boolean notificationFlagOn,
+            String screen,
+            String reason,
+            boolean reportOutcome,
+            boolean dontAllow) {
         try {
             int draftId = SharedPrefsData.getInt(
                     getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
@@ -3663,14 +3745,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             requestModel.setDraftId(draftId);
             requestModel.setConverted(converted);
             requestModel.setAlreadyEnabled(alreadyEnabled);
-            // One-time send outcome: Allow → accepted; Don't allow → denied.
-            if (!alreadyEnabled) {
-                requestModel.setAccepted(converted);
-                requestModel.setDenied(!converted);
+            // One-time send outcome (source-only): OS Allow → accepted; OS Don't
+            // allow → denied. Soft/shown-only burns leave both unset.
+            if (reportOutcome && !alreadyEnabled) {
+                requestModel.setAccepted(converted && !dontAllow);
+                requestModel.setDenied(dontAllow);
             }
             if (notificationFlagOn || converted) {
                 requestModel.setNotificationFlag(true);
-            } else if (!converted && !alreadyEnabled) {
+            } else if (dontAllow || (!converted && !alreadyEnabled && reportOutcome)) {
                 requestModel.setNotificationFlag(false);
             }
             if (screen != null && !screen.isEmpty()) {
@@ -6287,8 +6370,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
             if (category_id == 0) {
-                // Main → Local: never keep Pradhana latch on Local (district only).
-                locationPillShowPradhanaOnMain = false;
+                // Main → Local: pill on Local will show Pradhana (redirection to Main).
                 mFlipView.setVisibility(View.VISIBLE);
                 showHomeFeedLoadingReveal();
                 layout_with_data.setVisibility(View.GONE);
@@ -6313,10 +6395,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 // Leave Daily Updates / Mana Zilla Local session immediately so the
                 // delayed Main fetch cannot still probe FEED_MODE_LOCAL or keep Local
-                // chrome (Pradhana + Local re-entry / LTR lag). Pradhana latch only
-                // when this toggle is from Local (−1), not category → Main.
-                final boolean fromLocalFeed = (category_id == -1);
-                locationPillShowPradhanaOnMain = fromLocalFeed;
+                // chrome / LTR lag. Main pill is always district (redirection to Local).
                 localFeedFromDailyUpdates = false;
                 hideLocalFeedChrome();
                 // Flip category now so in-flight Local responses are dropped
@@ -13553,8 +13632,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 leave_comment_white.setHint("" + languageModelResponse.getData().getWriteComments());
                 applyMagazineShareFooterLabel();
 
-                // Local → district; Main → district (or Pradhana only after Local→Main
-                // pill); category → category name.
+                // Local → Pradhana (→ Main); Main → district (→ Local);
+                // category → category name.
                 type = resolveLocationPillTypeForCategory(category_id);
                 // Programmatic chrome only — avoid re-entering Special/Video/Reload open paths.
                 // Mutual exclusive: Special | Video News | News (home). Without Video branch,
@@ -13620,26 +13699,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Footer location-pill label passed into {@link FlipperAdapter}.
+     * Pill shows the <em>redirection destination</em>, not the current feed:
      * <ul>
-     *   <li>Local ({@code -1}) → selected district name</li>
-     *   <li>Main ({@code 0}) → district by default (existing location/district
-     *       display settings). {@code getMyFeed()} / ప్రధాన వార్తలు only when
-     *       {@link #locationPillShowPradhanaOnMain} — set solely by Local→Main
-     *       pill toggle-back.</li>
+     *   <li>Local ({@code -1}) → {@code getMyFeed()} / ప్రధాన వార్తలు (click → Main)</li>
+     *   <li>Main ({@code 0}) → selected district name (click → Local)</li>
      *   <li>Category ({@code > 0}) → that category's display name
      *       (intent extra / prefs / {@link CategoriesDiskCache})</li>
      * </ul>
      */
     @NonNull
     private String resolveLocationPillTypeForCategory(int catId) {
+        // Local: redirection label = Main (Pradhana Varthalu).
         if (catId == -1) {
-            String district = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
-            if (DistrictLabelHelper.isUsable(district)) {
-                return district;
+            String myFeed = resolveTranslatorMyFeedLabel();
+            if (DistrictLabelHelper.isUsable(myFeed)) {
+                return myFeed;
             }
-            String offline = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
-            if (DistrictLabelHelper.isUsable(offline)) {
-                return offline;
+            if (DistrictLabelHelper.isUsable(type) && isTranslatorMyFeedLabel(type)) {
+                return type;
             }
             return type != null ? type : "";
         }
@@ -13655,13 +13732,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             return type != null ? type : "";
         }
-        // Main (0): Pradhana only after Local→Main pill; otherwise district.
-        if (locationPillShowPradhanaOnMain) {
-            String myFeed = resolveTranslatorMyFeedLabel();
-            if (DistrictLabelHelper.isUsable(myFeed)) {
-                return myFeed;
-            }
-        }
+        // Main (0): always district (redirection = Local).
         String district = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
         if (DistrictLabelHelper.isUsable(district)) {
             return district;
@@ -13782,10 +13853,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         int langId = SharedPrefsData.getInt(HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
-        // Category titles come from List_All_Categories for this LanguageID — do not
-        // apply district-script compatibility (that used to swap Politics → getMyFeed).
+        // Category titles / Local Pradhana come from translator or List_All_Categories —
+        // do not apply district-script compatibility (that can wipe getMyFeed()).
         boolean feedTypeBad;
-        if (catId > 0) {
+        if (catId > 0 || catId == -1) {
             feedTypeBad = feedType == null || feedType.isEmpty()
                     || "null".equalsIgnoreCase(feedType.trim());
         } else {
@@ -13800,17 +13871,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     feedType = catName;
                     feedTypeBad = false;
                 }
-            } else if (catId == 0 && locationPillShowPradhanaOnMain) {
-                // Main after Local→Main pill only — Pradhana fallback.
+            } else if (catId == -1) {
+                // Local: Pradhana redirect label (never district).
                 String myFeed = resolveTranslatorMyFeedLabel();
-                if (DistrictLabelHelper.isUsable(myFeed)
-                        && DistrictLabelHelper.labelCompatibleWithLanguage(myFeed, langId)) {
+                if (DistrictLabelHelper.isUsable(myFeed)) {
                     feedType = myFeed;
                     feedTypeBad = false;
                 }
             }
-            // else Main/Local: fall through to district prefs below
-            if (feedTypeBad) {
+            // Main (and Local if translator missing): district prefs for Main only.
+            if (feedTypeBad && catId != -1) {
                 feedType = OfflineFeedStore.ensureDistrictPrefs(HomePage.this);
                 if (TextUtils.isEmpty(feedType)) {
                     feedType = DistrictLabelHelper.resolveDisplayLabel(HomePage.this);
@@ -14353,8 +14423,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         // Leaving any Mana Zilla local path when Reload / News main is requested.
-        // Footer refresh = cold-start Main label (district), not Pradhana latch.
-        locationPillShowPradhanaOnMain = false;
+        // Footer refresh = cold-start Main label (district redirection pill).
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         hideHomeCalendarMode();
@@ -14539,8 +14608,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void exitLocalFeedToMainNews() {
         showLog("exitLocalFeedToMainNews");
-        // Back-button / chrome exit is not the location-pill Local→Main toggle.
-        locationPillShowPradhanaOnMain = false;
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         try {
@@ -16382,12 +16449,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         //writeNewUser("User", type_firebase, current_time_firebase, draft_id_firebase, device_id_firebase, language_id_firebase, updated_post_id_firebase, positionx);
                         if(isFromLocalArticles || fromCache || adapter == null){
                            // Local↔Main toggle must rebuild the adapter so my_feed_name /
-                           // categery_id (district vs ప్రధాన వార్తలు after Local→Main) match.
+                           // categery_id (Local=Pradhana, Main=district) match.
                            final boolean rebuildForLocalMainToggle = isFromLocalArticles;
                            isFromLocalArticles=false;
                            if (languageModelResponse != null && languageModelResponse.getData() != null) {
-                               // Local → district; Main → district or Pradhana latch;
-                               // category → category name.
+                               // Local → Pradhana; Main → district; category → name.
                                type = resolveLocationPillTypeForCategory(category_id);
                            }
                            if (adapter == null || fromCache || rebuildForLocalMainToggle) {
@@ -18665,10 +18731,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
      * Call on resume / after language prefs may have changed.
      */
     private void refreshDistrictLabelsForCurrentLanguage() {
-        // Resume / language change: Main shows district again (not Pradhana latch).
-        locationPillShowPradhanaOnMain = false;
-        // Keep pill type in sync: Local = district; Main = district (or Pradhana
-        // only after Local→Main pill); category = name.
+        // Keep pill type in sync: Local = Pradhana; Main = district; category = name.
         String pill = resolveLocationPillTypeForCategory(category_id);
         if (DistrictLabelHelper.isUsable(pill)) {
             type = pill;

@@ -8,14 +8,19 @@ import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.FileProvider;
 import androidx.viewpager.widget.PagerAdapter;
+import androidx.viewpager.widget.ViewPager;
 
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -50,6 +55,9 @@ public class SamplePagerAdapter extends PagerAdapter {
     int layoutHeight=0;
     /** When true, use FIT_CENTER (Upload Original); else FIT_XY. */
     boolean useContainFit = false;
+    /** Cover ImageView — re-kick Glide if first open cancelled before paint. */
+    @Nullable
+    private ImageView page0View;
     public SamplePagerAdapter(Context context ,ArrayList<String> arrayList,int height,boolean value) {
         this(context, arrayList, height, value, false);
     }
@@ -121,8 +129,14 @@ public class SamplePagerAdapter extends PagerAdapter {
             }
             if (pageUrl.isEmpty() || "null".equalsIgnoreCase(pageUrl)) {
                 imageView.setImageResource(R.drawable.trasparent_background);
+                if (position == 0) {
+                    page0View = imageView;
+                    imageView.setTag(R.id.tag_gallery_image_url, "");
+                    imageView.setTag(R.id.tag_gallery_image_loaded, Boolean.TRUE);
+                }
             } else if (position == 0) {
                 // Cover wins the Glide pool over neighbor UIL loads.
+                page0View = imageView;
                 try {
                     int ow = imageView.getWidth();
                     int oh = imageView.getHeight();
@@ -137,6 +151,9 @@ public class SamplePagerAdapter extends PagerAdapter {
                         }
                     }
                     final ImageView targetView = imageView;
+                    final String loadUrl = pageUrl;
+                    imageView.setTag(R.id.tag_gallery_image_url, loadUrl);
+                    imageView.setTag(R.id.tag_gallery_image_loaded, null);
                     Glide.with(context)
                             .load(pageUrl)
                             .priority(com.bumptech.glide.Priority.IMMEDIATE)
@@ -151,6 +168,9 @@ public class SamplePagerAdapter extends PagerAdapter {
                                         Object model,
                                         com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
                                         boolean isFirstResource) {
+                                    if (loadUrl.equals(targetView.getTag(R.id.tag_gallery_image_url))) {
+                                        targetView.setTag(R.id.tag_gallery_image_loaded, null);
+                                    }
                                     targetView.postInvalidate();
                                     return false;
                                 }
@@ -162,6 +182,9 @@ public class SamplePagerAdapter extends PagerAdapter {
                                         com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
                                         com.bumptech.glide.load.DataSource dataSource,
                                         boolean isFirstResource) {
+                                    if (loadUrl.equals(targetView.getTag(R.id.tag_gallery_image_url))) {
+                                        targetView.setTag(R.id.tag_gallery_image_loaded, Boolean.TRUE);
+                                    }
                                     targetView.postInvalidate();
                                     return false;
                                 }
@@ -169,6 +192,7 @@ public class SamplePagerAdapter extends PagerAdapter {
                             .into(imageView);
                 } catch (Exception glideEx) {
                     imageLoader.displayImage(pageUrl, imageView, options, null);
+                    imageView.setTag(R.id.tag_gallery_image_loaded, Boolean.TRUE);
                 }
             } else {
                 imageLoader.displayImage(pageUrl, imageView, options, null);
@@ -226,6 +250,160 @@ public class SamplePagerAdapter extends PagerAdapter {
 
 
         return imageView;
+    }
+
+    public boolean isPage0Loaded() {
+        if (page0View == null) {
+            return false;
+        }
+        Object loaded = page0View.getTag(R.id.tag_gallery_image_loaded);
+        return Boolean.TRUE.equals(loaded) && page0View.getDrawable() != null;
+    }
+
+    /** Re-fire cover Glide if the first open left only the transparent stub. */
+    public void ensurePage0Bound(@Nullable ViewGroup pager) {
+        if (arrayList == null || arrayList.isEmpty() || page0View == null) {
+            return;
+        }
+        if (isPage0Loaded()) {
+            page0View.invalidate();
+            return;
+        }
+        String pageUrl = arrayList.get(0);
+        if (pageUrl == null) {
+            pageUrl = "";
+        }
+        pageUrl = pageUrl.trim();
+        if (pageUrl.isEmpty() || "null".equalsIgnoreCase(pageUrl)) {
+            page0View.setImageResource(R.drawable.trasparent_background);
+            page0View.setTag(R.id.tag_gallery_image_url, "");
+            page0View.setTag(R.id.tag_gallery_image_loaded, Boolean.TRUE);
+            return;
+        }
+        page0View.setTag(R.id.tag_gallery_image_url, null);
+        page0View.setTag(R.id.tag_gallery_image_loaded, null);
+        ViewGroup parent = pager;
+        if (parent == null && page0View.getParent() instanceof ViewGroup) {
+            parent = (ViewGroup) page0View.getParent();
+        }
+        if (parent == null) {
+            return;
+        }
+        // Re-run position-0 bind path via a fresh Glide call (same as instantiateItem).
+        try {
+            int ow = page0View.getWidth();
+            int oh = page0View.getHeight();
+            if (ow <= 0 || oh <= 0) {
+                ow = parent.getWidth() > 0 ? parent.getWidth() : 1080;
+                oh = parent.getHeight() > 0 ? parent.getHeight() : 1920;
+            }
+            final ImageView targetView = page0View;
+            final String loadUrl = pageUrl;
+            page0View.setTag(R.id.tag_gallery_image_url, loadUrl);
+            Glide.with(context)
+                    .load(pageUrl)
+                    .priority(com.bumptech.glide.Priority.IMMEDIATE)
+                    .dontAnimate()
+                    .override(Math.max(1, ow), Math.max(1, oh))
+                    .placeholder(R.drawable.trasparent_background)
+                    .error(R.drawable.trasparent_background)
+                    .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
+                        @Override
+                        public boolean onLoadFailed(
+                                @Nullable com.bumptech.glide.load.engine.GlideException e,
+                                Object model,
+                                com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                boolean isFirstResource) {
+                            if (loadUrl.equals(targetView.getTag(R.id.tag_gallery_image_url))) {
+                                targetView.setTag(R.id.tag_gallery_image_loaded, null);
+                            }
+                            targetView.postInvalidate();
+                            return false;
+                        }
+
+                        @Override
+                        public boolean onResourceReady(
+                                android.graphics.drawable.Drawable resource,
+                                Object model,
+                                com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable> target,
+                                com.bumptech.glide.load.DataSource dataSource,
+                                boolean isFirstResource) {
+                            if (loadUrl.equals(targetView.getTag(R.id.tag_gallery_image_url))) {
+                                targetView.setTag(R.id.tag_gallery_image_loaded, Boolean.TRUE);
+                            }
+                            targetView.postInvalidate();
+                            return false;
+                        }
+                    })
+                    .into(page0View);
+        } catch (Exception e) {
+            android.util.Log.e("MagazineCrash", "SamplePager ensurePage0: " + e.getMessage());
+        }
+    }
+
+    public static void schedulePage0Ensure(
+            @Nullable ViewPager pager, @Nullable SamplePagerAdapter adapter) {
+        if (pager == null || adapter == null) {
+            return;
+        }
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final int[] attempts = {0};
+        final int maxAttempts = 6;
+        final Runnable[] ensureHolder = new Runnable[1];
+        ensureHolder[0] = () -> {
+            if (adapter.isPage0Loaded()) {
+                return;
+            }
+            if (pager.getWindowToken() == null) {
+                if (attempts[0] < maxAttempts) {
+                    attempts[0]++;
+                    handler.postDelayed(ensureHolder[0], 50L);
+                }
+                return;
+            }
+            try {
+                adapter.ensurePage0Bound(pager);
+            } catch (Exception e) {
+                android.util.Log.e("MagazineCrash", "SamplePager schedulePage0: " + e.getMessage());
+            }
+            if (!adapter.isPage0Loaded() && attempts[0] < maxAttempts) {
+                attempts[0]++;
+                long delay = attempts[0] <= 2 ? 50L : (attempts[0] <= 4 ? 200L : 400L);
+                handler.postDelayed(ensureHolder[0], delay);
+            }
+        };
+        final Runnable ensure = ensureHolder[0];
+        if (pager.getWidth() > 0 && pager.getHeight() > 0 && pager.getChildCount() > 0) {
+            pager.post(ensure);
+            return;
+        }
+        final ViewTreeObserver.OnGlobalLayoutListener[] layoutListener =
+                new ViewTreeObserver.OnGlobalLayoutListener[1];
+        layoutListener[0] = () -> {
+            if (pager.getWidth() <= 0 || pager.getHeight() <= 0) {
+                return;
+            }
+            try {
+                pager.getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener[0]);
+            } catch (Exception ignored) {
+            }
+            ensure.run();
+        };
+        try {
+            pager.getViewTreeObserver().addOnGlobalLayoutListener(layoutListener[0]);
+        } catch (Exception e) {
+            handler.postDelayed(ensure, 100L);
+            return;
+        }
+        handler.postDelayed(() -> {
+            try {
+                pager.getViewTreeObserver().removeOnGlobalLayoutListener(layoutListener[0]);
+            } catch (Exception ignored) {
+            }
+            if (!adapter.isPage0Loaded()) {
+                ensure.run();
+            }
+        }, 300L);
     }
 
     public void addItem() {

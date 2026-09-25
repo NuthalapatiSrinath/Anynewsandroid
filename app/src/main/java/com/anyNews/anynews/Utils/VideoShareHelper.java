@@ -39,7 +39,15 @@ public class VideoShareHelper {
     }
 
     public interface OnShareCompleteListener {
+        /** Intent launched / chooser opened — unlock UI only (not a counted share). */
         void onShareStarted();
+
+        /**
+         * User confirmed outbound: WhatsApp direct launch, or picked a target from
+         * the system share sheet. Default no-op for callers that only unlock UI.
+         */
+        default void onShareConfirmed() {
+        }
     }
 
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder().build();
@@ -96,7 +104,8 @@ public class VideoShareHelper {
         // Instant path: any local/cache hit — skip worker thread + dialog.
         PreparedShare ready = tryResolveReadyShare(context, candidates);
         if (ready != null) {
-            launchShareIntent(context, activity, ready.uri, ready.mimeType, title, description, shareLink, mode);
+            launchShareIntent(context, activity, ready.uri, ready.mimeType, title, description,
+                    shareLink, mode, listener);
             if (listener != null) {
                 listener.onShareStarted();
             }
@@ -124,7 +133,8 @@ public class VideoShareHelper {
                 final PreparedShare done = prepared;
                 mainHandler.post(() -> {
                     dismissProgress();
-                    launchShareIntent(context, activity, done.uri, done.mimeType, title, description, shareLink, mode);
+                    launchShareIntent(context, activity, done.uri, done.mimeType, title, description,
+                            shareLink, mode, listener);
                     if (listener != null) {
                         listener.onShareStarted();
                     }
@@ -427,12 +437,13 @@ public class VideoShareHelper {
 
     private static void launchShareIntent(Context context, Activity activity, Uri uri,
                                             String mimeType, String title, String shareLink, ShareMode mode) {
-        launchShareIntent(context, activity, uri, mimeType, title, null, shareLink, mode);
+        launchShareIntent(context, activity, uri, mimeType, title, null, shareLink, mode, null);
     }
 
     private static void launchShareIntent(Context context, Activity activity, Uri uri,
                                             String mimeType, String title, String description,
-                                            String shareLink, ShareMode mode) {
+                                            String shareLink, ShareMode mode,
+                                            OnShareCompleteListener listener) {
         try {
             String shareMessage = buildShareMessage(title, description, shareLink);
 
@@ -462,6 +473,9 @@ public class VideoShareHelper {
                     activity.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 }
                 context.startActivity(intent);
+                if (listener != null) {
+                    listener.onShareConfirmed();
+                }
                 return;
             }
 
@@ -472,7 +486,16 @@ public class VideoShareHelper {
                 context.grantUriPermission(packageName, uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             }
-            context.startActivity(Intent.createChooser(intent, "Share Video"));
+            Context launchCtx = activity != null ? activity : context;
+            ShareOutboundHelper.launchChooserOnTargetChosen(
+                    launchCtx,
+                    intent,
+                    "Share Video",
+                    () -> {
+                        if (listener != null) {
+                            listener.onShareConfirmed();
+                        }
+                    });
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(context, "Unable to share video", Toast.LENGTH_SHORT).show();
