@@ -950,6 +950,26 @@ public class StartActivityReqModel implements Serializable {
         private Boolean videoAutoplayEnabled;
 
         /**
+         * Article TTS / read-aloud master. Null = old server / keep cache. Default OFF.
+         */
+        @SerializedName("tts_enabled")
+        @Expose
+        private Boolean ttsEnabled;
+
+        @SerializedName("tts_locale")
+        @Expose
+        private String ttsLocale;
+
+        @SerializedName("tts_voice")
+        @Expose
+        private String ttsVoice;
+
+        /** system | google */
+        @SerializedName("tts_engine")
+        @Expose
+        private String ttsEngine;
+
+        /**
          * Admin feed Exo chrome A/B: {@code current} | {@code playstore}.
          * Null = old server / keep cache. Default {@code current}.
          */
@@ -1546,6 +1566,26 @@ public class StartActivityReqModel implements Serializable {
 
         public boolean hasVideoAutoplayEnabled() {
             return videoAutoplayEnabled != null;
+        }
+
+        public Boolean getTtsEnabled() {
+            return ttsEnabled;
+        }
+
+        public boolean hasTtsEnabled() {
+            return ttsEnabled != null;
+        }
+
+        public String getTtsLocale() {
+            return ttsLocale;
+        }
+
+        public String getTtsVoice() {
+            return ttsVoice;
+        }
+
+        public String getTtsEngine() {
+            return ttsEngine;
         }
 
         /**

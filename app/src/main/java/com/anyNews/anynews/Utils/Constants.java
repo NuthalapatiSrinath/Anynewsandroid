@@ -86,6 +86,17 @@ public class Constants {
      */
     public static String VIDEO_AUTOPLAY_ENABLED = "video_autoplay_enabled";
     /**
+     * Article card TTS / read-aloud master ({@code tts_enabled}). Splash.
+     * Default OFF — hide speaker until admin enables.
+     */
+    public static String TTS_ENABLED = "tts_enabled";
+    /** BCP-47 locale from admin ({@code tts_locale}), e.g. te-IN. */
+    public static String TTS_LOCALE = "tts_locale";
+    /** Preferred voice name/id substring ({@code tts_voice}). */
+    public static String TTS_VOICE = "tts_voice";
+    /** system | google ({@code tts_engine}). */
+    public static String TTS_ENGINE = "tts_engine";
+    /**
      * Admin feed Exo chrome A/B ({@code feed_video_player}): {@code current} | {@code playstore}.
      * Splash + session + feed poll. Null omit must not wipe cache. Default {@code current}.
      */

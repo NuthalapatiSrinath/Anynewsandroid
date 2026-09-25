@@ -726,6 +726,36 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         } catch (Exception ignored) {
         }
+        // Stop article TTS when the user flips away from the speaking card.
+        try {
+            Long postId = null;
+            if (list != null && currentPage >= 0 && currentPage < list.size()) {
+                postId = list.get(currentPage).getPostId();
+            }
+            ArticleTtsHelper.stopIfNotCurrent(postId);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Top-right speaker on half-image cards. Hidden when admin {@code tts_enabled}
+     * is OFF. Speaks article body; pulse glow while speaking.
+     */
+    private void bindArticleTtsSpeaker(View convertView, int position) {
+        if (convertView == null) return;
+        try {
+            ImageView speakerBtn = convertView.findViewById(R.id.article_tts_button);
+            View pulseView = convertView.findViewById(R.id.article_tts_pulse);
+            if (speakerBtn == null) return;
+            Long postId = null;
+            CharSequence body = null;
+            if (list != null && position >= 0 && position < list.size()) {
+                postId = list.get(position).getPostId();
+                body = list.get(position).getDescription();
+            }
+            ArticleTtsHelper.bindButton(context, speakerBtn, pulseView, postId, body);
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean isUserDrivingFlip() {
@@ -8969,6 +8999,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             halfImageActivity.english_half_content_description.setEnabled(true);
         }
 
+        bindArticleTtsSpeaker(convertView, position);
+
         // halfimage_dislike_icon
         halfImageActivity.writer_follower.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -12825,6 +12857,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * on low-end (Narzo / Go). Full teardown belongs in HomePage after settle.
      */
     public static void pauseVideo(){
+        try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
         try{
             if (youTubePlayerViewHalf != null) {
                 youTubePlayerViewHalf.pause();

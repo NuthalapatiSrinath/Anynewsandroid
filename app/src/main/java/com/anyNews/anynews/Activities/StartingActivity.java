@@ -63,6 +63,7 @@ import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.StatusVideosDaysConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.FestivalSplashHelper;
+import com.anyNews.anynews.Utils.ArticleTtsConfigHelper;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
 import com.anyNews.anynews.Utils.CategoriesDiskCache;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
@@ -1838,6 +1839,14 @@ public class StartingActivity extends AppCompatActivity {
                                     Constants.PREF_NAME
                             );
                         }
+
+                        // Article TTS / read-aloud (null fields = old server; leave cache).
+                        ArticleTtsConfigHelper.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getTtsEnabled(),
+                                startActivityReqModel.getData().getTtsLocale(),
+                                startActivityReqModel.getData().getTtsVoice(),
+                                startActivityReqModel.getData().getTtsEngine());
 
                         // Feed Exo chrome A/B (null = keep cache).
                         if (startActivityReqModel.getData().hasFeedVideoPlayer()) {

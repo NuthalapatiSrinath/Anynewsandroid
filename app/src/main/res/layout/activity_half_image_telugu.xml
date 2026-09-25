@@ -97,6 +97,32 @@
                         android:background="@color/image_placeholder"
                         android:scaleType="fitXY" />
 
+                    <!-- Article TTS speaker (admin tts_enabled). Pulse glow while speaking. -->
+                    <View
+                        android:id="@+id/article_tts_pulse"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_alignParentTop="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_article_tts_pulse"
+                        android:visibility="gone" />
+
+                    <ImageView
+                        android:id="@+id/article_tts_button"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_alignParentTop="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginEnd="12dp"
+                        android:background="@drawable/bg_article_tts_btn"
+                        android:contentDescription="Read aloud"
+                        android:padding="7dp"
+                        android:src="@drawable/ic_article_tts_off"
+                        android:visibility="gone" />
+
                     <TextView
                         android:id="@+id/textViewWebUrl"
                         android:layout_width="wrap_content"
