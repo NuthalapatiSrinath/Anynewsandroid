@@ -78,40 +78,68 @@
                 android:textColor="@color/search_chrome_title"
                 android:textColorHint="@color/search_chrome_muted"
                 android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/search_examples"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_below="@id/search_input"
-                android:layout_marginStart="18dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="18dp"
-                android:text="@string/search_keyword_examples"
-                android:textColor="@color/search_chrome_muted"
-                android:textSize="12sp" />
         </RelativeLayout>
 
-        <TextView
-            android:id="@+id/search_no_results"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#FFF9C4"
-            android:drawableStart="@android:drawable/ic_delete"
-            android:drawablePadding="8dp"
-            android:gravity="center_vertical"
-            android:padding="12dp"
-            android:text="@string/no_stories_found"
-            android:textColor="#B71C1C"
-            android:textStyle="bold"
-            android:visibility="gone" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/search_list"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:clipToPadding="false"
-            android:paddingBottom="16dp" />
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/search_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="16dp" />
+
+            <!-- Clean empty state (replaces red-X yellow strip). -->
+            <LinearLayout
+                android:id="@+id/search_empty_state"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:paddingStart="32dp"
+                android:paddingTop="72dp"
+                android:paddingEnd="32dp"
+                android:visibility="gone">
+
+                <FrameLayout
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:background="@drawable/bg_search_empty_icon">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        app:srcCompat="@drawable/ic_action_search"
+                        app:tint="@color/search_chrome_muted" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/search_empty_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center"
+                    android:text="@string/no_stories_found"
+                    android:textColor="@color/search_chrome_title"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/search_empty_subtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="@string/search_empty_hint"
+                    android:textColor="@color/search_chrome_muted"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 </FrameLayout>

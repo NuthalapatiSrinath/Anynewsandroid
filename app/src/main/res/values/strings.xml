@@ -243,6 +243,7 @@
     <string name="search_stories">Search</string>
     <string name="search_back">Back</string>
     <string name="search_stories_hint">Search..</string>
+    <!-- Removed from UI: leftover "Search keyword ex : Modi, Politics…" eyebrow under the field. -->
     <string name="search_keyword_examples">Search keyword ex : Modi, Politics, Health, Stocks, …</string>
     <string name="search_daily_updates_section">Daily Updates</string>
     <string name="recent_searches">Recent Searches</string>
@@ -254,7 +255,8 @@
     <string name="search_hub_local_news">Local News</string>
     <string name="search_hub_flash_news">Flash News</string>
     <string name="search_hub_daily_updates">Daily Updates</string>
-    <string name="no_stories_found">No Stories found</string>
+    <string name="no_stories_found">No matching stories</string>
+    <string name="search_empty_hint">Try a different keyword</string>
     <string name="special_requires_internet">Connect to the internet to open Special</string>
     <string name="video_news">Video News</string>
     <string name="breaking_news">Flash News</string>

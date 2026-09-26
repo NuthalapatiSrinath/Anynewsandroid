@@ -11,6 +11,7 @@ import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.style.StyleSpan;
 import android.graphics.drawable.Drawable;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -71,8 +72,7 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     private View root;
     private EditText searchInput;
-    private TextView noResults;
-    private TextView examples;
+    private View emptyState;
     private RecyclerView listView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable pendingSuggest;
@@ -84,6 +84,28 @@ public class InAppSearchActivity extends AppCompatActivity {
     private final List<String> lastSuggestTexts = new ArrayList<>();
     private SearchRowsAdapter adapter;
     private int suggestSeq = 0;
+    private final TextWatcher queryWatcher =
+            new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    String q = s != null ? s.toString().trim() : "";
+                    hideEmptyState();
+                    if (q.isEmpty()) {
+                        cancelSuggest();
+                        showIdleState();
+                        return;
+                    }
+                    // Instant local prefix/contains + typo hints while network runs.
+                    paintLocalLiveSuggestions(q);
+                    scheduleSuggest(q);
+                }
+            };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -91,8 +113,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         setContentView(R.layout.activity_in_app_search);
         root = findViewById(R.id.in_app_search_root);
         searchInput = findViewById(R.id.search_input);
-        noResults = findViewById(R.id.search_no_results);
-        examples = findViewById(R.id.search_examples);
+        emptyState = findViewById(R.id.search_empty_state);
         listView = findViewById(R.id.search_list);
         listView.setLayoutManager(new LinearLayoutManager(this));
         adapter = new SearchRowsAdapter();
@@ -103,7 +124,14 @@ public class InAppSearchActivity extends AppCompatActivity {
 
         searchInput.setOnEditorActionListener(
                 (v, actionId, event) -> {
-                    if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                    boolean enterDown =
+                            event != null
+                                    && event.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                                    && event.getAction() == KeyEvent.ACTION_DOWN;
+                    if (actionId == EditorInfo.IME_ACTION_SEARCH
+                            || actionId == EditorInfo.IME_ACTION_DONE
+                            || actionId == EditorInfo.IME_ACTION_GO
+                            || enterDown) {
                         submitQuery(searchInput.getText() != null
                                 ? searchInput.getText().toString()
                                 : "");
@@ -135,31 +163,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                     }
                     return false;
                 });
-        searchInput.addTextChangedListener(
-                new TextWatcher() {
-                    @Override
-                    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-                    @Override
-                    public void onTextChanged(CharSequence s, int start, int before, int count) {}
-
-                    @Override
-                    public void afterTextChanged(Editable s) {
-                        String q = s != null ? s.toString().trim() : "";
-                        noResults.setVisibility(View.GONE);
-                        if (examples != null) {
-                            examples.setVisibility(q.isEmpty() ? View.VISIBLE : View.GONE);
-                        }
-                        if (q.isEmpty()) {
-                            cancelSuggest();
-                            showIdleState();
-                            return;
-                        }
-                        // Instant local prefix/contains + typo hints while network runs.
-                        paintLocalLiveSuggestions(q);
-                        scheduleSuggest(q);
-                    }
-                });
+        searchInput.addTextChangedListener(queryWatcher);
 
         SearchRevealHelper.playEnterReveal(this, root, getIntent());
         applyOpenExtras();
@@ -184,21 +188,34 @@ public class InAppSearchActivity extends AppCompatActivity {
             return;
         }
         String clean = seed.trim();
+        // Avoid double scheduleSuggest from TextWatcher while we own the open path.
+        searchInput.removeTextChangedListener(queryWatcher);
         searchInput.setText(clean);
         searchInput.setSelection(clean.length());
-        if (examples != null) {
-            examples.setVisibility(View.GONE);
-        }
+        searchInput.addTextChangedListener(queryWatcher);
         // Always try live + network suggestions so similar/fuzzy rows can appear.
         paintLocalLiveSuggestions(clean);
         scheduleSuggest(clean);
-        if (showEmpty) {
-            // Banner immediately; fuzzy/suggest rows still fill in from scheduleSuggest.
-            noResults.setVisibility(View.VISIBLE);
-            if (!hasStorySuggestRows()) {
-                paintEmptyOrFuzzy(clean);
-                noResults.setVisibility(View.VISIBLE);
-            }
+        if (showEmpty && !hasStorySuggestRows()) {
+            paintEmptyOrFuzzy(clean);
+        }
+    }
+
+    private void showEmptyState() {
+        if (emptyState != null) {
+            emptyState.setVisibility(View.VISIBLE);
+        }
+        if (listView != null) {
+            listView.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    private void hideEmptyState() {
+        if (emptyState != null) {
+            emptyState.setVisibility(View.GONE);
+        }
+        if (listView != null) {
+            listView.setVisibility(View.VISIBLE);
         }
     }
 
@@ -314,7 +331,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                 if (!dup) next.add(Row.fuzzy(f));
             }
         }
-        noResults.setVisibility(View.GONE);
+        hideEmptyState();
         rows.clear();
         rows.addAll(next);
         adapter.notifyDataSetChanged();
@@ -334,21 +351,21 @@ public class InAppSearchActivity extends AppCompatActivity {
             for (String f : fuzzy) {
                 next.add(Row.fuzzy(f));
             }
-            noResults.setVisibility(View.GONE);
+            hideEmptyState();
             rows.clear();
             rows.addAll(next);
             adapter.notifyDataSetChanged();
             return;
         }
-        noResults.setVisibility(View.VISIBLE);
-        // Keep idle recent searches underneath the banner.
-        if (!hasStorySuggestRows()) {
-            showIdleState();
-            noResults.setVisibility(View.VISIBLE);
-        }
+        // Typed query with nothing useful — clean centered empty, not yellow strip
+        // and not recent-searches under an error banner (looked broken).
+        rows.clear();
+        adapter.notifyDataSetChanged();
+        showEmptyState();
     }
 
     private void showIdleState() {
+        hideEmptyState();
         rows.clear();
         List<RecentSearchStore.Entry> recent = RecentSearchStore.loadEntries(this);
         if (!recent.isEmpty()) {
@@ -462,7 +479,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     }
                                     return;
                                 }
-                                noResults.setVisibility(View.GONE);
+                                hideEmptyState();
                                 // Append Did-you-mean under results when typed looks like a typo.
                                 List<String> pool = new ArrayList<>(lastSuggestTexts);
                                 for (RecentSearchStore.Entry e :
