@@ -90,6 +90,10 @@ public class Constants {
      * Default OFF — hide speaker until admin enables.
      */
     public static String TTS_ENABLED = "tts_enabled";
+    /** Top-right on article image ({@code tts_speaker_on_image}). Default OFF. */
+    public static String TTS_SPEAKER_ON_IMAGE = "tts_speaker_on_image";
+    /** Engagement row ({@code tts_speaker_on_engagement}). Default OFF. */
+    public static String TTS_SPEAKER_ON_ENGAGEMENT = "tts_speaker_on_engagement";
     /** BCP-47 locale from admin ({@code tts_locale}), e.g. te-IN. */
     public static String TTS_LOCALE = "tts_locale";
     /** Preferred voice name/id substring ({@code tts_voice}). */

@@ -1055,6 +1055,28 @@ public final class SessionAnalyticsTracker {
                         }
                     } catch (Exception ignored) {
                     }
+                    try {
+                        Boolean ttsEnabled = null;
+                        Boolean ttsOnImage = null;
+                        Boolean ttsOnEng = null;
+                        if (resBody.has("tts_enabled")
+                                && !resBody.get("tts_enabled").isJsonNull()) {
+                            ttsEnabled = resBody.get("tts_enabled").getAsBoolean();
+                        }
+                        if (resBody.has("tts_speaker_on_image")
+                                && !resBody.get("tts_speaker_on_image").isJsonNull()) {
+                            ttsOnImage = resBody.get("tts_speaker_on_image").getAsBoolean();
+                        }
+                        if (resBody.has("tts_speaker_on_engagement")
+                                && !resBody.get("tts_speaker_on_engagement").isJsonNull()) {
+                            ttsOnEng = resBody.get("tts_speaker_on_engagement").getAsBoolean();
+                        }
+                        if (ttsEnabled != null || ttsOnImage != null || ttsOnEng != null) {
+                            ArticleTtsConfigHelper.saveFromServer(
+                                    context, ttsEnabled, ttsOnImage, ttsOnEng, null, null, null);
+                        }
+                    } catch (Exception ignored) {
+                    }
                     Integer feedEveryN = null;
                     Integer adPrefetch = null;
                     Integer maxInFlight = null;

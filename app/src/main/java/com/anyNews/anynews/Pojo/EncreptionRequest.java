@@ -217,6 +217,19 @@ public class EncreptionRequest {
     @Expose
     private Boolean video_autoplay_enabled;
 
+    /** Article TTS master. Null when omitted — do not wipe splash. */
+    @SerializedName("tts_enabled")
+    @Expose
+    private Boolean tts_enabled;
+
+    @SerializedName("tts_speaker_on_image")
+    @Expose
+    private Boolean tts_speaker_on_image;
+
+    @SerializedName("tts_speaker_on_engagement")
+    @Expose
+    private Boolean tts_speaker_on_engagement;
+
     /** Feed Exo chrome A/B. Null when omitted — do not wipe splash. */
     @SerializedName("feed_video_player")
     @Expose
@@ -583,6 +596,18 @@ public class EncreptionRequest {
 
     public void setVideo_autoplay_enabled(Boolean video_autoplay_enabled) {
         this.video_autoplay_enabled = video_autoplay_enabled;
+    }
+
+    public Boolean getTts_enabled() {
+        return tts_enabled;
+    }
+
+    public Boolean getTts_speaker_on_image() {
+        return tts_speaker_on_image;
+    }
+
+    public Boolean getTts_speaker_on_engagement() {
+        return tts_speaker_on_engagement;
     }
 
     public String getFeed_video_player() {

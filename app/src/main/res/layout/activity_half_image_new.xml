@@ -310,6 +310,42 @@
                     </LinearLayout>
 
                     <LinearLayout
+                        android:id="@+id/half_tts"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:layout_marginEnd="8dp"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:gravity="center"
+                        android:visibility="gone">
+
+                        <FrameLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:clipChildren="false"
+                            android:clipToPadding="false">
+
+                            <View
+                                android:id="@+id/half_tts_pulse"
+                                android:layout_width="42dp"
+                                android:layout_height="42dp"
+                                android:layout_gravity="center"
+                                android:background="@drawable/bg_article_tts_pulse"
+                                android:visibility="gone" />
+
+                            <ImageView
+                                android:id="@+id/half_tts_icon"
+                                android:layout_width="35dp"
+                                android:layout_height="35dp"
+                                android:layout_gravity="center"
+                                android:background="@drawable/white_oval"
+                                android:contentDescription="Read aloud"
+                                android:padding="7dp"
+                                android:src="@drawable/ic_action_tts" />
+                        </FrameLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
                         android:id="@+id/half_search"
                         android:layout_width="42dp"
                         android:layout_height="42dp"

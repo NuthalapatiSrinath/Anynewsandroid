@@ -7,15 +7,22 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * Admin article TTS / read-aloud flags from splash ({@code tts_enabled},
- * {@code tts_locale}, {@code tts_voice}, {@code tts_engine}).
- * Default OFF — speaker hidden until admin enables.
+ * Admin article TTS / read-aloud flags from splash / session / feed poll:
+ * {@code tts_enabled}, {@code tts_speaker_on_image}, {@code tts_speaker_on_engagement},
+ * {@code tts_locale}, {@code tts_voice}, {@code tts_engine}.
+ *
+ * <p>Master + two placement slots (Search pattern). Defaults all OFF.
+ * Null from server = leave cache (never wipe on partial poll).
  */
 public final class ArticleTtsConfigHelper {
 
     public static final String ENGINE_SYSTEM = "system";
     public static final String ENGINE_GOOGLE = "google";
     public static final String GOOGLE_TTS_PACKAGE = "com.google.android.tts";
+
+    public static final boolean DEFAULT_ENABLED = false;
+    public static final boolean DEFAULT_ON_IMAGE = false;
+    public static final boolean DEFAULT_ON_ENGAGEMENT = false;
 
     private ArticleTtsConfigHelper() {}
 
@@ -26,11 +33,43 @@ public final class ArticleTtsConfigHelper {
             @Nullable String locale,
             @Nullable String voice,
             @Nullable String engine) {
-        if (context == null) return;
+        saveFromServer(context, enabled, null, null, locale, voice, engine);
+    }
+
+    /** Persist master + placement + voice fields (null = leave cache). */
+    public static boolean saveFromServer(
+            @Nullable Context context,
+            @Nullable Boolean enabled,
+            @Nullable Boolean onImage,
+            @Nullable Boolean onEngagement,
+            @Nullable String locale,
+            @Nullable String voice,
+            @Nullable String engine) {
+        if (context == null) return false;
         Context app = context.getApplicationContext();
+        boolean changed = false;
         if (enabled != null) {
-            SharedPrefsData.putBool(
-                    app, Constants.TTS_ENABLED, Boolean.TRUE.equals(enabled), Constants.PREF_NAME);
+            boolean next = Boolean.TRUE.equals(enabled);
+            if (isEnabled(app) != next) {
+                SharedPrefsData.putBool(app, Constants.TTS_ENABLED, next, Constants.PREF_NAME);
+                changed = true;
+            }
+        }
+        if (onImage != null) {
+            boolean next = Boolean.TRUE.equals(onImage);
+            if (isOnImage(app) != next) {
+                SharedPrefsData.putBool(
+                        app, Constants.TTS_SPEAKER_ON_IMAGE, next, Constants.PREF_NAME);
+                changed = true;
+            }
+        }
+        if (onEngagement != null) {
+            boolean next = Boolean.TRUE.equals(onEngagement);
+            if (isOnEngagement(app) != next) {
+                SharedPrefsData.putBool(
+                        app, Constants.TTS_SPEAKER_ON_ENGAGEMENT, next, Constants.PREF_NAME);
+                changed = true;
+            }
         }
         if (locale != null) {
             SharedPrefsData.putString(
@@ -44,16 +83,53 @@ public final class ArticleTtsConfigHelper {
             SharedPrefsData.putString(
                     app, Constants.TTS_ENGINE, normalizeEngine(engine), Constants.PREF_NAME);
         }
+        return changed;
     }
 
-    /** Master: show speaker + allow read-aloud. Default OFF. */
+    /** Master: allow read-aloud when a placement is also ON. Default OFF. */
     public static boolean isEnabled(@Nullable Context context) {
-        if (context == null) return false;
+        if (context == null) return DEFAULT_ENABLED;
         return SharedPrefsData.getBool(
                 context.getApplicationContext(),
                 Constants.TTS_ENABLED,
                 Constants.PREF_NAME,
-                false);
+                DEFAULT_ENABLED);
+    }
+
+    /** Top-right speaker on article image. Requires {@link #isEnabled}. Default OFF. */
+    public static boolean isOnImage(@Nullable Context context) {
+        if (context == null) return DEFAULT_ON_IMAGE;
+        try {
+            return SharedPrefsData.getBool(
+                    context.getApplicationContext(),
+                    Constants.TTS_SPEAKER_ON_IMAGE,
+                    Constants.PREF_NAME,
+                    DEFAULT_ON_IMAGE);
+        } catch (Exception e) {
+            return DEFAULT_ON_IMAGE;
+        }
+    }
+
+    /** Engagement-row speaker. Requires {@link #isEnabled}. Default OFF. */
+    public static boolean isOnEngagement(@Nullable Context context) {
+        if (context == null) return DEFAULT_ON_ENGAGEMENT;
+        try {
+            return SharedPrefsData.getBool(
+                    context.getApplicationContext(),
+                    Constants.TTS_SPEAKER_ON_ENGAGEMENT,
+                    Constants.PREF_NAME,
+                    DEFAULT_ON_ENGAGEMENT);
+        } catch (Exception e) {
+            return DEFAULT_ON_ENGAGEMENT;
+        }
+    }
+
+    public static boolean shouldShowOnImage(@Nullable Context context) {
+        return isEnabled(context) && isOnImage(context);
+    }
+
+    public static boolean shouldShowOnEngagement(@Nullable Context context) {
+        return isEnabled(context) && isOnEngagement(context);
     }
 
     @NonNull

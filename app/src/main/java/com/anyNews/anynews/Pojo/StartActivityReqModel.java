@@ -956,6 +956,16 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean ttsEnabled;
 
+        /** Top-right on article image. Null = keep cache. Default OFF. */
+        @SerializedName("tts_speaker_on_image")
+        @Expose
+        private Boolean ttsSpeakerOnImage;
+
+        /** Engagement row. Null = keep cache. Default OFF. */
+        @SerializedName("tts_speaker_on_engagement")
+        @Expose
+        private Boolean ttsSpeakerOnEngagement;
+
         @SerializedName("tts_locale")
         @Expose
         private String ttsLocale;
@@ -1574,6 +1584,14 @@ public class StartActivityReqModel implements Serializable {
 
         public boolean hasTtsEnabled() {
             return ttsEnabled != null;
+        }
+
+        public Boolean getTtsSpeakerOnImage() {
+            return ttsSpeakerOnImage;
+        }
+
+        public Boolean getTtsSpeakerOnEngagement() {
+            return ttsSpeakerOnEngagement;
         }
 
         public String getTtsLocale() {

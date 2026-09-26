@@ -738,8 +738,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Top-right speaker on half-image cards. Hidden when admin {@code tts_enabled}
-     * is OFF. Speaks article body; pulse glow while speaking.
+     * Top-right speaker on half-image cards when admin {@code tts_speaker_on_image}
+     * (+ master {@code tts_enabled}) is ON. Speaks article body; pulse while speaking.
      */
     private void bindArticleTtsSpeaker(View convertView, int position) {
         if (convertView == null) return;
@@ -753,7 +753,49 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 postId = list.get(position).getPostId();
                 body = list.get(position).getDescription();
             }
-            ArticleTtsHelper.bindButton(context, speakerBtn, pulseView, postId, body);
+            boolean show = ArticleTtsConfigHelper.shouldShowOnImage(context);
+            ArticleTtsHelper.bindButton(
+                    context,
+                    speakerBtn,
+                    pulseView,
+                    postId,
+                    body,
+                    show,
+                    ArticleTtsHelper.STYLE_IMAGE);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Engagement-row speaker when admin {@code tts_speaker_on_engagement}
+     * (+ master) is ON. Same TTS engine as image placement.
+     */
+    private void bindHalfTtsSpeaker(@Nullable View convertView, int position) {
+        if (convertView == null) return;
+        try {
+            View slot = convertView.findViewById(R.id.half_tts);
+            ImageView speakerBtn = convertView.findViewById(R.id.half_tts_icon);
+            View pulseView = convertView.findViewById(R.id.half_tts_pulse);
+            if (slot == null || speakerBtn == null) return;
+            boolean show = ArticleTtsConfigHelper.shouldShowOnEngagement(context);
+            slot.setVisibility(show ? View.VISIBLE : View.GONE);
+            Long postId = null;
+            CharSequence body = null;
+            if (list != null && position >= 0 && position < list.size()) {
+                postId = list.get(position).getPostId();
+                body = list.get(position).getDescription();
+            }
+            ArticleTtsHelper.bindButton(
+                    context,
+                    speakerBtn,
+                    pulseView,
+                    postId,
+                    body,
+                    show,
+                    ArticleTtsHelper.STYLE_ENGAGEMENT);
+            if (show) {
+                EngagementCountHelper.applyIconTint(context, speakerBtn);
+            }
         } catch (Exception ignored) {
         }
     }
@@ -2643,6 +2685,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_comment_icon));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_share_icon));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_search_icon));
+        EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.half_tts_icon));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.share));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.report_icon));
         EngagementCountHelper.applyIconTint(context, convertView.findViewById(R.id.video_report));
@@ -2830,6 +2873,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         applyActionIconRowOffset(convertView);
         applyHalfActionIconSizes(context, convertView);
         bindHalfSearchIcon(convertView);
+        bindHalfTtsSpeaker(convertView, position);
         applyTitleBodyGap(context, convertView);
         applyContentBlockOffset(context, convertView);
         bindHalfBodyCollapseToggle(convertView);
@@ -4537,13 +4581,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     // half-image and half-video layouts. Missing ids are skipped safely.
     private static final int[] HALF_ACTION_ICON_IDS = new int[] {
             R.id.half_image_like, R.id.half_comment_icon, R.id.half_share_icon,
-            R.id.half_search_icon, R.id.share, R.id.report_icon, R.id.video_report
+            R.id.half_tts_icon, R.id.half_search_icon, R.id.share, R.id.report_icon, R.id.video_report
     };
 
     // Tappable slot containers that wrap each action icon (image + video layouts).
     private static final int[] HALF_ACTION_SLOT_IDS = new int[] {
             R.id.half_image_like_icon, R.id.half_comment, R.id.half_share,
-            R.id.half_search, R.id.half_share__, R.id.report
+            R.id.half_tts, R.id.half_search, R.id.half_share__, R.id.report
     };
 
     // Defaults + clamps mirror the backend (Root_Settings / Update_Configuration).
@@ -12259,6 +12303,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         tintHalfActionIcons(convertView);
         applyHalfActionIconSizes(context, convertView);
         bindHalfSearchIcon(convertView);
+        bindHalfTtsSpeaker(convertView, position);
 
         if (engagementRow != null) {
             engagementRow.setVisibility(View.VISIBLE);

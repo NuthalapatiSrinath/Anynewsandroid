@@ -23,46 +23,59 @@ import androidx.annotation.Nullable;
 import com.anyNews.anynews.R;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
 /**
  * Article-body Text-to-Speech for half-image cards.
  * Toggle speaker → speak body / stop; pulse glow while speaking.
- * Voice/locale/engine from {@link ArticleTtsConfigHelper} (admin splash).
+ * Voice/locale/engine + placement from {@link ArticleTtsConfigHelper}.
  */
 public final class ArticleTtsHelper {
 
     private static final String UTTERANCE_ID = "article_tts_body";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
+    /** Image overlay uses white glyphs; engagement row uses tintable action icons. */
+    public static final int STYLE_IMAGE = 0;
+    public static final int STYLE_ENGAGEMENT = 1;
+
     private static TextToSpeech tts;
     private static boolean ttsReady;
     private static boolean ttsInitializing;
     private static String preferredEngine = "";
     private static Long speakingPostId;
-    private static WeakReference<ImageView> speakingBtnRef;
-    private static WeakReference<View> pulseViewRef;
+    private static final List<SpeakerSlot> activeSlots = new ArrayList<>();
     private static AnimatorSet pulseAnim;
+    private static WeakReference<View> pulseAnimTarget;
 
     private ArticleTtsHelper() {}
 
-    /** Hide speaker when admin master is OFF. */
+    /**
+     * Bind a speaker button. Visibility is controlled by the caller via {@code show}
+     * (master + placement). Speaks sanitized body; pulse while speaking.
+     */
     public static void bindButton(
             @Nullable Context context,
             @Nullable ImageView speakerBtn,
             @Nullable View pulseView,
             @Nullable Long postId,
-            @Nullable CharSequence bodyText) {
+            @Nullable CharSequence bodyText,
+            boolean show,
+            int style) {
         if (speakerBtn == null) return;
-        if (context == null || !ArticleTtsConfigHelper.isEnabled(context)) {
+        if (context == null || !show) {
             speakerBtn.setVisibility(View.GONE);
             if (pulseView != null) {
                 pulseView.setVisibility(View.GONE);
-                stopPulse(pulseView);
+                stopPulseOn(pulseView);
             }
             speakerBtn.setOnClickListener(null);
+            unregisterSlot(speakerBtn);
             return;
         }
         speakerBtn.setVisibility(View.VISIBLE);
@@ -71,12 +84,13 @@ public final class ArticleTtsHelper {
                         && postId != null
                         && speakingPostId.equals(postId)
                         && isSpeaking();
-        applyUiState(speakerBtn, pulseView, thisSpeaking);
+        registerOrUpdateSlot(speakerBtn, pulseView, style);
+        applyUiState(speakerBtn, pulseView, thisSpeaking, style);
         final Context app = context.getApplicationContext();
         final Long id = postId;
         final String text = sanitizeBody(bodyText);
         speakerBtn.setOnClickListener(
-                v -> toggle(app, id, text, speakerBtn, pulseView));
+                v -> toggle(app, id, text, speakerBtn, pulseView, style));
     }
 
     /** Stop if flipping away from the speaking article. */
@@ -95,7 +109,8 @@ public final class ArticleTtsHelper {
             @Nullable Long postId,
             @NonNull String text,
             @NonNull ImageView speakerBtn,
-            @Nullable View pulseView) {
+            @Nullable View pulseView,
+            int style) {
         if (TextUtils.isEmpty(text)) {
             return;
         }
@@ -108,7 +123,7 @@ public final class ArticleTtsHelper {
             stopSpeaking(true);
             return;
         }
-        speak(app, postId, text, speakerBtn, pulseView);
+        speak(app, postId, text, speakerBtn, pulseView, style);
     }
 
     private static void speak(
@@ -116,12 +131,12 @@ public final class ArticleTtsHelper {
             @Nullable Long postId,
             @NonNull String text,
             @NonNull ImageView speakerBtn,
-            @Nullable View pulseView) {
+            @Nullable View pulseView,
+            int style) {
         stopSpeaking(false);
         speakingPostId = postId;
-        speakingBtnRef = new WeakReference<>(speakerBtn);
-        pulseViewRef = pulseView == null ? null : new WeakReference<>(pulseView);
-        applyUiState(speakerBtn, pulseView, true);
+        registerOrUpdateSlot(speakerBtn, pulseView, style);
+        applyAllSlotsUi(true);
         ensureTts(
                 app,
                 () -> {
@@ -187,7 +202,7 @@ public final class ArticleTtsHelper {
                             new UtteranceProgressListener() {
                                 @Override
                                 public void onStart(String utteranceId) {
-                                    MAIN.post(() -> startPulseOnSpeaking());
+                                    MAIN.post(() -> applyAllSlotsUi(true));
                                 }
 
                                 @Override
@@ -203,7 +218,6 @@ public final class ArticleTtsHelper {
                                 @Override
                                 public void onRangeStart(
                                         String utteranceId, int start, int end, int frame) {
-                                    // Voice activity → keep pulse alive / nudge.
                                     MAIN.post(() -> nudgePulse());
                                 }
                             });
@@ -293,13 +307,10 @@ public final class ArticleTtsHelper {
         }
         speakingPostId = null;
         if (resetUi) {
-            ImageView btn = speakingBtnRef == null ? null : speakingBtnRef.get();
-            View pulse = pulseViewRef == null ? null : pulseViewRef.get();
-            applyUiState(btn, pulse, false);
+            applyAllSlotsUi(false);
         }
-        speakingBtnRef = null;
-        pulseViewRef = null;
-        stopPulse(null);
+        stopPulseAnimatorOnly();
+        pulseAnimTarget = null;
     }
 
     private static void shutdownTtsEngine() {
@@ -322,36 +333,90 @@ public final class ArticleTtsHelper {
         }
     }
 
-    private static void applyUiState(
-            @Nullable ImageView speakerBtn, @Nullable View pulseView, boolean speaking) {
-        if (speakerBtn != null) {
-            speakerBtn.setImageResource(
-                    speaking ? R.drawable.ic_article_tts_on : R.drawable.ic_article_tts_off);
-            speakerBtn.setContentDescription(speaking ? "Stop reading" : "Read aloud");
+    private static void applyAllSlotsUi(boolean speaking) {
+        pruneDeadSlots();
+        View firstPulse = null;
+        for (SpeakerSlot slot : activeSlots) {
+            ImageView btn = slot.btnRef.get();
+            View pulse = slot.pulseRef == null ? null : slot.pulseRef.get();
+            if (btn == null) continue;
+            applyUiState(btn, pulse, speaking, slot.style);
+            if (speaking && firstPulse == null && pulse != null) {
+                firstPulse = pulse;
+            } else if (speaking && firstPulse == null) {
+                firstPulse = btn;
+            }
         }
         if (speaking) {
-            startPulse(pulseView);
+            startPulse(firstPulse);
         } else {
-            stopPulse(pulseView);
+            stopPulseAnimatorOnly();
+            for (SpeakerSlot slot : activeSlots) {
+                View pulse = slot.pulseRef == null ? null : slot.pulseRef.get();
+                if (pulse != null) {
+                    pulse.setVisibility(View.GONE);
+                    pulse.setAlpha(0f);
+                    pulse.setScaleX(1f);
+                    pulse.setScaleY(1f);
+                }
+            }
         }
     }
 
-    private static void startPulseOnSpeaking() {
-        View pulse = pulseViewRef == null ? null : pulseViewRef.get();
-        ImageView btn = speakingBtnRef == null ? null : speakingBtnRef.get();
-        applyUiState(btn, pulse, true);
+    private static void applyUiState(
+            @Nullable ImageView speakerBtn,
+            @Nullable View pulseView,
+            boolean speaking,
+            int style) {
+        if (speakerBtn != null) {
+            if (style == STYLE_ENGAGEMENT) {
+                speakerBtn.setImageResource(
+                        speaking ? R.drawable.ic_action_tts_on : R.drawable.ic_action_tts);
+                try {
+                    EngagementCountHelper.applyIconTint(speakerBtn.getContext(), speakerBtn);
+                } catch (Exception ignored) {
+                }
+            } else {
+                speakerBtn.setImageResource(
+                        speaking ? R.drawable.ic_article_tts_on : R.drawable.ic_article_tts_off);
+                speakerBtn.setImageTintList(null);
+            }
+            speakerBtn.setContentDescription(speaking ? "Stop reading" : "Read aloud");
+        }
+        if (!speaking && pulseView != null) {
+            pulseView.setVisibility(View.GONE);
+            pulseView.setAlpha(0f);
+            pulseView.setScaleX(1f);
+            pulseView.setScaleY(1f);
+        }
     }
 
     private static void nudgePulse() {
-        View pulse = pulseViewRef == null ? null : pulseViewRef.get();
+        View pulse = pulseAnimTarget == null ? null : pulseAnimTarget.get();
         if (pulse == null || pulseAnim == null || !pulseAnim.isRunning()) {
-            startPulse(pulse);
+            // Prefer dedicated pulse views from active slots.
+            pruneDeadSlots();
+            for (SpeakerSlot slot : activeSlots) {
+                View p = slot.pulseRef == null ? null : slot.pulseRef.get();
+                if (p != null) {
+                    startPulse(p);
+                    return;
+                }
+            }
+            for (SpeakerSlot slot : activeSlots) {
+                ImageView btn = slot.btnRef.get();
+                if (btn != null) {
+                    startPulse(btn);
+                    return;
+                }
+            }
         }
     }
 
     private static void startPulse(@Nullable View pulseView) {
         if (pulseView == null) return;
         stopPulseAnimatorOnly();
+        pulseAnimTarget = new WeakReference<>(pulseView);
         pulseView.setVisibility(View.VISIBLE);
         pulseView.setAlpha(0.55f);
         pulseView.setScaleX(1f);
@@ -372,18 +437,17 @@ public final class ArticleTtsHelper {
         pulseAnim.start();
     }
 
-    private static void stopPulse(@Nullable View pulseView) {
-        stopPulseAnimatorOnly();
-        View pulse = pulseView;
-        if (pulse == null && pulseViewRef != null) {
-            pulse = pulseViewRef.get();
+    private static void stopPulseOn(@Nullable View pulseView) {
+        if (pulseView == null) return;
+        View animTarget = pulseAnimTarget == null ? null : pulseAnimTarget.get();
+        if (animTarget == pulseView) {
+            stopPulseAnimatorOnly();
+            pulseAnimTarget = null;
         }
-        if (pulse != null) {
-            pulse.setVisibility(View.GONE);
-            pulse.setAlpha(0f);
-            pulse.setScaleX(1f);
-            pulse.setScaleY(1f);
-        }
+        pulseView.setVisibility(View.GONE);
+        pulseView.setAlpha(0f);
+        pulseView.setScaleX(1f);
+        pulseView.setScaleY(1f);
     }
 
     private static void stopPulseAnimatorOnly() {
@@ -396,6 +460,45 @@ public final class ArticleTtsHelper {
         }
     }
 
+    private static void registerOrUpdateSlot(
+            @NonNull ImageView speakerBtn, @Nullable View pulseView, int style) {
+        pruneDeadSlots();
+        for (SpeakerSlot slot : activeSlots) {
+            ImageView existing = slot.btnRef.get();
+            if (existing == speakerBtn) {
+                slot.pulseRef = pulseView == null ? null : new WeakReference<>(pulseView);
+                slot.style = style;
+                return;
+            }
+        }
+        activeSlots.add(new SpeakerSlot(speakerBtn, pulseView, style));
+    }
+
+    private static void unregisterSlot(@NonNull ImageView speakerBtn) {
+        Iterator<SpeakerSlot> it = activeSlots.iterator();
+        while (it.hasNext()) {
+            SpeakerSlot slot = it.next();
+            ImageView btn = slot.btnRef.get();
+            if (btn == null || btn == speakerBtn) {
+                it.remove();
+            }
+        }
+    }
+
+    private static void pruneDeadSlots() {
+        Iterator<SpeakerSlot> it = activeSlots.iterator();
+        while (it.hasNext()) {
+            SpeakerSlot slot = it.next();
+            if (slot.btnRef.get() == null) {
+                it.remove();
+            }
+        }
+    }
+
+    /**
+     * Strip HTML, emoji, dingbats, and decorative symbols so TTS speaks only
+     * words (Telugu / English / etc.). Keeps letters, digits, punctuation.
+     */
     @NonNull
     private static String sanitizeBody(@Nullable CharSequence raw) {
         if (raw == null) return "";
@@ -409,13 +512,94 @@ public final class ArticleTtsHelper {
             }
         } catch (Exception ignored) {
         }
-        // Strip leftover markup / collapse whitespace for cleaner speech.
         s = s.replaceAll("<[^>]+>", " ");
+        s = stripEmojiAndDecorativeSymbols(s);
         s = s.replaceAll("\\s+", " ").trim();
-        // Android TTS has practical utterance limits; keep a safe chunk.
         if (s.length() > 3500) {
             s = s.substring(0, 3500);
         }
         return s;
+    }
+
+    /**
+     * Remove emoji, dingbats, pictographs, variation selectors, ZWJ, and other
+     * non-speech symbols (e.g. 👉) while keeping letters/digits/punctuation.
+     */
+    @NonNull
+    static String stripEmojiAndDecorativeSymbols(@NonNull String input) {
+        StringBuilder out = new StringBuilder(input.length());
+        boolean lastWasSpace = false;
+        for (int i = 0; i < input.length(); ) {
+            int cp = input.codePointAt(i);
+            i += Character.charCount(cp);
+            if (shouldStripCodePoint(cp)) {
+                if (!lastWasSpace && out.length() > 0) {
+                    out.append(' ');
+                    lastWasSpace = true;
+                }
+                continue;
+            }
+            if (Character.isWhitespace(cp)) {
+                if (!lastWasSpace && out.length() > 0) {
+                    out.append(' ');
+                    lastWasSpace = true;
+                }
+                continue;
+            }
+            out.appendCodePoint(cp);
+            lastWasSpace = false;
+        }
+        return out.toString().trim();
+    }
+
+    private static boolean shouldStripCodePoint(int cp) {
+        // Common TTS-noise: emoji presentation, keycap, ZWJ, variation selectors.
+        if (cp == 0x200D || cp == 0xFE0E || cp == 0xFE0F || cp == 0x20E3) {
+            return true;
+        }
+        // Skin tone modifiers.
+        if (cp >= 0x1F3FB && cp <= 0x1F3FF) {
+            return true;
+        }
+        int type = Character.getType(cp);
+        if (type == Character.OTHER_SYMBOL
+                || type == Character.SURROGATE
+                || type == Character.PRIVATE_USE
+                || type == Character.NON_SPACING_MARK
+                        && (cp >= 0xFE00 && cp <= 0xFE0F)) {
+            // Keep currency etc. that are OTHER_SYMBOL? Most So symbols are decorative.
+            // Letters/digits never hit OTHER_SYMBOL. Currency is CURRENCY_SYMBOL (Sc).
+            return true;
+        }
+        // Misc symbols & dingbats, enclosed alphanumerics used as bullets.
+        if ((cp >= 0x2600 && cp <= 0x27BF)
+                || (cp >= 0x2300 && cp <= 0x23FF)
+                || (cp >= 0x2B00 && cp <= 0x2BFF)
+                || (cp >= 0x25A0 && cp <= 0x25FF)
+                || (cp >= 0x2190 && cp <= 0x21FF)
+                || (cp >= 0x1F000 && cp <= 0x1FAFF)
+                || (cp >= 0x1F300 && cp <= 0x1F9FF)) {
+            return true;
+        }
+        // Geometric / box drawing bullets sometimes used in news bodies.
+        if (cp == 0x2022 || cp == 0x2023 || cp == 0x25AA || cp == 0x25AB
+                || cp == 0x25CF || cp == 0x25CB || cp == 0x25B6 || cp == 0x25BA
+                || cp == 0x25C0 || cp == 0x25C6 || cp == 0x25C7 || cp == 0x261E
+                || cp == 0x261B || cp == 0x27A4 || cp == 0x2794 || cp == 0x279C) {
+            return true;
+        }
+        return false;
+    }
+
+    private static final class SpeakerSlot {
+        final WeakReference<ImageView> btnRef;
+        @Nullable WeakReference<View> pulseRef;
+        int style;
+
+        SpeakerSlot(@NonNull ImageView btn, @Nullable View pulse, int style) {
+            this.btnRef = new WeakReference<>(btn);
+            this.pulseRef = pulse == null ? null : new WeakReference<>(pulse);
+            this.style = style;
+        }
     }
 }

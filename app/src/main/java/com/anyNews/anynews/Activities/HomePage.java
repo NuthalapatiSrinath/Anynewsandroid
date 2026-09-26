@@ -15875,6 +15875,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getSearch_icon_on_toggle(),
                             encreptionRequest.getSearch_icon_size_dp()
                     );
+                    applyArticleTtsConfig(
+                            encreptionRequest.getTts_enabled(),
+                            encreptionRequest.getTts_speaker_on_image(),
+                            encreptionRequest.getTts_speaker_on_engagement()
+                    );
                     applyMagazineShareIconConfig(
                             encreptionRequest.getMagazine_share_icon_size_dp(),
                             encreptionRequest.getMagazine_share_margin_end_dp(),
@@ -17471,6 +17476,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             boolean changed = com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
                     this, onEngagement, onToggle, sizeDp);
             applyHomeModeSearchIcon();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Admin article TTS master + placements — null fields leave prefs (no wipe). */
+    private void applyArticleTtsConfig(
+            Boolean enabled, Boolean onImage, Boolean onEngagement) {
+        try {
+            com.anyNews.anynews.Utils.ArticleTtsConfigHelper.saveFromServer(
+                    this, enabled, onImage, onEngagement, null, null, null);
         } catch (Exception ignored) {
         }
     }

@@ -1844,6 +1844,8 @@ public class StartingActivity extends AppCompatActivity {
                         ArticleTtsConfigHelper.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getTtsEnabled(),
+                                startActivityReqModel.getData().getTtsSpeakerOnImage(),
+                                startActivityReqModel.getData().getTtsSpeakerOnEngagement(),
                                 startActivityReqModel.getData().getTtsLocale(),
                                 startActivityReqModel.getData().getTtsVoice(),
                                 startActivityReqModel.getData().getTtsEngine());
