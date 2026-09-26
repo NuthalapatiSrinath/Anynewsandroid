@@ -165,6 +165,11 @@ public class StartingActivity extends AppCompatActivity {
     String articleId1;
     /** Job id from /job/{id} or legacy /job-{base64} deep links. */
     String jobId1;
+    /**
+     * 0-based nested gallery/magazine page from share {@code ?page=} / {@code ?slide=}.
+     * Forwarded to Home as {@code SHARE_GALLERY_PAGE}; 0 = first page (legacy links).
+     */
+    int shareGalleryPage = 0;
     String scrren;
     // firebase storage
     FirebaseDatabase database = FirebaseDatabase.getInstance();
@@ -313,12 +318,24 @@ public class StartingActivity extends AppCompatActivity {
                         Constants.PREF_NAME);
             } catch (Exception ignored) {
             }
+        } else {
+            // Launcher / non-push splash: drop stale sticky so HomePage cannot pin
+            // a previously received (but untapped) notification article.
+            try {
+                SharedPrefsData.putString(
+                        getApplicationContext(),
+                        Constants.PENDING_PUSH_POST,
+                        "",
+                        Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
         }
         SharedPrefsData.putString(getApplicationContext(), Constants.REFERRER_POST, "0", Constants.PREF_NAME);
         // Clear any stale pending share post before parsing this launch's intent;
         // extractData() re-sets it only when this launch is an actual share link.
         SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
         SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_JOB, "", Constants.PREF_NAME);
+        SharedPrefsData.putInt(getApplicationContext(), Constants.PENDING_SHARE_PAGE, 0, Constants.PREF_NAME);
         // Cold start via splash (incl. Recents swipe-away → reopen): do NOT restore
         // mid-feed from HomePage's theme-recreate flip checkpoint. Theme/uiMode
         // recreate never goes through StartingActivity, so that path still works.
@@ -1036,8 +1053,10 @@ public class StartingActivity extends AppCompatActivity {
             Intent intent = new Intent(StartingActivity.this, HomePage.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             intent.putExtra("SHARE_REDIRECT_ID", shareId.trim());
+            intent.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
             intent.putExtra("EXTRA_SESSION_ID", "0");
-            intent.putExtra("TITLE", TITLE);
+            // Share path must not re-forward a stale splash TITLE as push_post_id.
+            intent.putExtra("TITLE", "0");
             intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
             intent.putExtra("JOB_REDIRECT_ID", jobId1);
             intent.putExtra("DATAFROM2G", DATAFROM2G);
@@ -1060,6 +1079,10 @@ public class StartingActivity extends AppCompatActivity {
                             Long.parseLong(uid.replaceAll("[^0-9]", "")), Constants.PREF_NAME);
                 } catch (Exception ignored) { /* non-numeric referrer */ }
             }
+            int page = ShareOutboundHelper.parseGalleryPage(uri);
+            shareGalleryPage = Math.max(0, page);
+            SharedPrefsData.putInt(getApplicationContext(), Constants.PENDING_SHARE_PAGE,
+                    shareGalleryPage, Constants.PREF_NAME);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -1205,10 +1228,20 @@ public class StartingActivity extends AppCompatActivity {
             }
             Intent intent = new Intent(StartingActivity.this, HomePage.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            intent.putExtra("notification", true);
             intent.putExtra("TITLE", pushPostId.trim());
+            intent.putExtra("TITILE", pushPostId.trim());
             intent.putExtra("EXTRA_SESSION_ID", "0");
             intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
             intent.putExtra("DATAFROM2G", DATAFROM2G);
+            try {
+                int nid = Math.abs(pushPostId.trim().hashCode());
+                if (nid == 0) {
+                    nid = 1;
+                }
+                intent.setData(Uri.parse("anynews://push/" + pushPostId.trim() + "/" + nid));
+            } catch (Exception ignored) {
+            }
             // Do not pass SHARE_REDIRECT_ID — push must use push_post_id only.
             startActivity(intent);
         } catch (Exception e) {
@@ -2870,9 +2903,26 @@ public class StartingActivity extends AppCompatActivity {
         // open then “automatically back” to the prior Home (or WhatsApp on crash).
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         intent.putExtra("EXTRA_SESSION_ID", "0");
-        intent.putExtra("TITLE", TITLE);
+        boolean pushTitle = TITLE != null && !TITLE.isEmpty()
+                && !"null".equalsIgnoreCase(TITLE) && !"0".equals(TITLE.trim());
+        if (pushTitle) {
+            intent.putExtra("notification", true);
+            intent.putExtra("TITLE", TITLE);
+            intent.putExtra("TITILE", TITLE);
+            try {
+                int nid = Math.abs(TITLE.trim().hashCode());
+                if (nid == 0) {
+                    nid = 1;
+                }
+                intent.setData(Uri.parse("anynews://push/" + TITLE.trim() + "/" + nid));
+            } catch (Exception ignored) {
+            }
+        } else {
+            intent.putExtra("TITLE", "0");
+        }
         intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
         intent.putExtra("SHARE_REDIRECT_ID", articleId1);
+        intent.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
         intent.putExtra("JOB_REDIRECT_ID", jobId1);
         intent.putExtra("DATAFROM2G", DATAFROM2G);
         if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
@@ -3197,9 +3247,18 @@ public class StartingActivity extends AppCompatActivity {
                                 Intent intent = new Intent(StartingActivity.this, HomePage.class);
                                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                                 intent.putExtra("EXTRA_SESSION_ID", "0");
-                                intent.putExtra("TITLE", TITLE);
+                                boolean pushTitle8 = TITLE != null && !TITLE.isEmpty()
+                                        && !"null".equalsIgnoreCase(TITLE) && !"0".equals(TITLE.trim());
+                                if (pushTitle8) {
+                                    intent.putExtra("notification", true);
+                                    intent.putExtra("TITLE", TITLE);
+                                    intent.putExtra("TITILE", TITLE);
+                                } else {
+                                    intent.putExtra("TITLE", "0");
+                                }
                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
                                 intent.putExtra("SHARE_REDIRECT_ID",articleId1);
+                                intent.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
                                 intent.putExtra("JOB_REDIRECT_ID", jobId1);
                                 intent.putExtra("DATAFROM2G",DATAFROM2G);
                                 if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
@@ -3287,9 +3346,18 @@ public class StartingActivity extends AppCompatActivity {
                                                 Intent intent = new Intent(StartingActivity.this, HomePage.class);
                                                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                                                 intent.putExtra("EXTRA_SESSION_ID", "0");
-                                                intent.putExtra("TITLE", TITLE);
+                                                boolean pushTitle9 = TITLE != null && !TITLE.isEmpty()
+                                                        && !"null".equalsIgnoreCase(TITLE) && !"0".equals(TITLE.trim());
+                                                if (pushTitle9) {
+                                                    intent.putExtra("notification", true);
+                                                    intent.putExtra("TITLE", TITLE);
+                                                    intent.putExtra("TITILE", TITLE);
+                                                } else {
+                                                    intent.putExtra("TITLE", "0");
+                                                }
                                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
                                                 intent.putExtra("SHARE_REDIRECT_ID",articleId1);
+                                                intent.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
                                                 intent.putExtra("JOB_REDIRECT_ID", jobId1);
                                                 intent.putExtra("DATAFROM2G",DATAFROM2G);
                                                 if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){

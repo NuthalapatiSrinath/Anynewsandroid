@@ -67,12 +67,30 @@ public final class SpecialGalleryFlipHelper {
             @Nullable TextView hintView,
             @Nullable WormDotsIndicator wormDots,
             @Nullable Runnable onPageChanged) {
+        return bind(host, pager, imageUrls, hintView, wormDots, onPageChanged, 0);
+    }
+
+    /**
+     * Same as {@link #bind(ViewGroup, ViewPager, List, TextView, WormDotsIndicator, Runnable)}
+     * but lands on {@code initialPage} (0-based, clamped) after adapter swap — used when a
+     * share deep link encodes {@code ?page=N}.
+     */
+    @Nullable
+    public static FlipView bind(
+            @NonNull ViewGroup host,
+            @Nullable ViewPager pager,
+            @Nullable List<String> imageUrls,
+            @Nullable TextView hintView,
+            @Nullable WormDotsIndicator wormDots,
+            @Nullable Runnable onPageChanged,
+            int initialPage) {
         ArrayList<String> urls = GalleryImageUrls.sanitize(imageUrls);
         if (urls.isEmpty()) {
             // One transparent seat — never invent a splash-logo "page".
             urls.add("");
         }
         final String fingerprint = GalleryImageUrls.fingerprint(urls);
+        final int landPage = Math.max(0, Math.min(initialPage, urls.size() - 1));
 
         // New bind must not inherit a stuck drive flag from a prior gesture —
         // unless the user is mid-swipe on this same nested FlipView (rebind would
@@ -82,6 +100,12 @@ public final class SpecialGalleryFlipHelper {
                 && existing != null
                 && existing.getVisibility() == View.VISIBLE
                 && existing.getWindowToken() != null) {
+            if (landPage > 0) {
+                try {
+                    existing.flipTo(landPage);
+                } catch (Exception ignored) {
+                }
+            }
             return existing;
         }
         NESTED_GALLERY_DRIVING.set(false);
@@ -187,9 +211,9 @@ public final class SpecialGalleryFlipHelper {
                 flipRef.setVisibility(View.GONE);
                 return null;
             }
-            // Land on page 0 after adapter swap — never leave a mid-peak seat.
+            // Land on share page (or 0) after adapter swap — never leave a mid-peak seat.
             try {
-                flipRef.flipTo(0);
+                flipRef.flipTo(landPage);
             } catch (Exception ignored) {
             }
             // First bind often runs before FlipView has non-zero size; Glide wait-for-layout
@@ -201,7 +225,12 @@ public final class SpecialGalleryFlipHelper {
             // from a cancelled first open. Re-kick until Glide actually paints.
             GalleryImageFlipAdapter priorAdapter =
                     (GalleryImageFlipAdapter) flipRef.getAdapter();
-            if (!priorAdapter.isPage0Loaded()) {
+            if (landPage > 0) {
+                try {
+                    flipRef.flipTo(landPage);
+                } catch (Exception ignored) {
+                }
+            } else if (!priorAdapter.isPage0Loaded()) {
                 schedulePage0Ensure(flipRef, priorAdapter);
             }
         }

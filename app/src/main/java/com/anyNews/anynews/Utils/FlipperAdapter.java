@@ -5505,6 +5505,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             // Cover Glide can lose the first-open race (transparent stub);
                             // neighbors often already in memory — re-kick page-0 after layout.
                             CardPagerAdapter.schedulePage0Ensure(magPager, magPagerAdapter);
+                            // Share deep-link ?page=N → land magazine ViewPager on that slide.
+                            try {
+                                final int land = applyPendingShareGalleryPage(
+                                        list.get(position).getPostId(),
+                                        convertView,
+                                        magPager,
+                                        null);
+                                if (land > 0) {
+                                    magPager.post(() -> {
+                                        try {
+                                            magPager.setCurrentItem(land, false);
+                                        } catch (Exception ignored) {
+                                        }
+                                    });
+                                }
+                            } catch (Exception ignored) {
+                            }
                             // Same Play Store WormDots + gallery_strip as image_gallery / half gallery.
                             if (image_magazineHolder.magzine_ll_dots != null) {
                                 image_magazineHolder.magzine_ll_dots.setVisibility(
@@ -5788,6 +5805,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         } else if (imageGallaryHolder.galleryLayout != null) {
                             galleryFlipHost = imageGallaryHolder.galleryLayout;
                         }
+                        int shareLandPage = -1;
+                        try {
+                            if (context instanceof HomePage) {
+                                // Peek via consume only when we bind — hold until below.
+                                shareLandPage = ((HomePage) context).consumeShareGalleryPage(
+                                        list.get(position).getPostId());
+                            } else if (activity instanceof HomePage) {
+                                shareLandPage = ((HomePage) activity).consumeShareGalleryPage(
+                                        list.get(position).getPostId());
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        final int galleryInitialPage = Math.max(0, shareLandPage);
                         if (isSpecialModeNow() && galleryFlipHost != null) {
                             // Keep Play Store WormDotsIndicator visible; Flip helper
                             // drives it via BaseDotsIndicator.Pager (no TextView dots).
@@ -5800,7 +5830,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     image_gallary,
                                     gallerySwipeHint,
                                     imageGallaryHolder.indicator,
-                                    null);
+                                    null,
+                                    galleryInitialPage);
                             if (galFlip != null) {
                                 usedSpecialGalleryFlip = true;
                             }
@@ -5816,6 +5847,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.indicator.setViewPager(viewpager);
                             }
                             SamplePagerAdapter.schedulePage0Ensure(viewpager, galleryPagerAdapter);
+                            if (galleryInitialPage > 0) {
+                                try {
+                                    int safe = Math.max(0,
+                                            Math.min(galleryInitialPage, image_gallary.size() - 1));
+                                    viewpager.setCurrentItem(safe, false);
+                                } catch (Exception ignored) {
+                                }
+                            }
                             GallerySwipeHintHelper.bind(
                                     viewpager, gallerySwipeHint, image_gallary.size());
                         }
@@ -7416,7 +7455,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             imageGallaryHolder.image_gallary_scrip.setVisibility(View.GONE);
         }
 
-        final String mInvitationUrl = list.get(position).getShareLink();
+        final String mInvitationUrl = shareLinkForGalleryPage(position, customConvertView);
         final String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         final boolean galleryWhatsapp = from == 1 || fromWhatsapp;
         // Defer past the click frame so the sheet dismiss paints first, then capture.
@@ -7497,7 +7536,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         image_magazineHolder.magzine_ll_dots.setVisibility(GONE);
         hideOnPostMagazineShare(imageViewShare);
 
-        String mInvitationUrl = list.get(position).getShareLink();
+        String mInvitationUrl = shareLinkForGalleryPage(position, magzine_relative_slider);
         String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         final boolean magazineWasWhatsapp = fromWhatsapp;
         fromWhatsapp = false;
@@ -11285,6 +11324,126 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
+     * Current nested gallery/magazine page (0-based) inside a post card root.
+     * Prefers Special FlipView, then gallery ViewPager, then magazine ViewPager.
+     */
+    private int resolveNestedGalleryPage(@Nullable View root) {
+        if (root == null) {
+            return 0;
+        }
+        try {
+            FlipView flip = SpecialGalleryFlipHelper.findNestedGalleryFlip(root);
+            if (flip != null && flip.getVisibility() == VISIBLE) {
+                return Math.max(0, flip.getCurrentPage());
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            ViewPager galleryPager = root.findViewById(R.id.viewpager);
+            if (galleryPager != null
+                    && galleryPager.getVisibility() == VISIBLE
+                    && galleryPager.getAdapter() != null) {
+                return Math.max(0, galleryPager.getCurrentItem());
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            ViewPager magPager = root.findViewById(R.id.magzine_viewPager_data);
+            if (magPager != null && magPager.getAdapter() != null) {
+                return Math.max(0, magPager.getCurrentItem());
+            }
+        } catch (Exception ignored) {
+        }
+        if (image_magazineHolder != null
+                && image_magazineHolder.magzine_viewPager_data != null
+                && image_magazineHolder.magzine_viewPager_data.getAdapter() != null) {
+            try {
+                return Math.max(0,
+                        image_magazineHolder.magzine_viewPager_data.getCurrentItem());
+            } catch (Exception ignored) {
+            }
+        }
+        if (imageGallaryHolder != null && imageGallaryHolder.viewpager != null
+                && imageGallaryHolder.viewpager.getAdapter() != null
+                && imageGallaryHolder.viewpager.getVisibility() == VISIBLE) {
+            try {
+                return Math.max(0, imageGallaryHolder.viewpager.getCurrentItem());
+            } catch (Exception ignored) {
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Post share_link with current nested page encoded as {@code ?page=N} (0-based).
+     * Page 0 omits the query so legacy short URLs stay unchanged.
+     */
+    @NonNull
+    private String shareLinkForGalleryPage(int position, @Nullable View root) {
+        String base = "";
+        try {
+            if (list != null && position >= 0 && position < list.size()) {
+                base = list.get(position).getShareLink();
+            }
+        } catch (Exception ignored) {
+        }
+        return ShareOutboundHelper.appendGalleryPage(base, resolveNestedGalleryPage(root));
+    }
+
+    /**
+     * Apply one-shot share {@code ?page=} to a nested gallery FlipView / ViewPager
+     * after bind. Returns the page used ({@code >= 0}), or {@code -1} if none pending.
+     */
+    private int applyPendingShareGalleryPage(long postId, @Nullable View root,
+                                             @Nullable ViewPager pager,
+                                             @Nullable FlipView flip) {
+        int page = -1;
+        try {
+            if (context instanceof HomePage) {
+                page = ((HomePage) context).consumeShareGalleryPage(postId);
+            } else if (activity instanceof HomePage) {
+                page = ((HomePage) activity).consumeShareGalleryPage(postId);
+            }
+        } catch (Exception ignored) {
+        }
+        if (page < 0) {
+            return -1;
+        }
+        final int land = page;
+        if (flip != null) {
+            try {
+                int count = flip.getPageCount();
+                int safe = Math.max(0, Math.min(land, Math.max(0, count - 1)));
+                flip.flipTo(safe);
+                return safe;
+            } catch (Exception ignored) {
+            }
+        }
+        if (pager != null && pager.getAdapter() != null) {
+            try {
+                int count = pager.getAdapter().getCount();
+                int safe = Math.max(0, Math.min(land, Math.max(0, count - 1)));
+                pager.setCurrentItem(safe, false);
+                return safe;
+            } catch (Exception ignored) {
+            }
+        }
+        if (root != null) {
+            FlipView nested = SpecialGalleryFlipHelper.findNestedGalleryFlip(root);
+            if (nested != null) {
+                try {
+                    int count = nested.getPageCount();
+                    int safe = Math.max(0, Math.min(land, Math.max(0, count - 1)));
+                    nested.flipTo(safe);
+                    return safe;
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return land;
+    }
+
+    /**
      * Single-launch guard for all share entry points. Returns false if a share is
      * already in flight or was accepted within {@link #SHARE_LAUNCH_GUARD_MS}.
      */
@@ -14769,7 +14928,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void launchMagazinePdfShareIntent(int position, Uri pdfUri) {
-        String mInvitationUrl = list.get(position).getShareLink();
+        String mInvitationUrl = shareLinkForGalleryPage(position, null);
         String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("application/pdf");
@@ -14786,7 +14945,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void launchMagazineImagesShareIntent(int position, ArrayList<Uri> uris) {
-        String mInvitationUrl = list.get(position).getShareLink();
+        String mInvitationUrl = shareLinkForGalleryPage(position, null);
         String msg = ShareOutboundHelper.formatCaption(list.get(position).getTitle(), mInvitationUrl, list.get(position).getPostId());
         Intent intent = new Intent();
         if (uris.size() == 1) {

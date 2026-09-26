@@ -15,6 +15,7 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -257,5 +258,76 @@ public final class ShareOutboundHelper {
             return shareLink.trim();
         }
         return SharePublicBaseHelper.buildFallbackShareUrl(context, postId, null);
+    }
+
+    /**
+     * Append 0-based gallery/magazine page to an https share URL.
+     * {@code pageIndex <= 0} leaves the link unchanged (legacy links = page 0).
+     * Replaces any existing {@code page} / {@code slide} query param.
+     */
+    @NonNull
+    public static String appendGalleryPage(@Nullable String httpsShareLink, int pageIndex) {
+        if (TextUtils.isEmpty(httpsShareLink) || pageIndex <= 0) {
+            return httpsShareLink != null ? httpsShareLink.trim() : "";
+        }
+        try {
+            Uri uri = Uri.parse(httpsShareLink.trim());
+            Uri.Builder b = uri.buildUpon().clearQuery();
+            Set<String> names = uri.getQueryParameterNames();
+            if (names != null) {
+                for (String name : names) {
+                    if (name == null) {
+                        continue;
+                    }
+                    if ("page".equalsIgnoreCase(name) || "slide".equalsIgnoreCase(name)) {
+                        continue;
+                    }
+                    for (String v : uri.getQueryParameters(name)) {
+                        b.appendQueryParameter(name, v);
+                    }
+                }
+            }
+            b.appendQueryParameter("page", String.valueOf(pageIndex));
+            return b.build().toString();
+        } catch (Exception e) {
+            String base = httpsShareLink.trim();
+            String sep = base.contains("?") ? "&" : "?";
+            return base + sep + "page=" + pageIndex;
+        }
+    }
+
+    /**
+     * Parse 0-based gallery page from a deep-link / share URI.
+     * Accepts {@code page} or {@code slide}; missing / invalid → 0.
+     */
+    public static int parseGalleryPage(@Nullable Uri uri) {
+        if (uri == null) {
+            return 0;
+        }
+        try {
+            String raw = uri.getQueryParameter("page");
+            if (TextUtils.isEmpty(raw)) {
+                raw = uri.getQueryParameter("slide");
+            }
+            if (TextUtils.isEmpty(raw)) {
+                return 0;
+            }
+            int page = Integer.parseInt(raw.trim().replaceAll("[^0-9]", ""));
+            return Math.max(0, page);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /** @see #parseGalleryPage(Uri) */
+    public static int parseGalleryPage(@Nullable String urlOrUri) {
+        if (TextUtils.isEmpty(urlOrUri)) {
+            return 0;
+        }
+        try {
+            return parseGalleryPage(Uri.parse(urlOrUri.trim()));
+        } catch (Exception e) {
+            return 0;
+        }
     }
 }

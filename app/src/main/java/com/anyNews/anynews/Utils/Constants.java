@@ -720,9 +720,17 @@ public class Constants {
     // Hindi post once, then continue the Telugu feed — never rewrite LanguageID.
     public static String PENDING_SHARE_POST = "pending_share_post_id";
     /**
-     * One-shot FCM push post id. Written when the tray PendingIntent is built /
-     * splash receives a push tap; HomePage consumes+clears so warm opens still
-     * pin the article when Intent extras are dropped by OEM / CLEAR_TOP races.
+     * One-shot 0-based gallery/magazine page from share deep links ({@code ?page=N}).
+     * Written by StartingActivity with {@link #PENDING_SHARE_POST}; HomePage holds
+     * it until FlipperAdapter binds the nested FlipView/ViewPager, then clears.
+     * Missing / 0 = first page (legacy short links without page).
+     */
+    public static String PENDING_SHARE_PAGE = "pending_share_gallery_page";
+    /**
+     * One-shot FCM push post id. Written only on tray tap (HomePage / splash),
+     * never on FCM receive — receive-time sticky opened the latest push on
+     * launcher opens and broke stacked-notif correctness. Cleared after land
+     * or on non-push splash.
      */
     public static String PENDING_PUSH_POST = "pending_push_post_id";
     /** One-shot job id from /job/{id} or legacy /job-{base64} share deep links. */

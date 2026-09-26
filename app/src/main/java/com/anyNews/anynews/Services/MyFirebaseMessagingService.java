@@ -244,28 +244,44 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
     /**
      * Stable tray + PendingIntent requestCode per post. Never 0 (collides across
-     * missing-id pushes under FLAG_UPDATE_CURRENT).
+     * missing-id pushes under FLAG_UPDATE_CURRENT). When post id is missing/0,
+     * diversify with object/title hash so notification-only payloads do not share
+     * one PendingIntent.
      */
     private int safeNotificationId(String postId) {
+        return safeNotificationId(postId, null);
+    }
+
+    private int safeNotificationId(String postId, @Nullable String diversifier) {
         if (postId == null || postId.trim().isEmpty() || "null".equalsIgnoreCase(postId.trim())) {
-            return 1;
+            return diversifiedFallbackId(diversifier);
         }
         String raw = postId.trim();
         try {
             long v = Long.parseLong(raw);
             if (v == 0L) {
-                return 1;
+                return diversifiedFallbackId(diversifier);
             }
             // Keep positive int identity; large ids hash to a stable non-zero code.
             if (v > 0 && v <= Integer.MAX_VALUE) {
                 return (int) v;
             }
             int h = Long.hashCode(v);
-            return h != 0 ? Math.abs(h) : 1;
+            return h != 0 ? Math.abs(h) : diversifiedFallbackId(diversifier);
         } catch (NumberFormatException e) {
             int h = raw.hashCode();
-            return h != 0 ? Math.abs(h) : 1;
+            return h != 0 ? Math.abs(h) : diversifiedFallbackId(diversifier);
         }
+    }
+
+    private static int diversifiedFallbackId(@Nullable String diversifier) {
+        if (diversifier != null && !diversifier.trim().isEmpty()) {
+            int h = diversifier.trim().hashCode();
+            if (h != 0) {
+                return Math.abs(h);
+            }
+        }
+        return 1;
     }
 
     /**
@@ -285,7 +301,8 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         if (objectJson != null) {
             resultIntent.putExtra("OBJECT", objectJson);
         }
-        int notificationId = safeNotificationId(postId);
+        String diversifier = objectJson != null ? objectJson : title;
+        int notificationId = safeNotificationId(postId, diversifier);
         try {
             resultIntent.setData(Uri.parse("anynews://push/" + postId + "/" + notificationId));
         } catch (Exception ignored) {
@@ -293,20 +310,10 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         resultIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        try {
-            SharedPrefsData.putString(
-                    getApplicationContext(),
-                    Constants.PENDING_PUSH_POST,
-                    postId,
-                    Constants.PREF_NAME);
-            // Push owns seating — do not let a stale share sticky win.
-            SharedPrefsData.putString(
-                    getApplicationContext(),
-                    Constants.PENDING_SHARE_POST,
-                    "",
-                    Constants.PREF_NAME);
-        } catch (Exception ignored) {
-        }
+        // Do NOT write PENDING_PUSH_POST here — this runs on FCM receive, not tap.
+        // Receive-time sticky made launcher/cold opens land on the latest push, and
+        // stacked notifs all shared one sticky (last writer wins). Extras + data URI
+        // carry the post id; HomePage/StartingActivity persist sticky only on tap.
         return resultIntent;
     }
 
@@ -776,7 +783,8 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         }
 
         Intent resultIntent = buildPushOpenIntent(post_id, title, object);
-        int notificationId = safeNotificationId(post_id);
+        String diversifier = object != null ? object : title;
+        int notificationId = safeNotificationId(post_id, diversifier);
         PendingIntent pendingIntent = buildPushPendingIntent(resultIntent, notificationId);
         bindRemoteViewClicks(collapsedView, expandedView, pendingIntent);
 
@@ -910,7 +918,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             }
 
             Intent resultIntent = buildPushOpenIntent(post_id, actor, object.toString());
-            int notificationId = safeNotificationId(post_id);
+            int notificationId = safeNotificationId(post_id, object.toString());
             PendingIntent pendingIntent = buildPushPendingIntent(resultIntent, notificationId);
 
             final Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);

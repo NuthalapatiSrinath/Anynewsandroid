@@ -752,6 +752,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     String SHARE_REDIRECT_ID = "", TITLE_REWARDS = "", pushUpdatedID,DATAFROM2G;
     long SHARE_ID;
     /**
+     * One-shot 0-based nested gallery/magazine page from share {@code ?page=}.
+     * Held until FlipperAdapter binds the shared post's FlipView/ViewPager.
+     * {@code -1} = none pending; {@code 0+} = land on that nested page.
+     */
+    private long pendingShareGalleryPostId = 0L;
+    private int pendingShareGalleryPage = -1;
+    /**
      * One extra page-0 after a sticky share miss — List_All_Articles with
      * {@code share_post_id} re-fetches the post by id when the first page did not
      * pin it (e.g. cache race / cross-language push sticky refuse). Cleared with
@@ -1318,7 +1325,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         String sessionId = "" + getIntent().getStringExtra("EXTRA_SESSION_ID");
         pushUpdatedID = "" + getIntent().getStringExtra("TITLE");
-        // FCM tray: prefer TITILE typo key, then data URI, then PENDING_PUSH_POST.
+        // FCM tray: prefer TITILE typo key, then data URI, then PENDING_PUSH_POST
+        // (only when this launch looks like a push tap — splash always forwards TITLE).
         if (pushUpdatedID == null || pushUpdatedID.isEmpty()
                 || "null".equalsIgnoreCase(pushUpdatedID)) {
             String titleAlt = getIntent().getStringExtra("TITILE");
@@ -1334,9 +1342,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 pushUpdatedID = fromUri;
             }
         }
-        if (pushUpdatedID == null || pushUpdatedID.isEmpty()
+        boolean pushTapOpen = isPushOpenIntent(getIntent());
+        if (pushTapOpen
+                && (pushUpdatedID == null || pushUpdatedID.isEmpty()
                 || "null".equalsIgnoreCase(pushUpdatedID)
-                || "0".equals(pushUpdatedID.trim())) {
+                || "0".equals(pushUpdatedID.trim()))) {
             try {
                 String pendingPush = SharedPrefsData.getString(
                         getApplicationContext(), Constants.PENDING_PUSH_POST, Constants.PREF_NAME);
@@ -1348,9 +1358,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
+        // Persist sticky only for a real push tap (hand-off / process death). Always
+        // clear stale receive-era sticky on non-push opens so launcher cannot pin it.
         try {
-            SharedPrefsData.putString(
-                    getApplicationContext(), Constants.PENDING_PUSH_POST, "", Constants.PREF_NAME);
+            if (pushTapOpen && pushUpdatedID != null) {
+                String raw = pushUpdatedID.trim();
+                if (!raw.isEmpty() && !"null".equalsIgnoreCase(raw) && !"0".equals(raw)) {
+                    SharedPrefsData.putString(
+                            getApplicationContext(), Constants.PENDING_PUSH_POST, raw, Constants.PREF_NAME);
+                } else {
+                    SharedPrefsData.putString(
+                            getApplicationContext(), Constants.PENDING_PUSH_POST, "", Constants.PREF_NAME);
+                }
+            } else {
+                SharedPrefsData.putString(
+                        getApplicationContext(), Constants.PENDING_PUSH_POST, "", Constants.PREF_NAME);
+            }
         } catch (Exception ignored) {
         }
         SHARE_REDIRECT_ID = "" + getIntent().getStringExtra("SHARE_REDIRECT_ID");
@@ -1377,6 +1400,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             try {
                 SharedPrefsData.putString(
                         getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
+                SharedPrefsData.putInt(
+                        getApplicationContext(), Constants.PENDING_SHARE_PAGE, 0, Constants.PREF_NAME);
             } catch (Exception ignored) {
             }
         } else if (SHARE_REDIRECT_ID == null || SHARE_REDIRECT_ID.equals("null") || SHARE_REDIRECT_ID.trim().isEmpty()) {
@@ -1396,6 +1421,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 SHARE_ID = 0;
             }
         }
+        capturePendingShareGalleryPage(getIntent(), SHARE_ID);
         // Job share deep-link: open Jobs hub on the exact job (mirrors article SHARE sticky).
         try {
             String jobRedirect = "" + getIntent().getStringExtra("JOB_REDIRECT_ID");
@@ -1837,9 +1863,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 || "0".equals(pushRaw.trim())) {
             pushRaw = postIdFromPushIntentUri(intent.getData());
         }
-        if (pushRaw == null || pushRaw.trim().isEmpty()
+        // PENDING only when this onNewIntent is a push tap (not every warm resume).
+        if ((pushRaw == null || pushRaw.trim().isEmpty()
                 || "null".equalsIgnoreCase(pushRaw.trim())
-                || "0".equals(pushRaw.trim())) {
+                || "0".equals(pushRaw.trim()))
+                && isPushOpenIntent(intent)) {
             try {
                 String pendingPush = SharedPrefsData.getString(
                         getApplicationContext(), Constants.PENDING_PUSH_POST, Constants.PREF_NAME);
@@ -1867,8 +1895,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         try {
+            // Sticky for this tap only (process death while feed loads).
             SharedPrefsData.putString(
-                    getApplicationContext(), Constants.PENDING_PUSH_POST, "", Constants.PREF_NAME);
+                    getApplicationContext(),
+                    Constants.PENDING_PUSH_POST,
+                    String.valueOf(pushId),
+                    Constants.PREF_NAME);
             SharedPrefsData.putString(
                     getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
         } catch (Exception ignored) {
@@ -1882,7 +1914,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         SHARE_REDIRECT_ID = "0";
         showLog("push onNewIntent TITLE=" + pushUpdatedID);
         try {
+            intent.putExtra("notification", true);
             intent.putExtra("TITLE", pushUpdatedID);
+            intent.putExtra("TITILE", pushUpdatedID);
             intent.removeExtra("SHARE_REDIRECT_ID");
         } catch (Exception ignored) {
         }
@@ -1913,6 +1947,36 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception e) {
             showLog("push onNewIntent land failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * True when this Intent is a notification tray tap (not splash forwarding a
+     * blank TITLE). Splash always puts {@code TITLE}; only FCM sets
+     * {@code notification}, {@code TITILE}, or {@code anynews://push/…}.
+     */
+    private static boolean isPushOpenIntent(@Nullable Intent intent) {
+        if (intent == null) {
+            return false;
+        }
+        try {
+            if (intent.getBooleanExtra("notification", false)) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        if (postIdFromPushIntentUri(intent.getData()) != null) {
+            return true;
+        }
+        try {
+            String titile = intent.getStringExtra("TITILE");
+            if (titile != null && !titile.trim().isEmpty()
+                    && !"null".equalsIgnoreCase(titile.trim())
+                    && !"0".equals(titile.trim())) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     /** Post id from FCM uniqueness URI {@code anynews://push/{postId}/…}. */
@@ -2011,6 +2075,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         SHARE_REDIRECT_ID = String.valueOf(shareId);
         SHARE_ID = shareId;
         deepLinkShareRescueAttempted = false;
+        capturePendingShareGalleryPage(intent, shareId);
         showLog("share onNewIntent SHARE_ID=" + SHARE_ID);
         try {
             intent.removeExtra("SHARE_REDIRECT_ID");
@@ -14102,7 +14167,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             Intent intent = getIntent();
             if (intent != null) {
                 intent.removeExtra("TITLE");
+                intent.removeExtra("TITILE");
             }
+        } catch (Exception ignored) {
+        }
+        try {
+            SharedPrefsData.putString(
+                    getApplicationContext(), Constants.PENDING_PUSH_POST, "", Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
     }
@@ -19612,7 +19683,8 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /** Drop one-shot share + push deep-link sticky so Reload / next pages do not re-pin.
-     * Does not change {@link Constants#LanguageID} — cross-language share is one-shot only. */
+     * Does not change {@link Constants#LanguageID} — cross-language share is one-shot only.
+     * Nested gallery page sticky is kept until {@link #consumeShareGalleryPage(long)}. */
     private void consumeDeepLinkStickyIds() {
         SHARE_ID = 0;
         SHARE_REDIRECT_ID = "0";
@@ -19622,6 +19694,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             Intent intent = getIntent();
             if (intent != null) {
                 intent.removeExtra("SHARE_REDIRECT_ID");
+                intent.removeExtra("SHARE_GALLERY_PAGE");
             }
         } catch (Exception ignored) {
         }
@@ -19633,6 +19706,71 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Read share gallery page from intent extra or one-shot prefs and hold until
+     * the shared post's nested FlipView/ViewPager binds.
+     */
+    private void capturePendingShareGalleryPage(@Nullable Intent intent, long sharePostId) {
+        if (sharePostId <= 0) {
+            return;
+        }
+        int page = -1;
+        try {
+            if (intent != null && intent.hasExtra("SHARE_GALLERY_PAGE")) {
+                page = intent.getIntExtra("SHARE_GALLERY_PAGE", 0);
+            }
+        } catch (Exception ignored) {
+        }
+        if (page < 0) {
+            try {
+                page = SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.PENDING_SHARE_PAGE, Constants.PREF_NAME);
+            } catch (Exception ignored) {
+                page = 0;
+            }
+        }
+        try {
+            SharedPrefsData.putInt(
+                    getApplicationContext(), Constants.PENDING_SHARE_PAGE, 0, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        try {
+            if (intent != null) {
+                intent.removeExtra("SHARE_GALLERY_PAGE");
+            }
+        } catch (Exception ignored) {
+        }
+        if (page < 0) {
+            page = 0;
+        }
+        pendingShareGalleryPostId = sharePostId;
+        pendingShareGalleryPage = page;
+        showLog("share gallery page pending postId=" + sharePostId + " page=" + page);
+    }
+
+    /**
+     * One-shot nested gallery/magazine page for a share open.
+     * Returns {@code >= 0} once for {@code postId}, then clears.
+     * Missing page param → returns {@code 0} (first page) only when this post
+     * was the share target; unrelated binds return {@code -1}.
+     */
+    public int consumeShareGalleryPage(long postId) {
+        if (postId <= 0 || pendingShareGalleryPostId <= 0
+                || postId != pendingShareGalleryPostId
+                || pendingShareGalleryPage < 0) {
+            return -1;
+        }
+        int page = pendingShareGalleryPage;
+        pendingShareGalleryPage = -1;
+        pendingShareGalleryPostId = 0L;
+        try {
+            SharedPrefsData.putInt(
+                    getApplicationContext(), Constants.PENDING_SHARE_PAGE, 0, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        return Math.max(0, page);
     }
 
     /**
