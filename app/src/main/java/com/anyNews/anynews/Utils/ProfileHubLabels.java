@@ -118,12 +118,18 @@ public final class ProfileHubLabels {
         }
     }
 
-    /**
-     * Caption above the district name on the location row.
-     * Always English so users can find location controls after switching language.
-     */
+    /** Caption above the district name on the location row. */
     public static String selectedLocation(@Nullable Context context) {
-        return str(context, R.string.profile_selected_location, "Choose Your Location");
+        switch (languageId(context)) {
+            case 1: return "നിങ്ങളുടെ സ്ഥലം തിരഞ്ഞെടുക്കുക";
+            case 2: return "अपना स्थान चुनें";
+            case 3: return "మీ లొకేషన్ ఎంచుకోండి";
+            case 4: return "உங்கள் இடத்தைத் தேர்ந்தெடுக்கவும்";
+            case 5: return "ನಿಮ್ಮ ಸ್ಥಳವನ್ನು ಆಯ್ಕೆಮಾಡಿ";
+            case 6: return "ଆପଣଙ୍କ ଅବସ୍ଥାନ ବାଛନ୍ତୁ";
+            default:
+                return str(context, R.string.profile_selected_location, "Choose Your Location");
+        }
     }
 
     /** "Edit profile" CTA on the completion bar. */

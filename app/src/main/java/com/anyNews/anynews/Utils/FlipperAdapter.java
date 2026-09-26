@@ -4763,29 +4763,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         rememberWhatsappShareCountView(list.get(position).getPostId(), whatsappView);
     }
 
-    /**
-     * Special / magazine on-post Share: same blue circular {@code ic_share_full}
-     * + {@code blink_share} as Calendar and full-image share. Lives bottom-right
-     * on the post (footer Calendar replaced the old center Share slot).
-     */
-    private void startMagazineShareBlink(ImageView shareIcon) {
-        if (shareIcon == null) {
-            return;
-        }
-        shareIcon.setImageResource(R.drawable.ic_share_full);
-        shareIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        shareIcon.clearColorFilter();
-        shareIcon.setBackground(null);
-        MagazineShareIconHelper.apply(context, shareIcon);
-        shareIcon.setVisibility(VISIBLE);
-        shareIcon.setClickable(true);
-        shareIcon.setFocusable(true);
-        shareIcon.clearAnimation();
-        Animation blink = AnimationUtils.loadAnimation(context, R.anim.blink_share);
-        shareIcon.startAnimation(blink);
-    }
-
-    /** Hide on-post magazine/Special Share (normal galleries / non-glow posts). */
+    /** Hide on-post magazine/Special Share — Play Store uses footer middle Share. */
     private void hideOnPostMagazineShare(ImageView shareIcon) {
         if (shareIcon == null) {
             return;
@@ -4800,9 +4778,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Show All/Single share sheet and hide every on-post blue Share overlay so the
-     * FAB cannot sit on top of {@code imageViewShareClose} (gallery FrameLayout
-     * places {@code image_gallary_share} above {@code scrren_icon}).
+     * Show All/Single share sheet and keep on-post Share hidden (footer Share owns it).
      */
     private void openOnPostShareSheet(@Nullable RelativeLayout shareSheet,
                                       @Nullable ImageView... shareIcons) {
@@ -4829,10 +4805,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Posts that used the old footer magazine Share: true magazines, Magazines-cat
+     * Posts that use Play Store footer-middle Share: true magazines, Magazines-cat
      * specials, and image_gallery pages while the Special tab is active.
      */
-    private boolean shouldShowOnPostMagazineShare(@Nullable ModelClass.Datum item) {
+    private boolean shouldUseMagazineFooterShare(@Nullable ModelClass.Datum item) {
         if (item == null) {
             return false;
         }
@@ -4852,23 +4828,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 || type.equalsIgnoreCase("magazines");
     }
 
-    /**
-     * Re-show blue blink Share after closing the All/Single sheet, only for posts
-     * that previously used footer magazine Share.
-     */
+    /** After All/Single sheet closes, keep on-post Share hidden (footer owns it). */
     private void restoreOnPostMagazineShare(ImageView shareIcon, ModelClass.Datum item,
                                             View.OnClickListener clickListener) {
-        if (shareIcon == null) {
-            return;
-        }
-        if (shouldShowOnPostMagazineShare(item)) {
-            startMagazineShareBlink(shareIcon);
-            if (clickListener != null) {
-                shareIcon.setOnClickListener(clickListener);
-            }
-        } else {
-            hideOnPostMagazineShare(shareIcon);
-        }
+        hideOnPostMagazineShare(shareIcon);
     }
 
     private int getVideoLayoutTopHeight() {
@@ -5422,24 +5385,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         image_magazineHolder.magzine_indicator = convertView.findViewById(R.id.magzine_indicator);
                         final RelativeLayout magzine_relative_slider = convertView.findViewById(R.id.magzine_relative_slider);
                         ImageView imageViewShareMag = convertView.findViewById(R.id.imageViewShare);
-                        // Footer Calendar took the old center Share slot — restore blue blink
-                        // Share on the post (bottom-right), same action as former footer Share.
+                        // Play Store: footer-middle blinking Share; hide on-post corner Share.
+                        if (imageViewShareMag != null) {
+                            hideOnPostMagazineShare(imageViewShareMag);
+                        }
                         final RelativeLayout relativeLayoutShareOpt = convertView.findViewById(R.id.relativeLayoutShareOpt);
                         final TextView textViewAllPage = convertView.findViewById(R.id.textViewAllPage);
                         final TextView textViewSinglePage = convertView.findViewById(R.id.textViewSinglePage);
                         final ImageView imageViewShareClose = convertView.findViewById(R.id.imageViewShareClose);
-                        final View.OnClickListener magazineOnPostShareClick = new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                fromWhatsapp = false;
-                                openOnPostShareSheet(relativeLayoutShareOpt, imageViewShareMag);
-                            }
-                        };
-                        if (imageViewShareMag != null) {
-                            startMagazineShareBlink(imageViewShareMag);
-                            imageViewShareMag.setOnClickListener(magazineOnPostShareClick);
-                        }
-                        // Keep HomePage sync (footer Share stays hidden; Calendar owns center).
                         try {
                             if (context instanceof HomePage) {
                                 ((HomePage) context).onMagazinePageBound(position);
@@ -5456,8 +5409,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             @Override
                             public void onClick(View view) {
                                 relativeLayoutShareOpt.setVisibility(GONE);
-                                restoreOnPostMagazineShare(imageViewShareMag, list.get(position),
-                                        magazineOnPostShareClick);
+                                hideOnPostMagazineShare(imageViewShareMag);
                                 fromWhatsapp = false;
                                 image_magazineHolder.magzine_ll_dots.setVisibility(VISIBLE);
                             }
@@ -5466,8 +5418,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             @Override
                             public void onClick(View view) {
                                 relativeLayoutShareOpt.setVisibility(GONE);
-                                restoreOnPostMagazineShare(imageViewShareMag, list.get(position),
-                                        magazineOnPostShareClick);
+                                hideOnPostMagazineShare(imageViewShareMag);
                                 shareFullMagazine(position);
                             }
                         });
@@ -5765,10 +5716,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         pauseVideo();
                         ArrayList<String> image_gallary = new ArrayList<>();
                         showLog("image_gallery:::");
-                        // Magazines specials (cat 15) + Special-tab galleries get on-post blink Share.
-                        final boolean galleryUsesGlowShare =
-                                shouldShowOnPostMagazineShare(list.get(position));
-                        if (galleryUsesGlowShare) {
+                        // Magazines specials + Special-tab galleries → footer blinking Share.
+                        final boolean galleryUsesFooterShare =
+                                shouldUseMagazineFooterShare(list.get(position));
+                        if (galleryUsesFooterShare) {
                             try {
                                 if (context instanceof HomePage) {
                                     ((HomePage) context).onMagazinePageBound(position);
@@ -5797,37 +5748,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         imageGallaryHolder.imageViewShareClose = convertView.findViewById(R.id.imageViewShareClose);
                         //imageGallaryHolder.galleryLayout.setLayerType(View.LAYER_TYPE_NONE,null);
                         imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
+                        // On-image corner Share removed — footer Share covers Magazines/Special.
+                        hideOnPostMagazineShare(imageGallaryHolder.image_gallary_share);
                         final View finalConvertView = convertView;
-                        final ModelClass.Datum galleryItem = list.get(position);
-                        final View.OnClickListener galleryOnPostShareClick = new View.OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                fromWhatsapp = false;
-                                imageGallaryHolder.relativeLayoutShareOpt =
-                                        finalConvertView.findViewById(R.id.relativeLayoutShareOpt);
-                                imageGallaryHolder.image_gallary_share =
-                                        finalConvertView.findViewById(R.id.image_gallary_share);
-                                imageGallaryHolder.dotIndicatior =
-                                        finalConvertView.findViewById(R.id.dotIndicatior);
-                                openOnPostShareSheet(imageGallaryHolder.relativeLayoutShareOpt,
-                                        imageGallaryHolder.image_gallary_share);
-                                if (imageGallaryHolder.dotIndicatior != null) {
-                                    imageGallaryHolder.dotIndicatior.setVisibility(GONE);
-                                }
-                            }
-                        };
-                        if (imageGallaryHolder.image_gallary_share != null) {
-                            if (galleryUsesGlowShare) {
-                                // Magazines/Special numbered galleries: on-post blue blink Share
-                                // (footer Calendar replaced the old center Share slot).
-                                startMagazineShareBlink(imageGallaryHolder.image_gallary_share);
-                                imageGallaryHolder.image_gallary_share.setOnClickListener(
-                                        galleryOnPostShareClick);
-                            } else {
-                                // Normal News galleries keep on-image share hidden.
-                                hideOnPostMagazineShare(imageGallaryHolder.image_gallary_share);
-                            }
-                        }
                         //imageGallaryHolder.indicator.initialize(config);
                         List<String> galleryImages = list.get(position).getImages();
                         if (galleryImages != null && !galleryImages.isEmpty()) {
@@ -5917,8 +5840,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.image_gallary_share = finalConvertView.findViewById(R.id.image_gallary_share);
                                 imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
                                 imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
-                                restoreOnPostMagazineShare(imageGallaryHolder.image_gallary_share,
-                                        galleryItem, galleryOnPostShareClick);
+                                hideOnPostMagazineShare(imageGallaryHolder.image_gallary_share);
                                 imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);
 
                             }
@@ -5931,9 +5853,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 imageGallaryHolder.image_gallary_share = finalConvertView.findViewById(R.id.image_gallary_share);
                                 imageGallaryHolder.dotIndicatior = finalConvertView.findViewById(R.id.dotIndicatior);
                                 imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
-                                restoreOnPostMagazineShare(imageGallaryHolder.image_gallary_share,
-                                        galleryItem, galleryOnPostShareClick);
-                                imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);                               // downloadPDFWithProgressBar(list.get(position).getDownloadUrl(),"anyNews+"+list.get(position).getPostId()+".pdf",position);
+                                hideOnPostMagazineShare(imageGallaryHolder.image_gallary_share);
+                                imageGallaryHolder.dotIndicatior.setVisibility(VISIBLE);
+
                             }
                         });
                         View finalConvertView3 = convertView;

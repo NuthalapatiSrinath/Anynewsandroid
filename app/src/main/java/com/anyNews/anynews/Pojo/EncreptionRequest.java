@@ -365,26 +365,6 @@ public class EncreptionRequest {
     @Expose
     private Integer search_icon_size_dp;
 
-    @SerializedName("magazine_share_icon_size_dp")
-    @Expose
-    private Integer magazine_share_icon_size_dp;
-
-    @SerializedName("magazine_share_margin_end_dp")
-    @Expose
-    private Integer magazine_share_margin_end_dp;
-
-    @SerializedName("magazine_share_margin_bottom_dp")
-    @Expose
-    private Integer magazine_share_margin_bottom_dp;
-
-    @SerializedName("magazine_share_margin_start_dp")
-    @Expose
-    private Integer magazine_share_margin_start_dp;
-
-    @SerializedName("magazine_share_margin_top_dp")
-    @Expose
-    private Integer magazine_share_margin_top_dp;
-
     @SerializedName("enable_video_post")
     @Expose
     private Boolean enable_video_post;
@@ -773,46 +753,6 @@ public class EncreptionRequest {
 
     public void setSearch_icon_size_dp(Integer search_icon_size_dp) {
         this.search_icon_size_dp = search_icon_size_dp;
-    }
-
-    public Integer getMagazine_share_icon_size_dp() {
-        return magazine_share_icon_size_dp;
-    }
-
-    public void setMagazine_share_icon_size_dp(Integer magazine_share_icon_size_dp) {
-        this.magazine_share_icon_size_dp = magazine_share_icon_size_dp;
-    }
-
-    public Integer getMagazine_share_margin_end_dp() {
-        return magazine_share_margin_end_dp;
-    }
-
-    public void setMagazine_share_margin_end_dp(Integer magazine_share_margin_end_dp) {
-        this.magazine_share_margin_end_dp = magazine_share_margin_end_dp;
-    }
-
-    public Integer getMagazine_share_margin_bottom_dp() {
-        return magazine_share_margin_bottom_dp;
-    }
-
-    public void setMagazine_share_margin_bottom_dp(Integer magazine_share_margin_bottom_dp) {
-        this.magazine_share_margin_bottom_dp = magazine_share_margin_bottom_dp;
-    }
-
-    public Integer getMagazine_share_margin_start_dp() {
-        return magazine_share_margin_start_dp;
-    }
-
-    public void setMagazine_share_margin_start_dp(Integer magazine_share_margin_start_dp) {
-        this.magazine_share_margin_start_dp = magazine_share_margin_start_dp;
-    }
-
-    public Integer getMagazine_share_margin_top_dp() {
-        return magazine_share_margin_top_dp;
-    }
-
-    public void setMagazine_share_margin_top_dp(Integer magazine_share_margin_top_dp) {
-        this.magazine_share_margin_top_dp = magazine_share_margin_top_dp;
     }
 
     public Boolean getEnable_video_post() {

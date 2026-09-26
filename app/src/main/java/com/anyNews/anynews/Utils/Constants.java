@@ -251,12 +251,6 @@ public class Constants {
     public static String SEARCH_ICON_ON_TOGGLE = "search_icon_on_toggle";
     /** Search glyph size (dp) when on the News|Read toggle bar. */
     public static String SEARCH_ICON_SIZE_DP = "search_icon_size_dp";
-    /** Blue on-image Share overlay (Magazines / Special / Calendar) — size dp. */
-    public static String MAGAZINE_SHARE_ICON_SIZE_DP = "magazine_share_icon_size_dp";
-    public static String MAGAZINE_SHARE_MARGIN_END_DP = "magazine_share_margin_end_dp";
-    public static String MAGAZINE_SHARE_MARGIN_BOTTOM_DP = "magazine_share_margin_bottom_dp";
-    public static String MAGAZINE_SHARE_MARGIN_START_DP = "magazine_share_margin_start_dp";
-    public static String MAGAZINE_SHARE_MARGIN_TOP_DP = "magazine_share_margin_top_dp";
     public static String ENABLE_VIDEO_POST = "enable_video_post";
     public static String ENABLE_ARTICLE_POST = "enable_article_post";
     public static String ENABLE_FULL_POST = "enable_full_post";

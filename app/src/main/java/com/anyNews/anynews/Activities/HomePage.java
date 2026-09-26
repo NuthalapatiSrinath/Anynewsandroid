@@ -169,7 +169,6 @@ import com.anyNews.anynews.Utils.PlayInAppUpdateHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
 import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.Logone;
-import com.anyNews.anynews.Utils.MagazineShareIconHelper;
 import com.anyNews.anynews.Utils.ModelClass;
 import com.anyNews.anynews.Utils.MovementMethodTV;
 import com.anyNews.anynews.Utils.MyUtils;
@@ -8038,12 +8037,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Center FAB was: show_reporter_login → orange reporter "+", else green WhatsApp;
-     * magazines → Share footer. Product now keeps the whole center slot off
-     * ({@link ProfileHubConfigHelper#isFooterShowPlus} always false), so this only
-     * force-hides overlays (empty feed, after API, magazine, offline — all paths).
+     * Center slot: Magazines / Special galleries → blinking footer Share (Play Store).
+     * Otherwise keep reporter "+" / WhatsApp overlays hidden (product: plus slot off).
      */
     private void updateCenterFab() {
+        boolean showShare = shouldShowMagazineFooterShare();
         int idx = getVisiblePostIndex();
         String type = "";
         try {
@@ -8055,11 +8053,49 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         Log.i(MAGAZINE_GLOW_TAG, "updateCenterFab idx=" + idx
                 + " postType=[" + type + "]"
-                + " showReporterLogin=" + showReporterLogin
-                + " MODE=HIDDEN");
+                + " showShare=" + showShare
+                + " showReporterLogin=" + showReporterLogin);
+        if (showShare) {
+            applyMagazineCenterShare();
+            Log.i(MAGAZINE_GLOW_TAG, "MODE=SHARE_FOOTER postType=[" + type + "]");
+            showLog("updateCenterFab magazine share footer");
+            return;
+        }
         hideMagazineShareFooter();
         hideCenterPlusOverlays();
-        showLog("updateCenterFab center plus/WA permanently hidden");
+        showLog("updateCenterFab center plus/WA hidden (non-magazine)");
+    }
+
+    /**
+     * Footer blinking Share: true magazines / Magazines-cat specials, plus
+     * Special-tab image_gallery / magazine pages (same set that used to show
+     * the floating on-post blue Share).
+     */
+    private boolean shouldShowMagazineFooterShare() {
+        try {
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum item = list.get(idx);
+            if (usesMagazineGlowShare(item, idx)) {
+                return true;
+            }
+            if (!isSpecialFeedMode() || item == null) {
+                return false;
+            }
+            String type = item.getPostType();
+            if (type == null) {
+                return false;
+            }
+            type = type.trim();
+            return type.equalsIgnoreCase("image_gallery")
+                    || type.equalsIgnoreCase("magazine")
+                    || type.equalsIgnoreCase("magazines");
+        } catch (Exception e) {
+            Log.e(MAGAZINE_GLOW_TAG, "shouldShowMagazineFooterShare: " + e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -10834,7 +10870,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** Force-hide center FAB + magazine/WA overlays when the + slot is off (admin or offline). */
+    /**
+     * Force-hide center FAB + WhatsApp overlays when the + slot is off.
+     * Magazine footer Share visibility is owned solely by
+     * {@link #updateCenterFab()} / {@link #hideMagazineShareFooter()}.
+     */
     private void hideCenterPlusOverlays() {
         try {
             closeCenterPlusMenu(false);
@@ -10847,9 +10887,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             if (imageVIewShareWhatsapp != null) {
                 imageVIewShareWhatsapp.setVisibility(View.GONE);
-            }
-            if (layoutMagazineShareFooter != null) {
-                layoutMagazineShareFooter.setVisibility(View.GONE);
             }
         } catch (Exception e) {
             showLog("hideCenterPlusOverlays: " + e.getMessage());
@@ -11231,18 +11268,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Called from FlipperAdapter when a magazine page view is bound.
-     * Footer center Share stays hidden (Calendar owns that slot); on-post blue
-     * blink Share is wired in FlipperAdapter for glow magazine/Special posts.
+     * Called from FlipperAdapter when a magazine / Special gallery page is bound.
+     * Restores Play Store footer-middle blinking Share (hides floating on-post Share).
      */
     public void onMagazinePageBound(int boundPosition) {
         Log.i(MAGAZINE_GLOW_TAG, "onMagazinePageBound boundPosition=" + boundPosition
                 + " positionx=" + positionx
                 + " flipPage=" + (mFlipView != null ? mFlipView.getCurrentPage() : -1)
-                + " mode=ON_POST_SHARE");
+                + " mode=FOOTER_SHARE");
         try {
-            // Keep positionx in sync so any residual footer share path still targets
-            // the visible magazine if invoked; center slot remains Calendar.
             int visible = getVisiblePostIndex();
             if (boundPosition == visible || boundPosition == positionx
                     || (mFlipView != null && boundPosition == mFlipView.getCurrentPage())) {
@@ -15886,13 +15920,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getTts_speaker_on_image(),
                             encreptionRequest.getTts_speaker_on_engagement()
                     );
-                    applyMagazineShareIconConfig(
-                            encreptionRequest.getMagazine_share_icon_size_dp(),
-                            encreptionRequest.getMagazine_share_margin_end_dp(),
-                            encreptionRequest.getMagazine_share_margin_bottom_dp(),
-                            encreptionRequest.getMagazine_share_margin_start_dp(),
-                            encreptionRequest.getMagazine_share_margin_top_dp()
-                    );
                     // Admin-controlled reporter create-menu post-type toggles. Cache the
                     // polled values; if the create menu is open, refresh its buttons live.
                     applyReporterPostTypeConfig(
@@ -17493,70 +17520,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             com.anyNews.anynews.Utils.ArticleTtsConfigHelper.saveFromServer(
                     this, enabled, onImage, onEngagement, null, null, null);
             ArticleTtsHelper.warmUp(this);
-        } catch (Exception ignored) {
-        }
-    }
-
-    /**
-     * Admin-controlled Magazines / Special / Calendar blue Share overlay size +
-     * margins (dp). Caches poll values and re-applies to the visible card live.
-     */
-    private void applyMagazineShareIconConfig(
-            Integer sizeDp,
-            Integer marginEndDp,
-            Integer marginBottomDp,
-            Integer marginStartDp,
-            Integer marginTopDp
-    ) {
-        try {
-            boolean changed = false;
-            if (sizeDp != null) {
-                int prev = SharedPrefsData.getInt(
-                        HomePage.this, Constants.MAGAZINE_SHARE_ICON_SIZE_DP, Constants.PREF_NAME);
-                if (prev != sizeDp) {
-                    changed = true;
-                }
-            }
-            if (marginEndDp != null) {
-                int prev = SharedPrefsData.getInt(
-                        HomePage.this, Constants.MAGAZINE_SHARE_MARGIN_END_DP, Constants.PREF_NAME);
-                if (prev != marginEndDp) {
-                    changed = true;
-                }
-            }
-            if (marginBottomDp != null) {
-                int prev = SharedPrefsData.getInt(
-                        HomePage.this, Constants.MAGAZINE_SHARE_MARGIN_BOTTOM_DP, Constants.PREF_NAME);
-                if (prev != marginBottomDp) {
-                    changed = true;
-                }
-            }
-            if (marginStartDp != null) {
-                int prev = SharedPrefsData.getInt(
-                        HomePage.this, Constants.MAGAZINE_SHARE_MARGIN_START_DP, Constants.PREF_NAME);
-                if (prev != marginStartDp) {
-                    changed = true;
-                }
-            }
-            if (marginTopDp != null) {
-                int prev = SharedPrefsData.getInt(
-                        HomePage.this, Constants.MAGAZINE_SHARE_MARGIN_TOP_DP, Constants.PREF_NAME);
-                if (prev != marginTopDp) {
-                    changed = true;
-                }
-            }
-            MagazineShareIconHelper.save(
-                    HomePage.this, sizeDp, marginEndDp, marginBottomDp, marginStartDp, marginTopDp);
-            if (changed && mFlipView != null) {
-                final FlipView flipView = mFlipView;
-                flipView.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        MagazineShareIconHelper.applyUnder(HomePage.this, flipView);
-                        flipView.requestLayout();
-                    }
-                });
-            }
         } catch (Exception ignored) {
         }
     }

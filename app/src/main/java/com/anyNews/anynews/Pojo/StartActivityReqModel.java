@@ -157,66 +157,6 @@ public class StartActivityReqModel implements Serializable {
             return searchIconSizeDp;
         }
 
-        @SerializedName("magazine_share_icon_size_dp")
-        @Expose
-        private Integer magazineShareIconSizeDp = 48;
-
-        public int getMagazineShareIconSizeDp() {
-            return magazineShareIconSizeDp != null ? magazineShareIconSizeDp : 48;
-        }
-
-        public void setMagazineShareIconSizeDp(Integer magazineShareIconSizeDp) {
-            this.magazineShareIconSizeDp = magazineShareIconSizeDp;
-        }
-
-        @SerializedName("magazine_share_margin_end_dp")
-        @Expose
-        private Integer magazineShareMarginEndDp = 20;
-
-        public int getMagazineShareMarginEndDp() {
-            return magazineShareMarginEndDp != null ? magazineShareMarginEndDp : 20;
-        }
-
-        public void setMagazineShareMarginEndDp(Integer magazineShareMarginEndDp) {
-            this.magazineShareMarginEndDp = magazineShareMarginEndDp;
-        }
-
-        @SerializedName("magazine_share_margin_bottom_dp")
-        @Expose
-        private Integer magazineShareMarginBottomDp = 64;
-
-        public int getMagazineShareMarginBottomDp() {
-            return magazineShareMarginBottomDp != null ? magazineShareMarginBottomDp : 64;
-        }
-
-        public void setMagazineShareMarginBottomDp(Integer magazineShareMarginBottomDp) {
-            this.magazineShareMarginBottomDp = magazineShareMarginBottomDp;
-        }
-
-        @SerializedName("magazine_share_margin_start_dp")
-        @Expose
-        private Integer magazineShareMarginStartDp = 0;
-
-        public int getMagazineShareMarginStartDp() {
-            return magazineShareMarginStartDp != null ? magazineShareMarginStartDp : 0;
-        }
-
-        public void setMagazineShareMarginStartDp(Integer magazineShareMarginStartDp) {
-            this.magazineShareMarginStartDp = magazineShareMarginStartDp;
-        }
-
-        @SerializedName("magazine_share_margin_top_dp")
-        @Expose
-        private Integer magazineShareMarginTopDp = 0;
-
-        public int getMagazineShareMarginTopDp() {
-            return magazineShareMarginTopDp != null ? magazineShareMarginTopDp : 0;
-        }
-
-        public void setMagazineShareMarginTopDp(Integer magazineShareMarginTopDp) {
-            this.magazineShareMarginTopDp = magazineShareMarginTopDp;
-        }
-
         @SerializedName("enable_video_post")
         @Expose
         private Boolean enableVideoPost = Boolean.TRUE;

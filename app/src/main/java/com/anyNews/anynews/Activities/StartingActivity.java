@@ -83,7 +83,6 @@ import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.Pojo.LanguageFontConfig;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.FullVideoShareCardHelper;
-import com.anyNews.anynews.Utils.MagazineShareIconHelper;
 import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.SharePublicBaseHelper;
 import com.anyNews.anynews.Utils.Logone;
@@ -1798,16 +1797,6 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getSearchIconOnEngagement(),
                                 startActivityReqModel.getData().getSearchIconOnToggle(),
                                 startActivityReqModel.getData().getSearchIconSizeDp()
-                        );
-
-                        // Admin-controlled Magazines/Special/Calendar on-image Share size + margins.
-                        MagazineShareIconHelper.save(
-                                getApplicationContext(),
-                                startActivityReqModel.getData().getMagazineShareIconSizeDp(),
-                                startActivityReqModel.getData().getMagazineShareMarginEndDp(),
-                                startActivityReqModel.getData().getMagazineShareMarginBottomDp(),
-                                startActivityReqModel.getData().getMagazineShareMarginStartDp(),
-                                startActivityReqModel.getData().getMagazineShareMarginTopDp()
                         );
 
                         // Admin-controlled reporter create-menu post-type toggles.
