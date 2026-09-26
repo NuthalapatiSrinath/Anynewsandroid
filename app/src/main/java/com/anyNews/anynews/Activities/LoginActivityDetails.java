@@ -120,6 +120,7 @@ public class LoginActivityDetails extends AppCompatActivity {
     LinearLayout login_detailes, otp_layout, verify_layout, resend_layout, post_layout, sendotpnew;
     private static final int REQ_USER_CONSENT = 200;
     private static final long RESEND_COOLDOWN_MS = 45_000L;
+    private static final long OTP_LOADING_DOT_MS = 400L;
     private static final String TAG_OTP = "LoginOtp";
     SmsBroadcastReceiver smsBroadcastReceiver;
     private boolean smsReceiverRegistered = false;
@@ -131,6 +132,28 @@ public class LoginActivityDetails extends AppCompatActivity {
     private boolean pendingReturnToProfile = false;
     private boolean pendingOpenBecomeReporter = false;
     private boolean pendingOpenRewards = false;
+    /** True while ReadOtp API is in flight — blocks double-submit. */
+    private boolean otpVerifyInFlight = false;
+    /** Skip PinTextWatcher side-effects while distributing autofilled digits. */
+    private boolean otpProgrammaticUpdate = false;
+    private String otpVerifyLabel = " Verify";
+    private final Handler otpLoadingHandler = new Handler(Looper.getMainLooper());
+    private Runnable otpLoadingDotsRunnable;
+    private int otpLoadingDotStep = 0;
+    private final ActivityResultLauncher<Intent> smsConsentLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.StartActivityForResult(),
+                    new ActivityResultCallback<ActivityResult>() {
+                        @Override
+                        public void onActivityResult(ActivityResult result) {
+                            if (result.getResultCode() == Activity.RESULT_OK
+                                    && result.getData() != null) {
+                                String message = result.getData()
+                                        .getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE);
+                                getOtpFromMessage(message);
+                            }
+                        }
+                    });
 
 
     @Override
@@ -297,28 +320,7 @@ public class LoginActivityDetails extends AppCompatActivity {
         otp_submit.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
-                StringBuilder otp = new StringBuilder();
-                for (int i = 0; i < editTexts.length; i++) {
-                    otp = otp.append(editTexts[i].getText().toString().trim());
-                }
-                if (otp.toString().length() == 4) {
-                    finalOtp = otp;
-
-                    ((InputMethodManager) LoginActivityDetails.this.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(otp_1.getWindowToken(), 0);
-                    ((InputMethodManager) LoginActivityDetails.this.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(otp_2.getWindowToken(), 0);
-                    ((InputMethodManager) LoginActivityDetails.this.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(otp_3.getWindowToken(), 0);
-                    ((InputMethodManager) LoginActivityDetails.this.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(otp_4.getWindowToken(), 0);
-
-                    Validate();
-
-                } else {
-
-                    Toast.makeText(LoginActivityDetails.this, "Enter a valid OTP", Toast.LENGTH_SHORT).show();
-
-                }
-
-
+                submitOtpFromBoxes(false);
             }
         });
         emailIdEdittext.setOnClickListener(new View.OnClickListener() {
@@ -381,7 +383,10 @@ public class LoginActivityDetails extends AppCompatActivity {
         mobile_et.setHint(" " + languageModelResponse.getData().getMobileNumber());
         post_login.setText(" " + languageModelResponse.getData().getSendOtp());
         otpnew.setText(" " + languageModelResponse.getData().getSendOtp());
-        otp_submit.setText(" " + languageModelResponse.getData().getVerify());
+        otpVerifyLabel = " " + languageModelResponse.getData().getVerify();
+        if (!otpVerifyInFlight) {
+            otp_submit.setText(otpVerifyLabel);
+        }
         resendOtpLabel = " " + languageModelResponse.getData().getResendOtp();
         if (resendEnabled) {
             txt_resend_otp.setText(resendOtpLabel);
@@ -718,10 +723,103 @@ public class LoginActivityDetails extends AppCompatActivity {
         if (editTexts == null) {
             return;
         }
-        for (EditText et : editTexts) {
-            if (et != null) {
-                et.setText("");
+        otpProgrammaticUpdate = true;
+        try {
+            for (EditText et : editTexts) {
+                if (et != null) {
+                    et.setText("");
+                }
             }
+        } finally {
+            otpProgrammaticUpdate = false;
+        }
+    }
+
+    /** Collect 4 digit boxes → verify once. Manual tap or SMS autofill. */
+    private void submitOtpFromBoxes(boolean autoTriggered) {
+        if (otpVerifyInFlight || loginStep != STEP_OTP || editTexts == null) {
+            return;
+        }
+        StringBuilder otp = new StringBuilder();
+        for (EditText et : editTexts) {
+            if (et != null && et.getText() != null) {
+                otp.append(et.getText().toString().trim());
+            }
+        }
+        if (otp.length() != 4) {
+            if (!autoTriggered) {
+                Toast.makeText(LoginActivityDetails.this, "Enter a valid OTP", Toast.LENGTH_SHORT)
+                        .show();
+            }
+            return;
+        }
+        finalOtp = otp;
+        hideOtpSoftKeyboard();
+        setOtpVerifyLoading(true);
+        Validate();
+    }
+
+    private void hideOtpSoftKeyboard() {
+        InputMethodManager imm =
+                (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm == null) {
+            return;
+        }
+        for (EditText et : new EditText[]{otp_1, otp_2, otp_3, otp_4}) {
+            if (et != null) {
+                imm.hideSoftInputFromWindow(et.getWindowToken(), 0);
+            }
+        }
+    }
+
+    private void setOtpVerifyLoading(boolean loading) {
+        otpVerifyInFlight = loading;
+        if (otp_submit == null) {
+            return;
+        }
+        otp_submit.setEnabled(!loading);
+        otp_submit.setClickable(!loading);
+        if (editTexts != null) {
+            for (EditText et : editTexts) {
+                if (et != null) {
+                    et.setEnabled(!loading);
+                }
+            }
+        }
+        if (loading) {
+            startOtpLoadingDots();
+        } else {
+            stopOtpLoadingDots();
+            otp_submit.setText(otpVerifyLabel);
+        }
+    }
+
+    private void startOtpLoadingDots() {
+        stopOtpLoadingDots();
+        otpLoadingDotStep = 0;
+        otpLoadingDotsRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!otpVerifyInFlight || otp_submit == null) {
+                    return;
+                }
+                otpLoadingDotStep = (otpLoadingDotStep % 3) + 1;
+                StringBuilder dots = new StringBuilder();
+                for (int i = 0; i < otpLoadingDotStep; i++) {
+                    dots.append('.');
+                }
+                otp_submit.setText(dots.toString());
+                otpLoadingHandler.postDelayed(this, OTP_LOADING_DOT_MS);
+            }
+        };
+        otp_submit.setText(".");
+        otpLoadingHandler.postDelayed(otpLoadingDotsRunnable, OTP_LOADING_DOT_MS);
+    }
+
+    private void stopOtpLoadingDots() {
+        if (otpLoadingDotsRunnable != null) {
+            otpLoadingHandler.removeCallbacks(otpLoadingDotsRunnable);
+            otpLoadingDotsRunnable = null;
         }
     }
 
@@ -841,6 +939,11 @@ public class LoginActivityDetails extends AppCompatActivity {
 
 
                 EncreptionRequest encreptionRequest = response.body();
+                if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                    setOtpVerifyLoading(false);
+                    Toast.makeText(LoginActivityDetails.this, "Invalid Otp", Toast.LENGTH_LONG).show();
+                    return;
+                }
                 String encrpt_data = null;
                 /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                     encrpt_data = decrypt(encreptionRequest.getData());
@@ -852,7 +955,8 @@ public class LoginActivityDetails extends AppCompatActivity {
                 ValidateOtpResponse validateUserOtp = gsonObj.fromJson(encrpt_data, ValidateOtpResponse.class);
 
 
-                if (validateUserOtp.getSuccess()) {
+                if (validateUserOtp != null && Boolean.TRUE.equals(validateUserOtp.getSuccess())) {
+                    setOtpVerifyLoading(false);
 
                     SharedPrefsData.putBool(getApplicationContext(), Constants.is_login, true, Constants.PREF_NAME);
                     SharedPrefsData.putBool(getApplicationContext(), Constants.FORCE_LOGGED_OUT, false, Constants.PREF_NAME);
@@ -939,6 +1043,7 @@ public class LoginActivityDetails extends AppCompatActivity {
 
                 } else {
 
+                    setOtpVerifyLoading(false);
                     Toast.makeText(LoginActivityDetails.this, "Invalid Otp", Toast.LENGTH_LONG).show();
 
                 }
@@ -950,12 +1055,12 @@ public class LoginActivityDetails extends AppCompatActivity {
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
 
 
+                setOtpVerifyLoading(false);
                 Toast.makeText(LoginActivityDetails.this, "Invalid Otp", Toast.LENGTH_LONG).show();
-                otp_1.setText("");
-                otp_2.setText("");
-                otp_3.setText("");
-                otp_4.setText("");
-                otp_1.requestFocus();
+                clearOtpBoxes();
+                if (otp_1 != null) {
+                    otp_1.requestFocus();
+                }
 
             }
         });
@@ -967,6 +1072,7 @@ public class LoginActivityDetails extends AppCompatActivity {
     public void onBackPressed() {
         if (loginStep == STEP_OTP) {
             // Back to mobile entry without finishing.
+            setOtpVerifyLoading(false);
             loginStep = STEP_MOBILE;
             otp_layout.setVisibility(View.GONE);
             resend_layout.setVisibility(View.GONE);
@@ -1057,6 +1163,9 @@ public class LoginActivityDetails extends AppCompatActivity {
 
         @Override
         public void afterTextChanged(Editable s) {
+            if (otpProgrammaticUpdate || otpVerifyInFlight) {
+                return;
+            }
 
             String text = newTypedString;
 
@@ -1125,16 +1234,14 @@ public class LoginActivityDetails extends AppCompatActivity {
 
     private void startSmsAutoRead() {
         logAppSignatureForSmsRetriever();
-        // Prefer SMS Retriever (auto-fill, no READ_SMS). Falls back to User Consent.
+        // Primary: User Consent (no app hash; matches Google Allow dialog in screenshot).
+        startSmsUserConsent();
+        // Also start Retriever when OTP SMS includes the app signature hash (silent fill).
         SmsRetrieverClient client = SmsRetriever.getClient(this);
         client.startSmsRetriever()
                 .addOnSuccessListener(aVoid -> Log.d(TAG_OTP, "SMS Retriever started"))
-                .addOnFailureListener(e -> {
-                    Log.w(TAG_OTP, "SMS Retriever failed, starting User Consent", e);
-                    startSmsUserConsent();
-                });
-        // Also start User Consent so OTP can still be approved if SMS lacks app hash.
-        startSmsUserConsent();
+                .addOnFailureListener(e ->
+                        Log.w(TAG_OTP, "SMS Retriever failed (Consent still active)", e));
     }
 
     private void logAppSignatureForSmsRetriever() {
@@ -1163,9 +1270,11 @@ public class LoginActivityDetails extends AppCompatActivity {
             }
         });
     }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        // Legacy fallback if consent was started via startActivityForResult.
         if (requestCode == REQ_USER_CONSENT) {
             if ((resultCode == RESULT_OK) && (data != null)) {
                 String message = data.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE);
@@ -1173,38 +1282,47 @@ public class LoginActivityDetails extends AppCompatActivity {
             }
         }
     }
+
     private void getOtpFromMessage(String message) {
         if (message == null || message.isEmpty()) {
             return;
         }
-        Pattern pattern = Pattern.compile("(|^)\\d{4}");
-        Matcher matcher = pattern.matcher(message);
-
-        if (matcher.find()) {
-            String text = matcher.group(0);
-            if (text != null && text.length() >= 4) {
-                fillOtpDigits(text);
-            }
+        Log.d(TAG_OTP, "SMS received for OTP parse, length=" + message.length());
+        // Prefer "Your OTP for login is 7535" style (avoids Message-ID digits).
+        Matcher preferred = Pattern.compile("(?i)(?:otp)\\D{0,40}?(\\d{4})").matcher(message);
+        if (preferred.find()) {
+            fillOtpDigits(preferred.group(1));
+            return;
+        }
+        Matcher fallback = Pattern.compile("\\b(\\d{4})\\b").matcher(message);
+        if (fallback.find()) {
+            fillOtpDigits(fallback.group(1));
         }
     }
 
     private void fillOtpDigits(String otp) {
-        if (editTexts == null || otp == null) {
+        if (editTexts == null || otp == null || otpVerifyInFlight) {
             return;
         }
         String digits = otp.replaceAll("\\D", "");
         if (digits.length() < 4) {
             return;
         }
-        // Avoid recursive TextWatcher loops while distributing digits.
-        otp_1.setText(String.valueOf(digits.charAt(0)));
-        otp_2.setText(String.valueOf(digits.charAt(1)));
-        otp_3.setText(String.valueOf(digits.charAt(2)));
-        otp_4.setText(String.valueOf(digits.charAt(3)));
+        otpProgrammaticUpdate = true;
+        try {
+            otp_1.setText(String.valueOf(digits.charAt(0)));
+            otp_2.setText(String.valueOf(digits.charAt(1)));
+            otp_3.setText(String.valueOf(digits.charAt(2)));
+            otp_4.setText(String.valueOf(digits.charAt(3)));
+        } finally {
+            otpProgrammaticUpdate = false;
+        }
         otp_4.requestFocus();
         if (otp_4.getText() != null) {
             otp_4.setSelection(otp_4.getText().length());
         }
+        // Allow → fill → auto-verify (same path as tapping Verify).
+        otp_4.post(() -> submitOtpFromBoxes(true));
     }
 
     private void registerBroadcastReceiver() {
@@ -1221,7 +1339,15 @@ public class LoginActivityDetails extends AppCompatActivity {
 
                     @Override
                     public void onConsentIntent(Intent intent) {
-                        startActivityForResult(intent, REQ_USER_CONSENT);
+                        try {
+                            smsConsentLauncher.launch(intent);
+                        } catch (ActivityNotFoundException e) {
+                            Log.w(TAG_OTP, "SMS consent activity missing", e);
+                            try {
+                                startActivityForResult(intent, REQ_USER_CONSENT);
+                            } catch (ActivityNotFoundException ignored) {
+                            }
+                        }
                     }
 
                     @Override
@@ -1289,6 +1415,7 @@ public class LoginActivityDetails extends AppCompatActivity {
             resendCountDownTimer.cancel();
             resendCountDownTimer = null;
         }
+        stopOtpLoadingDots();
         super.onDestroy();
     }
 
