@@ -64,6 +64,7 @@ import com.anyNews.anynews.Utils.StatusVideosDaysConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.FestivalSplashHelper;
 import com.anyNews.anynews.Utils.ArticleTtsConfigHelper;
+import com.anyNews.anynews.Utils.ArticleTtsHelper;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
 import com.anyNews.anynews.Utils.CategoriesDiskCache;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
@@ -1849,6 +1850,11 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getTtsLocale(),
                                 startActivityReqModel.getData().getTtsVoice(),
                                 startActivityReqModel.getData().getTtsEngine());
+                        // Init engine + voices now so first Home speaker tap is instant.
+                        try {
+                            ArticleTtsHelper.warmUp(getApplicationContext());
+                        } catch (Exception ignored) {
+                        }
 
                         // Feed Exo chrome A/B (null = keep cache).
                         if (startActivityReqModel.getData().hasFeedVideoPlayer()) {

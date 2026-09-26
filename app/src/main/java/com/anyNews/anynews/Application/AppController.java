@@ -41,6 +41,7 @@ import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.MediaAccessReporter;
 import com.anyNews.anynews.Utils.AdImpressionReporter;
+import com.anyNews.anynews.Utils.ArticleTtsHelper;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
 import com.facebook.ads.AdSettings;
@@ -103,6 +104,8 @@ public class AppController extends MultiDexApplication {
         MediaAccessReporter.get().init(this);
         // Real native-ad display counts (Google/FB painted) — one batched flush.
         AdImpressionReporter.get().init(this);
+        // Article TTS: stop on process background; warm engine when already enabled.
+        ArticleTtsHelper.init(this);
 
         // One-shot per process: previous session's flip views → permanent Read before News loads.
         try {

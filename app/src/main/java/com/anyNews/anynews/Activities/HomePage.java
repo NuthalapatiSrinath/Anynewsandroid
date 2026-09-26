@@ -202,6 +202,7 @@ import com.anyNews.anynews.Utils.BookmarkStore;
 import com.anyNews.anynews.Utils.NetworkCallDeduper;
 import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
+import com.anyNews.anynews.Utils.ArticleTtsHelper;
 import com.anyNews.anynews.Utils.MediaAccessReporter;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.DeviceLocationHelper;
@@ -1064,6 +1065,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             FeedAdConfig.warmFromPrefs(getApplicationContext());
+        } catch (Exception ignored) {
+        }
+        try {
+            // Engine init + getVoices() off the critical first-tap path.
+            ArticleTtsHelper.warmUp(getApplicationContext());
         } catch (Exception ignored) {
         }
         appliedNightUiMask =
@@ -17486,6 +17492,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             com.anyNews.anynews.Utils.ArticleTtsConfigHelper.saveFromServer(
                     this, enabled, onImage, onEngagement, null, null, null);
+            ArticleTtsHelper.warmUp(this);
         } catch (Exception ignored) {
         }
     }
@@ -18968,6 +18975,11 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onPause();
         pauseVideo();
+        try {
+            // Leaving Home (incl. recents) — stop read-aloud so voice does not continue.
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
         super.onPause();
         try {
             if (FlipperAdapter.exoPlayer != null) {
@@ -19026,6 +19038,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
 
     @Override
     protected void onStop() {
+        try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
         super.onStop();
         // Real background (Home / other app) — clear Allow-settled so next open can ask.
         // Leaving for POST_NOTIFICATIONS / app notification Settings keeps settled so

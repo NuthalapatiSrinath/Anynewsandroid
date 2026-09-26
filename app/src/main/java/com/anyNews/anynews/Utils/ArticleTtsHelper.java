@@ -3,6 +3,7 @@ package com.anyNews.anynews.Utils;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.app.Application;
 import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
@@ -19,6 +20,10 @@ import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.OnLifecycleEvent;
+import androidx.lifecycle.ProcessLifecycleOwner;
 
 import com.anyNews.anynews.R;
 
@@ -29,11 +34,16 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Article-body Text-to-Speech for half-image cards.
  * Toggle speaker → speak body / stop; pulse glow while speaking.
  * Voice/locale/engine + placement from {@link ArticleTtsConfigHelper}.
+ *
+ * <p>Warm the engine on splash/Home so the first speaker tap is not blocked by
+ * {@code new TextToSpeech()} + {@code getVoices()}. Stop on app background via
+ * {@link ProcessLifecycleOwner} (and callers may also stop from Home onPause).
  */
 public final class ArticleTtsHelper {
 
@@ -48,12 +58,64 @@ public final class ArticleTtsHelper {
     private static boolean ttsReady;
     private static boolean ttsInitializing;
     private static String preferredEngine = "";
+    private static String appliedVoiceKey = "";
+    private static boolean voicesPreloaded;
     private static Long speakingPostId;
     private static final List<SpeakerSlot> activeSlots = new ArrayList<>();
+    private static final List<Runnable> pendingReady = new ArrayList<>();
     private static AnimatorSet pulseAnim;
     private static WeakReference<View> pulseAnimTarget;
+    private static final AtomicBoolean lifecycleRegistered = new AtomicBoolean(false);
 
     private ArticleTtsHelper() {}
+
+    /**
+     * Call once from {@link Application#onCreate()}. Registers process-background
+     * stop and posts an early warm-up when TTS is already enabled in prefs.
+     */
+    public static void init(@NonNull Application application) {
+        ensureAppLifecycle(application);
+        MAIN.post(() -> warmUp(application));
+    }
+
+    /**
+     * Init the TTS engine + locale/voice catalog before the user taps speaker.
+     * Safe to call repeatedly (splash after config, Home onCreate, etc.).
+     */
+    public static void warmUp(@Nullable Context context) {
+        if (context == null) return;
+        final Context app = context.getApplicationContext();
+        ensureAppLifecycle(app);
+        if (!ArticleTtsConfigHelper.isEnabled(app)) {
+            return;
+        }
+        ensureTts(
+                app,
+                () -> {
+                    applyVoiceConfig(app);
+                    preloadVoices();
+                });
+    }
+
+    private static void ensureAppLifecycle(@NonNull Context context) {
+        if (!lifecycleRegistered.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            ProcessLifecycleOwner.get()
+                    .getLifecycle()
+                    .addObserver(
+                            new LifecycleObserver() {
+                                @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
+                                public void onAppBackground() {
+                                    // Recents / Home / other app — stop voice immediately.
+                                    stopAll();
+                                }
+                            });
+        } catch (Exception ignored) {
+            lifecycleRegistered.set(false);
+        }
+    }
 
     /**
      * Bind a speaker button. Visibility is controlled by the caller via {@code show}
@@ -177,16 +239,13 @@ public final class ArticleTtsHelper {
             onReady.run();
             return;
         }
-        final Runnable queued = onReady;
-        if (ttsInitializing && tts != null) {
-            MAIN.postDelayed(
-                    () -> {
-                        if (ttsReady) queued.run();
-                        else ensureTts(app, queued);
-                    },
-                    200);
+        // Already spinning up the same engine — run as soon as onInit fires.
+        if (ttsInitializing && tts != null && preferredEngine.equals(enginePkg)) {
+            pendingReady.add(onReady);
             return;
         }
+        pendingReady.clear();
+        pendingReady.add(onReady);
         shutdownTtsEngine();
         ttsInitializing = true;
         preferredEngine = enginePkg;
@@ -194,6 +253,8 @@ public final class ArticleTtsHelper {
                 status -> {
                     ttsInitializing = false;
                     ttsReady = status == TextToSpeech.SUCCESS;
+                    List<Runnable> queued = new ArrayList<>(pendingReady);
+                    pendingReady.clear();
                     if (!ttsReady) {
                         stopSpeaking(true);
                         return;
@@ -221,7 +282,12 @@ public final class ArticleTtsHelper {
                                     MAIN.post(() -> nudgePulse());
                                 }
                             });
-                    queued.run();
+                    for (Runnable r : queued) {
+                        try {
+                            r.run();
+                        } catch (Exception ignored) {
+                        }
+                    }
                 };
         if (!TextUtils.isEmpty(enginePkg)) {
             tts = new TextToSpeech(app, listener, enginePkg);
@@ -234,6 +300,18 @@ public final class ArticleTtsHelper {
         if (tts == null) return;
         try {
             String localeTag = ArticleTtsConfigHelper.getLocale(app);
+            String voiceWanted = ArticleTtsConfigHelper.getVoice(app);
+            String key =
+                    preferredEngine
+                            + "|"
+                            + localeTag
+                            + "|"
+                            + voiceWanted
+                            + "|"
+                            + languageId(app);
+            if (key.equals(appliedVoiceKey) && voicesPreloaded) {
+                return;
+            }
             Locale locale;
             if (!TextUtils.isEmpty(localeTag)) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -253,10 +331,10 @@ public final class ArticleTtsHelper {
                     || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts.setLanguage(Locale.getDefault());
             }
-            String voiceWanted = ArticleTtsConfigHelper.getVoice(app);
             if (!TextUtils.isEmpty(voiceWanted)
                     && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 Set<Voice> voices = tts.getVoices();
+                voicesPreloaded = voices != null;
                 if (voices != null) {
                     String needle = voiceWanted.toLowerCase(Locale.US);
                     Voice best = null;
@@ -272,11 +350,42 @@ public final class ArticleTtsHelper {
                         tts.setVoice(best);
                     }
                 }
+            } else {
+                preloadVoices();
             }
             tts.setSpeechRate(1.0f);
             tts.setPitch(1.0f);
+            appliedVoiceKey = key;
         } catch (Exception ignored) {
         }
+    }
+
+    /** Touch voice catalog once so first speak is not blocked by getVoices(). */
+    private static void preloadVoices() {
+        if (tts == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            voicesPreloaded = true;
+            return;
+        }
+        if (voicesPreloaded) return;
+        try {
+            Set<Voice> voices = tts.getVoices();
+            voicesPreloaded = voices != null;
+        } catch (Exception ignored) {
+            voicesPreloaded = false;
+        }
+    }
+
+    private static int languageId(@Nullable Context context) {
+        try {
+            if (context != null) {
+                return SharedPrefsData.getInt(
+                        context.getApplicationContext(),
+                        Constants.LanguageID,
+                        Constants.PREF_NAME);
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
     }
 
     @NonNull
@@ -315,6 +424,8 @@ public final class ArticleTtsHelper {
 
     private static void shutdownTtsEngine() {
         ttsReady = false;
+        appliedVoiceKey = "";
+        voicesPreloaded = false;
         try {
             if (tts != null) {
                 tts.stop();
