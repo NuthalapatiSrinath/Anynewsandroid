@@ -5852,6 +5852,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     int safe = Math.max(0,
                                             Math.min(galleryInitialPage, image_gallary.size() - 1));
                                     viewpager.setCurrentItem(safe, false);
+                                    final int landSafe = safe;
+                                    viewpager.post(() -> {
+                                        try {
+                                            viewpager.setCurrentItem(landSafe, false);
+                                        } catch (Exception ignored) {
+                                        }
+                                    });
                                 } catch (Exception ignored) {
                                 }
                             }
