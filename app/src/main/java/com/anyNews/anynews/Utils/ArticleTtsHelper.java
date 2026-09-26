@@ -331,20 +331,29 @@ public final class ArticleTtsHelper {
                     || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts.setLanguage(Locale.getDefault());
             }
-            if (!TextUtils.isEmpty(voiceWanted)
-                    && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 Set<Voice> voices = tts.getVoices();
                 voicesPreloaded = voices != null;
-                if (voices != null) {
-                    String needle = voiceWanted.toLowerCase(Locale.US);
+                if (voices != null && !voices.isEmpty()) {
                     Voice best = null;
-                    for (Voice v : voices) {
-                        if (v == null) continue;
-                        String name = v.getName() == null ? "" : v.getName().toLowerCase(Locale.US);
-                        if (name.contains(needle) || needle.contains(name)) {
-                            best = v;
-                            break;
+                    // 1) Exact / substring name match from admin (browser voice name).
+                    if (!TextUtils.isEmpty(voiceWanted)) {
+                        String needle = voiceWanted.toLowerCase(Locale.US);
+                        for (Voice v : voices) {
+                            if (v == null) continue;
+                            String name =
+                                    v.getName() == null
+                                            ? ""
+                                            : v.getName().toLowerCase(Locale.US);
+                            if (name.contains(needle) || needle.contains(name)) {
+                                best = v;
+                                break;
+                            }
                         }
+                    }
+                    // 2) Fallback: best voice for the resolved locale (language[+country]).
+                    if (best == null) {
+                        best = bestVoiceForLocale(voices, locale);
                     }
                     if (best != null) {
                         tts.setVoice(best);
@@ -372,6 +381,54 @@ public final class ArticleTtsHelper {
             voicesPreloaded = voices != null;
         } catch (Exception ignored) {
             voicesPreloaded = false;
+        }
+    }
+
+    /**
+     * Prefer a network/high-quality voice whose locale matches language+country, then
+     * language-only. Used when the admin-saved browser voice name is missing on-device.
+     */
+    @Nullable
+    private static Voice bestVoiceForLocale(
+            @NonNull Set<Voice> voices, @Nullable Locale wanted) {
+        if (wanted == null) return null;
+        String wantLang = wanted.getLanguage() == null ? "" : wanted.getLanguage();
+        if (TextUtils.isEmpty(wantLang)) return null;
+        String wantCountry =
+                wanted.getCountry() == null
+                        ? ""
+                        : wanted.getCountry().toUpperCase(Locale.US);
+        Voice langCountry = null;
+        Voice langOnly = null;
+        for (Voice v : voices) {
+            if (v == null || v.getLocale() == null) continue;
+            Locale vl = v.getLocale();
+            String vlLang = vl.getLanguage() == null ? "" : vl.getLanguage();
+            if (!wantLang.equalsIgnoreCase(vlLang)) continue;
+            String vlCountry =
+                    vl.getCountry() == null
+                            ? ""
+                            : vl.getCountry().toUpperCase(Locale.US);
+            boolean countryMatch =
+                    !TextUtils.isEmpty(wantCountry) && wantCountry.equals(vlCountry);
+            if (countryMatch) {
+                if (langCountry == null || prefersVoice(v, langCountry)) {
+                    langCountry = v;
+                }
+            } else if (langOnly == null || prefersVoice(v, langOnly)) {
+                langOnly = v;
+            }
+        }
+        return langCountry != null ? langCountry : langOnly;
+    }
+
+    /** Prefer non-network when both exist? Actually network often sounds better for Google. Prefer higher quality / not requiresNetwork if local available — keep simple: prefer default-quality, then any. */
+    private static boolean prefersVoice(@NonNull Voice candidate, @NonNull Voice incumbent) {
+        // Prefer higher quality score when available; otherwise keep incumbent.
+        try {
+            return candidate.getQuality() > incumbent.getQuality();
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
