@@ -206,12 +206,277 @@ public final class ProfileHubLabels {
         }
     }
 
-    /**
-     * Caption for the language row.
-     * Always English so users can find language controls after switching language.
-     */
+    /** Caption for the language row. */
     public static String selectLanguage(@Nullable Context context) {
-        return str(context, R.string.profile_choose_language, "Choose Language");
+        switch (languageId(context)) {
+            case 1: return "ഭാഷ തിരഞ്ഞെടുക്കുക";
+            case 2: return "भाषा चुनें";
+            case 3: return "భాష ఎంచుకోండి";
+            case 4: return "மொழியைத் தேர்ந்தெடுக்கவும்";
+            case 5: return "ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ";
+            case 6: return "ଭାଷା ବାଛନ୍ତୁ";
+            default:
+                return str(context, R.string.profile_choose_language, "Choose Language");
+        }
+    }
+
+    public static String categories(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "വിഭാഗങ്ങൾ";
+            case 2: return "श्रेणियाँ";
+            case 3: return "కేటగిరీలు";
+            case 4: return "வகைகள்";
+            case 5: return "ವರ್ಗಗಳು";
+            case 6: return "ବର୍ଗଗୁଡ଼ିକ";
+            default: return str(context, R.string.profile_categories, "Categories");
+        }
+    }
+
+    public static String categoriesViewAll(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "എല്ലാം കാണുക >";
+            case 2: return "सभी देखें >";
+            case 3: return "అన్నీ చూడండి >";
+            case 4: return "அனைத்தையும் பார்க்க >";
+            case 5: return "ಎಲ್ಲವನ್ನೂ ನೋಡಿ >";
+            case 6: return "ସବୁ ଦେଖନ୍ତୁ >";
+            default:
+                return str(context, R.string.profile_categories_view_all, "View All >");
+        }
+    }
+
+    public static String contactUs(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ഞങ്ങളെ ബന്ധപ്പെടുക";
+            case 2: return "संपर्क करें";
+            case 3: return "మమ్మల్ని సంప్రదించండి";
+            case 4: return "எங்களை தொடர்பு கொள்ளுங்கள்";
+            case 5: return "ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ";
+            case 6: return "ଆମକୁ ଯୋଗାଯୋଗ କରନ୍ତୁ";
+            default: return str(context, R.string.profile_contact_us, "Contact Us");
+        }
+    }
+
+    public static String logout(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ലോഗൗട്ട്";
+            case 2: return "लॉग आउट";
+            case 3: return "లాగ్ అవుట్";
+            case 4: return "வெளியேறு";
+            case 5: return "ಲಾಗ್ ಔಟ್";
+            case 6: return "ଲଗଆଉଟ୍";
+            default: return str(context, R.string.profile_logout, "Logout");
+        }
+    }
+
+    public static String logoutConfirm(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ലോഗൗട്ട് ചെയ്യണോ?";
+            case 2: return "लॉग आउट करें?";
+            case 3: return "లాగ్ అవుట్ చేయాలా?";
+            case 4: return "வெளியேறவா?";
+            case 5: return "ಲಾಗ್ ಔಟ್ ಮಾಡಬೇಕೇ?";
+            case 6: return "ଲଗଆଉଟ୍ କରିବେ କି?";
+            default: return str(context, R.string.profile_logout_confirm, "Logout?");
+        }
+    }
+
+    public static String logoutYes(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "അതെ";
+            case 2: return "हाँ";
+            case 3: return "అవును";
+            case 4: return "ஆம்";
+            case 5: return "ಹೌದು";
+            case 6: return "ହଁ";
+            default: return str(context, R.string.profile_logout_yes, "Yes");
+        }
+    }
+
+    public static String logoutNo(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "അല്ല";
+            case 2: return "नहीं";
+            case 3: return "కాదు";
+            case 4: return "இல்லை";
+            case 5: return "ಇಲ್ಲ";
+            case 6: return "ନା";
+            default: return str(context, R.string.profile_logout_no, "No");
+        }
+    }
+
+    public static String tagline(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "മുന്നിലിരിക്കൂ, അറിഞ്ഞിരിക്കൂ";
+            case 2: return "आगे रहें, जानकार रहें";
+            case 3: return "ముందుండండి, సమాచారంతో ఉండండి";
+            case 4: return "முன்னிலையில் இருங்கள், தெரிந்திருங்கள்";
+            case 5: return "ಮುಂದಿರಿ, ತಿಳಿದಿರಿ";
+            case 6: return "ଆଗକୁ ରୁହନ୍ତୁ, ଜାଣି ରୁହନ୍ତୁ";
+            default: return str(context, R.string.profile_tagline, "Stay Ahead, Stay Informed");
+        }
+    }
+
+    public static String verified(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "സ്ഥിരീകരിച്ചത്";
+            case 2: return "सत्यापित";
+            case 3: return "వెరిఫైడ్";
+            case 4: return "சரிபார்க்கப்பட்டது";
+            case 5: return "ಪರಿಶೀಲಿಸಲಾಗಿದೆ";
+            case 6: return "ଯାଞ୍ଚିତ";
+            default: return str(context, R.string.profile_verified, "Verified");
+        }
+    }
+
+    public static String totalEarnings(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "മൊത്തം വരുമാനം";
+            case 2: return "कुल कमाई";
+            case 3: return "మొత్తం సంపాదన";
+            case 4: return "மொத்த வருவாய்";
+            case 5: return "ಒಟ್ಟು ಗಳಿಕೆ";
+            case 6: return "ମୋଟ ଆୟ";
+            default: return str(context, R.string.profile_total_earnings, "Total earnings");
+        }
+    }
+
+    public static String earnings(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "വരുമാനം";
+            case 2: return "कमाई";
+            case 3: return "సంపాదన";
+            case 4: return "வருவாய்";
+            case 5: return "ಗಳಿಕೆ";
+            case 6: return "ଆୟ";
+            default: return str(context, R.string.profile_earnings_details, "Earnings");
+        }
+    }
+
+    public static String reporterShortcuts(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "റിപ്പോർട്ടർ ഷോർട്ട്കട്ടുകൾ";
+            case 2: return "रिपोर्टर शॉर्टकट";
+            case 3: return "రిపోర్టర్ షార్ట్‌కట్లు";
+            case 4: return "ரிப்போர்ட்டர் குறுக்குவழிகள்";
+            case 5: return "ರಿಪೋರ್ಟರ್ ಶಾರ್ಟ್‌ಕಟ್‌ಗಳು";
+            case 6: return "ରିପୋର୍ଟର୍ ସର୍ଟକଟ୍";
+            default:
+                return str(context, R.string.profile_reporter_shortcuts, "Reporter Shortcuts");
+        }
+    }
+
+    public static String completeProfile(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "പ്രൊഫൈൽ പൂർത്തിയാക്കുക";
+            case 2: return "प्रोफ़ाइल पूरा करें";
+            case 3: return "ప్రొఫైల్ పూర్తి చేయండి";
+            case 4: return "சுயவிவரத்தை முடிக்கவும்";
+            case 5: return "ಪ್ರೊಫೈಲ್ ಪೂರ್ಣಗೊಳಿಸಿ";
+            case 6: return "ପ୍ରୋଫାଇଲ୍ ସମ୍ପୂର୍ଣ୍ଣ କରନ୍ତୁ";
+            default:
+                return str(context, R.string.profile_complete_profile, "Complete Profile");
+        }
+    }
+
+    public static String reporterRole(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "റിപ്പോർട്ടർ";
+            case 2: return "रिपोर्टर";
+            case 3: return "రిపోర్టర్";
+            case 4: return "ரிப்போர்ட்டர்";
+            case 5: return "ರಿಪೋರ್ಟರ್";
+            case 6: return "ରିପୋର୍ଟର୍";
+            default: return str(context, R.string.profile_role_reporter, "Reporter");
+        }
+    }
+
+    public static String reporterDeskPending(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ലോഗിൻ ചെയ്തു — റിപ്പോർട്ടർ അംഗീകാരം കാത്തിരിക്കുന്നു";
+            case 2: return "लॉगिन हो चुका — रिपोर्टर स्वीकृति की प्रतीक्षा";
+            case 3: return "లాగిన్ అయ్యారు — రిపోర్టర్ ఆమోదం కోసం వేచి";
+            case 4: return "உள்நுழைந்துள்ளீர்கள் — ரிப்போர்ட்டர் ஒப்புதல் காத்திருக்கிறது";
+            case 5: return "ಲಾಗಿನ್ ಆಗಿದೆ — ರಿಪೋರ್ಟರ್ ಅನುಮೋದನೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ";
+            case 6: return "ଲଗଇନ୍ ହୋଇଛି — ରିପୋର୍ଟର୍ ଅନୁମୋଦନ ଅପେକ୍ଷାରେ";
+            default:
+                return str(context, R.string.profile_reporter_desk_pending,
+                        "Logged in — awaiting reporter approval");
+        }
+    }
+
+    public static String reporterDeskRejected(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "റിപ്പോർട്ടർ അപേക്ഷ നിരസിച്ചു";
+            case 2: return "रिपोर्टर आवेदन अस्वीकृत";
+            case 3: return "రిపోర్టర్ దరఖాస్తు తిరస్కరించబడింది";
+            case 4: return "ரிப்போர்ட்டர் விண்ணப்பம் நிராகரிக்கப்பட்டது";
+            case 5: return "ರಿಪೋರ್ಟರ್ ಅರ್ಜಿ ತಿರಸ್ಕರಿಸಲಾಗಿದೆ";
+            case 6: return "ରିପୋର୍ଟର୍ ଆବେଦନ ପ୍ରତ୍ୟାଖ୍ୟାନ";
+            default:
+                return str(context, R.string.profile_reporter_desk_rejected,
+                        "Reporter application rejected");
+        }
+    }
+
+    public static String deleteAccount(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "അക്കൗണ്ട് ഇല്ലാതാക്കുക";
+            case 2: return "खाता हटाएँ";
+            case 3: return "ఖాతా తొలగించండి";
+            case 4: return "கணக்கை நீக்கு";
+            case 5: return "ಖಾತೆ ಅಳಿಸಿ";
+            case 6: return "ଖାତା ବିଲୋପ କରନ୍ତୁ";
+            default: return "Delete Account";
+        }
+    }
+
+    public static String followMore(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "കൂടുതൽ ഫോളോ ചെയ്യുക";
+            case 2: return "और फॉलो करें";
+            case 3: return "మరిన్ని ఫాలో అవ్వండి";
+            case 4: return "மேலும் பின்தொடரவும்";
+            case 5: return "ಇನ್ನಷ್ಟು ಫಾಲೋ ಮಾಡಿ";
+            case 6: return "ଅଧିକ ଫଲୋ କରନ୍ତୁ";
+            default: return "Follow More";
+        }
+    }
+
+    public static String likes(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "ലൈക്കുകൾ";
+            case 2: return "लाइक्स";
+            case 3: return "లైక్స్";
+            case 4: return "லைக்ஸ்";
+            case 5: return "ಲೈಕ್‌ಗಳು";
+            case 6: return "ଲାଇକ୍";
+            default: return "Likes";
+        }
+    }
+
+    public static String wallet(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "വാലറ്റ്";
+            case 2: return "वॉलेट";
+            case 3: return "వాలెట్";
+            case 4: return "வாலட்";
+            case 5: return "ವಾಲೆಟ್";
+            case 6: return "ଓୟାଲେଟ୍";
+            default: return str(context, R.string.profile_wallet, "Wallet");
+        }
+    }
+
+    public static String rewards(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "റിവാർഡുകൾ";
+            case 2: return "रिवॉर्ड्स";
+            case 3: return "రివార్డ్స్";
+            case 4: return "ரிவார்டுகள்";
+            case 5: return "ರಿವಾರ್ಡ್‌ಗಳು";
+            case 6: return "ରିୱାର୍ଡସ୍";
+            default: return "Rewards";
+        }
     }
 
     public static String fabArticle(@Nullable Context context) {

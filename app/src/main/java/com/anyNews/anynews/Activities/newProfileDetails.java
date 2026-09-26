@@ -860,10 +860,10 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     private void showLogoutConfirmDialog() {
-        String title = getString(R.string.profile_logout);
-        String message = getString(R.string.profile_logout_confirm);
-        String yes = getString(R.string.profile_logout_yes);
-        String no = getString(R.string.profile_logout_no);
+        String title = ProfileHubLabels.logout(this);
+        String message = ProfileHubLabels.logoutConfirm(this);
+        String yes = ProfileHubLabels.logoutYes(this);
+        String no = ProfileHubLabels.logoutNo(this);
         new androidx.appcompat.app.AlertDialog.Builder(newProfileDetails.this)
                 .setTitle(title)
                 .setMessage(message)
@@ -2080,7 +2080,6 @@ public class newProfileDetails extends AppCompatActivity {
         }
         TextView langLabel = findViewById(R.id.profile_language_label);
         if (langLabel != null) {
-            // Always English heading — values (తెలుగు / हिन्दी) stay localized below.
             langLabel.setText(ProfileHubLabels.selectLanguage(this));
         }
         if (textViewFollowingUser != null) {
@@ -2092,11 +2091,11 @@ public class newProfileDetails extends AppCompatActivity {
         if (textViewShareEarnUser != null) {
             textViewShareEarnUser.setText(ProfileHubLabels.shareApp(this));
         }
-        if (textViewFollowMore != null
-                && languageModelResponse != null
-                && languageModelResponse.getData() != null
-                && TranslatorPackHelper.packMatchesLanguage(this)) {
-            textViewFollowMore.setText("" + languageModelResponse.getData().getFollowMore());
+        if (textViewFollowMore != null) {
+            textViewFollowMore.setText(packString(
+                    languageModelResponse != null && languageModelResponse.getData() != null
+                            ? languageModelResponse.getData().getFollowMore() : null,
+                    ProfileHubLabels.followMore(this)));
         }
 
         if (profile_article_name != null) {
@@ -2105,11 +2104,11 @@ public class newProfileDetails extends AppCompatActivity {
                             ? languageModelResponse.getData().getArticles() : null,
                     ProfileHubLabels.articles(this)));
         }
-        if (profile_like_name != null
-                && languageModelResponse != null
-                && languageModelResponse.getData() != null
-                && TranslatorPackHelper.packMatchesLanguage(this)) {
-            profile_like_name.setText(" " + languageModelResponse.getData().getLikes());
+        if (profile_like_name != null) {
+            profile_like_name.setText(" " + packString(
+                    languageModelResponse != null && languageModelResponse.getData() != null
+                            ? languageModelResponse.getData().getLikes() : null,
+                    ProfileHubLabels.likes(this)));
         }
         if (profile_followers_name != null) {
             profile_followers_name.setText(" " + packString(
@@ -2129,17 +2128,17 @@ public class newProfileDetails extends AppCompatActivity {
                             ? languageModelResponse.getData().getFollowing() : null,
                     ProfileHubLabels.following(this)));
         }
-        if (profile_follow_more != null
-                && languageModelResponse != null
-                && languageModelResponse.getData() != null
-                && TranslatorPackHelper.packMatchesLanguage(this)) {
-            profile_follow_more.setText("" + languageModelResponse.getData().getFollowMore());
+        if (profile_follow_more != null) {
+            profile_follow_more.setText(packString(
+                    languageModelResponse != null && languageModelResponse.getData() != null
+                            ? languageModelResponse.getData().getFollowMore() : null,
+                    ProfileHubLabels.followMore(this)));
         }
-        if (user_rewards != null
-                && languageModelResponse != null
-                && languageModelResponse.getData() != null
-                && TranslatorPackHelper.packMatchesLanguage(this)) {
-            user_rewards.setText("" + languageModelResponse.getData().getRewards());
+        if (user_rewards != null) {
+            user_rewards.setText(packString(
+                    languageModelResponse != null && languageModelResponse.getData() != null
+                            ? languageModelResponse.getData().getRewards() : null,
+                    ProfileHubLabels.rewards(this)));
         }
         if (user_share_to_earn != null
                 && languageModelResponse != null
@@ -2147,11 +2146,11 @@ public class newProfileDetails extends AppCompatActivity {
                 && TranslatorPackHelper.packMatchesLanguage(this)) {
             user_share_to_earn.setText("" + languageModelResponse.getData().getShareToEarn());
         }
-        if (user_follow_more_data != null
-                && languageModelResponse != null
-                && languageModelResponse.getData() != null
-                && TranslatorPackHelper.packMatchesLanguage(this)) {
-            user_follow_more_data.setText("" + languageModelResponse.getData().getFollowMore());
+        if (user_follow_more_data != null) {
+            user_follow_more_data.setText(packString(
+                    languageModelResponse != null && languageModelResponse.getData() != null
+                            ? languageModelResponse.getData().getFollowMore() : null,
+                    ProfileHubLabels.followMore(this)));
         }
         if (only_language_name != null) {
             only_language_name.setText(resolveCurrentLanguageDisplay());
@@ -2163,7 +2162,7 @@ public class newProfileDetails extends AppCompatActivity {
             total_amount.setText("" + languageModelResponse.getData().getTotalAmount());
         }
         if (profile_next_payment != null) {
-            profile_next_payment.setText("Earnings");
+            profile_next_payment.setText(ProfileHubLabels.earnings(this));
         }
         if (logintext != null
                 && languageModelResponse != null
@@ -2171,24 +2170,19 @@ public class newProfileDetails extends AppCompatActivity {
                 && TranslatorPackHelper.packMatchesLanguage(this)) {
             logintext.setText("" + languageModelResponse.getData().getLogin());
         }
-        if (account_delete_name != null
-                && languageModelResponse != null
-                && languageModelResponse.getData() != null
-                && TranslatorPackHelper.packMatchesLanguage(this)) {
-            account_delete_name.setText("" + languageModelResponse.getData().getDelete_account());
+        if (account_delete_name != null) {
+            account_delete_name.setText(packString(
+                    languageModelResponse != null && languageModelResponse.getData() != null
+                            ? languageModelResponse.getData().getDelete_account() : null,
+                    ProfileHubLabels.deleteAccount(this)));
         }
         if (textViewAppDelete != null) {
             String del = languageModelResponse != null && languageModelResponse.getData() != null
                     ? languageModelResponse.getData().getDelete_account() : null;
-            if (TranslatorPackHelper.packMatchesLanguage(this)
-                    && del != null && !del.equalsIgnoreCase("null")) {
-                textViewAppDelete.setText(del);
-            } else {
-                textViewAppDelete.setText("Delete Account");
-            }
+            textViewAppDelete.setText(packString(del, ProfileHubLabels.deleteAccount(this)));
         }
         if (textViewAppLogout != null) {
-            textViewAppLogout.setText(R.string.profile_logout);
+            textViewAppLogout.setText(ProfileHubLabels.logout(this));
         }
         bindNewsNavLabel();
         applyProfileHubTranslatedLabels();
@@ -2219,15 +2213,14 @@ public class newProfileDetails extends AppCompatActivity {
 
         TextView tagline = findViewById(R.id.profile_tagline);
         if (tagline != null) {
-            // No translator field for marketing tagline — keep resource (may be English).
-            tagline.setText(R.string.profile_tagline);
+            tagline.setText(ProfileHubLabels.tagline(this));
         }
 
         setHubLabel(R.id.profile_categories_label,
                 packOk ? firstTranslator(d != null ? d.getCategory() : null,
                         d != null ? d.getDiscover() : null,
-                        getString(R.string.profile_categories))
-                        : getString(R.string.profile_categories));
+                        ProfileHubLabels.categories(this))
+                        : ProfileHubLabels.categories(this));
 
         TextView viewAll = findViewById(R.id.profile_categories_view_all);
         if (viewAll != null) {
@@ -2235,7 +2228,7 @@ public class newProfileDetails extends AppCompatActivity {
             if (notEmptyTranslator(view) && !"view".equalsIgnoreCase(view.trim())) {
                 viewAll.setText(view.trim());
             } else {
-                viewAll.setText(R.string.profile_categories_view_all);
+                viewAll.setText(ProfileHubLabels.categoriesViewAll(this));
             }
         }
 
@@ -2261,7 +2254,7 @@ public class newProfileDetails extends AppCompatActivity {
         TextView contactLabel = findViewById(R.id.profile_contact_label);
         if (contactLabel != null) {
             contactLabel.setText(packString(
-                    d != null ? d.getContactUs() : null, getString(R.string.profile_contact_us)));
+                    d != null ? d.getContactUs() : null, ProfileHubLabels.contactUs(this)));
         }
 
         TextView bmLabel = findViewById(R.id.profile_bookmarks_label);
@@ -3452,17 +3445,17 @@ public class newProfileDetails extends AppCompatActivity {
                     languageModelResponse != null ? languageModelResponse.getData() : null;
             String r = d != null ? d.getReporter() : null;
             titleView.setText(notEmptyTranslator(r) ? r.trim()
-                    : getString(R.string.profile_reporter_desk_title));
+                    : ProfileHubLabels.reporterRole(this));
         }
 
         if (state == Constants.REPORTER_DESK_PENDING) {
             if (statusView != null) {
-                statusView.setText(R.string.profile_reporter_desk_pending);
+                statusView.setText(ProfileHubLabels.reporterDeskPending(this));
             }
             desk.setVisibility(View.VISIBLE);
         } else if (state == Constants.REPORTER_DESK_REJECTED) {
             if (statusView != null) {
-                statusView.setText(R.string.profile_reporter_desk_rejected);
+                statusView.setText(ProfileHubLabels.reporterDeskRejected(this));
             }
             desk.setVisibility(View.VISIBLE);
         } else {
@@ -3794,7 +3787,7 @@ public class newProfileDetails extends AppCompatActivity {
             return false;
         }
         if (!isReporter) {
-            Toast.makeText(this, R.string.profile_reporter_desk_pending, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, ProfileHubLabels.reporterDeskPending(this), Toast.LENGTH_SHORT).show();
             return false;
         }
         if (ReporterPostGateHelper.blockComposeIfIncomplete(this)) {
@@ -3806,12 +3799,7 @@ public class newProfileDetails extends AppCompatActivity {
     private void bindReporterVerifiedLabel() {
         TextView tv = findViewById(R.id.profile_verified_label);
         if (tv == null) return;
-        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
-        if (id == 3) {
-            tv.setText("వెరిఫైడ్");
-        } else {
-            tv.setText(R.string.profile_verified);
-        }
+        tv.setText(ProfileHubLabels.verified(this));
     }
 
     private void bindReporterShortcutLabels() {
@@ -3830,7 +3818,7 @@ public class newProfileDetails extends AppCompatActivity {
         if (role != null) {
             String r = TranslatorPackHelper.packMatchesLanguage(this) && d != null
                     ? d.getReporter() : null;
-            role.setText(notEmptyTranslator(r) ? r.trim() : getString(R.string.profile_role_reporter));
+            role.setText(notEmptyTranslator(r) ? r.trim() : ProfileHubLabels.reporterRole(this));
         }
     }
 
@@ -3843,17 +3831,11 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     private String resolveTotalEarningsLabel() {
-        if (SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME) == 3) {
-            return "మొత్తం సంపాదన";
-        }
-        return getString(R.string.profile_total_earnings);
+        return ProfileHubLabels.totalEarnings(this);
     }
 
     private String resolveShortcutsTitle() {
-        if (SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME) == 3) {
-            return "రిపోర్టర్ షార్ట్‌కట్లు";
-        }
-        return getString(R.string.profile_reporter_shortcuts);
+        return ProfileHubLabels.reporterShortcuts(this);
     }
 
     /**
@@ -3916,10 +3898,7 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     private String resolveCompleteProfileOnlyLabel() {
-        if (SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME) == 3) {
-            return "ప్రొఫైల్ పూర్తి చేయండి";
-        }
-        return getString(R.string.profile_complete_profile);
+        return ProfileHubLabels.completeProfile(this);
     }
 
     private void setupReporterShortcutClicks() {
@@ -4695,7 +4674,7 @@ public class newProfileDetails extends AppCompatActivity {
                 rewardsLabel.setText(
                         com.anyNews.anynews.rewards.RewardsLabels.joinedChip(this));
             } catch (Exception ignored) {
-                rewardsLabel.setText("Rewards");
+                rewardsLabel.setText(ProfileHubLabels.rewards(this));
             }
         }
         if (rewardsSubtitle != null) {
@@ -4721,6 +4700,7 @@ public class newProfileDetails extends AppCompatActivity {
                 walletLabel.setText(
                         com.anyNews.anynews.rewards.RewardsLabels.walletScreenTitle(this));
             } catch (Exception ignored) {
+                walletLabel.setText(ProfileHubLabels.wallet(this));
             }
         }
         if (walletSubtitle != null) {
