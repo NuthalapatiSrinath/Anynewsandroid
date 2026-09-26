@@ -2245,6 +2245,9 @@ public class newProfileDetails extends AppCompatActivity {
         setHubLabel(R.id.profile_settings_row_label,
                 packString(d != null ? d.getSettings() : null, ProfileHubLabels.settings(this)));
 
+        setHubLabel(R.id.profile_rewards_wallet_label, ProfileHubLabels.wallet(this));
+        setHubLabel(R.id.profile_rewards_label, ProfileHubLabels.rewards(this));
+
         TextView feedbackLabel = findViewById(R.id.profile_feedback_label);
         if (feedbackLabel != null) {
             feedbackLabel.setText(packString(

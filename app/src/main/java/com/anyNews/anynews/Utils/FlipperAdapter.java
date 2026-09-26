@@ -13276,21 +13276,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
-    /** Settings → Video Autoplay user pref (default ON when unset). */
+    /** Settings → Video Autoplay user pref (default OFF when unset). */
     public static boolean isVideoAutoplayUserPrefEnabled(Context ctx) {
-        return SharedPrefsData.getBool(ctx, Constants.VIDEO_AUTOPLAY, Constants.PREF_NAME, true);
+        return SharedPrefsData.getBool(ctx, Constants.VIDEO_AUTOPLAY, Constants.PREF_NAME, false);
     }
 
     /**
      * Admin master {@code video_autoplay_enabled} (splash + feed poll).
-     * Default ON when unset so older servers keep prior behavior.
+     * Default OFF when unset — admin must explicitly enable.
      */
     public static boolean isAdminVideoAutoplayEnabled(Context ctx) {
         if (ctx == null) {
-            return true;
+            return false;
         }
         return SharedPrefsData.getBool(
-                ctx, Constants.VIDEO_AUTOPLAY_ENABLED, Constants.PREF_NAME, true);
+                ctx, Constants.VIDEO_AUTOPLAY_ENABLED, Constants.PREF_NAME, false);
     }
 
     /**

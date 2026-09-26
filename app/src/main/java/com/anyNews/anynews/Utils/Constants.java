@@ -82,7 +82,7 @@ public class Constants {
     public static String VIDEO_AUTOPLAY = "settings_video_autoplay";
     /**
      * Admin global FlipView video autoplay master ({@code video_autoplay_enabled}).
-     * Splash + feed poll. Default ON when unset. OFF → never autoplay (tap to play).
+     * Splash + feed poll. Default OFF when unset. ON only when admin saved true.
      */
     public static String VIDEO_AUTOPLAY_ENABLED = "video_autoplay_enabled";
     /**
@@ -719,6 +719,12 @@ public class Constants {
     // Cross-language: opening a Hindi share while LanguageID=Telugu must show the
     // Hindi post once, then continue the Telugu feed — never rewrite LanguageID.
     public static String PENDING_SHARE_POST = "pending_share_post_id";
+    /**
+     * One-shot FCM push post id. Written when the tray PendingIntent is built /
+     * splash receives a push tap; HomePage consumes+clears so warm opens still
+     * pin the article when Intent extras are dropped by OEM / CLEAR_TOP races.
+     */
+    public static String PENDING_PUSH_POST = "pending_push_post_id";
     /** One-shot job id from /job/{id} or legacy /job-{base64} share deep links. */
     public static String PENDING_SHARE_JOB = "pending_share_job_id";
     /**

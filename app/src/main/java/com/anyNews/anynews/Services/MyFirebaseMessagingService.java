@@ -40,7 +40,7 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import com.anyNews.anynews.Activities.StartingActivity;
+import com.anyNews.anynews.Activities.HomePage;
 import com.anyNews.anynews.Pojo.AddLikeResponse;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.StartingAppRequest;
@@ -242,11 +242,106 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         return SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
     }
 
+    /**
+     * Stable tray + PendingIntent requestCode per post. Never 0 (collides across
+     * missing-id pushes under FLAG_UPDATE_CURRENT).
+     */
     private int safeNotificationId(String postId) {
+        if (postId == null || postId.trim().isEmpty() || "null".equalsIgnoreCase(postId.trim())) {
+            return 1;
+        }
+        String raw = postId.trim();
         try {
-            return Integer.parseInt(postId);
+            long v = Long.parseLong(raw);
+            if (v == 0L) {
+                return 1;
+            }
+            // Keep positive int identity; large ids hash to a stable non-zero code.
+            if (v > 0 && v <= Integer.MAX_VALUE) {
+                return (int) v;
+            }
+            int h = Long.hashCode(v);
+            return h != 0 ? Math.abs(h) : 1;
         } catch (NumberFormatException e) {
-            return postId != null ? Math.abs(postId.hashCode()) : 0;
+            int h = raw.hashCode();
+            return h != 0 ? Math.abs(h) : 1;
+        }
+    }
+
+    /**
+     * Build the tap Intent. Targets {@link HomePage} with CLEAR_TOP|SINGLE_TOP so a
+     * foreground feed receives {@code onNewIntent} (splash singleTask + finish() used
+     * to drop TITLE). Unique data URI keeps PendingIntent extras from colliding.
+     */
+    @NonNull
+    private Intent buildPushOpenIntent(@NonNull String postId, @Nullable String title, @Nullable String objectJson) {
+        Intent resultIntent = new Intent(getApplicationContext(), HomePage.class);
+        resultIntent.putExtra("notification", true);
+        resultIntent.putExtra("TITILE", postId);
+        resultIntent.putExtra("TITLE", postId);
+        if (title != null) {
+            resultIntent.putExtra("TITLE_REWARDS", title);
+        }
+        if (objectJson != null) {
+            resultIntent.putExtra("OBJECT", objectJson);
+        }
+        int notificationId = safeNotificationId(postId);
+        try {
+            resultIntent.setData(Uri.parse("anynews://push/" + postId + "/" + notificationId));
+        } catch (Exception ignored) {
+        }
+        resultIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        try {
+            SharedPrefsData.putString(
+                    getApplicationContext(),
+                    Constants.PENDING_PUSH_POST,
+                    postId,
+                    Constants.PREF_NAME);
+            // Push owns seating — do not let a stale share sticky win.
+            SharedPrefsData.putString(
+                    getApplicationContext(),
+                    Constants.PENDING_SHARE_POST,
+                    "",
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        return resultIntent;
+    }
+
+    @NonNull
+    private PendingIntent buildPushPendingIntent(@NonNull Intent resultIntent, int notificationId) {
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= 31) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.getActivity(
+                getApplicationContext(),
+                notificationId,
+                resultIntent,
+                flags);
+    }
+
+    /** Custom RemoteViews swallow taps on many OEMs unless each root has a PI. */
+    private void bindRemoteViewClicks(
+            @NonNull RemoteViews collapsed,
+            @NonNull RemoteViews expanded,
+            @NonNull PendingIntent pendingIntent) {
+        try {
+            collapsed.setOnClickPendingIntent(R.id.notification_root_collapsed, pendingIntent);
+            collapsed.setOnClickPendingIntent(R.id.notification_titleE, pendingIntent);
+            collapsed.setOnClickPendingIntent(R.id.notification_titleTEL, pendingIntent);
+            collapsed.setOnClickPendingIntent(R.id.notification_titleTa, pendingIntent);
+            collapsed.setOnClickPendingIntent(R.id.imageViewIcon, pendingIntent);
+        } catch (Exception ignored) {
+        }
+        try {
+            expanded.setOnClickPendingIntent(R.id.notification_root_expanded, pendingIntent);
+            expanded.setOnClickPendingIntent(R.id.notification_title, pendingIntent);
+            expanded.setOnClickPendingIntent(R.id.imageViewIconExpanded, pendingIntent);
+            expanded.setOnClickPendingIntent(R.id.notificationView, pendingIntent);
+        } catch (Exception ignored) {
         }
     }
 
@@ -680,33 +775,10 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             expandedView.setViewVisibility(R.id.notificationView, View.GONE);
         }
 
-        Intent resultIntent = new Intent(getApplicationContext(), StartingActivity.class);
-        resultIntent.putExtra("notification", true);
-        // Legacy splash key (typo) + HomePage TITLE — both must carry this post_id.
-        resultIntent.putExtra("TITILE", post_id);
-        resultIntent.putExtra("TITLE", post_id);
-        resultIntent.putExtra("TITLE_REWARDS", title);
-        resultIntent.putExtra("OBJECT", object);
-        // Unique data URI so multi-tray PendingIntents never share one extras blob
-        // under FLAG_UPDATE_CURRENT (OEM / same-component collisions).
-        try {
-            resultIntent.setData(Uri.parse("anynews://push/" + post_id));
-        } catch (Exception ignored) {
-        }
-        resultIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
+        Intent resultIntent = buildPushOpenIntent(post_id, title, object);
         int notificationId = safeNotificationId(post_id);
-        PendingIntent pendingIntent;
-        if (Build.VERSION.SDK_INT >= 31) {
-            pendingIntent = PendingIntent.getActivity(
-                    getApplicationContext(),
-                    notificationId,
-                    resultIntent,
-                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        } else {
-            pendingIntent = PendingIntent.getActivity(
-                    this, notificationId, resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-        }
+        PendingIntent pendingIntent = buildPushPendingIntent(resultIntent, notificationId);
+        bindRemoteViewClicks(collapsedView, expandedView, pendingIntent);
 
         try {
             if (!canPostNotifications()) {
@@ -837,33 +909,9 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 bigText = body + "\n\n\"" + snippet + "\"";
             }
 
-            Intent resultIntent = new Intent(getApplicationContext(), StartingActivity.class);
-            resultIntent.putExtra("notification", true);
-            resultIntent.putExtra("TITILE", post_id);
-            resultIntent.putExtra("TITLE", post_id);
-            resultIntent.putExtra("TITLE_REWARDS", actor);
-            resultIntent.putExtra("OBJECT", object.toString());
-            try {
-                resultIntent.setData(Uri.parse("anynews://push/" + post_id));
-            } catch (Exception ignored) {
-            }
-            resultIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
+            Intent resultIntent = buildPushOpenIntent(post_id, actor, object.toString());
             int notificationId = safeNotificationId(post_id);
-            PendingIntent pendingIntent;
-            if (Build.VERSION.SDK_INT >= 31) {
-                pendingIntent = PendingIntent.getActivity(
-                        getApplicationContext(),
-                        notificationId,
-                        resultIntent,
-                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-            } else {
-                pendingIntent = PendingIntent.getActivity(
-                        getApplicationContext(),
-                        notificationId,
-                        resultIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT);
-            }
+            PendingIntent pendingIntent = buildPushPendingIntent(resultIntent, notificationId);
 
             final Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
 

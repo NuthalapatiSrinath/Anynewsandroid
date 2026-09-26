@@ -110,7 +110,7 @@ public final class ProfileHubLabels {
         switch (languageId(context)) {
             case 1: return "AnyNews-ൽ പരസ്യം ചെയ്യുക";
             case 2: return "AnyNews में विज्ञापन करें";
-            case 3: return "ఎనీన్యూస్‌లో Advertise చేయండి";
+            case 3: return "ఎనీన్యూస్‌లో ప్రకటన ఇవ్వండి";
             case 4: return "AnyNews-இல் விளம்பரம் செய்யுங்கள்";
             case 5: return "AnyNewsನಲ್ಲಿ ಜಾಹೀರಾತು ಮಾಡಿ";
             case 6: return "AnyNewsରେ ବିଜ୍ଞାପନ କରନ୍ତୁ";

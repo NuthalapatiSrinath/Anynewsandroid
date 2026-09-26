@@ -281,6 +281,39 @@ public class StartingActivity extends AppCompatActivity {
                 TITLE = titleAlt;
             }
         }
+        // PendingIntent data URI still carries post id when OEM drops extras.
+        if (TITLE == null || TITLE.isEmpty() || "null".equalsIgnoreCase(TITLE)
+                || "0".equals(TITLE.trim())) {
+            try {
+                Uri data = intent.getData();
+                if (isFcmPushIntentUri(data)) {
+                    String path = data.getPath();
+                    if (path != null && path.length() > 1) {
+                        String seg = path.startsWith("/") ? path.substring(1) : path;
+                        int slash = seg.indexOf('/');
+                        if (slash > 0) {
+                            seg = seg.substring(0, slash);
+                        }
+                        if (!seg.isEmpty() && !"0".equals(seg)) {
+                            Long.parseLong(seg);
+                            TITLE = seg;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (TITLE != null && !TITLE.isEmpty() && !"null".equalsIgnoreCase(TITLE)
+                && !"0".equals(TITLE.trim())) {
+            try {
+                SharedPrefsData.putString(
+                        getApplicationContext(),
+                        Constants.PENDING_PUSH_POST,
+                        TITLE.trim(),
+                        Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
+        }
         SharedPrefsData.putString(getApplicationContext(), Constants.REFERRER_POST, "0", Constants.PREF_NAME);
         // Clear any stale pending share post before parsing this launch's intent;
         // extractData() re-sets it only when this launch is an actual share link.

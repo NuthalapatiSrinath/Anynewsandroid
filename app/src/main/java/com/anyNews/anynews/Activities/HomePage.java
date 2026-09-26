@@ -1318,6 +1318,41 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         String sessionId = "" + getIntent().getStringExtra("EXTRA_SESSION_ID");
         pushUpdatedID = "" + getIntent().getStringExtra("TITLE");
+        // FCM tray: prefer TITILE typo key, then data URI, then PENDING_PUSH_POST.
+        if (pushUpdatedID == null || pushUpdatedID.isEmpty()
+                || "null".equalsIgnoreCase(pushUpdatedID)) {
+            String titleAlt = getIntent().getStringExtra("TITILE");
+            if (titleAlt != null && !titleAlt.isEmpty() && !"null".equalsIgnoreCase(titleAlt)) {
+                pushUpdatedID = titleAlt;
+            }
+        }
+        if (pushUpdatedID == null || pushUpdatedID.isEmpty()
+                || "null".equalsIgnoreCase(pushUpdatedID)
+                || "0".equals(pushUpdatedID.trim())) {
+            String fromUri = postIdFromPushIntentUri(getIntent() != null ? getIntent().getData() : null);
+            if (fromUri != null) {
+                pushUpdatedID = fromUri;
+            }
+        }
+        if (pushUpdatedID == null || pushUpdatedID.isEmpty()
+                || "null".equalsIgnoreCase(pushUpdatedID)
+                || "0".equals(pushUpdatedID.trim())) {
+            try {
+                String pendingPush = SharedPrefsData.getString(
+                        getApplicationContext(), Constants.PENDING_PUSH_POST, Constants.PREF_NAME);
+                if (pendingPush != null && !pendingPush.trim().isEmpty()
+                        && !"0".equals(pendingPush.trim())
+                        && !"null".equalsIgnoreCase(pendingPush.trim())) {
+                    pushUpdatedID = pendingPush.trim();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            SharedPrefsData.putString(
+                    getApplicationContext(), Constants.PENDING_PUSH_POST, "", Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
         SHARE_REDIRECT_ID = "" + getIntent().getStringExtra("SHARE_REDIRECT_ID");
         TITLE_REWARDS = "" + getIntent().getStringExtra("TITLE_REWARDS");
         DATAFROM2G = "" + getIntent().getStringExtra("DATAFROM2G");
@@ -1325,7 +1360,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Fallback: some splash routing branches launch HomePage without the
         // SHARE_REDIRECT_ID extra. StartingActivity persists the shared post id
         // as a one-shot; consume it here (and clear it) so the exact post opens.
-        if (SHARE_REDIRECT_ID == null || SHARE_REDIRECT_ID.equals("null") || SHARE_REDIRECT_ID.trim().isEmpty()) {
+        // Push TITLE owns seating — skip stale share sticky when opening from FCM.
+        boolean pushOwnsSeating = false;
+        try {
+            if (pushUpdatedID != null) {
+                String raw = pushUpdatedID.trim();
+                if (!raw.isEmpty() && !"null".equalsIgnoreCase(raw) && !"0".equals(raw)) {
+                    pushOwnsSeating = Long.parseLong(raw) > 0;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (pushOwnsSeating) {
+            SHARE_REDIRECT_ID = "0";
+            SHARE_ID = 0;
+            try {
+                SharedPrefsData.putString(
+                        getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
+        } else if (SHARE_REDIRECT_ID == null || SHARE_REDIRECT_ID.equals("null") || SHARE_REDIRECT_ID.trim().isEmpty()) {
             String pendingShare = SharedPrefsData.getString(getApplicationContext(), Constants.PENDING_SHARE_POST, Constants.PREF_NAME);
             if (pendingShare != null && !pendingShare.trim().isEmpty() && !pendingShare.equals("0")) {
                 SHARE_REDIRECT_ID = pendingShare.trim();
@@ -1758,11 +1812,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             applySearchQueryExtra(intent);
             applyCategorySessionExtra(intent);
             applyDailyUpdatesOpenExtra(intent);
-            // Share first (owns seating when SHARE_REDIRECT_ID present).
-            applyShareRedirectFromIntent(intent);
-            // FCM push: Home is CLEAR_TOP|SINGLE_TOP — must consume TITLE here
-            // (onCreate already ran). Share path returns early when SHARE set.
+            // FCM push first (owns seating). Share only when no push TITLE.
             applyPushRedirectFromIntent(intent);
+            applyShareRedirectFromIntent(intent);
         }
     }
 
@@ -1774,11 +1826,31 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (intent == null) {
             return;
         }
-        // Share deep-link owns seating when present.
-        if (SHARE_ID > 0) {
-            return;
-        }
         String pushRaw = intent.getStringExtra("TITLE");
+        if (pushRaw == null || pushRaw.trim().isEmpty()
+                || "null".equalsIgnoreCase(pushRaw.trim())
+                || "0".equals(pushRaw.trim())) {
+            pushRaw = intent.getStringExtra("TITILE");
+        }
+        if (pushRaw == null || pushRaw.trim().isEmpty()
+                || "null".equalsIgnoreCase(pushRaw.trim())
+                || "0".equals(pushRaw.trim())) {
+            pushRaw = postIdFromPushIntentUri(intent.getData());
+        }
+        if (pushRaw == null || pushRaw.trim().isEmpty()
+                || "null".equalsIgnoreCase(pushRaw.trim())
+                || "0".equals(pushRaw.trim())) {
+            try {
+                String pendingPush = SharedPrefsData.getString(
+                        getApplicationContext(), Constants.PENDING_PUSH_POST, Constants.PREF_NAME);
+                if (pendingPush != null && !pendingPush.trim().isEmpty()
+                        && !"0".equals(pendingPush.trim())
+                        && !"null".equalsIgnoreCase(pendingPush.trim())) {
+                    pushRaw = pendingPush.trim();
+                }
+            } catch (Exception ignored) {
+            }
+        }
         if (pushRaw == null || pushRaw.trim().isEmpty()
                 || "null".equalsIgnoreCase(pushRaw.trim())
                 || "0".equals(pushRaw.trim())) {
@@ -1794,15 +1866,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (pushId <= 0) {
             return;
         }
+        try {
+            SharedPrefsData.putString(
+                    getApplicationContext(), Constants.PENDING_PUSH_POST, "", Constants.PREF_NAME);
+            SharedPrefsData.putString(
+                    getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
         pushUpdatedID = String.valueOf(pushId);
         pushOpenWireConsumed = false;
         TITLE_VALUE = 0;
         deepLinkShareRescueAttempted = false;
+        // Push owns seating over any in-memory share sticky.
         SHARE_ID = 0;
         SHARE_REDIRECT_ID = "0";
         showLog("push onNewIntent TITLE=" + pushUpdatedID);
         try {
             intent.putExtra("TITLE", pushUpdatedID);
+            intent.removeExtra("SHARE_REDIRECT_ID");
+        } catch (Exception ignored) {
+        }
+        try {
+            clearSearchFeedMode();
         } catch (Exception ignored) {
         }
         try {
@@ -1830,6 +1915,36 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    /** Post id from FCM uniqueness URI {@code anynews://push/{postId}/…}. */
+    @Nullable
+    private static String postIdFromPushIntentUri(@Nullable Uri uri) {
+        if (uri == null) {
+            return null;
+        }
+        try {
+            if (!"anynews".equalsIgnoreCase(uri.getScheme())
+                    || !"push".equalsIgnoreCase(uri.getHost())) {
+                return null;
+            }
+            String path = uri.getPath();
+            if (path == null || path.length() < 2) {
+                return null;
+            }
+            String seg = path.startsWith("/") ? path.substring(1) : path;
+            int slash = seg.indexOf('/');
+            if (slash > 0) {
+                seg = seg.substring(0, slash);
+            }
+            if (seg.isEmpty() || "0".equals(seg) || "null".equalsIgnoreCase(seg)) {
+                return null;
+            }
+            Long.parseLong(seg);
+            return seg;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /**
      * Warm share open (app already on Home): pin the shared post without stacking
      * another HomePage. Mirrors onCreate SHARE_REDIRECT_ID / PENDING_SHARE_POST.
@@ -1837,6 +1952,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void applyShareRedirectFromIntent(@Nullable Intent intent) {
         if (intent == null) {
             return;
+        }
+        // FCM push TITLE / anynews://push owns this open — do not steal with share sticky.
+        try {
+            String pushCheck = intent.getStringExtra("TITLE");
+            if (pushCheck == null || pushCheck.trim().isEmpty()
+                    || "null".equalsIgnoreCase(pushCheck.trim())) {
+                pushCheck = intent.getStringExtra("TITILE");
+            }
+            if (pushCheck == null || pushCheck.trim().isEmpty()
+                    || "null".equalsIgnoreCase(pushCheck.trim())
+                    || "0".equals(pushCheck.trim())) {
+                pushCheck = postIdFromPushIntentUri(intent.getData());
+            }
+            if (pushCheck != null && !pushCheck.trim().isEmpty()
+                    && !"null".equalsIgnoreCase(pushCheck.trim())
+                    && !"0".equals(pushCheck.trim())
+                    && Long.parseLong(pushCheck.trim()) > 0) {
+                return;
+            }
+        } catch (Exception ignored) {
         }
         String shareRedirect = intent.getStringExtra("SHARE_REDIRECT_ID");
         if (shareRedirect == null || shareRedirect.trim().isEmpty()
@@ -15545,7 +15680,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (pushUpdatedID != null) {
                 String raw = pushUpdatedID.trim();
                 if (!raw.isEmpty() && !raw.equalsIgnoreCase("null") && !raw.equals("0")) {
-                    int v = Integer.parseInt(raw);
+                    long v = Long.parseLong(raw);
                     if (v > 0) return true;
                 }
             }

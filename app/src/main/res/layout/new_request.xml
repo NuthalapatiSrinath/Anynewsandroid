@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Expanded tray: left thumb/brand + title; optional article image below (not right) -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/notification_root_expanded"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
