@@ -37,6 +37,9 @@ import com.anyNews.anynews.Utils.RecentSearchStore;
 import com.anyNews.anynews.Utils.SearchFuzzyHelper;
 import com.anyNews.anynews.Utils.SearchRevealHelper;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.request.RequestOptions;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -55,10 +58,11 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 /**
  * In-app Search: mist + teal chrome, recent-searches idle state,
- * debounced story suggestions with counts while typing, submit opens HomePage
- * search mode. No category / Daily Updates category suggestions (product ask).
- * Typo intent: local edit-distance against recent (+ last suggest texts) with no
- * extra API; empty state paints quickly after a short timeout if the server is slow.
+ * debounced Google-style article typeahead (title + right thumb) while typing,
+ * submit opens HomePage search mode. No category / Daily Updates suggestions.
+ * Typo intent: local edit-distance against recent (+ last suggest texts).
+ * Empty state only after the suggest request settles with zero hits — never
+ * flash "No matching stories" while a request is still in flight.
  */
 public class InAppSearchActivity extends AppCompatActivity {
 
@@ -66,9 +70,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     /** HomePage bounced here after Search/Enter with zero FlipView hits. */
     public static final String EXTRA_SHOW_NO_RESULTS = "extra_search_show_no_results";
 
-    private static final long SUGGEST_DEBOUNCE_MS = 110L;
-    /** Show empty / fuzzy hint if Suggestions still pending after this. */
-    private static final long EMPTY_HINT_MS = 520L;
+    private static final long SUGGEST_DEBOUNCE_MS = 80L;
 
     private View root;
     private EditText searchInput;
@@ -76,7 +78,6 @@ public class InAppSearchActivity extends AppCompatActivity {
     private RecyclerView listView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable pendingSuggest;
-    private Runnable pendingEmptyHint;
     private Call<EncreptionRequest> suggestCall;
     private String lastSuggestQuery = "";
     private final List<Row> rows = new ArrayList<>();
@@ -84,6 +85,8 @@ public class InAppSearchActivity extends AppCompatActivity {
     private final List<String> lastSuggestTexts = new ArrayList<>();
     private SearchRowsAdapter adapter;
     private int suggestSeq = 0;
+    /** True while a suggest XHR is outstanding for the current typed query. */
+    private boolean suggestInFlight = false;
     private final TextWatcher queryWatcher =
             new TextWatcher() {
                 @Override
@@ -239,33 +242,16 @@ public class InAppSearchActivity extends AppCompatActivity {
                     fetchSuggestions(q);
                 };
         handler.postDelayed(pendingSuggest, SUGGEST_DEBOUNCE_MS);
-        pendingEmptyHint =
-                () -> {
-                    pendingEmptyHint = null;
-                    if (seq != suggestSeq) return;
-                    String typed =
-                            searchInput.getText() != null
-                                    ? searchInput.getText().toString().trim()
-                                    : "";
-                    if (!typed.equals(q)) return;
-                    // Still waiting on network — keep local live rows; only fall back
-                    // to empty/fuzzy when nothing useful is on screen yet.
-                    if (!hasStorySuggestRows()) {
-                        paintEmptyOrFuzzy(q);
-                    }
-                };
-        handler.postDelayed(pendingEmptyHint, EMPTY_HINT_MS);
+        // Do NOT paint empty while the request is in flight — that caused the
+        // yellow/centered "No Stories found" flash before late results arrived.
     }
 
     private void cancelSuggest() {
         suggestSeq++;
+        suggestInFlight = false;
         if (pendingSuggest != null) {
             handler.removeCallbacks(pendingSuggest);
             pendingSuggest = null;
-        }
-        if (pendingEmptyHint != null) {
-            handler.removeCallbacks(pendingEmptyHint);
-            pendingEmptyHint = null;
         }
         if (suggestCall != null) {
             suggestCall.cancel();
@@ -275,7 +261,18 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     private boolean hasStorySuggestRows() {
         for (Row r : rows) {
-            if (r.type == Row.TYPE_SUGGEST || r.type == Row.TYPE_FUZZY) return true;
+            if (r.type == Row.TYPE_SUGGEST
+                    || r.type == Row.TYPE_ARTICLE
+                    || r.type == Row.TYPE_FUZZY) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasArticleRows() {
+        for (Row r : rows) {
+            if (r.type == Row.TYPE_ARTICLE) return true;
         }
         return false;
     }
@@ -293,9 +290,15 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     /**
      * Google-like live rows on every keystroke: prefix/contains as suggestions,
-     * then Did-you-mean typos underneath. Network results replace this when ready.
+     * then Did-you-mean typos underneath. Network article results replace this
+     * when ready. Never clear existing article rows to empty while waiting.
      */
     private void paintLocalLiveSuggestions(@NonNull String q) {
+        // Keep prior article hits visible while the next letter's XHR runs —
+        // avoids blank / empty flash between keystrokes.
+        if (hasArticleRows() || suggestInFlight) {
+            return;
+        }
         List<String> pool = localSuggestPool();
         List<String> live = SearchFuzzyHelper.livePrefixMatches(q, pool, 8);
         List<String> fuzzy = SearchFuzzyHelper.closeMatches(q, pool, 3);
@@ -338,6 +341,8 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void paintEmptyOrFuzzy(@NonNull String q) {
+        // Never show empty while a suggest request is still outstanding.
+        if (suggestInFlight) return;
         List<String> pool = localSuggestPool();
         List<String> live = SearchFuzzyHelper.livePrefixMatches(q, pool, 8);
         if (!live.isEmpty()) {
@@ -357,8 +362,8 @@ public class InAppSearchActivity extends AppCompatActivity {
             adapter.notifyDataSetChanged();
             return;
         }
-        // Typed query with nothing useful — clean centered empty, not yellow strip
-        // and not recent-searches under an error banner (looked broken).
+        // Typed query with nothing useful — clean centered empty (671b0ff),
+        // not yellow strip and not recent-searches under an error banner.
         rows.clear();
         adapter.notifyDataSetChanged();
         showEmptyState();
@@ -381,20 +386,11 @@ public class InAppSearchActivity extends AppCompatActivity {
     private void fetchSuggestions(final String q) {
         if (q.equals(lastSuggestQuery)
                 && !rows.isEmpty()
-                && (rows.get(0).type == Row.TYPE_SUGGEST
-                        || rows.get(0).type == Row.TYPE_HEADER)) {
-            boolean hasStorySuggest = false;
-            for (Row r : rows) {
-                if (r.type == Row.TYPE_SUGGEST) {
-                    hasStorySuggest = true;
-                    break;
-                }
-            }
-            if (hasStorySuggest) {
-                return;
-            }
+                && hasArticleRows()) {
+            return;
         }
         lastSuggestQuery = q;
+        suggestInFlight = true;
         try {
             JsonObject req = new JsonObject();
             req.addProperty(
@@ -405,11 +401,15 @@ public class InAppSearchActivity extends AppCompatActivity {
                     SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME));
             req.addProperty("search_text", q);
             req.addProperty("limit", 12);
+            // Additive flag — old servers ignore; new servers return article rows.
+            req.addProperty("include_articles", true);
+            req.addProperty("suggest_mode", "articles");
             String enc = encrypt(new Gson().toJson(req));
             JsonObject body = new JsonObject();
             body.addProperty("data", enc);
             APIService api = RestApiClient.getClient().create(APIService.class);
             suggestCall = api.Search_Suggestions("v3", body);
+            final int seqAtSend = suggestSeq;
             suggestCall.enqueue(
                     new Callback<EncreptionRequest>() {
                         @Override
@@ -417,6 +417,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 Call<EncreptionRequest> call,
                                 Response<EncreptionRequest> response) {
                             if (isFinishing() || call.isCanceled()) return;
+                            if (seqAtSend != suggestSeq) return;
+                            suggestInFlight = false;
                             String typed =
                                     searchInput.getText() != null
                                             ? searchInput.getText().toString().trim()
@@ -428,33 +430,37 @@ public class InAppSearchActivity extends AppCompatActivity {
                                         && response.body().getData() != null) {
                                     String raw = decrypt(response.body().getData());
                                     JsonObject obj = new Gson().fromJson(raw, JsonObject.class);
-                                    JsonArray data =
-                                            obj != null && obj.has("data")
-                                                    ? obj.getAsJsonArray("data")
+                                    // Prefer articles[] (Google-style); fall back to data[].
+                                    JsonArray articles =
+                                            obj != null && obj.has("articles")
+                                                            && obj.get("articles").isJsonArray()
+                                                    ? obj.getAsJsonArray("articles")
                                                     : null;
-                                    if (data != null) {
-                                        for (JsonElement el : data) {
-                                            if (el == null || !el.isJsonObject()) continue;
-                                            JsonObject o = el.getAsJsonObject();
-                                            String text =
-                                                    o.has("text") ? o.get("text").getAsString() : "";
-                                            int count =
-                                                    o.has("count") ? o.get("count").getAsInt() : 0;
-                                            long postId = 0L;
-                                            try {
-                                                if (o.has("post_id") && !o.get("post_id").isJsonNull()) {
-                                                    postId = o.get("post_id").getAsLong();
+                                    if (articles != null && articles.size() > 0) {
+                                        for (JsonElement el : articles) {
+                                            Row art = parseArticleRow(el, q);
+                                            if (art != null) {
+                                                next.add(art);
+                                                if (!TextUtils.isEmpty(art.title)) {
+                                                    lastSuggestTexts.add(art.title);
                                                 }
-                                            } catch (Exception ignored) {
-                                                postId = 0L;
                                             }
-                                            // Only honor post_id on true singles (count 1).
-                                            if (count != 1) {
-                                                postId = 0L;
-                                            }
-                                            if (!TextUtils.isEmpty(text)) {
-                                                next.add(Row.suggest(text, count, q, postId));
-                                                lastSuggestTexts.add(text);
+                                        }
+                                    }
+                                    if (next.isEmpty()) {
+                                        JsonArray data =
+                                                obj != null && obj.has("data")
+                                                        ? obj.getAsJsonArray("data")
+                                                        : null;
+                                        if (data != null) {
+                                            for (JsonElement el : data) {
+                                                Row parsed = parseSuggestDataRow(el, q);
+                                                if (parsed != null) {
+                                                    next.add(parsed);
+                                                    if (!TextUtils.isEmpty(parsed.title)) {
+                                                        lastSuggestTexts.add(parsed.title);
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -465,14 +471,18 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 }
                                 boolean hasStory = false;
                                 for (Row r : next) {
-                                    if (r.type == Row.TYPE_SUGGEST) {
+                                    if (r.type == Row.TYPE_SUGGEST
+                                            || r.type == Row.TYPE_ARTICLE) {
                                         hasStory = true;
                                         break;
                                     }
                                 }
                                 if (!hasStory) {
-                                    // Keep Google-like local prefix rows; don't wipe to
-                                    // weak Did-you-mean-only when the pool still matches.
+                                    // Stale article rows from the previous letter must not stick
+                                    // when this query truly has zero hits.
+                                    rows.clear();
+                                    adapter.notifyDataSetChanged();
+                                    // Local prefix only (no in-flight / no prior articles).
                                     paintLocalLiveSuggestions(q);
                                     if (!hasStorySuggestRows()) {
                                         paintEmptyOrFuzzy(q);
@@ -495,7 +505,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     for (String f : fuzzy) {
                                         boolean dup = false;
                                         for (Row r : next) {
-                                            if (r.type == Row.TYPE_SUGGEST
+                                            if ((r.type == Row.TYPE_SUGGEST
+                                                            || r.type == Row.TYPE_ARTICLE)
                                                     && r.title != null
                                                     && r.title.equalsIgnoreCase(f)) {
                                                 dup = true;
@@ -515,6 +526,8 @@ public class InAppSearchActivity extends AppCompatActivity {
 
                         @Override
                         public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                            if (seqAtSend != suggestSeq) return;
+                            suggestInFlight = false;
                             if (!call.isCanceled()) {
                                 String typed =
                                         searchInput.getText() != null
@@ -530,8 +543,83 @@ public class InAppSearchActivity extends AppCompatActivity {
                         }
                     });
         } catch (Exception e) {
+            suggestInFlight = false;
             paintEmptyOrFuzzy(q);
         }
+    }
+
+    @Nullable
+    private static Row parseArticleRow(JsonElement el, String highlight) {
+        if (el == null || !el.isJsonObject()) return null;
+        JsonObject o = el.getAsJsonObject();
+        String title =
+                o.has("title") && !o.get("title").isJsonNull()
+                        ? o.get("title").getAsString()
+                        : (o.has("text") && !o.get("text").isJsonNull()
+                                ? o.get("text").getAsString()
+                                : "");
+        if (TextUtils.isEmpty(title) || title.trim().length() < 2) return null;
+        long postId = 0L;
+        try {
+            if (o.has("post_id") && !o.get("post_id").isJsonNull()) {
+                postId = o.get("post_id").getAsLong();
+            }
+        } catch (Exception ignored) {
+            postId = 0L;
+        }
+        String image = firstImageUrl(o);
+        return Row.article(title, highlight, postId, image);
+    }
+
+    @Nullable
+    private static Row parseSuggestDataRow(JsonElement el, String highlight) {
+        if (el == null || !el.isJsonObject()) return null;
+        JsonObject o = el.getAsJsonObject();
+        String text = o.has("text") && !o.get("text").isJsonNull()
+                ? o.get("text").getAsString()
+                : "";
+        if (TextUtils.isEmpty(text) || text.trim().length() < 2) return null;
+        int count = 0;
+        try {
+            if (o.has("count") && !o.get("count").isJsonNull()) {
+                count = o.get("count").getAsInt();
+            }
+        } catch (Exception ignored) {
+            count = 0;
+        }
+        long postId = 0L;
+        try {
+            if (o.has("post_id") && !o.get("post_id").isJsonNull()) {
+                postId = o.get("post_id").getAsLong();
+            }
+        } catch (Exception ignored) {
+            postId = 0L;
+        }
+        String image = firstImageUrl(o);
+        // Article-shaped row (count 1 + post_id and/or image) → thumbnail UI.
+        if ((count == 1 && postId > 0L) || !TextUtils.isEmpty(image)) {
+            if (count != 1) postId = postId > 0L ? postId : 0L;
+            return Row.article(text, highlight, postId > 0L ? postId : 0L, image);
+        }
+        // Legacy keyword bucket — still open FlipView keyword search.
+        return Row.suggest(text, count, highlight, 0L);
+    }
+
+    @NonNull
+    private static String firstImageUrl(JsonObject o) {
+        if (o == null) return "";
+        String[] keys = {"thumb_image", "image", "video_thumb"};
+        for (String k : keys) {
+            try {
+                if (o.has(k) && !o.get(k).isJsonNull()) {
+                    String s = o.get(k).getAsString();
+                    if (!TextUtils.isEmpty(s)) return s.trim();
+                }
+            } catch (Exception ignored) {
+                /* skip */
+            }
+        }
+        return "";
     }
 
     private void submitQuery(String q) {
@@ -628,6 +716,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         static final int TYPE_HEADER = 0;
         static final int TYPE_RECENT = 1;
         static final int TYPE_SUGGEST = 3;
+        static final int TYPE_ARTICLE = 4;
         static final int TYPE_FUZZY = 5;
 
         final int type;
@@ -635,22 +724,25 @@ public class InAppSearchActivity extends AppCompatActivity {
         final int meta;
         final String highlight;
         final long postId;
+        final String imageUrl;
 
         private Row(
                 int type,
                 String title,
                 int meta,
                 String highlight,
-                long postId) {
+                long postId,
+                String imageUrl) {
             this.type = type;
             this.title = title;
             this.meta = meta;
             this.highlight = highlight;
             this.postId = postId;
+            this.imageUrl = imageUrl;
         }
 
         static Row header(String t) {
-            return new Row(TYPE_HEADER, t, 0, null, 0L);
+            return new Row(TYPE_HEADER, t, 0, null, 0L, null);
         }
 
         static Row recent(String t) {
@@ -658,7 +750,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
 
         static Row recent(String t, long postId) {
-            return new Row(TYPE_RECENT, t, 0, null, postId);
+            return new Row(TYPE_RECENT, t, 0, null, postId, null);
         }
 
         static Row suggest(String t, int count, String highlight) {
@@ -666,15 +758,26 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
 
         static Row suggest(String t, int count, String highlight, long postId) {
-            return new Row(TYPE_SUGGEST, t, count, highlight, postId);
+            return new Row(TYPE_SUGGEST, t, count, highlight, postId, null);
+        }
+
+        static Row article(String t, String highlight, long postId, String imageUrl) {
+            return new Row(TYPE_ARTICLE, t, 1, highlight, postId, imageUrl);
         }
 
         static Row fuzzy(String t) {
-            return new Row(TYPE_FUZZY, t, 0, null, 0L);
+            return new Row(TYPE_FUZZY, t, 0, null, 0L, null);
         }
     }
 
     private class SearchRowsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+
+        private final RequestOptions thumbOpts =
+                new RequestOptions()
+                        .centerCrop()
+                        .diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)
+                        .placeholder(R.drawable.ic_news_icon)
+                        .error(R.drawable.ic_news_icon);
 
         @Override
         public int getItemViewType(int position) {
@@ -711,22 +814,35 @@ public class InAppSearchActivity extends AppCompatActivity {
                 return;
             }
             RowVH vh = (RowVH) holder;
-            if (row.type == Row.TYPE_SUGGEST && !TextUtils.isEmpty(row.highlight)) {
+            if ((row.type == Row.TYPE_SUGGEST || row.type == Row.TYPE_ARTICLE)
+                    && !TextUtils.isEmpty(row.highlight)) {
                 vh.title.setText(highlightMatch(row.title, row.highlight));
             } else {
                 vh.title.setText(row.title);
             }
-            if (row.type == Row.TYPE_SUGGEST) {
-                vh.meta.setVisibility(View.VISIBLE);
-                vh.meta.setText(String.valueOf(row.meta));
+            if (row.type == Row.TYPE_ARTICLE) {
+                vh.meta.setVisibility(View.GONE);
+                vh.icon.setVisibility(View.GONE);
+                vh.action.setVisibility(View.GONE);
+                vh.thumb.setVisibility(View.VISIBLE);
+                bindThumb(vh.thumb, row.imageUrl);
+                vh.itemView.setOnClickListener(
+                        v -> openSearch(suggestSubmitText(row), row.postId, true));
+            } else if (row.type == Row.TYPE_SUGGEST) {
+                vh.icon.setVisibility(View.VISIBLE);
+                vh.thumb.setVisibility(View.GONE);
+                clearThumb(vh.thumb);
+                // Hide count meta for cleaner Google-like rows when we have a post.
+                if (row.postId > 0L || row.meta == 1) {
+                    vh.meta.setVisibility(View.GONE);
+                } else {
+                    vh.meta.setVisibility(View.VISIBLE);
+                    vh.meta.setText(String.valueOf(row.meta));
+                }
                 vh.icon.setImageResource(R.drawable.ic_action_search);
                 vh.action.setVisibility(View.GONE);
-                // Prefer the typed needle when the row is a truncated snippet (…),
-                // so FlipView search_text matches what Suggestions found.
-                // Count=1 + post_id → [article, Continue-reading hub] (not soft keyword multi-hit).
                 vh.itemView.setOnClickListener(
                         v -> {
-                            // Count=1 OR known post_id → that article then Continue-reading hub.
                             if (row.meta == 1 || row.postId > 0L) {
                                 openSearch(suggestSubmitText(row), row.postId, true);
                             } else {
@@ -734,7 +850,10 @@ public class InAppSearchActivity extends AppCompatActivity {
                             }
                         });
             } else if (row.type == Row.TYPE_FUZZY) {
+                vh.icon.setVisibility(View.VISIBLE);
                 vh.meta.setVisibility(View.GONE);
+                vh.thumb.setVisibility(View.GONE);
+                clearThumb(vh.thumb);
                 vh.icon.setImageResource(R.drawable.ic_action_search);
                 vh.action.setVisibility(View.GONE);
                 vh.itemView.setOnClickListener(
@@ -746,7 +865,10 @@ public class InAppSearchActivity extends AppCompatActivity {
                             submitQuery(row.title);
                         });
             } else if (row.type == Row.TYPE_RECENT) {
+                vh.icon.setVisibility(View.VISIBLE);
                 vh.meta.setVisibility(View.GONE);
+                vh.thumb.setVisibility(View.GONE);
+                clearThumb(vh.thumb);
                 vh.icon.setImageResource(android.R.drawable.ic_menu_recent_history);
                 vh.action.setVisibility(View.VISIBLE);
                 vh.action.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
@@ -757,19 +879,43 @@ public class InAppSearchActivity extends AppCompatActivity {
                         });
                 vh.itemView.setOnClickListener(
                         v -> {
-                            // Recent of a single story (stored post_id) or long title →
-                            // single-article FlipView, not unlimited keyword hub.
                             boolean single =
                                     row.postId > 0L
                                             || (row.title != null && row.title.trim().length() >= 28);
                             openSearch(row.title, row.postId, single);
                         });
             } else {
-                // Unknown / legacy row types — treat as inert.
+                vh.icon.setVisibility(View.VISIBLE);
                 vh.meta.setVisibility(View.GONE);
+                vh.thumb.setVisibility(View.GONE);
+                clearThumb(vh.thumb);
                 vh.action.setVisibility(View.GONE);
                 vh.itemView.setOnClickListener(null);
             }
+        }
+
+        private void bindThumb(@NonNull ImageView thumb, @Nullable String url) {
+            if (TextUtils.isEmpty(url)) {
+                thumb.setImageResource(R.drawable.ic_news_icon);
+                return;
+            }
+            try {
+                Glide.with(thumb.getContext())
+                        .load(url)
+                        .apply(thumbOpts)
+                        .into(thumb);
+            } catch (Exception e) {
+                thumb.setImageResource(R.drawable.ic_news_icon);
+            }
+        }
+
+        private void clearThumb(@NonNull ImageView thumb) {
+            try {
+                Glide.with(thumb.getContext()).clear(thumb);
+            } catch (Exception ignored) {
+                /* ignore */
+            }
+            thumb.setImageDrawable(null);
         }
 
         @Override
@@ -799,6 +945,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         final ImageView icon;
         final TextView title;
         final TextView meta;
+        final ImageView thumb;
         final ImageView action;
 
         RowVH(@NonNull View itemView) {
@@ -806,6 +953,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             icon = itemView.findViewById(R.id.row_icon);
             title = itemView.findViewById(R.id.row_title);
             meta = itemView.findViewById(R.id.row_meta);
+            thumb = itemView.findViewById(R.id.row_thumb);
             action = itemView.findViewById(R.id.row_action);
         }
     }
