@@ -8449,6 +8449,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             hideMagazineShareFooter();
             hideCenterPlusOverlays();
             repairVisibleShareTargetIfInviteShell();
+            // Hiding the middle slot rebuilds the bar. The pooled Special view
+            // lands on Daily Updates and keeps the orange pulse — clear it.
+            hideSpecialBlinkForQuietCard();
             showLog("updateCenterFab hide share footer (invite/ad shell visible)");
             return;
         }
@@ -8482,6 +8485,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         hideFooterWhatsapp();
         ensureMagazineShareFooterSlot();
+        if (isVisibleFooterQuietCard()) {
+            hideSpecialBlinkForQuietCard();
+        }
         showLog("updateCenterFab middle slot hidden");
     }
 
@@ -8511,6 +8517,37 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     && page.findViewById(R.id.magzine_viewPager_data) == null
                     && page.findViewById(R.id.viewpager) == null
                     && page.findViewById(R.id.gallery_horizontal_flip) == null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Ads, invite, and ratings cards keep the middle slot empty. They must not
+     * pulse Special or Daily Updates. The orange blink stays on center Share,
+     * and only while a magazine or special card is the visible card.
+     */
+    private boolean isVisibleFooterQuietCard() {
+        if (visibleFlipIsInviteOrAdShell()) {
+            return true;
+        }
+        try {
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum item = list.get(idx);
+            if (item == null) {
+                return false;
+            }
+            if (ReadArticleStore.isAdFeedSlot(item)
+                    || ReadArticleStore.isShareFeedSlot(item)
+                    || ReadArticleStore.isRatingsFeedSlot(item)) {
+                return true;
+            }
+            String type = item.getPostType();
+            return type != null && (type.trim().equalsIgnoreCase("web")
+                    || type.trim().equalsIgnoreCase("web_ads"));
         } catch (Exception e) {
             return false;
         }
@@ -21922,8 +21959,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
             ensureSpecialMenuIconAlwaysVisible();
             ensureSpecialTabBulbOverlay();
-            if (!specialTabViewedThisSession) {
+            if (!specialTabViewedThisSession && !isVisibleFooterQuietCard()) {
                 startSpecialTabBlinkAnimation();
+            } else if (isVisibleFooterQuietCard()) {
+                hideSpecialBlinkForQuietCard();
             }
         });
     }
@@ -22126,6 +22165,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
             return;
         }
+        if (isVisibleFooterQuietCard()) {
+            hideSpecialBlinkForQuietCard();
+            return;
+        }
         if (isMagazineShareFooterShowing()) {
             stopSpecialTabBlinkAnimation();
             if (specialTabBulbOverlay != null) {
@@ -22136,9 +22179,19 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         // Menu icon first — independent of overlay success.
         ensureSpecialMenuIconAlwaysVisible();
 
+        // Menu rebuild pools item views LIFO. The Special overlay then sits on
+        // Daily Updates (menu index 3). Never treat that parent as already set up.
+        if (specialTabBulbOverlay != null
+                && specialTabBulbOverlay.getParent() != null
+                && !isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
+            detachMisplacedSpecialOverlay();
+            clearFooterItemIconPulse(R.id.navigation_status);
+        }
+
         if (specialTabBulbOverlay != null) {
             if (specialTabBulbOverlay.getParent() != null
-                    && specialTabBulbOverlay.isAttachedToWindow()) {
+                    && specialTabBulbOverlay.isAttachedToWindow()
+                    && isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
                 // After first session open: hide overlay so only one icon shows;
                 // while blink pending keep overlay for orange pulse on top of solid icon.
                 if (specialTabViewedThisSession) {
@@ -22188,6 +22241,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             return;
         }
         Logone.d("HomePage", "SpecialTabBlink pending:" + !specialTabViewedThisSession);
+        if (isVisibleFooterQuietCard()) {
+            hideSpecialBlinkForQuietCard();
+            return;
+        }
         ensureSpecialMenuIconAlwaysVisible();
         ensureSpecialTabBulbOverlay();
         if (!specialTabViewedThisSession) {
@@ -22199,6 +22256,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
 
     private void showSpecialTabBlink() {
         if (bottomNavigationView == null) {
+            return;
+        }
+        if (isVisibleFooterQuietCard()) {
+            hideSpecialBlinkForQuietCard();
             return;
         }
         if (isMagazineShareFooterShowing()) {
@@ -22290,15 +22351,26 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         // Magazine / special-gallery cards blink the center Share slot, never
         // Special (menu index 1) and never Daily Updates (navigation_status).
-        if (isMagazineShareFooterShowing()) {
-            stopSpecialTabBlinkAnimation();
+        // Ads hide the middle column and must not pulse either tab.
+        if (isMagazineShareFooterShowing() || isVisibleFooterQuietCard()) {
+            if (isVisibleFooterQuietCard()) {
+                hideSpecialBlinkForQuietCard();
+            } else {
+                stopSpecialTabBlinkAnimation();
+            }
             return;
         }
         ensureSpecialMenuIconAlwaysVisible();
+        if (specialTabBulbOverlay != null
+                && !isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
+            detachMisplacedSpecialOverlay();
+            clearFooterItemIconPulse(R.id.navigation_status);
+        }
         View blinkTarget = null;
         if (specialTabBulbOverlay != null
                 && specialTabBulbOverlay.getParent() != null
-                && specialTabBulbOverlay.isAttachedToWindow()) {
+                && specialTabBulbOverlay.isAttachedToWindow()
+                && isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
             specialTabBulbOverlay.setVisibility(View.VISIBLE);
             blinkTarget = specialTabBulbOverlay;
         } else {
@@ -22308,7 +22380,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                         com.google.android.material.R.id.navigation_bar_item_icon_view);
             }
         }
-        if (blinkTarget == null) {
+        if (blinkTarget == null
+                || !isViewInsideFooterItem(blinkTarget, R.id.navigation_catagiries)) {
+            clearFooterItemIconPulse(R.id.navigation_status);
             return;
         }
         stopSpecialTabBlinkAnimation();
@@ -22351,7 +22425,128 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         // Re-apply ColorStateList so selected Special/Profile stay brand orange.
         applyFooterTabIconTints();
+        // Pooled item views move the orange filter onto the lightning icon.
+        clearFooterItemIconPulse(R.id.navigation_status);
     }
+
+    /**
+     * Ads and invite cards: no orange pulse on Special or Daily Updates.
+     * Does not reload the feed.
+     */
+    private void hideSpecialBlinkForQuietCard() {
+        stopSpecialTabBlinkAnimation();
+        if (specialTabBulbOverlay != null
+                && !isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
+            detachMisplacedSpecialOverlay();
+        }
+        if (specialTabBulbOverlay != null) {
+            specialTabBulbOverlay.setVisibility(View.GONE);
+            specialTabBulbOverlay.clearColorFilter();
+            specialTabBulbOverlay.setAlpha(1f);
+        }
+        clearFooterItemIconPulse(R.id.navigation_status);
+        clearFooterItemIconPulse(R.id.navigation_catagiries);
+        releaseDailyUpdatesCheckLeftByQuietCard();
+    }
+
+    private boolean isViewInsideFooterItem(@Nullable View view, int itemId) {
+        View current = view;
+        while (current != null) {
+            if (current instanceof BottomNavigationItemView) {
+                MenuItem data = ((BottomNavigationItemView) current).getItemData();
+                return data != null && data.getItemId() == itemId;
+            }
+            if (!(current.getParent() instanceof View)) {
+                return false;
+            }
+            current = (View) current.getParent();
+        }
+        return false;
+    }
+
+    /** Drop a special-blink overlay that a menu rebuild rebound onto another tab. */
+    private void detachMisplacedSpecialOverlay() {
+        if (specialTabBulbOverlay == null) {
+            return;
+        }
+        if (isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
+            return;
+        }
+        specialTabBulbOverlay.clearAnimation();
+        specialTabBulbOverlay.clearColorFilter();
+        specialTabBulbOverlay.setAlpha(1f);
+        if (specialTabBulbOverlay.getParent() instanceof ViewGroup) {
+            ((ViewGroup) specialTabBulbOverlay.getParent()).removeView(specialTabBulbOverlay);
+        }
+        specialTabBulbOverlay = null;
+    }
+
+    /** Stop an orange pulse left on a footer icon after the bar is rebuilt. */
+    private void clearFooterItemIconPulse(int itemId) {
+        View item = findFooterMenuItemView(itemId);
+        if (item == null) {
+            return;
+        }
+        View stray = item.findViewById(R.id.special_tab_bulb_overlay);
+        if (stray != null && stray != specialTabBulbOverlay) {
+            stray.clearAnimation();
+            stray.setAlpha(1f);
+            if (stray instanceof ImageView) {
+                ((ImageView) stray).clearColorFilter();
+            }
+            if (stray.getParent() instanceof ViewGroup) {
+                ((ViewGroup) stray.getParent()).removeView(stray);
+            }
+        }
+        View icon = item.findViewById(
+                com.google.android.material.R.id.navigation_bar_item_icon_view);
+        if (icon != null) {
+            icon.clearAnimation();
+            icon.setAlpha(1f);
+            if (icon instanceof ImageView) {
+                ((ImageView) icon).clearColorFilter();
+            }
+        }
+        if (item.isSelected() && item instanceof BottomNavigationItemView) {
+            MenuItem data = ((BottomNavigationItemView) item).getItemData();
+            if (data != null && !data.isChecked()) {
+                item.setSelected(false);
+            }
+        }
+    }
+
+    /**
+     * Hiding the middle slot rebuilds BottomNavigationView. The checked index
+     * can land on Daily Updates (menu index 3, the next visible tab). Put the
+     * check back on News without opening Daily Updates or reloading the feed.
+     */
+    private void releaseDailyUpdatesCheckLeftByQuietCard() {
+        if (bottomNavigationView == null || bottomNavigationView.getMenu() == null) {
+            return;
+        }
+        if (isDailyUpdatesMode() || isVideoFeedMode() || isCalendarMode()) {
+            return;
+        }
+        MenuItem daily = bottomNavigationView.getMenu().findItem(R.id.navigation_status);
+        int selected = bottomNavigationView.getSelectedItemId();
+        boolean dailyChecked = (daily != null && daily.isChecked())
+                || selected == R.id.navigation_status;
+        boolean middleChecked = selected == R.id.navigation_stricker;
+        if (!dailyChecked && !middleChecked) {
+            return;
+        }
+        if (selected == R.id.navigation_catagiries && isSpecialFeedMode()) {
+            return;
+        }
+        try {
+            suppressBottomNavCallbacks = true;
+            bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+        } catch (Exception ignored) {
+        } finally {
+            suppressBottomNavCallbacks = false;
+        }
+    }
+
     private void sendNotification2() {
         showLog("Notification:4444444444");
         Intent newIntent=new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS);
