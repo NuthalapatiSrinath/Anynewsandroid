@@ -1956,6 +1956,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Push owns seating over any in-memory share sticky.
         SHARE_ID = 0;
         SHARE_REDIRECT_ID = "0";
+        // onStart may already have started the "first article" reload (it runs
+        // before onNewIntent on some devices), or it may run next. That reload
+        // clears this id and paints page 0. A 70-minute-old post is not in that
+        // window, so the tap looked like it opened article 1. Drop the in-flight
+        // reload, and tell onStart not to start another.
+        feedModeEpoch++;
+        suppressFeedRefreshForIncomingIntent = true;
         showLog("push onNewIntent TITLE=" + pushUpdatedID);
         try {
             intent.putExtra("notification", true);
@@ -1980,14 +1987,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         try {
-            OpenPathCache.forceNextFeedNetwork(this);
+            // Same surface as a cold open: main My Feed, not the category /
+            // Local / calendar deck the user happened to be on.
+            localFeedFromDailyUpdates = false;
+            hideLocalFeedChrome();
+            hideHomeCalendarMode();
+            hideHomeDailyUpdatesMode();
+            category_id = 0;
+            softMergeOnNextPage0 = false;
+            positionx = 0;
+            lastSettledFlipIndex = -1;
+            requestSize = 0;
+            requestPostition = 1;
             last_post_id = 0;
             skip = 0;
             actual_skip = 0;
+            isFromLocalArticles = true;
+            OpenPathCache.forceNextFeedNetwork(this);
             isApiRequested = true;
             isDataParsed = true;
             dummyResponse = null;
-            ShowNews_Data_Values(category_id, 0);
+            ShowNews_Data_Values(0, 0);
         } catch (Exception e) {
             showLog("push onNewIntent land failed: " + e.getMessage());
         }
@@ -14854,6 +14874,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (isOnlineReadFlipMode()) {
             return;
         }
+        // A push/share seat is a one-shot page 0. A slot refresh would replace
+        // it with the plain first article.
+        if (isStickyFeedOpen()) {
+            return;
+        }
         final int slot = GreetingDayPartHelper.currentSlot();
         if (slot == GreetingDayPartHelper.SLOT_NONE) {
             return;
@@ -15671,6 +15696,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         // Drop in-flight responses after Special/News/Video/local mode change.
         final int epochAtEnqueue = feedModeEpoch;
+        // Plain page-0 enqueued before a push/share tap must not replace that
+        // seat when it returns later (same epoch if the tap did not bump yet).
+        final long deepLinkAtEnqueue = resolvePendingDeepLinkPostId();
         final boolean specialAtEnqueue = special;
         final boolean videoAtEnqueue = videoFeed;
         final int categoryAtEnqueue = this.category_id;
@@ -15694,6 +15722,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     showLog("List_All_Articles stale response dropped epoch="
                             + epochAtEnqueue + " now=" + feedModeEpoch
                             + " specialWas=" + specialAtEnqueue + " videoWas=" + videoAtEnqueue);
+                    isApiRequested = false;
+                    return;
+                }
+                final long deepLinkNow = resolvePendingDeepLinkPostId();
+                if (deepLinkNow > 0L && deepLinkAtEnqueue != deepLinkNow) {
+                    showLog("List_All_Articles stale vs push/share seat enq="
+                            + deepLinkAtEnqueue + " now=" + deepLinkNow);
                     isApiRequested = false;
                     return;
                 }
@@ -15769,6 +15804,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             public void onFailure(Call<EncreptionRequest> call, Throwable t) {
                 if (epochAtEnqueue != feedModeEpoch) {
                     showLog("List_All_Articles stale failure ignored");
+                    return;
+                }
+                final long deepLinkNow = resolvePendingDeepLinkPostId();
+                if (deepLinkNow > 0L && deepLinkAtEnqueue != deepLinkNow) {
+                    showLog("List_All_Articles stale failure vs push/share seat");
                     return;
                 }
                 isApiRequested = false;
