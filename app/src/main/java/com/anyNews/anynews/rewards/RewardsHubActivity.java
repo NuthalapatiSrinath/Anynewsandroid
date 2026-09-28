@@ -456,12 +456,7 @@ public class RewardsHubActivity extends AppCompatActivity {
 
         if (body.has("week") && body.get("week").isJsonObject()) {
             JsonObject w = body.getAsJsonObject("week");
-            String label = optStr(w, "period_label", "");
-            if (TextUtils.isEmpty(label)) {
-                // Fallback for older servers
-                label = optStr(w, "week_key", "");
-            }
-            weekView.setText(label != null ? label : "");
+            weekView.setText(periodRangeLabel(w));
         }
         applyPeriodBanner(body);
 
@@ -1199,6 +1194,57 @@ public class RewardsHubActivity extends AppCompatActivity {
 
     private void toast(String msg) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    /** Contest dates. Never the period id. */
+    private static String periodRangeLabel(JsonObject w) {
+        String label = optStr(w, "period_label", "");
+        if (!TextUtils.isEmpty(label) && !looksLikePeriodId(label)) return label;
+        String start = shortInstant(optStr(w, "starts_at", ""));
+        String end = shortInstant(optStr(w, "ends_at", ""));
+        if (!TextUtils.isEmpty(start) && !TextUtils.isEmpty(end)) return start + " – " + end;
+        if (!TextUtils.isEmpty(start)) return start;
+        return "";
+    }
+
+    private static boolean looksLikePeriodId(String s) {
+        if (s == null) return false;
+        String t = s.trim();
+        return t.matches("P\\d+-S\\d+")
+                || t.matches("P\\d+-[WDH].+")
+                || t.matches("[WDH]\\d{4}.*");
+    }
+
+    private static String shortInstant(String raw) {
+        if (TextUtils.isEmpty(raw)) return "";
+        try {
+            String iso = raw.trim();
+            SimpleDateFormat in =
+                    new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+            in.setTimeZone(TimeZone.getTimeZone("UTC"));
+            if (!iso.endsWith("Z")) return "";
+            int dot = iso.indexOf('.');
+            String trunc = iso;
+            if (dot < 0) {
+                in = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+                in.setTimeZone(TimeZone.getTimeZone("UTC"));
+            } else {
+                String frac = iso.substring(dot + 1).replace("Z", "");
+                if (frac.length() < 3) {
+                    while (frac.length() < 3) frac += "0";
+                } else if (frac.length() > 3) {
+                    frac = frac.substring(0, 3);
+                }
+                trunc = iso.substring(0, dot + 1) + frac + "Z";
+            }
+            Date d = in.parse(trunc);
+            if (d == null) return "";
+            SimpleDateFormat out = new SimpleDateFormat("d MMM, h:mm a", Locale.US);
+            out.setTimeZone(TimeZone.getTimeZone("Asia/Kolkata"));
+            return out.format(d);
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private static String optStr(JsonObject o, String k, String fb) {

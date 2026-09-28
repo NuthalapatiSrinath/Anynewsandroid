@@ -405,6 +405,19 @@ public final class RewardsLabels {
         }
     }
 
+    /** Week-close conversion. Manual convert keeps convertCoins. */
+    public static String autoConverted(@Nullable Context c) {
+        switch (languageId(c)) {
+            case 1: return "ഓട്ടോ കൺവേർട്ട്";
+            case 2: return "ऑटो कन्वर्ट";
+            case 3: return "ఆటో కన్వర్ట్";
+            case 4: return "தானியங்கி மாற்றம்";
+            case 5: return "ಆಟೋ ಕನ್ವರ್ಟ್";
+            case 6: return "ଅଟୋ କନଭର୍ଟ";
+            default: return "Auto-converted";
+        }
+    }
+
     public static String coinEarns(@Nullable Context c) {
         switch (languageId(c)) {
             case 1: return "നാണയ ലാഭങ്ങൾ";

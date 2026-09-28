@@ -314,8 +314,15 @@ public class RewardsWalletActivity extends AppCompatActivity {
             JsonObject row = arr.get(i).getAsJsonObject();
             double amt = optDouble(row, "rupees");
             if (amt <= 0) continue;
+            String when = formatWhen(row);
+            String kind = optStr(row, "convert_kind", "");
+            String title =
+                    "auto".equals(kind)
+                            ? RewardsLabels.autoConverted(this)
+                            : RewardsLabels.convertCoins(this);
+            String meta = TextUtils.isEmpty(when) ? title : title + " · " + when;
             LinearLayout col = newMoneyRowCol();
-            col.addView(moneyLine("+" + "₹" + formatMoney(amt), formatWhen(row)));
+            col.addView(moneyLine("+" + "₹" + formatMoney(amt), meta));
             history.addView(col);
         }
     }
