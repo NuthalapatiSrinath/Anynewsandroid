@@ -51,6 +51,10 @@ public final class ShareOutboundHelper {
      * Opens the system share sheet. {@code onTargetChosen} runs only when the user
      * picks an app — dismiss / back without choosing does <strong>not</strong> count.
      * Android cannot confirm the user pressed Send inside the target app.
+     *
+     * <p>WhatsApp button shares use this same callback. Do not increment
+     * {@code whatsapp_shares} from {@code startActivity}; a packaged intent still
+     * waits here until a target is chosen.
      */
     public static void launchChooserOnTargetChosen(
             @NonNull Context context,

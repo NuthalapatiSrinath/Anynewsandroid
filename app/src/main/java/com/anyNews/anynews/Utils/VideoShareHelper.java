@@ -48,8 +48,8 @@ public class VideoShareHelper {
         void onShareStarted();
 
         /**
-         * User confirmed outbound: WhatsApp direct launch, or picked a target from
-         * the system share sheet. Default no-op for callers that only unlock UI.
+         * User picked a target from the share sheet (WhatsApp or any other app).
+         * Opening the sheet does not call this. Default no-op for callers that only unlock UI.
          */
         default void onShareConfirmed() {
         }
@@ -774,15 +774,22 @@ public class VideoShareHelper {
                 if (mode == ShareMode.WHATSAPP_STATUS) {
                     intent.putExtra("jid", "status@broadcast");
                 }
-                // Skip scanning all share targets — grant WhatsApp only and launch ASAP.
+                // Skip scanning all share targets — grant WhatsApp only.
+                // Count only when the user picks WhatsApp in the sheet, not when it opens.
                 context.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 if (activity != null) {
                     activity.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 }
-                context.startActivity(intent);
-                if (listener != null) {
-                    listener.onShareConfirmed();
-                }
+                Context launchCtx = activity != null ? activity : context;
+                ShareOutboundHelper.launchChooserOnTargetChosen(
+                        launchCtx,
+                        intent,
+                        "Share Video",
+                        () -> {
+                            if (listener != null) {
+                                listener.onShareConfirmed();
+                            }
+                        });
                 return;
             }
 

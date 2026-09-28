@@ -7857,18 +7857,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                             final long galleryPostId = list.get(position).getPostId();
                             final boolean countAsWhatsapp = galleryWhatsapp;
-                            if (galleryWhatsapp) {
-                                context.startActivity(intent);
-                                Share_Count_Value(shareCountProperty(true), galleryPostId);
-                            } else {
-                                // Count only when user picks an app — not on sheet open/dismiss.
-                                ShareOutboundHelper.launchChooserOnTargetChosen(
-                                        context,
-                                        intent,
-                                        "Share Link",
-                                        () -> Share_Count_Value(
-                                                shareCountProperty(false), galleryPostId));
-                            }
+                            // Count only when user picks a target — not on sheet open/dismiss.
+                            ShareOutboundHelper.launchChooserOnTargetChosen(
+                                    context,
+                                    intent,
+                                    "Share Link",
+                                    () -> Share_Count_Value(
+                                            shareCountProperty(countAsWhatsapp), galleryPostId));
                         }
                         fromWhatsapp = false;
                     } finally {
@@ -8868,11 +8863,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     if (fullImageActivity.layout_strip_iconnew != null) {
                         fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
                     }
-                    // Instant WhatsApp share — count update is fire-and-forget after launch.
+                    // Same signal as normal Share: count only after a chooser target is picked.
                     if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        context.startActivity(intent);
+                        final long waPostId = list.get(position).getPostId();
+                        ShareOutboundHelper.launchChooserOnTargetChosen(
+                                context,
+                                intent,
+                                "Share",
+                                () -> Share_Count_Value("whatsapp_share", waPostId));
                     }
-                    Share_Count_Value("whatsapp_share", list.get(position).getPostId());
                 } finally {
                     releaseShareLaunch();
                 }
@@ -8924,9 +8923,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         e.printStackTrace();
                     }
                     if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        context.startActivity(intent);
+                        final long surveyPostId = list.get(position).getPostId();
+                        ShareOutboundHelper.launchChooserOnTargetChosen(
+                                context,
+                                intent,
+                                "Share",
+                                () -> Share_Count_Value("whatsapp_share", surveyPostId));
                     }
-                    Share_Count_Value("whatsapp_share", list.get(position).getPostId());
                 } finally {
                     releaseShareLaunch();
                 }
@@ -9609,17 +9612,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                             showLog("Halfshare"+ context + "First" + context.getPackageName() + "Second" + BuildConfig.APPLICATION_ID);
                             final long halfPostId = list.get(customPosition).getPostId();
-                            if (from == 1) {
-                                context.startActivity(intent);
-                                Share_Count_Value(shareCountProperty(true), halfPostId);
-                            } else {
-                                ShareOutboundHelper.launchChooserOnTargetChosen(
-                                        context,
-                                        intent,
-                                        "Share Link",
-                                        () -> Share_Count_Value(
-                                                shareCountProperty(false), halfPostId));
-                            }
+                            final boolean halfWhatsapp = from == 1;
+                            // Count only when user picks a target — not on sheet open/dismiss.
+                            ShareOutboundHelper.launchChooserOnTargetChosen(
+                                    context,
+                                    intent,
+                                    "Share Link",
+                                    () -> Share_Count_Value(
+                                            shareCountProperty(halfWhatsapp), halfPostId));
                         }
                     } finally {
                         releaseShareLaunch();
@@ -12173,8 +12173,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Capture on UI, compress/attach on a worker, then open the system share sheet.
      * Keeps Single Page / screenshot shares feeling instant (no PNG@100 on the main thread).
-     * {@code onShareConfirmed} runs for WhatsApp-direct launch, or when the user picks
-     * a target from the system chooser — never merely because the sheet opened.
+     * {@code onShareConfirmed} runs only when the user picks a chooser target
+     * — including a WhatsApp-targeted intent. Never merely because the sheet opened.
      */
     private void prepareAndLaunchScreenshotShare(
             @Nullable View captureView,
@@ -12237,18 +12237,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         try {
                             if (context != null
                                     && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                                if (whatsappDirect) {
-                                    context.startActivity(launchIntent);
-                                    if (onShareConfirmed != null) {
-                                        onShareConfirmed.run();
-                                    }
-                                } else {
-                                    ShareOutboundHelper.launchChooserOnTargetChosen(
-                                            context,
-                                            launchIntent,
-                                            "Share Link",
-                                            onShareConfirmed);
-                                }
+                                // WhatsApp (package set) and normal Share both wait for a target pick.
+                                ShareOutboundHelper.launchChooserOnTargetChosen(
+                                        context,
+                                        launchIntent,
+                                        "Share Link",
+                                        onShareConfirmed);
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
@@ -15527,20 +15521,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 intent.putExtra("jid", "status@broadcast");
                 intent.setPackage("com.whatsapp");
-                context.startActivity(intent);
-                if (onShareConfirmed != null) {
-                    onShareConfirmed.run();
-                }
+                ShareOutboundHelper.launchChooserOnTargetChosen(
+                        context, intent, "Share Link", onShareConfirmed);
             } else if (whatsappMode == 2) {
                 if (!appInstalledOrNot("com.whatsapp")) {
                     Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 intent.setPackage("com.whatsapp");
-                context.startActivity(intent);
-                if (onShareConfirmed != null) {
-                    onShareConfirmed.run();
-                }
+                ShareOutboundHelper.launchChooserOnTargetChosen(
+                        context, intent, "Share Link", onShareConfirmed);
             } else if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                 ShareOutboundHelper.launchChooserOnTargetChosen(
                         context, intent, "Share Link", onShareConfirmed);
@@ -15761,19 +15751,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void startShareActivity(
             Intent intent, String chooserTitle, @Nullable Runnable onShareConfirmed) {
         try {
-            // Direct package (e.g. WhatsApp) = confirmed outbound; system chooser waits for pick.
-            if (intent.getPackage() != null && !intent.getPackage().isEmpty()) {
-                if (activity != null && !activity.isFinishing()) {
-                    activity.startActivity(intent);
-                } else if (context != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    context.startActivity(intent);
-                }
-                if (onShareConfirmed != null) {
-                    onShareConfirmed.run();
-                }
-                return;
-            }
+            // Packaged WhatsApp and the open share sheet both count only on target pick.
             Context launchCtx = (activity != null && !activity.isFinishing()) ? activity : context;
             if (launchCtx == null) {
                 return;
