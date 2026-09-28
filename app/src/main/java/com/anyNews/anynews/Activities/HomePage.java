@@ -309,6 +309,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Client seats exactly {@code [first hit, Continue-reading hub]} — no extra articles.
      */
     public static final String EXTRA_SEARCH_SINGLE_ONLY = "extra_search_single_only";
+    /** Story group title. The bar above the footer shows this, not the article. */
+    public static final String EXTRA_SEARCH_STORY = "extra_search_story";
+    public static final String EXTRA_SEARCH_STORY_COUNT = "extra_search_story_count";
     /**
      * Optional Daily Updates deep-open after {@link #EXTRA_FOOTER_TAB} status:
      * {@link com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest#DU_OPEN_PANCHANGAM} etc.
@@ -328,6 +331,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private long activeSearchPostId = 0L;
     /** Count=1 suggestion: seat at most one paintable hit (+ hub). */
     private boolean activeSearchSingleOnly = false;
+    /** Story group the user opened. Empty for a single article. */
+    private String activeSearchStoryLabel = "";
+    private int activeSearchStoryCount = 0;
     /**
      * Search open has successfully landed FlipView on the first paintable hit
      * (page 0) — keyword multi-hit or single-article. Later
@@ -347,6 +353,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Mist + teal bottom bar: back + query while keyword FlipView is active. */
     private View searchContextBar;
     private TextView searchContextQuery;
+    private TextView searchContextCount;
     private View homeModeSearchIcon;
     NeomorphFrameLayout neo_profile, neo_post_artical, neo_home, neo_inner_home, neo_inner_profile;
     long mBackPressed;
@@ -2246,6 +2253,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         boolean singleOnly = intent.getBooleanExtra(EXTRA_SEARCH_SINGLE_ONLY, false);
         intent.removeExtra(EXTRA_SEARCH_SINGLE_ONLY);
+        String storyLabel = "";
+        int storyCount = 0;
+        if (intent.hasExtra(EXTRA_SEARCH_STORY)) {
+            storyLabel = intent.getStringExtra(EXTRA_SEARCH_STORY);
+            intent.removeExtra(EXTRA_SEARCH_STORY);
+        }
+        if (intent.hasExtra(EXTRA_SEARCH_STORY_COUNT)) {
+            storyCount = intent.getIntExtra(EXTRA_SEARCH_STORY_COUNT, 0);
+            intent.removeExtra(EXTRA_SEARCH_STORY_COUNT);
+        }
+        if (storyLabel == null) storyLabel = "";
+        storyLabel = storyLabel.trim();
         boolean hasQuery = intent.hasExtra(EXTRA_SEARCH_QUERY);
         String q = hasQuery ? intent.getStringExtra(EXTRA_SEARCH_QUERY) : null;
         if (hasQuery) {
@@ -2261,6 +2280,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 + " singleOnly=" + (singleOnly || postIdExtra > 0L));
         activeSearchQuery = q;
         activeSearchPostId = postIdExtra > 0L ? postIdExtra : 0L;
+        activeSearchStoryLabel = storyLabel;
+        activeSearchStoryCount = storyLabel.isEmpty() ? 0 : Math.max(0, storyCount);
+        if (!storyLabel.isEmpty()) {
+            singleOnly = false;
+            activeSearchPostId = 0L;
+        }
         activeSearchSingleOnly = singleOnly || activeSearchPostId > 0L;
         searchContentLanded = false;
         searchFeedActive = true;
@@ -2904,6 +2929,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         activeSearchQuery = "";
         activeSearchPostId = 0L;
         activeSearchSingleOnly = false;
+        activeSearchStoryLabel = "";
+        activeSearchStoryCount = 0;
         searchContentLanded = false;
         searchSoftRetryUsed = false;
         try {
@@ -2995,6 +3022,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             searchContextBar = include != null ? include : findViewById(R.id.search_context_bar);
             if (searchContextBar != null) {
                 searchContextQuery = searchContextBar.findViewById(R.id.search_context_query);
+                searchContextCount = searchContextBar.findViewById(R.id.search_context_count);
                 View back = searchContextBar.findViewById(R.id.search_context_back);
                 if (back != null) {
                     back.setOnClickListener(v -> exitSearchFeedMode());
@@ -3004,6 +3032,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
             searchContextBar = null;
             searchContextQuery = null;
+            searchContextCount = null;
         }
         updateSearchContextBar();
     }
@@ -3013,9 +3042,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (searchContextBar == null) return;
             if (isSearchFeedActive()) {
                 searchContextBar.setVisibility(View.VISIBLE);
-                if (searchContextQuery != null) {
-                    searchContextQuery.setText(
-                            activeSearchQuery != null ? activeSearchQuery.trim() : "");
+                String story = activeSearchStoryLabel != null ? activeSearchStoryLabel.trim() : "";
+                if (!story.isEmpty()) {
+                    if (searchContextQuery != null) searchContextQuery.setText(story);
+                    if (searchContextCount != null) {
+                        if (activeSearchStoryCount > 0) {
+                            searchContextCount.setText("(" + activeSearchStoryCount + ")");
+                            searchContextCount.setVisibility(View.VISIBLE);
+                        } else {
+                            searchContextCount.setVisibility(View.GONE);
+                        }
+                    }
+                } else {
+                    if (searchContextQuery != null) {
+                        searchContextQuery.setText(
+                                activeSearchQuery != null ? activeSearchQuery.trim() : "");
+                    }
+                    if (searchContextCount != null) {
+                        searchContextCount.setVisibility(View.GONE);
+                    }
                 }
             } else {
                 searchContextBar.setVisibility(View.GONE);
@@ -15950,7 +15995,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (activeSearchQuery != null && !activeSearchQuery.trim().isEmpty()) {
                 requestModel.setSearch_text(activeSearchQuery.trim());
             }
-            if (activeSearchPostId > 0L || activeSearchSingleOnly) {
+            if (activeSearchStoryLabel != null && !activeSearchStoryLabel.trim().isEmpty()) {
+                requestModel.setStory_label(activeSearchStoryLabel.trim());
+                requestModel.setSearch_post_id(null);
+                requestModel.setLimit(60);
+            } else if (activeSearchPostId > 0L || activeSearchSingleOnly) {
                 requestModel.setSearch_post_id(
                         activeSearchPostId > 0L ? activeSearchPostId : null);
                 // Primary + similar siblings (server ranks exact then near matches).
@@ -17870,6 +17919,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     }
                                     if (activeSearchPostId <= 0L
                                             && !activeSearchSingleOnly
+                                            && (activeSearchStoryLabel == null
+                                                    || activeSearchStoryLabel.trim().isEmpty())
                                             && !searchSoftRetryUsed
                                             && soft != null
                                             && !soft.isEmpty()

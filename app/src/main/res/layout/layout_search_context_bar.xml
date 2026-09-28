@@ -45,5 +45,19 @@
         android:textSize="16sp"
         android:textStyle="bold"
         android:letterSpacing="0.01"
-        tools:text="tension headache" />
+        tools:text="వినాయక చవితి" />
+
+    <TextView
+        android:id="@+id/search_context_count"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:gravity="center_vertical"
+        android:maxLines="1"
+        android:textColor="@color/search_chrome_title"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:text="(38)"
+        tools:visibility="visible" />
 </LinearLayout>

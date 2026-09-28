@@ -237,6 +237,22 @@ public class ListAllArticlesRequest implements Serializable {
         this.search_post_id = search_post_id;
     }
 
+    /**
+     * Story group opened from search. FlipView loads that group's articles.
+     * A single article leaves this empty.
+     */
+    @SerializedName("story_label")
+    @Expose
+    private String story_label;
+
+    public String getStory_label() {
+        return story_label;
+    }
+
+    public void setStory_label(String story_label) {
+        this.story_label = story_label;
+    }
+
     @SerializedName("sdk_version")
     @Expose
     private int sdk_version;

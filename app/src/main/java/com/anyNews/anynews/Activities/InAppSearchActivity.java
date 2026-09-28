@@ -66,8 +66,9 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
  * In-app Search: mist + teal chrome, recent-searches idle state.
  * Typing shows suggestion chips, then story groups (highest count first),
  * then each matching article (title, date, photo) from that same response.
- * Tapping a story group lists the articles in that story. Tapping an article
- * opens it. A chip writes its word into the box and the results follow.
+ * Tapping a story group opens those articles in the flip reader. Tapping an
+ * article opens that one article. A chip writes its word into the box and
+ * the results follow.
  * Empty state only after the suggest request settles with zero hits — never
  * flash "No matching stories" while a request is still in flight.
  */
@@ -491,8 +492,49 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     /**
-     * Story row (the count) opens that group's articles. Back returns to the
-     * groups. Tapping an article in the list opens the article.
+     * Story row opens that group's articles in the flip reader, one after
+     * another. The search list stays as it is: groups, then articles.
+     */
+    private void openStoryFeed(@Nullable Row row) {
+        if (row == null) return;
+        String story = row.title != null ? row.title.trim() : "";
+        if (story.isEmpty()) return;
+        String typed =
+                searchInput != null && searchInput.getText() != null
+                        ? searchInput.getText().toString()
+                        : "";
+        String query = softenClientQuery(typed);
+        if (query.isEmpty()) query = softenClientQuery(story);
+        if (query.isEmpty()) return;
+        if (!query.isEmpty()) {
+            RecentSearchStore.add(this, query, 0L);
+        }
+        Intent intent = new Intent(this, HomePage.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.putExtra(HomePage.EXTRA_SEARCH_QUERY, query);
+        intent.putExtra(HomePage.EXTRA_SEARCH_STORY, story);
+        intent.putExtra(HomePage.EXTRA_SEARCH_STORY_COUNT, Math.max(0, row.meta));
+        Intent self = getIntent();
+        if (self != null && self.getBooleanExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, false)) {
+            intent.putExtra(SearchRevealHelper.EXTRA_HAS_REVEAL, true);
+            intent.putExtra(
+                    SearchRevealHelper.EXTRA_REVEAL_CX,
+                    self.getIntExtra(SearchRevealHelper.EXTRA_REVEAL_CX, 0));
+            intent.putExtra(
+                    SearchRevealHelper.EXTRA_REVEAL_CY,
+                    self.getIntExtra(SearchRevealHelper.EXTRA_REVEAL_CY, 0));
+        }
+        if (getApplicationContext() != null
+                && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+            startActivity(intent);
+        }
+        finish();
+        overridePendingTransition(0, 0);
+    }
+
+    /**
+     * Kept for a filtered article page. The story row itself opens the flip
+     * reader ({@link #openStoryFeed}) and does not land here.
      */
     private void openTopic(@Nullable String topic) {
         String next = topic == null ? "" : topic.trim();
@@ -1564,7 +1606,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                 if (row.topicBucket) {
                     vh.meta.setVisibility(View.VISIBLE);
                     vh.meta.setText(String.valueOf(row.meta));
-                    vh.itemView.setOnClickListener(v -> openTopic(row.title));
+                    vh.itemView.setOnClickListener(v -> openStoryFeed(row));
                 } else if (row.postId > 0L) {
                     vh.meta.setVisibility(View.GONE);
                     vh.itemView.setOnClickListener(
