@@ -284,6 +284,13 @@ public class Constants {
     public static String FLIP_RESTORE_PENDING = "flip_restore_pending";
     /** epoch ms when flip checkpoint was written (theme recreate TTL). */
     public static String FLIP_RESTORE_AT = "flip_restore_at";
+    /** Language id that owned {@link #FLIP_RESTORE_INDEX}. Mismatch → stay on article 0. */
+    public static String FLIP_RESTORE_LANGUAGE_ID = "flip_restore_language_id";
+    /**
+     * Set when the user picks a different language so the next Home open
+     * starts at that language's latest article instead of the previous seat.
+     */
+    public static String LANGUAGE_SWITCH_RESET_FLIP = "language_switch_reset_flip";
     /** JSON of {@link com.anyNews.anynews.Pojo.CricketMiniPlayerPosition} from splash / poll. */
     public static String CRICKET_MINI_PLAYER_POSITION = "cricket_mini_player_position";
     /** "true"/"false" admin toggle for the floating cricket mini player (default false). */

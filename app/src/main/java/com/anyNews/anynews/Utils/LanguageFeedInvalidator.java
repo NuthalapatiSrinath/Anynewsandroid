@@ -48,6 +48,21 @@ public final class LanguageFeedInvalidator {
             SharedPrefsData.putInt(app, Constants.LAST_FEED_LANGUAGE_ID, 0, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
+        // Drop the other language's flip seat before Home is recreated. commit()
+        // so the next onCreate cannot read the previous index. Home also honors
+        // LANGUAGE_SWITCH_RESET_FLIP if a dying activity rewrites the checkpoint.
+        try {
+            app.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putInt(Constants.FLIP_RESTORE_INDEX, 0)
+                    .putString(Constants.FLIP_RESTORE_POST_ID, "-1")
+                    .putBoolean(Constants.FLIP_RESTORE_PENDING, false)
+                    .putString(Constants.FLIP_RESTORE_AT, "0")
+                    .putInt(Constants.FLIP_RESTORE_LANGUAGE_ID, 0)
+                    .putBoolean(Constants.LANGUAGE_SWITCH_RESET_FLIP, true)
+                    .commit();
+        } catch (Exception ignored) {
+        }
         try {
             // Force get_static_data / translator pack reload for the new language.
             SharedPrefsData.putLong(app, Constants.OPEN_PATH_STATIC_AT, 0L, Constants.PREF_NAME);

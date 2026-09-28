@@ -104,6 +104,13 @@ public final class OpenPathFeedPrefetcher {
                         @NonNull Call<EncreptionRequest> c,
                         @NonNull Response<EncreptionRequest> response) {
                     try {
+                        int langNow = SharedPrefsData.getInt(
+                                app, Constants.LanguageID, Constants.PREF_NAME);
+                        if (langNow != langId) {
+                            Logone.v(TAG, "early main page-0 dropped lang enq="
+                                    + langId + " now=" + langNow);
+                            return;
+                        }
                         if (response.body() != null
                                 && response.body().getData() != null
                                 && !response.body().getData().isEmpty()) {

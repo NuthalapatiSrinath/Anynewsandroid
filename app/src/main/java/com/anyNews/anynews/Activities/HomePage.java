@@ -1087,6 +1087,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         pendingNightModeRecreate = false;
         readPendingFlipRestoreState(savedInstanceState);
+        // Language switch: do not re-seat the previous language's flip index.
+        consumeLanguageSwitchFlipReset();
         // Secure by default (blocks screenshots/recording); cleared only when the
         // remote allow_screen_capture flag is ON. Falls back to secure if unset.
         cachedCaptureAllowed = ScreenCaptureHelper.isCaptureAllowed(this);
@@ -15566,11 +15568,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         final boolean specialAtEnqueue = special;
         final boolean videoAtEnqueue = videoFeed;
         final int categoryAtEnqueue = this.category_id;
+        final int languageAtEnqueue = SharedPrefsData.getInt(
+                getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
 
         Callback<EncreptionRequest> feedCallback = new Callback<EncreptionRequest>() {
 
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                int languageNow = SharedPrefsData.getInt(
+                        getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+                if (languageAtEnqueue > 0 && languageNow > 0
+                        && languageAtEnqueue != languageNow) {
+                    showLog("List_All_Articles stale language dropped enq="
+                            + languageAtEnqueue + " now=" + languageNow);
+                    isApiRequested = false;
+                    return;
+                }
                 if (epochAtEnqueue != feedModeEpoch) {
                     showLog("List_All_Articles stale response dropped epoch="
                             + epochAtEnqueue + " now=" + feedModeEpoch
@@ -18470,6 +18483,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
+        // A finishing Home (language change uses CLEAR_TASK) must not write its
+        // seat back over the reset. Theme recreate is not finishing and still saves.
+        boolean languageSwitchReset = SharedPrefsData.getBool(
+                this, Constants.LANGUAGE_SWITCH_RESET_FLIP, Constants.PREF_NAME);
+        if (isFinishing() || languageSwitchReset) {
+            outState.putInt(STATE_FLIP_INDEX, 0);
+            outState.putLong(STATE_FLIP_POST_ID, -1L);
+            showLog("onSaveInstanceState skip flip checkpoint finishing="
+                    + isFinishing() + " languageSwitch=" + languageSwitchReset);
+            return;
+        }
         int flipIndex = resolveCurrentFlipIndexForSave();
         long postId = resolvePostIdForFlipIndex(flipIndex);
         outState.putInt(STATE_FLIP_INDEX, flipIndex);
@@ -18561,7 +18585,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Keep a durable checkpoint while the user flips so theme recreate can restore. */
     private void persistFlipRestoreCheckpoint(int flipIndex, long postId, boolean pending) {
         try {
-            // Single editor.apply() — avoids 4 separate SharedPreferences transactions.
+            // Language switch owns the checkpoint until the new Home consumes it.
+            if (SharedPrefsData.getBool(
+                    this, Constants.LANGUAGE_SWITCH_RESET_FLIP, Constants.PREF_NAME)) {
+                return;
+            }
+            int languageId = pending
+                    ? SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME)
+                    : 0;
+            // Single editor.apply() — avoids separate SharedPreferences transactions.
             android.content.SharedPreferences.Editor editor =
                     getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE).edit();
             editor.putInt(Constants.FLIP_RESTORE_INDEX, flipIndex);
@@ -18570,10 +18602,46 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             editor.putString(
                     Constants.FLIP_RESTORE_AT,
                     pending ? String.valueOf(System.currentTimeMillis()) : "0");
+            editor.putInt(Constants.FLIP_RESTORE_LANGUAGE_ID, languageId);
             editor.apply();
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * After a language change, Home is recreated with session id 0, which still
+     * honors the flip checkpoint. That seat belongs to the previous language.
+     * Open on the first (latest) article instead.
+     */
+    private void consumeLanguageSwitchFlipReset() {
+        boolean reset = false;
+        int checkpointLang = 0;
+        int currentLang = 0;
+        try {
+            reset = SharedPrefsData.getBool(
+                    this, Constants.LANGUAGE_SWITCH_RESET_FLIP, Constants.PREF_NAME);
+            checkpointLang = SharedPrefsData.getInt(
+                    this, Constants.FLIP_RESTORE_LANGUAGE_ID, Constants.PREF_NAME);
+            currentLang = SharedPrefsData.getInt(
+                    this, Constants.LanguageID, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        boolean otherLanguageSeat = checkpointLang > 0
+                && currentLang > 0
+                && checkpointLang != currentLang;
+        if (!reset && !otherLanguageSeat) {
+            return;
+        }
+        try {
+            SharedPrefsData.putBoolImmediate(
+                    this, Constants.LANGUAGE_SWITCH_RESET_FLIP, false, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        clearPendingFlipRestore();
+        positionx = 0;
+        showLog("language switch: open at first article reset=" + reset
+                + " checkpointLang=" + checkpointLang + " current=" + currentLang);
     }
 
     private int resolveCurrentFlipIndexForSave() {
