@@ -141,6 +141,7 @@ import com.anyNews.anynews.Pojo.SurveyRequestFeedback;
 import com.anyNews.anynews.models.FlipItems;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
+import com.anyNews.anynews.Services.MyFirebaseMessagingService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 import com.anyNews.anynews.Ui.HomeFeedRevealView;
@@ -1343,6 +1344,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         }
         boolean pushTapOpen = isPushOpenIntent(getIntent());
+        if (pushTapOpen) {
+            // Custom RemoteViews clicks skip setAutoCancel. Drop this tray row only.
+            MyFirebaseMessagingService.dismissOpenedPush(this, getIntent());
+        }
         if (pushTapOpen
                 && (pushUpdatedID == null || pushUpdatedID.isEmpty()
                 || "null".equalsIgnoreCase(pushUpdatedID)
@@ -1851,6 +1856,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void applyPushRedirectFromIntent(@Nullable Intent intent) {
         if (intent == null) {
             return;
+        }
+        if (isPushOpenIntent(intent)) {
+            MyFirebaseMessagingService.dismissOpenedPush(this, intent);
         }
         String pushRaw = intent.getStringExtra("TITLE");
         if (pushRaw == null || pushRaw.trim().isEmpty()

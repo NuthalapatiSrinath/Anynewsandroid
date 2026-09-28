@@ -46,6 +46,7 @@ import com.anyNews.anynews.Pojo.StartActivityReqModel;
 import com.anyNews.anynews.Pojo.StartingAppRequest;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
+import com.anyNews.anynews.Services.MyFirebaseMessagingService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.AdMobInitializer;
@@ -330,6 +331,9 @@ public class StartingActivity extends AppCompatActivity {
                         Constants.PREF_NAME);
             } catch (Exception ignored) {
             }
+        }
+        if (isIncomingPushTap(intent)) {
+            MyFirebaseMessagingService.dismissOpenedPush(this, intent);
         }
         SharedPrefsData.putString(getApplicationContext(), Constants.REFERRER_POST, "0", Constants.PREF_NAME);
         // Clear any stale pending share post before parsing this launch's intent;
@@ -1161,6 +1165,9 @@ public class StartingActivity extends AppCompatActivity {
         if (intent.getBooleanExtra("notification", false)
                 || intent.hasExtra("TITILE")
                 || intent.hasExtra("TITLE")) {
+            if (isIncomingPushTap(intent)) {
+                MyFirebaseMessagingService.dismissOpenedPush(this, intent);
+            }
             String pushTitle = intent.getStringExtra("TITILE");
             if (pushTitle == null || pushTitle.isEmpty() || "null".equalsIgnoreCase(pushTitle)) {
                 pushTitle = intent.getStringExtra("TITLE");
@@ -1211,6 +1218,54 @@ public class StartingActivity extends AppCompatActivity {
                 && "push".equalsIgnoreCase(uri.getHost());
     }
 
+    /** Tray tap, not a launcher or share splash. TITLE alone is too broad. */
+    private static boolean isIncomingPushTap(@Nullable Intent intent) {
+        if (intent == null) {
+            return false;
+        }
+        if (isFcmPushIntentUri(intent.getData())
+                || intent.getBooleanExtra("notification", false)) {
+            return true;
+        }
+        String titile = intent.getStringExtra("TITILE");
+        return titile != null && !titile.isEmpty()
+                && !"null".equalsIgnoreCase(titile)
+                && !"0".equals(titile.trim());
+    }
+
+    /**
+     * Forward the {@code notify()} id. Do not invent {@code hashCode(postId)} —
+     * that is not the tray id from {@code safeNotificationId}.
+     */
+    private void attachPushTrayId(@NonNull Intent homeIntent, @Nullable String postId) {
+        if (postId == null || postId.trim().isEmpty()
+                || "0".equals(postId.trim())
+                || "null".equalsIgnoreCase(postId.trim())) {
+            return;
+        }
+        String id = postId.trim();
+        int nid = MyFirebaseMessagingService.pushNotificationIdFromIntent(getIntent());
+        if (nid == 0) {
+            try {
+                long v = Long.parseLong(id);
+                if (v > 0 && v <= Integer.MAX_VALUE) {
+                    nid = (int) v;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (nid != 0) {
+            homeIntent.putExtra(MyFirebaseMessagingService.EXTRA_PUSH_NOTIFICATION_ID, nid);
+        }
+        try {
+            String uri = nid != 0
+                    ? "anynews://push/" + id + "/" + nid
+                    : "anynews://push/" + id;
+            homeIntent.setData(Uri.parse(uri));
+        } catch (Exception ignored) {
+        }
+    }
+
     /**
      * Warm FCM open: Home already showing — pin via TITLE / push_post_id onNewIntent.
      * Cold path still uses {@link #openHomeFromSplash()}.
@@ -1235,14 +1290,9 @@ public class StartingActivity extends AppCompatActivity {
             intent.putExtra("EXTRA_SESSION_ID", "0");
             intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
             intent.putExtra("DATAFROM2G", DATAFROM2G);
-            try {
-                int nid = Math.abs(pushPostId.trim().hashCode());
-                if (nid == 0) {
-                    nid = 1;
-                }
-                intent.setData(Uri.parse("anynews://push/" + pushPostId.trim() + "/" + nid));
-            } catch (Exception ignored) {
-            }
+            // Keep the notify() id. hashCode(postId) diverged from the tray id and
+            // a later cancel removed nothing.
+            attachPushTrayId(intent, pushPostId.trim());
             // Do not pass SHARE_REDIRECT_ID — push must use push_post_id only.
             startActivity(intent);
         } catch (Exception e) {
@@ -2910,14 +2960,7 @@ public class StartingActivity extends AppCompatActivity {
             intent.putExtra("notification", true);
             intent.putExtra("TITLE", TITLE);
             intent.putExtra("TITILE", TITLE);
-            try {
-                int nid = Math.abs(TITLE.trim().hashCode());
-                if (nid == 0) {
-                    nid = 1;
-                }
-                intent.setData(Uri.parse("anynews://push/" + TITLE.trim() + "/" + nid));
-            } catch (Exception ignored) {
-            }
+            attachPushTrayId(intent, TITLE.trim());
         } else {
             intent.putExtra("TITLE", "0");
         }
@@ -3254,6 +3297,7 @@ public class StartingActivity extends AppCompatActivity {
                                     intent.putExtra("notification", true);
                                     intent.putExtra("TITLE", TITLE);
                                     intent.putExtra("TITILE", TITLE);
+                                    attachPushTrayId(intent, TITLE.trim());
                                 } else {
                                     intent.putExtra("TITLE", "0");
                                 }
@@ -3353,6 +3397,7 @@ public class StartingActivity extends AppCompatActivity {
                                                     intent.putExtra("notification", true);
                                                     intent.putExtra("TITLE", TITLE);
                                                     intent.putExtra("TITILE", TITLE);
+                                                    attachPushTrayId(intent, TITLE.trim());
                                                 } else {
                                                     intent.putExtra("TITLE", "0");
                                                 }

@@ -4,6 +4,7 @@ import static com.anyNews.anynews.Utils.AppHelper.showLog;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 import android.Manifest;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -23,6 +24,7 @@ import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
+import android.service.notification.StatusBarNotification;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -303,6 +305,9 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         }
         String diversifier = objectJson != null ? objectJson : title;
         int notificationId = safeNotificationId(postId, diversifier);
+        // Same int passed to notify(). Tap handlers cancel this id; auto-cancel
+        // does not run when RemoteViews own the click.
+        resultIntent.putExtra(EXTRA_PUSH_NOTIFICATION_ID, notificationId);
         try {
             resultIntent.setData(Uri.parse("anynews://push/" + postId + "/" + notificationId));
         } catch (Exception ignored) {
@@ -328,6 +333,199 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 notificationId,
                 resultIntent,
                 flags);
+    }
+
+    /** Extra on the tap Intent. Value is the id passed to {@code notify()}. */
+    public static final String EXTRA_PUSH_NOTIFICATION_ID = "push_notification_id";
+
+    /** Group key used by article pushes. Must match the builder in {@code sendNotification}. */
+    private static final String PUSH_GROUP_KEY = "com.anyNews.anynews.Services.WORK_EMAIL";
+
+    /**
+     * Remove the tray row for this tap. {@code setAutoCancel(true)} does not fire
+     * when custom RemoteViews handle the click via {@code setOnClickPendingIntent}.
+     * Cancels only this id so other stacked pushes stay.
+     */
+    public static void dismissOpenedPush(@Nullable Context context, @Nullable Intent intent) {
+        if (context == null || intent == null) {
+            return;
+        }
+        int id = pushNotificationIdFromIntent(intent);
+        if (id == 0) {
+            return;
+        }
+        try {
+            NotificationManager nm = (NotificationManager) context.getApplicationContext()
+                    .getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) {
+                return;
+            }
+            nm.cancel(id);
+            cancelOrphanPushGroupSummary(nm, id);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Tray id for a push open. Prefer {@link #EXTRA_PUSH_NOTIFICATION_ID}.
+     * The FCM data URI is {@code anynews://push/{postId}/{notificationId}} and that
+     * second segment is the {@code notify()} id. Splash handoff used to replace it
+     * with {@code hashCode(postId)}, which does not match {@code notify()} — when
+     * those two differ and the post id fits in an int, the post id is the tray id
+     * ({@link #safeNotificationId} returns that int).
+     */
+    public static int pushNotificationIdFromIntent(@Nullable Intent intent) {
+        if (intent == null) {
+            return 0;
+        }
+        try {
+            int extra = intent.getIntExtra(EXTRA_PUSH_NOTIFICATION_ID, 0);
+            if (extra != 0) {
+                return extra;
+            }
+        } catch (Exception ignored) {
+        }
+        int uriId = notificationIdFromPushUri(intent.getData());
+        int postId = positiveIntPostId(postIdFromPushOpenIntent(intent));
+        if (uriId != 0 && postId != 0 && uriId != postId) {
+            return postId;
+        }
+        if (uriId != 0) {
+            return uriId;
+        }
+        return postId;
+    }
+
+    @Nullable
+    private static String postIdFromPushOpenIntent(@NonNull Intent intent) {
+        String fromUri = postIdFromPushUri(intent.getData());
+        if (isUsablePostId(fromUri)) {
+            return fromUri;
+        }
+        String titile = intent.getStringExtra("TITILE");
+        if (isUsablePostId(titile)) {
+            return titile;
+        }
+        String title = intent.getStringExtra("TITLE");
+        if (isUsablePostId(title)) {
+            return title;
+        }
+        return null;
+    }
+
+    @Nullable
+    private static String postIdFromPushUri(@Nullable Uri uri) {
+        if (!isPushOpenUri(uri)) {
+            return null;
+        }
+        String path = uri.getPath();
+        if (path == null || path.length() < 2) {
+            return null;
+        }
+        String seg = path.startsWith("/") ? path.substring(1) : path;
+        int slash = seg.indexOf('/');
+        if (slash > 0) {
+            seg = seg.substring(0, slash);
+        }
+        return seg;
+    }
+
+    private static int notificationIdFromPushUri(@Nullable Uri uri) {
+        if (!isPushOpenUri(uri) || uri.getPath() == null) {
+            return 0;
+        }
+        String seg = uri.getPath();
+        if (seg.startsWith("/")) {
+            seg = seg.substring(1);
+        }
+        int slash = seg.indexOf('/');
+        if (slash < 0 || slash >= seg.length() - 1) {
+            return 0;
+        }
+        String idPart = seg.substring(slash + 1);
+        int cut = idPart.indexOf('/');
+        if (cut >= 0) {
+            idPart = idPart.substring(0, cut);
+        }
+        try {
+            return Integer.parseInt(idPart.trim());
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static boolean isPushOpenUri(@Nullable Uri uri) {
+        return uri != null
+                && "anynews".equalsIgnoreCase(uri.getScheme())
+                && "push".equalsIgnoreCase(uri.getHost());
+    }
+
+    private static boolean isUsablePostId(@Nullable String postId) {
+        if (postId == null) {
+            return false;
+        }
+        String trimmed = postId.trim();
+        return !trimmed.isEmpty()
+                && !"null".equalsIgnoreCase(trimmed)
+                && !"0".equals(trimmed);
+    }
+
+    /** Numeric post ids that fit in an int are the tray id. Never 0. */
+    private static int positiveIntPostId(@Nullable String postId) {
+        if (!isUsablePostId(postId)) {
+            return 0;
+        }
+        try {
+            long v = Long.parseLong(postId.trim());
+            if (v > 0 && v <= Integer.MAX_VALUE) {
+                return (int) v;
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        return 0;
+    }
+
+    /** Drop an empty system group header after the opened child is gone. */
+    private static void cancelOrphanPushGroupSummary(@NonNull NotificationManager nm, int openedId) {
+        if (Build.VERSION.SDK_INT < 23) {
+            return;
+        }
+        try {
+            StatusBarNotification[] active = nm.getActiveNotifications();
+            if (active == null) {
+                return;
+            }
+            boolean otherChild = false;
+            for (StatusBarNotification sbn : active) {
+                if (sbn == null || sbn.getId() == openedId) {
+                    continue;
+                }
+                Notification n = sbn.getNotification();
+                if (n == null || !PUSH_GROUP_KEY.equals(n.getGroup())) {
+                    continue;
+                }
+                if ((n.flags & Notification.FLAG_GROUP_SUMMARY) == 0) {
+                    otherChild = true;
+                    break;
+                }
+            }
+            if (otherChild) {
+                return;
+            }
+            for (StatusBarNotification sbn : active) {
+                if (sbn == null) {
+                    continue;
+                }
+                Notification n = sbn.getNotification();
+                if (n == null || !PUSH_GROUP_KEY.equals(n.getGroup())) {
+                    continue;
+                }
+                if ((n.flags & Notification.FLAG_GROUP_SUMMARY) != 0) {
+                    nm.cancel(sbn.getTag(), sbn.getId());
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     /** Custom RemoteViews swallow taps on many OEMs unless each root has a PI. */
@@ -711,7 +909,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
         Spannable pnTitle = makeSpannable(title, "\\[.*?\\]", pnColor);
 
-        String GROUP_KEY_WORK_EMAIL = "com.anyNews.anynews.Services.WORK_EMAIL";
+        String GROUP_KEY_WORK_EMAIL = PUSH_GROUP_KEY;
         collapsedView.setTextViewText(R.id.notification_titleE, pnTitle);
         collapsedView.setTextViewText(R.id.notification_titleTEL, pnTitle);
         collapsedView.setTextViewText(R.id.notification_titleTa, pnTitle);
