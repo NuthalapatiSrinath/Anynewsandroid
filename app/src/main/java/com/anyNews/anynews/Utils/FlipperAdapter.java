@@ -726,10 +726,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         } catch (Exception ignored) {
         }
-        // Stop article TTS when the user flips away from the speaking card.
+        // Late safety if settle runs after a flip. Primary cancel is
+        // HomePage.onFlippedToPage (immediate, all card types, no network).
         try {
             Long postId = null;
-            if (list != null && currentPage >= 0 && currentPage < list.size()) {
+            if (list != null && currentPage >= 0 && currentPage < list.size()
+                    && list.get(currentPage) != null) {
                 postId = list.get(currentPage).getPostId();
             }
             ArticleTtsHelper.stopIfNotCurrent(postId);

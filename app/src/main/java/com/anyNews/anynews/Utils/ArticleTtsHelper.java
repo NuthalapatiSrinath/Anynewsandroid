@@ -47,7 +47,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class ArticleTtsHelper {
 
-    private static final String UTTERANCE_ID = "article_tts_body";
+    private static final String UTTERANCE_PREFIX = "article_tts_body:";
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     /** Image overlay uses white glyphs; engagement row uses tintable action icons. */
@@ -61,6 +61,9 @@ public final class ArticleTtsHelper {
     private static String appliedVoiceKey = "";
     private static boolean voicesPreloaded;
     private static Long speakingPostId;
+    /** Id of the utterance we still want. Cleared on stop so a late onDone/onStart cannot restart UI or cut a newer read. */
+    private static String activeUtteranceId;
+    private static int utteranceSeq;
     private static final List<SpeakerSlot> activeSlots = new ArrayList<>();
     private static final List<Runnable> pendingReady = new ArrayList<>();
     private static AnimatorSet pulseAnim;
@@ -141,12 +144,8 @@ public final class ArticleTtsHelper {
             return;
         }
         speakerBtn.setVisibility(View.VISIBLE);
-        final boolean thisSpeaking =
-                speakingPostId != null
-                        && postId != null
-                        && speakingPostId.equals(postId)
-                        && isSpeaking();
-        registerOrUpdateSlot(speakerBtn, pulseView, style);
+        final boolean thisSpeaking = isSpeakingPost(postId) && isSpeaking();
+        registerOrUpdateSlot(speakerBtn, pulseView, style, postId);
         applyUiState(speakerBtn, pulseView, thisSpeaking, style);
         final Context app = context.getApplicationContext();
         final Long id = postId;
@@ -176,11 +175,7 @@ public final class ArticleTtsHelper {
         if (TextUtils.isEmpty(text)) {
             return;
         }
-        final boolean thisSpeaking =
-                speakingPostId != null
-                        && postId != null
-                        && speakingPostId.equals(postId)
-                        && isSpeaking();
+        final boolean thisSpeaking = isSpeakingPost(postId) && isSpeaking();
         if (thisSpeaking) {
             stopSpeaking(true);
             return;
@@ -197,12 +192,15 @@ public final class ArticleTtsHelper {
             int style) {
         stopSpeaking(false);
         speakingPostId = postId;
-        registerOrUpdateSlot(speakerBtn, pulseView, style);
+        final String utteranceId = UTTERANCE_PREFIX + (++utteranceSeq);
+        activeUtteranceId = utteranceId;
+        registerOrUpdateSlot(speakerBtn, pulseView, style, postId);
         applyAllSlotsUi(true);
         ensureTts(
                 app,
                 () -> {
-                    if (speakingPostId == null
+                    if (!utteranceId.equals(activeUtteranceId)
+                            || speakingPostId == null
                             || (postId != null && !postId.equals(speakingPostId))) {
                         return;
                     }
@@ -211,16 +209,16 @@ public final class ArticleTtsHelper {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                         Bundle params = new Bundle();
                         params.putString(
-                                TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, UTTERANCE_ID);
+                                TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId);
                         result =
                                 tts.speak(
                                         text,
                                         TextToSpeech.QUEUE_FLUSH,
                                         params,
-                                        UTTERANCE_ID);
+                                        utteranceId);
                     } else {
                         HashMap<String, String> map = new HashMap<>();
-                        map.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, UTTERANCE_ID);
+                        map.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId);
                         result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, map);
                     }
                     if (result != TextToSpeech.SUCCESS) {
@@ -263,23 +261,35 @@ public final class ArticleTtsHelper {
                             new UtteranceProgressListener() {
                                 @Override
                                 public void onStart(String utteranceId) {
-                                    MAIN.post(() -> applyAllSlotsUi(true));
+                                    MAIN.post(() -> {
+                                        if (!isActiveUtterance(utteranceId)) return;
+                                        applyAllSlotsUi(true);
+                                    });
                                 }
 
                                 @Override
                                 public void onDone(String utteranceId) {
-                                    MAIN.post(() -> stopSpeaking(true));
+                                    MAIN.post(() -> {
+                                        if (!isActiveUtterance(utteranceId)) return;
+                                        stopSpeaking(true);
+                                    });
                                 }
 
                                 @Override
                                 public void onError(String utteranceId) {
-                                    MAIN.post(() -> stopSpeaking(true));
+                                    MAIN.post(() -> {
+                                        if (!isActiveUtterance(utteranceId)) return;
+                                        stopSpeaking(true);
+                                    });
                                 }
 
                                 @Override
                                 public void onRangeStart(
                                         String utteranceId, int start, int end, int frame) {
-                                    MAIN.post(() -> nudgePulse());
+                                    MAIN.post(() -> {
+                                        if (!isActiveUtterance(utteranceId)) return;
+                                        nudgePulse();
+                                    });
                                 }
                             });
                     for (Runnable r : queued) {
@@ -465,6 +475,9 @@ public final class ArticleTtsHelper {
     }
 
     private static void stopSpeaking(boolean resetUi) {
+        // Drop the active id before tts.stop() so a synchronous onDone cannot
+        // clear a read that starts immediately afterwards.
+        activeUtteranceId = null;
         try {
             if (tts != null && ttsReady) {
                 tts.stop();
@@ -501,6 +514,14 @@ public final class ArticleTtsHelper {
         }
     }
 
+    private static boolean isSpeakingPost(@Nullable Long postId) {
+        return speakingPostId != null && postId != null && speakingPostId.equals(postId);
+    }
+
+    private static boolean isActiveUtterance(@Nullable String utteranceId) {
+        return utteranceId != null && utteranceId.equals(activeUtteranceId);
+    }
+
     private static void applyAllSlotsUi(boolean speaking) {
         pruneDeadSlots();
         View firstPulse = null;
@@ -508,10 +529,13 @@ public final class ArticleTtsHelper {
             ImageView btn = slot.btnRef.get();
             View pulse = slot.pulseRef == null ? null : slot.pulseRef.get();
             if (btn == null) continue;
-            applyUiState(btn, pulse, speaking, slot.style);
-            if (speaking && firstPulse == null && pulse != null) {
+            // Only the article that was tapped may show the orange speaker.
+            // Recycled next/previous cards stay off even if they are already bound.
+            boolean slotSpeaking = speaking && isSpeakingPost(slot.postId);
+            applyUiState(btn, pulse, slotSpeaking, slot.style);
+            if (slotSpeaking && firstPulse == null && pulse != null) {
                 firstPulse = pulse;
-            } else if (speaking && firstPulse == null) {
+            } else if (slotSpeaking && firstPulse == null) {
                 firstPulse = btn;
             }
         }
@@ -565,6 +589,7 @@ public final class ArticleTtsHelper {
             // Prefer dedicated pulse views from active slots.
             pruneDeadSlots();
             for (SpeakerSlot slot : activeSlots) {
+                if (!isSpeakingPost(slot.postId)) continue;
                 View p = slot.pulseRef == null ? null : slot.pulseRef.get();
                 if (p != null) {
                     startPulse(p);
@@ -572,6 +597,7 @@ public final class ArticleTtsHelper {
                 }
             }
             for (SpeakerSlot slot : activeSlots) {
+                if (!isSpeakingPost(slot.postId)) continue;
                 ImageView btn = slot.btnRef.get();
                 if (btn != null) {
                     startPulse(btn);
@@ -629,17 +655,21 @@ public final class ArticleTtsHelper {
     }
 
     private static void registerOrUpdateSlot(
-            @NonNull ImageView speakerBtn, @Nullable View pulseView, int style) {
+            @NonNull ImageView speakerBtn,
+            @Nullable View pulseView,
+            int style,
+            @Nullable Long postId) {
         pruneDeadSlots();
         for (SpeakerSlot slot : activeSlots) {
             ImageView existing = slot.btnRef.get();
             if (existing == speakerBtn) {
                 slot.pulseRef = pulseView == null ? null : new WeakReference<>(pulseView);
                 slot.style = style;
+                slot.postId = postId;
                 return;
             }
         }
-        activeSlots.add(new SpeakerSlot(speakerBtn, pulseView, style));
+        activeSlots.add(new SpeakerSlot(speakerBtn, pulseView, style, postId));
     }
 
     private static void unregisterSlot(@NonNull ImageView speakerBtn) {
@@ -763,11 +793,17 @@ public final class ArticleTtsHelper {
         final WeakReference<ImageView> btnRef;
         @Nullable WeakReference<View> pulseRef;
         int style;
+        @Nullable Long postId;
 
-        SpeakerSlot(@NonNull ImageView btn, @Nullable View pulse, int style) {
+        SpeakerSlot(
+                @NonNull ImageView btn,
+                @Nullable View pulse,
+                int style,
+                @Nullable Long postId) {
             this.btnRef = new WeakReference<>(btn);
             this.pulseRef = pulse == null ? null : new WeakReference<>(pulse);
             this.style = style;
+            this.postId = postId;
         }
     }
 }

@@ -237,6 +237,12 @@ public final class SpecialGalleryFlipHelper {
 
         final int pageCount = urls.size();
         final FlipViewDotsPager dotsPager = bindWormDots(wormDots, flipRef, pageCount);
+        int openedOn = 0;
+        try {
+            openedOn = flipRef.getCurrentPage();
+        } catch (Exception ignored) {
+        }
+        final int[] galleryPage = new int[] {openedOn};
 
         flipRef.setOnFlipListener(new FlipView.OnFlipListener() {
             @Override
@@ -244,6 +250,15 @@ public final class SpecialGalleryFlipHelper {
                 int safe = position;
                 if (safe < 0) safe = 0;
                 if (safe >= pageCount) safe = Math.max(0, pageCount - 1);
+                // Nested gallery swipe is a different surface. Ignore the bind-time
+                // page so an off-screen prefetch cannot cancel the card on screen.
+                if (safe != galleryPage[0]) {
+                    galleryPage[0] = safe;
+                    try {
+                        ArticleTtsHelper.stopAll();
+                    } catch (Exception ignored) {
+                    }
+                }
                 if (dotsPager != null) {
                     dotsPager.onFlippedTo(safe);
                 }

@@ -3145,6 +3145,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 || !getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
             return;
         }
+        try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
         Intent profile = new Intent(HomePage.this, newProfileDetails.class);
         profile.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -11915,6 +11919,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void OnFlipCompletedListener(FlipView v) {
         showLog("OnFlipCompletedListener:::::::::");
+        // Page has settled. If speech is still the previous article, cut it.
+        // Same-article complete (aborted swipe back) leaves an in-progress read alone.
+        try {
+            int page = positionx;
+            if (v != null) {
+                page = v.getCurrentPage();
+            }
+            Long postId = null;
+            if (list != null && page >= 0 && page < list.size() && list.get(page) != null) {
+                postId = list.get(page).getPostId();
+            }
+            ArticleTtsHelper.stopIfNotCurrent(postId);
+        } catch (Exception ignored) {
+        }
         // Restore cricket mini-player after flip gesture (feature kept; only paused visually).
         if (cricketMiniPlayerManager != null) {
             cricketMiniPlayerManager.setHiddenForFlipGesture(false);
@@ -14882,6 +14900,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performSpecialFeedOpen() {
         showLog("performSpecialFeedOpen");
+        try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
         clearSearchFeedMode();
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
@@ -18120,6 +18142,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && !mFlipView.mIsFlipping) {
             showLog("onFlippedToPage skip same index=" + position);
             return;
+        }
+        // New card is the one on screen (half-image, half-video, gallery, ad).
+        // Cancel the previous article immediately. Do not auto-read the new card.
+        // On-device TTS only — no network.
+        if (position != positionx) {
+            try {
+                ArticleTtsHelper.stopAll();
+            } catch (Exception ignored) {
+            }
         }
         // Drop prior settle batches + deferred AdMob from the previous page immediately.
         cancelPendingFlipSettleCallbacks();

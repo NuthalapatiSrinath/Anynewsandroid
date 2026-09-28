@@ -28,6 +28,10 @@ public final class SearchRevealHelper {
 
     /** Launch search with optional circular-reveal origin from {@code source}. */
     public static void openFrom(@NonNull Activity activity, @Nullable View source) {
+        try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
         Intent intent =
                 new Intent(activity, com.anyNews.anynews.Activities.InAppSearchActivity.class);
         if (source != null) {
