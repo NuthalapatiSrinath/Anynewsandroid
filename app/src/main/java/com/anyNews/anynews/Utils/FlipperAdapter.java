@@ -4503,6 +4503,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return t;
     }
 
+    /**
+     * Title / body / strip. {@code "" + null} and a JSON {@code "null"} both paint
+     * the word null under the headline — treat those as empty.
+     */
+    @NonNull
+    private static String displayCopy(@Nullable String raw) {
+        return safeBylineText(raw);
+    }
+
     // Body/description TextViews across the half-image and half-video layouts (plain
     // + "__" video variants + language variants). Missing ids are skipped safely.
     private static final int[] HALF_BODY_TEXT_IDS = new int[] {
@@ -5544,7 +5553,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 }
                             });
                             for (int i = 0; i < magImages.size(); i++) {
-                                mCardAdapter.addCardItem(new CardItem("" + magImages.get(i), "" + "" + magImages.get(i), list.get(position).getShareLink(), "" + list.get(position).getTitle(), list.get(position).getPostId()));
+                                mCardAdapter.addCardItem(new CardItem("" + magImages.get(i), "" + "" + magImages.get(i), list.get(position).getShareLink(), displayCopy(list.get(position).getTitle()), list.get(position).getPostId()));
                             }
                             mCardShadowTransformer = new ShadowTransformer(image_magazineHolder.magzine_viewPager_data, mCardAdapter);
                             mCardShadowTransformer.enableScaling(true);
@@ -5947,15 +5956,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     settleAnchor);
                         }
                         if (LanguageId == 4) {
-                            imageGallaryHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+                            imageGallaryHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
                             applyStripFont(imageGallaryHolder.strip_text_name);
 
                         } else if (LanguageId == 1) {
-                            imageGallaryHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+                            imageGallaryHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
                             applyStripFont(imageGallaryHolder.strip_text_name);
 
                         } else {
-                            imageGallaryHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+                            imageGallaryHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
                             applyStripFont(imageGallaryHolder.strip_text_name);
 
                         }
@@ -8418,15 +8427,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
         if (LanguageId == 4) {
-            fullImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            fullImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(fullImageActivity.strip_text_name);
 
         } else if (LanguageId == 1) {
-            fullImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            fullImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(fullImageActivity.strip_text_name);
 
         } else {
-            fullImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            fullImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(fullImageActivity.strip_text_name);
 
         }
@@ -8436,7 +8445,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         fullImageActivity.full_img_comment = convertView.findViewById(R.id.full_img_comment_txt);
 
 //                        Set Text
-        fullImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+        fullImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
         bindFullPostEngagementCounts(fullImageActivity, position);
 
 
@@ -8802,9 +8811,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             halfImageActivity.tamil_half_content_description.setVisibility(View.VISIBLE);
             halfImageActivity.tamil_half_content_title.setVisibility(View.VISIBLE);
 
-            halfImageActivity.tamil_half_content_description.setText("" + list.get(position).getDescription());
-            halfImageActivity.tamil_half_content_title.setText("" + list.get(position).getTitle());
-            halfImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            halfImageActivity.tamil_half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            halfImageActivity.tamil_half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             showLog("Content Description TAMIL: "+halfImageActivity.tamil_half_content_description.getText().toString());
             applyStripFont(halfImageActivity.strip_text_name);
             FontSettingsHelper.applyArticleTypography(
@@ -8824,9 +8833,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             halfImageActivity.english_half_content_description.setVisibility(View.VISIBLE);
             halfImageActivity.english_half_content_title.setVisibility(View.VISIBLE);
 
-            halfImageActivity.english_half_content_description.setText("" + list.get(position).getDescription());
-            halfImageActivity.english_half_content_title.setText("" + list.get(position).getTitle());
-            halfImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            halfImageActivity.english_half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            halfImageActivity.english_half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             showLog("Content Description ENG : "+halfImageActivity.english_half_content_description.getText().toString());
             applyStripFont(halfImageActivity.strip_text_name);
             FontSettingsHelper.applyArticleTypography(
@@ -8844,9 +8853,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             halfImageActivity.half_content_title.setVisibility(View.GONE);
             halfImageActivity.half_content_description.setVisibility(View.VISIBLE);
             halfImageActivity.half_content_title.setVisibility(View.VISIBLE);
-            halfImageActivity.half_content_description.setText("" +list.get(position).getDescription());
-            halfImageActivity.half_content_title.setText("" + list.get(position).getTitle());
-            halfImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            halfImageActivity.half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            halfImageActivity.half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             showLog("Content Description HALF: "+halfImageActivity.half_content_description.getText().toString());
             applyStripFont(halfImageActivity.strip_text_name);
             FontSettingsHelper.applyArticleTypography(
@@ -8990,7 +8999,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         showLog("Check Point Adapter:: 11");
         if (Boolean.TRUE.equals(list.get(position).getIs_source())) {
-            descriptionText = "" + list.get(position).getDescription();
+            descriptionText = displayCopy(list.get(position).getDescription());
             descriptionHash = descriptionText.substring(descriptionText.indexOf("#") + 1);
             showLog("descriptionHash:"+descriptionHash);
             descriptionHash.trim();
@@ -9103,7 +9112,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     halfImageActivity.half_content_description.setText(ssText);
                 }
             } else {
-                halfImageActivity. half_content_description.setText("" + list.get(position).getDescription());
+                halfImageActivity. half_content_description.setText(displayCopy(list.get(position).getDescription()));
             }
             halfImageActivity.half_content_description.setMovementMethod(new MovementMethodTV());
             halfImageActivity.half_content_description.setHighlightColor(Color.TRANSPARENT);
@@ -9507,9 +9516,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             tamil_half_content_description.setVisibility(View.VISIBLE);
             tamil_half_content_title.setVisibility(View.VISIBLE);
 
-            tamil_half_content_description.setText("" + list.get(position).getDescription());
-            tamil_half_content_title.setText("" + list.get(position).getTitle());
-            halfVideoExoPlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+            tamil_half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            tamil_half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfVideoExoPlayerHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(halfVideoExoPlayerHolder.strip_text_name);
             FontSettingsHelper.applyArticleTypography(context, 4, tamil_half_content_title, tamil_half_content_description, "half_video_tamil");
 
@@ -9523,9 +9532,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             english_half_content_description.setVisibility(View.VISIBLE);
             english_half_content_title.setVisibility(View.VISIBLE);
 
-            english_half_content_description.setText("" + list.get(position).getDescription());
-            english_half_content_title.setText("" + list.get(position).getTitle());
-            halfVideoExoPlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+            english_half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            english_half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfVideoExoPlayerHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(halfVideoExoPlayerHolder.strip_text_name);
             FontSettingsHelper.applyArticleTypography(context, 1, english_half_content_title, english_half_content_description, "half_video_english");
 
@@ -9536,9 +9545,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             half_content_title.setVisibility(View.GONE);
             half_content_description.setVisibility(View.VISIBLE);
             half_content_title.setVisibility(View.VISIBLE);
-            half_content_description.setText(""+list.get(position).getDescription());
-            half_content_title.setText("" + list.get(position).getTitle());
-            halfVideoExoPlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+            half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfVideoExoPlayerHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(halfVideoExoPlayerHolder.strip_text_name);
             FontSettingsHelper.applyArticleTypography(context, LanguageId, half_content_title, half_content_description, "half_video_default");
         }
@@ -10134,9 +10143,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             tamil_half_content_description.setVisibility(View.VISIBLE);
             tamil_half_content_title.setVisibility(View.VISIBLE);
 
-            tamil_half_content_description.setText("" + list.get(position).getDescription());
-            tamil_half_content_title.setText("" + list.get(position).getTitle());
-            half_youTubePlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+            tamil_half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            tamil_half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            half_youTubePlayerHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(half_youTubePlayerHolder.strip_text_name);
             FontSettingsHelper.applyArticleTypography(context, 4, tamil_half_content_title, tamil_half_content_description, "half_video_tamil");
 
@@ -10150,9 +10159,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             english_half_content_description.setVisibility(View.VISIBLE);
             english_half_content_title.setVisibility(View.VISIBLE);
 
-            english_half_content_description.setText("" + list.get(position).getDescription());
-            english_half_content_title.setText("" + list.get(position).getTitle());
-            half_youTubePlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+            english_half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            english_half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            half_youTubePlayerHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(half_youTubePlayerHolder.strip_text_name);
             FontSettingsHelper.applyArticleTypography(context, 1, english_half_content_title, english_half_content_description, "half_video_english");
 
@@ -10163,9 +10172,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             half_content_title.setVisibility(View.GONE);
             half_content_description.setVisibility(View.VISIBLE);
             half_content_title.setVisibility(View.VISIBLE);
-            half_content_description.setText(""+list.get(position).getDescription());
-            half_content_title.setText("" + list.get(position).getTitle());
-            half_youTubePlayerHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+            half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            half_youTubePlayerHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             applyStripFont(half_youTubePlayerHolder.strip_text_name);
             FontSettingsHelper.applyArticleTypography(context, LanguageId, half_content_title, half_content_description, "half_video_default");
         }

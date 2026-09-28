@@ -2312,6 +2312,48 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return out.isEmpty() ? null : out;
     }
 
+    /** JSON/Java null and the literal word {@code null} are not article copy. */
+    private static boolean isNullishCopy(@Nullable String raw) {
+        if (raw == null) return true;
+        String t = raw.trim();
+        return t.isEmpty()
+                || "null".equalsIgnoreCase(t)
+                || "undefined".equalsIgnoreCase(t);
+    }
+
+    @NonNull
+    private static String blankNullishCopy(@Nullable String raw) {
+        return isNullishCopy(raw) ? "" : raw.trim();
+    }
+
+    /** Stop {@code "" + null} from painting the word null on the opened search card. */
+    private static void sanitizeSearchDatumCopy(@Nullable ModelClass.Datum d) {
+        if (d == null) return;
+        d.setTitle(blankNullishCopy(d.getTitle()));
+        d.setDescription(blankNullishCopy(d.getDescription()));
+        d.setWriterName(blankNullishCopy(d.getWriterName()));
+        d.setRole(blankNullishCopy(d.getRole()));
+        d.setStrip_content(blankNullishCopy(d.getStrip_content()));
+        try {
+            d.setPost_date_time(blankNullishCopy(d.getPost_date_time()));
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * A search row with no real title is a blank card from null fields.
+     * The opened post ({@code pinnedPostId}) stays so the tapped article still shows.
+     */
+    private static boolean isJunkNullSearchCard(
+            @Nullable ModelClass.Datum d, long pinnedPostId) {
+        if (d == null) return true;
+        if (FeedEndHelper.isFeedEnd(d)) return false;
+        if (!isNullishCopy(d.getTitle())) return false;
+        return !(pinnedPostId > 0L
+                && d.getPostId() != null
+                && d.getPostId() == pinnedPostId);
+    }
+
     /**
      * Ensure a Search_Stories row has a FlipView layout key so getView never
      * paints Continue-reading for a real article (blank post_type → hub-on-every-page).
@@ -2373,6 +2415,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 continue;
             }
             try {
+                sanitizeSearchDatumCopy(d);
+            } catch (Exception ignored) {
+            }
+            // Null title/description used to seat a blank card (and paint "null")
+            // under the opened hit. Keep only the pinned article when copy is empty.
+            if (isJunkNullSearchCard(d, activeSearchPostId)) {
+                showLog("ANYNEWS_SEARCH drop null/blank card postId=" + d.getPostId());
+                list.remove(i);
+                continue;
+            }
+            try {
                 ensureSearchHitPostType(d);
             } catch (Exception ignored) {
             }
@@ -2401,6 +2454,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
                 if (keep == null && activeSearchPostId <= 0L) {
                     keep = d;
+                    continue;
+                }
+                if (isJunkNullSearchCard(d, activeSearchPostId)) {
                     continue;
                 }
                 siblings.add(d);
