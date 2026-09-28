@@ -3,13 +3,18 @@ package com.anyNews.anynews.Utils;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.ClipData;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.webkit.MimeTypeMap;
 import android.widget.Toast;
 
@@ -90,6 +95,93 @@ public class VideoShareHelper {
                                     String alternateUrl, String title, String description,
                                     String shareLink, ShareMode mode, String statusMessage,
                                     OnShareCompleteListener listener) {
+        sharePrepared(context, activity, primaryUrl, alternateUrl, title, description, shareLink,
+                mode, statusMessage, listener, false);
+    }
+
+    /**
+     * Half-article video share. The file sent to WhatsApp / other apps carries
+     * {@code app_share_logo}. Full-screen videos keep {@link #shareVideo}.
+     */
+    public static void shareHalfArticleVideo(Context context, Activity activity, String primaryUrl,
+                                              String alternateUrl, String title, String description,
+                                              String shareLink, ShareMode mode,
+                                              OnShareCompleteListener listener) {
+        sharePrepared(context, activity, primaryUrl, alternateUrl, title, description, shareLink,
+                mode, context.getString(R.string.video_status_sharing), listener, true);
+    }
+
+    /**
+     * Saves a half-article video into Downloads with the ANYNEWS logo.
+     * If the logo cannot be added, the original file is still saved and a toast
+     * says that fallback was used.
+     */
+    public static void saveHalfArticleVideo(Context context, Activity activity, String primaryUrl,
+                                             String alternateUrl, String displayName) {
+        if (context == null) {
+            return;
+        }
+        final String[] candidates = uniqueUrls(primaryUrl, alternateUrl);
+        if (candidates.length == 0) {
+            Toast.makeText(context, "Video is not available to download", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Toast.makeText(context, "Your video is downloading", Toast.LENGTH_LONG).show();
+        final Handler mainHandler = new Handler(Looper.getMainLooper());
+        final String logoKey = candidates[0];
+        mainHandler.post(() -> showProgress(context, context.getString(R.string.video_status_downloading)));
+        downloadThread = new Thread(() -> {
+            try {
+                BrandedFile branded = resolveHalfVideoFile(context, candidates, logoKey,
+                        context.getString(R.string.video_status_downloading),
+                        context.getString(R.string.half_video_adding_logo), mainHandler, true);
+                if (branded == null || branded.file == null) {
+                    mainHandler.post(() -> {
+                        dismissProgress();
+                        Toast.makeText(context, "Unable to download video", Toast.LENGTH_LONG).show();
+                    });
+                    return;
+                }
+                String savedName = displayName;
+                if (!branded.branded) {
+                    String ext = getExtension(branded.file.getName());
+                    if (savedName != null && !savedName.toLowerCase().endsWith("." + ext)) {
+                        int dot = savedName.lastIndexOf('.');
+                        savedName = (dot > 0 ? savedName.substring(0, dot) : savedName) + "." + ext;
+                    }
+                } else if (savedName != null && !savedName.toLowerCase().endsWith(".mp4")) {
+                    int dot = savedName.lastIndexOf('.');
+                    savedName = (dot > 0 ? savedName.substring(0, dot) : savedName) + ".mp4";
+                }
+                Uri saved = exportToDownloads(context.getApplicationContext(), branded.file, savedName);
+                final String toastFallback = branded.fallback;
+                final String finalName = savedName;
+                mainHandler.post(() -> {
+                    dismissProgress();
+                    if (toastFallback != null) {
+                        Toast.makeText(context,
+                                context.getString(R.string.half_video_logo_fallback_download),
+                                Toast.LENGTH_LONG).show();
+                    }
+                    VideoDownloadConfirmHelper.showSavedVideo(context, saved, finalName);
+                });
+            } catch (InterruptedException e) {
+                mainHandler.post(VideoShareHelper::dismissProgress);
+            } catch (Exception e) {
+                e.printStackTrace();
+                mainHandler.post(() -> {
+                    dismissProgress();
+                    Toast.makeText(context, "Unable to download video", Toast.LENGTH_LONG).show();
+                });
+            }
+        }, "half-video-download");
+        downloadThread.start();
+    }
+
+    private static void sharePrepared(Context context, Activity activity, String primaryUrl,
+                                      String alternateUrl, String title, String description,
+                                      String shareLink, ShareMode mode, String statusMessage,
+                                      OnShareCompleteListener listener, boolean halfArticleLogo) {
         final String[] candidates = uniqueUrls(primaryUrl, alternateUrl);
         if (candidates.length == 0) {
             Toast.makeText(context, "Video is not available to share", Toast.LENGTH_SHORT).show();
@@ -100,41 +192,93 @@ public class VideoShareHelper {
         }
 
         final Handler mainHandler = new Handler(Looper.getMainLooper());
+        final String logoKey = candidates[0];
 
-        // Instant path: any local/cache hit — skip worker thread + dialog.
-        PreparedShare ready = tryResolveReadyShare(context, candidates);
-        if (ready != null) {
-            launchShareIntent(context, activity, ready.uri, ready.mimeType, title, description,
-                    shareLink, mode, listener);
-            if (listener != null) {
-                listener.onShareStarted();
+        if (halfArticleLogo) {
+            File branded = HalfVideoLogoWatermark.peek(context, logoKey);
+            if (branded != null) {
+                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", branded);
+                launchShareIntent(context, activity, uri, "video/mp4", title, description,
+                        shareLink, mode, listener);
+                if (listener != null) {
+                    listener.onShareStarted();
+                }
+                return;
             }
-            return;
+        } else {
+            // Instant path: any local/cache hit — skip worker thread + dialog.
+            PreparedShare ready = tryResolveReadyShare(context, candidates);
+            if (ready != null) {
+                launchShareIntent(context, activity, ready.uri, ready.mimeType, title, description,
+                        shareLink, mode, listener);
+                if (listener != null) {
+                    listener.onShareStarted();
+                }
+                return;
+            }
         }
 
         downloadThread = new Thread(() -> {
             try {
-                PreparedShare prepared = null;
-                for (String candidate : candidates) {
-                    prepared = prepareShareableVideo(context, candidate, statusMessage, mainHandler, true);
-                    if (prepared != null) {
-                        break;
+                Uri shareUri;
+                String mime;
+                String fallback = null;
+                if (halfArticleLogo) {
+                    BrandedFile branded = resolveHalfVideoFile(context, candidates, logoKey,
+                            statusMessage, context.getString(R.string.half_video_adding_logo),
+                            mainHandler, true);
+                    if (branded == null || branded.file == null) {
+                        mainHandler.post(() -> {
+                            dismissProgress();
+                            if (listener != null) {
+                                listener.onShareStarted();
+                            }
+                        });
+                        return;
                     }
-                }
-                if (prepared == null) {
-                    mainHandler.post(() -> {
-                        dismissProgress();
-                        if (listener != null) {
-                            listener.onShareStarted();
+                    shareUri = FileProvider.getUriForFile(context,
+                            context.getPackageName() + ".provider", branded.file);
+                    mime = branded.branded ? "video/mp4" : resolveMimeType(branded.file, branded.file.getName());
+                    fallback = branded.fallback;
+                } else {
+                    PreparedShare prepared = null;
+                    for (String candidate : candidates) {
+                        prepared = prepareShareableVideo(context, candidate, statusMessage, mainHandler, true);
+                        if (prepared != null) {
+                            break;
                         }
-                    });
-                    return;
+                    }
+                    if (prepared == null) {
+                        mainHandler.post(() -> {
+                            dismissProgress();
+                            if (listener != null) {
+                                listener.onShareStarted();
+                            }
+                        });
+                        return;
+                    }
+                    shareUri = prepared.uri;
+                    mime = prepared.mimeType;
                 }
-                final PreparedShare done = prepared;
+                final Uri doneUri = shareUri;
+                final String doneMime = mime;
+                final String doneFallback = fallback;
                 mainHandler.post(() -> {
                     dismissProgress();
-                    launchShareIntent(context, activity, done.uri, done.mimeType, title, description,
+                    if (doneFallback != null) {
+                        Toast.makeText(context,
+                                context.getString(R.string.half_video_logo_fallback_share),
+                                Toast.LENGTH_LONG).show();
+                    }
+                    launchShareIntent(context, activity, doneUri, doneMime, title, description,
                             shareLink, mode, listener);
+                    if (listener != null) {
+                        listener.onShareStarted();
+                    }
+                });
+            } catch (InterruptedException e) {
+                mainHandler.post(() -> {
+                    dismissProgress();
                     if (listener != null) {
                         listener.onShareStarted();
                     }
@@ -185,13 +329,13 @@ public class VideoShareHelper {
             if (localFile != null && localFile.exists() && localFile.length() > 0) {
                 localFile.setReadable(true, false);
                 Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", localFile);
-                return new PreparedShare(uri, resolveMimeType(localFile, sourceUrl));
+                return new PreparedShare(uri, resolveMimeType(localFile, sourceUrl), localFile);
             }
             File cachedFile = getCacheFile(context, sourceUrl);
             if (cachedFile.exists() && cachedFile.length() > 0) {
                 cachedFile.setReadable(true, false);
                 Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
-                return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl));
+                return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
             }
         } catch (Exception ignored) {
         }
@@ -238,6 +382,169 @@ public class VideoShareHelper {
         }
     }
 
+    /**
+     * Download and stamp a half-article video ahead of Share / Download so the
+     * second tap reuses the cached file.
+     */
+    public static void prefetchHalfArticleVideo(Context context, String primaryUrl, String alternateUrl) {
+        if (context == null) {
+            return;
+        }
+        final String[] candidates = uniqueUrls(primaryUrl, alternateUrl);
+        if (candidates.length == 0) {
+            return;
+        }
+        final Context appContext = context.getApplicationContext();
+        final String logoKey = candidates[0];
+        if (HalfVideoLogoWatermark.peek(appContext, logoKey) != null) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                resolveHalfVideoFile(appContext, candidates, logoKey, null, null,
+                        new Handler(Looper.getMainLooper()), false);
+            } catch (Exception ignored) {
+                // Share and download retry with a visible fallback.
+            }
+        }, "half-video-prefetch").start();
+    }
+
+    private static final class BrandedFile {
+        final File file;
+        final boolean branded;
+        final String fallback;
+
+        BrandedFile(File file, boolean branded, String fallback) {
+            this.file = file;
+            this.branded = branded;
+            this.fallback = fallback;
+        }
+    }
+
+    /**
+     * Local raw file, then the cached logo composite. {@code fallback} is set
+     * when the outgoing file is the original.
+     */
+    private static BrandedFile resolveHalfVideoFile(Context context, String[] candidates, String logoKey,
+                                                     String downloadMessage, String logoMessage,
+                                                     Handler mainHandler, boolean allowProgress) throws Exception {
+        PreparedShare prepared = null;
+        for (String candidate : candidates) {
+            prepared = prepareShareableVideo(context, candidate, downloadMessage, mainHandler, allowProgress);
+            if (prepared != null) {
+                break;
+            }
+        }
+        if (prepared == null) {
+            return null;
+        }
+        File source = prepared.file;
+        if (source == null) {
+            source = copyUriToCache(context, prepared.uri, logoKey);
+        }
+        if (source == null || !source.exists() || source.length() <= 0) {
+            return new BrandedFile(null, false,
+                    "Original video kept because the file could not be read.");
+        }
+        if (allowProgress && logoMessage != null) {
+            mainHandler.post(() -> {
+                if (progressDialog != null && progressDialog.isShowing()) {
+                    progressDialog.setMessage(logoMessage);
+                } else {
+                    showProgress(context, logoMessage);
+                }
+            });
+        }
+        HalfVideoLogoWatermark.Outcome outcome = HalfVideoLogoWatermark.apply(context, source, logoKey);
+        if (outcome.branded && outcome.file != null) {
+            return new BrandedFile(outcome.file, true, null);
+        }
+        return new BrandedFile(source, false, outcome.fallback);
+    }
+
+    private static File copyUriToCache(Context context, Uri uri, String logoKey) {
+        if (uri == null) {
+            return null;
+        }
+        File dest = new File(cacheParent(context), "half_src_" + Integer.toHexString(logoKey.hashCode()) + ".mp4");
+        try (java.io.InputStream in = context.getContentResolver().openInputStream(uri);
+             java.io.OutputStream out = new java.io.BufferedOutputStream(new java.io.FileOutputStream(dest))) {
+            if (in == null) {
+                return null;
+            }
+            byte[] buffer = new byte[1 << 16];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            out.flush();
+            return dest.length() > 0 ? dest : null;
+        } catch (Exception e) {
+            //noinspection ResultOfMethodCallIgnored
+            dest.delete();
+            return null;
+        }
+    }
+
+    private static File cacheParent(Context context) {
+        File dir = context.getExternalCacheDir();
+        if (dir == null) {
+            dir = context.getCacheDir();
+        }
+        return dir;
+    }
+
+    private static Uri exportToDownloads(Context context, File source, String displayName) throws Exception {
+        String name = (displayName == null || displayName.trim().isEmpty())
+                ? "anyNews_" + System.currentTimeMillis() + ".mp4"
+                : displayName.trim();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentResolver resolver = context.getContentResolver();
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                throw new java.io.IOException("Downloads insert failed");
+            }
+            try (java.io.InputStream in = new java.io.FileInputStream(source);
+                 java.io.OutputStream out = resolver.openOutputStream(uri)) {
+                if (out == null) {
+                    throw new java.io.IOException("Downloads stream failed");
+                }
+                byte[] buffer = new byte[1 << 16];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+                out.flush();
+            } catch (Exception e) {
+                resolver.delete(uri, null, null);
+                throw e;
+            }
+            values.clear();
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            resolver.update(uri, values, null, null);
+            return uri;
+        }
+        File destDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        //noinspection ResultOfMethodCallIgnored
+        destDir.mkdirs();
+        File dest = new File(destDir, name);
+        try (java.io.InputStream in = new java.io.FileInputStream(source);
+             java.io.OutputStream out = new java.io.BufferedOutputStream(new java.io.FileOutputStream(dest))) {
+            byte[] buffer = new byte[1 << 16];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            out.flush();
+        }
+        return FileProvider.getUriForFile(context, context.getPackageName() + ".provider", dest);
+    }
+
     private static String[] uniqueUrls(String primary, String alternate) {
         java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
         if (primary != null) {
@@ -275,7 +582,7 @@ public class VideoShareHelper {
         if (localFile != null && localFile.exists() && localFile.length() > 0) {
             localFile.setReadable(true, false);
             Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", localFile);
-            return new PreparedShare(uri, resolveMimeType(localFile, sourceUrl));
+            return new PreparedShare(uri, resolveMimeType(localFile, sourceUrl), localFile);
         }
 
         File cachedFile = getCacheFile(context, sourceUrl);
@@ -284,7 +591,7 @@ public class VideoShareHelper {
         if (cachedFile.exists() && cachedFile.length() > 0) {
             cachedFile.setReadable(true, false);
             Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
-            return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl));
+            return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
         }
 
         Object lock = DOWNLOAD_LOCKS.computeIfAbsent(cacheKey(sourceUrl), key -> new Object());
@@ -293,7 +600,7 @@ public class VideoShareHelper {
             if (cachedFile.exists() && cachedFile.length() > 0) {
                 cachedFile.setReadable(true, false);
                 Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
-                return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl));
+                return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
             }
 
             if (allowProgress && statusMessage != null) {
@@ -312,7 +619,7 @@ public class VideoShareHelper {
 
         cachedFile.setReadable(true, false);
         Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
-        return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl));
+        return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
     }
 
     private static void downloadToCache(String sourceUrl, File cachedFile) throws Exception {
@@ -531,10 +838,16 @@ public class VideoShareHelper {
     private static final class PreparedShare {
         final Uri uri;
         final String mimeType;
+        final File file;
 
         PreparedShare(Uri uri, String mimeType) {
+            this(uri, mimeType, null);
+        }
+
+        PreparedShare(Uri uri, String mimeType, File file) {
             this.uri = uri;
             this.mimeType = mimeType;
+            this.file = file;
         }
     }
 }

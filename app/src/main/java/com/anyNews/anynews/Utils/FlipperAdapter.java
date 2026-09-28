@@ -14749,11 +14749,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             final boolean waShare = mode == VideoShareHelper.ShareMode.WHATSAPP_CHAT
                     || mode == VideoShareHelper.ShareMode.WHATSAPP_STATUS;
-            VideoShareHelper.shareVideo(context, activity,
-                    resolveVideoShareUrl(position),
-                    item.getVideoUrl(),
-                    item.getTitle(),
-                    item.getDescription(), item.getShareLink(), mode,
+            final boolean halfArticle = "normal_video".equalsIgnoreCase(item.getPostType());
+            VideoShareHelper.OnShareCompleteListener shareListener =
                     new VideoShareHelper.OnShareCompleteListener() {
                         @Override
                         public void onShareStarted() {
@@ -14764,7 +14761,22 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         public void onShareConfirmed() {
                             Share_Count_Value(shareCountProperty(waShare), item.getPostId());
                         }
-                    });
+                    };
+            if (halfArticle) {
+                VideoShareHelper.shareHalfArticleVideo(context, activity,
+                        resolveVideoShareUrl(position),
+                        item.getVideoUrl(),
+                        item.getTitle(),
+                        item.getDescription(), item.getShareLink(), mode,
+                        shareListener);
+            } else {
+                VideoShareHelper.shareVideo(context, activity,
+                        resolveVideoShareUrl(position),
+                        item.getVideoUrl(),
+                        item.getTitle(),
+                        item.getDescription(), item.getShareLink(), mode,
+                        shareListener);
+            }
         } catch (Exception e) {
             e.printStackTrace();
             releaseShareLaunch();
@@ -14826,6 +14838,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         lastVideoShareUiAtMs = now;
+        if (layout == VideoShareLayout.HALF_EXO || layout == VideoShareLayout.HALF_YOUTUBE) {
+            String primary = resolveVideoShareUrl(position);
+            String alternate = list.get(position) != null ? list.get(position).getVideoUrl() : null;
+            VideoShareHelper.prefetchHalfArticleVideo(context, primary, alternate);
+        }
         FullVideoOptionsDialog.show(context, new FullVideoOptionsDialog.Listener() {
             @Override
             public void onDownloadVideo() {
@@ -14901,7 +14918,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 FullVideoShareCardHelper.apply(context, whatsappChatOption);
             }
             if (canShareVideoFile(position)) {
-                VideoShareHelper.prefetchVideo(context, resolveVideoShareUrl(position));
+                if (layout == VideoShareLayout.HALF_EXO || layout == VideoShareLayout.HALF_YOUTUBE) {
+                    String alternate = list.get(position) != null ? list.get(position).getVideoUrl() : null;
+                    VideoShareHelper.prefetchHalfArticleVideo(context, resolveVideoShareUrl(position), alternate);
+                } else {
+                    VideoShareHelper.prefetchVideo(context, resolveVideoShareUrl(position));
+                }
             }
         });
     }
@@ -14955,12 +14977,71 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return resolveVideoShareUrl(position) != null;
     }
 
+    private boolean isHalfVideoPost(int position) {
+        return list != null && position >= 0 && position < list.size()
+                && list.get(position) != null
+                && "normal_video".equalsIgnoreCase(list.get(position).getPostType());
+    }
+
+    private String halfVideoDownloadFileName(int position) {
+        return "anyNews_" + System.currentTimeMillis() + "_"
+                + list.get(position).getPostId() + ".mp4";
+    }
+
     /**
-     * Full-video "Download Video" option. Saves through the same DownloadManager
-     * helper the magazine/video downloads already use, so progress, the
-     * download confirmation popup and the share notification stay identical. Android 10+
-     * writes to public Downloads without a permission; older builds ask for
-     * WRITE_EXTERNAL_STORAGE first.
+     * Half-article download from the legacy permission callback. Full-screen
+     * videos stay on DownloadManager.
+     */
+    public void downloadHalfArticleVideo(int position) {
+        downloadFullVideo(position);
+    }
+
+    private void runWhenVideoStorageAllowed(Runnable action) {
+        if (action == null) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                || ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED) {
+            action.run();
+            return;
+        }
+        if (activity instanceof FragmentActivity) {
+            PermissionX.init((FragmentActivity) activity)
+                    .permissions(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    .onExplainRequestReason(new ExplainReasonCallback() {
+                        @Override
+                        public void onExplainReason(@NonNull ExplainScope scope, @NonNull List<String> deniedList) {
+                            scope.showRequestReasonDialog(deniedList,
+                                    "Please allow the below necessary permissions to download videos", "OK", "Cancel");
+                        }
+                    })
+                    .onForwardToSettings(new ForwardToSettingsCallback() {
+                        @Override
+                        public void onForwardToSettings(@NonNull ForwardScope scope, @NonNull List<String> deniedList) {
+                            scope.showForwardToSettingsDialog(deniedList,
+                                    "Please allow below permission manually from settings page to download videos", "OK", "Cancel");
+                        }
+                    })
+                    .request(new RequestCallback() {
+                        @Override
+                        public void onResult(boolean allGranted, @NonNull List<String> grantedList,
+                                             @NonNull List<String> deniedList) {
+                            if (allGranted) {
+                                action.run();
+                            }
+                        }
+                    });
+        } else if (activity != null) {
+            ActivityCompat.requestPermissions(activity,
+                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 234);
+        }
+    }
+
+    /**
+     * "Download Video" for half and full posts. Half-article files are stamped
+     * with the ANYNEWS share logo before they are saved. Full-screen videos
+     * stay on DownloadManager, unchanged.
      */
     private void downloadFullVideo(int position) {
         if (list == null || position < 0 || position >= list.size()) {
@@ -14972,6 +15053,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         String fileName = buildVideoDownloadFileName(position, videoUrl);
+        if (isHalfVideoPost(position)) {
+            runWhenVideoStorageAllowed(() -> VideoShareHelper.saveHalfArticleVideo(
+                    context, activity, videoUrl,
+                    list.get(position).getVideoUrl(),
+                    halfVideoDownloadFileName(position)));
+            return;
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                 || ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED) {

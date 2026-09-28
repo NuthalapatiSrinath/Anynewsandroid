@@ -6649,9 +6649,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 adapter.shareFullMagazine(positionx);
             }else{
                 showLog("getMediaType::"+list.get(positionx).getMediaType());
+                String postType = list.get(positionx).getPostType();
+                if (postType != null && postType.equalsIgnoreCase("normal_video")) {
+                    adapter.downloadHalfArticleVideo(positionx);
+                    return;
+                }
                 String mediaType = list.get(positionx).getMediaType();
                 if("4".equals(mediaType) || "6".equals(mediaType) ){
-                    //Youtube full and half video download
+                    // Youtube full-video download. Half-article videos return above.
                     showLog("DATA::"+list.get(positionx).getMediaType());
                     adapter.downloadPDFWithProgressBar(list.get(positionx).getDownloadUrl(), "anyNews_"+uniqID+"_"+ + list.get(positionx).getPostId() + "."+getMimeType(list.get(positionx).getDownloadUrl()), positionx,page);
                 }else{

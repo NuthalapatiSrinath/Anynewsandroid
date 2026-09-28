@@ -98,6 +98,25 @@ public final class VideoDownloadConfirmHelper {
         showDownloaded(context, -1L, null);
     }
 
+    /**
+     * Same confirmation as a DownloadManager save, for a file this app wrote
+     * (watermarked half-article video).
+     */
+    public static void showSavedVideo(Context context, Uri openUri, String fileName) {
+        if (context == null) {
+            return;
+        }
+        Runnable work = () -> {
+            showDialogNow(context);
+            postOpenNotificationUri(context, openUri, fileName);
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            work.run();
+        } else {
+            MAIN.post(work);
+        }
+    }
+
     private static void showDialogNow(Context context) {
         if (context instanceof Activity) {
             Activity activity = (Activity) context;
@@ -150,11 +169,19 @@ public final class VideoDownloadConfirmHelper {
             ensureDownloadChannel(context);
 
             Uri openUri = resolveOpenUri(context, downloadId, fileName);
-            if (openUri == null) {
-                Log.w(TAG, "no open URI for downloadId=" + downloadId + " file=" + fileName);
-                return;
-            }
+            postOpenNotificationUri(context, openUri, fileName);
+        } catch (Exception e) {
+            Log.e(TAG, "post notification failed", e);
+        }
+    }
 
+    private static void postOpenNotificationUri(Context context, Uri openUri, String fileName) {
+        if (openUri == null) {
+            Log.w(TAG, "no open URI for file=" + fileName);
+            return;
+        }
+        try {
+            ensureDownloadChannel(context);
             String mime = resolveMime(context, openUri, fileName);
             Intent viewIntent = new Intent(Intent.ACTION_VIEW);
             viewIntent.setDataAndType(openUri, mime);
@@ -168,9 +195,10 @@ public final class VideoDownloadConfirmHelper {
             } catch (Exception ignored) {
             }
 
-            int requestCode = (int) (downloadId > 0
-                    ? (downloadId % Integer.MAX_VALUE)
-                    : (System.currentTimeMillis() % Integer.MAX_VALUE));
+            int requestCode = (int) (System.currentTimeMillis() % Integer.MAX_VALUE);
+            if (requestCode == 0) {
+                requestCode = 44001;
+            }
             int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 piFlags |= PendingIntent.FLAG_IMMUTABLE;
