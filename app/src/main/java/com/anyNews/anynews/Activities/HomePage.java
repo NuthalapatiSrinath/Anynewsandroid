@@ -592,6 +592,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     Long pendingExpandParentId = null;
     /** Prevents double-submit while Add_Comment is in flight. */
     private boolean commentSubmitInFlight = false;
+    /** Article the open comments sheet was loaded for. Send must use this, not a later flip-page lookup. */
+    private long commentsSheetPostId = 0L;
+    private long commentsSheetSubPostId = 0L;
     public  boolean adImpress=false;
     public  String adError="";
 
@@ -7911,6 +7914,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             @Override
             public void onClick(View view) {
                 comment_page.setVisibility(View.GONE);
+                commentsSheetPostId = 0L;
+                commentsSheetSubPostId = 0L;
                 leave_comment_white.setText("");
                 clearReplyContext();
                 refreshVisibleCommentCountChrome();
@@ -8285,6 +8290,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void OpenComments(Long post_id, Long sub_post_id, boolean isRetry) {
+        if (post_id != null && post_id > 0) {
+            commentsSheetPostId = post_id;
+            commentsSheetSubPostId = sub_post_id != null ? sub_post_id : 0L;
+        }
 
             showProgress();
         setCommentArticleTitleFromCurrentPost();
@@ -13892,28 +13901,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    private JsonObject getCommentRequestData() {
-        int idx = getVisiblePostIndex();
-        if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
-            idx = positionx;
-        }
-        long post_id = list.get(idx).getPostId();
-        long sub_post_id = list.get(idx).getSubPostId();
+    private JsonObject getCommentRequestData(long post_id, long sub_post_id, String comment, Long parentId) {
         ListOfCommentsRequest requestModel = new ListOfCommentsRequest();
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
         requestModel.setPostId(post_id);
         requestModel.setSubPostId(sub_post_id);
         requestModel.setUserid(allsharedpreference.getEmailId());
-        requestModel.setComment("" + leave_comment_white.getText().toString());
+        requestModel.setComment(comment != null ? comment : "");
         requestModel.setLanguageId(SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
-        if (replyParentCommentId != null && replyParentCommentId > 0) {
-            requestModel.setParentCommentId(replyParentCommentId);
+        if (parentId != null && parentId > 0) {
+            requestModel.setParentCommentId(parentId);
         }
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
-        String encrpt_data = null;
-        showLog("API COMMENT REQUEST :" + jsonString.toString());
-        encrpt_data = encrypt(jsonString);
+        showLog("API COMMENT REQUEST :" + jsonString);
+        String encrpt_data = encrypt(jsonString);
         EncritonRequestData Encriton_Request = new EncritonRequestData();
         Encriton_Request.setData(encrpt_data);
         return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
@@ -14043,23 +14045,41 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         linear_no_comment_page.setVisibility(View.GONE);
-        int idx = getVisiblePostIndex();
-        if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
-            idx = positionx;
+
+        long resolvedPostId = commentsSheetPostId;
+        long resolvedSubPostId = commentsSheetSubPostId;
+        if (resolvedPostId <= 0) {
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
+                idx = positionx;
+            }
+            if (list != null && idx >= 0 && idx < list.size() && list.get(idx) != null) {
+                if (list.get(idx).getPostId() != null) {
+                    resolvedPostId = list.get(idx).getPostId();
+                }
+                if (list.get(idx).getSubPostId() != null) {
+                    resolvedSubPostId = list.get(idx).getSubPostId();
+                }
+            }
         }
-        if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
+        if (resolvedPostId <= 0) {
             Toast.makeText(this, "Unable to send comment", Toast.LENGTH_SHORT).show();
             return;
         }
-        final long post_id = list.get(idx).getPostId() != null ? list.get(idx).getPostId() : 0L;
-        final long sub_post_id = list.get(idx).getSubPostId() != null ? list.get(idx).getSubPostId() : 0L;
+        final long post_id = resolvedPostId;
+        final long sub_post_id = resolvedSubPostId;
         final Long parentIdSnapshot = replyParentCommentId;
+        final String textBody = leave_comment_white.getText() != null
+                ? leave_comment_white.getText().toString()
+                : "";
+        if (textBody.trim().isEmpty()) {
+            Toast.makeText(this, "Comment is empty", Toast.LENGTH_LONG).show();
+            return;
+        }
+        final long sentAtMs = System.currentTimeMillis();
 
         if (!isDeviceOnline()) {
             try {
-                String textBody = leave_comment_white.getText() != null
-                        ? leave_comment_white.getText().toString()
-                        : "";
                 OfflineActionQueue.enqueueComment(
                         getApplicationContext(),
                         post_id,
@@ -14079,63 +14099,181 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
 
-        JsonObject otp = getCommentRequestData();
+        JsonObject otp;
+        try {
+            otp = getCommentRequestData(post_id, sub_post_id, textBody, parentIdSnapshot);
+        } catch (Exception e) {
+            toastCommentSendFailure(null);
+            return;
+        }
         setCommentSendChromeBusy(true);
 
         APIService apiService = RestApiClient.getClient().create(APIService.class);
-
         Call<EncreptionRequest> otp_generation = apiService.comment("v3", otp);
         try {
             otp_generation.enqueue(new Callback<EncreptionRequest>() {
 
                 @Override
                 public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-                    setCommentSendChromeBusy(false);
+                    CommentResponuse parsed = null;
+                    boolean parsedOk = false;
+                    try {
+                        EncreptionRequest encreptionRequest = response != null ? response.body() : null;
+                        if (encreptionRequest != null && encreptionRequest.getData() != null) {
+                            String encrpt_data = decrypt(encreptionRequest.getData());
+                            parsed = new Gson().fromJson(encrpt_data, CommentResponuse.class);
+                            parsedOk = parsed != null;
+                        }
+                    } catch (Exception e) {
+                        parsedOk = false;
+                    }
 
-                    EncreptionRequest encreptionRequest = response.body();
-                    if (encreptionRequest == null || encreptionRequest.getData() == null) {
-                        Toast.makeText(HomePage.this, "Comment failed — try again", Toast.LENGTH_SHORT).show();
+                    if (parsedOk && parsed.wasSaved()) {
+                        setCommentSendChromeBusy(false);
+                        applySuccessfulCommentSend(post_id, sub_post_id, parentIdSnapshot, parsed.getComments());
                         return;
                     }
-                    String encrpt_data = decrypt(encreptionRequest.getData());
-
-                    Gson gsonObj = new Gson();
-                    CommentResponuse validateUserOtp = gsonObj.fromJson(encrpt_data, CommentResponuse.class);
-
-                    if (validateUserOtp != null && Boolean.TRUE.equals(validateUserOtp.getSuccess())) {
-                        if (parentIdSnapshot != null && parentIdSnapshot > 0) {
-                            pendingExpandParentId = parentIdSnapshot;
-                        }
-                        leave_comment_white.setText("");
-                        clearReplyContext();
-                        refreshCommentComposeHint();
-                        if (adapter != null) {
-                            adapter.incrementCommentCountForPost(post_id, sub_post_id);
-                        }
-                        if (validateUserOtp.getComments() != null && adapter != null) {
-                            adapter.syncCommentCountFromServer(
-                                    post_id,
-                                    sub_post_id,
-                                    validateUserOtp.getComments(),
-                                    true);
-                        }
-                        // Keep existing list visible while refreshing — avoid blank flash.
-                        OpenComment(post_id, sub_post_id);
-                    } else {
-                        Toast.makeText(HomePage.this, "Comment failed — try again", Toast.LENGTH_SHORT).show();
+                    if (parsedOk && Boolean.FALSE.equals(parsed.getSuccess())
+                            && !Boolean.TRUE.equals(parsed.getSaved())) {
+                        setCommentSendChromeBusy(false);
+                        toastCommentSendFailure(parsed.getMsg());
+                        return;
                     }
+                    // Timeout, empty body, or an error after the row was stored.
+                    confirmSavedCommentOrToast(post_id, sub_post_id, textBody, parentIdSnapshot, sentAtMs);
                 }
 
                 @Override
                 public void onFailure(Call<EncreptionRequest> call, Throwable t) {
-                    setCommentSendChromeBusy(false);
-                    Toast.makeText(HomePage.this, "Comment failed — try again", Toast.LENGTH_SHORT).show();
+                    confirmSavedCommentOrToast(post_id, sub_post_id, textBody, parentIdSnapshot, sentAtMs);
                 }
             });
         } catch (Exception e) {
             setCommentSendChromeBusy(false);
-            Toast.makeText(this, "Comment failed — try again", Toast.LENGTH_SHORT).show();
+            toastCommentSendFailure(null);
         }
+    }
+
+    private void applySuccessfulCommentSend(long post_id, long sub_post_id, Long parentIdSnapshot, Integer serverCount) {
+        if (parentIdSnapshot != null && parentIdSnapshot > 0) {
+            pendingExpandParentId = parentIdSnapshot;
+        }
+        if (leave_comment_white != null) {
+            leave_comment_white.setText("");
+        }
+        clearReplyContext();
+        refreshCommentComposeHint();
+        if (adapter != null) {
+            adapter.incrementCommentCountForPost(post_id, sub_post_id);
+        }
+        if (serverCount != null && adapter != null) {
+            adapter.syncCommentCountFromServer(post_id, sub_post_id, serverCount, true);
+        }
+        OpenComment(post_id, sub_post_id);
+    }
+
+    private void toastCommentSendFailure(String serverMsg) {
+        String message = serverMsg == null ? "" : serverMsg.trim();
+        String lower = message.toLowerCase(Locale.US);
+        boolean showServer = !message.isEmpty()
+                && message.length() <= 140
+                && !lower.contains("e11000")
+                && !lower.contains("mongo")
+                && !lower.contains("exception")
+                && !lower.contains("syntax");
+        Toast.makeText(
+                HomePage.this,
+                showServer ? message : "Comment failed — try again",
+                Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Add_Comment can store the row and still drop the HTTP response (timeout,
+     * proxy, or a throw after save). If this draft's text is already in the
+     * thread, treat the send as success instead of a generic failure toast.
+     */
+    private void confirmSavedCommentOrToast(long postId, long subPostId, String textBody,
+                                            Long parentId, long sentAtMs) {
+        try {
+            JsonObject otp = getAllCommentRequestData(postId, subPostId);
+            APIService apiService = RestApiClient.getClient().create(APIService.class);
+            apiService.List_All_Comment_For_Article("v3", otp)
+                    .enqueue(new Callback<EncreptionRequest>() {
+                        @Override
+                        public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                            boolean found = false;
+                            ListOfCommentsResponse parsed = null;
+                            try {
+                                EncreptionRequest body = response != null ? response.body() : null;
+                                if (body != null && body.getData() != null) {
+                                    parsed = new Gson().fromJson(
+                                            decrypt(body.getData()), ListOfCommentsResponse.class);
+                                    found = commentListContainsRecentSend(
+                                            parsed, textBody, parentId, sentAtMs);
+                                }
+                            } catch (Exception ignored) {
+                            }
+                            setCommentSendChromeBusy(false);
+                            if (found && parsed != null) {
+                                if (parentId != null && parentId > 0) {
+                                    pendingExpandParentId = parentId;
+                                }
+                                if (leave_comment_white != null) {
+                                    leave_comment_white.setText("");
+                                }
+                                clearReplyContext();
+                                refreshCommentComposeHint();
+                                applyCommentsListResponse(postId, subPostId, parsed, false);
+                                return;
+                            }
+                            toastCommentSendFailure(null);
+                        }
+
+                        @Override
+                        public void onFailure(Call<EncreptionRequest> call, Throwable t) {
+                            setCommentSendChromeBusy(false);
+                            toastCommentSendFailure(null);
+                        }
+                    });
+        } catch (Exception e) {
+            setCommentSendChromeBusy(false);
+            toastCommentSendFailure(null);
+        }
+    }
+
+    private boolean commentListContainsRecentSend(ListOfCommentsResponse parsed, String textBody,
+                                                  Long parentId, long sentAtMs) {
+        if (parsed == null || !Boolean.TRUE.equals(parsed.getSuccess()) || parsed.getData() == null) {
+            return false;
+        }
+        String want = textBody == null ? "" : textBody.trim();
+        if (want.isEmpty()) {
+            return false;
+        }
+        long wantParent = parentId != null && parentId > 0 ? parentId : 0L;
+        int myDraft = SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME);
+        for (int i = 0; i < parsed.getData().size(); i++) {
+            ListOfCommentsResponse.Datum row = parsed.getData().get(i);
+            if (row == null || row.getComment() == null) {
+                continue;
+            }
+            if (!want.equals(row.getComment().trim())) {
+                continue;
+            }
+            long rowParent = row.getParentCommentId() != null ? row.getParentCommentId() : 0L;
+            if (rowParent != wantParent) {
+                continue;
+            }
+            if (myDraft > 0 && (row.getDraftId() == null || row.getDraftId() != myDraft)) {
+                continue;
+            }
+            Long commentTime = row.getCommentTime();
+            if (commentTime == null || commentTime < sentAtMs - 15000L) {
+                continue;
+            }
+            return true;
+        }
+        return false;
     }
 
     private JsonObject getAllCommentRequestData(long post_id, long sub_post_id) {
