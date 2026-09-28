@@ -113,6 +113,9 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.OnLifecycleEvent;
+import androidx.lifecycle.ProcessLifecycleOwner;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.percentlayout.widget.PercentRelativeLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -695,6 +698,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private int feedModeEpoch = 0;
     /** True while this activity is between onResume and onPause (for offline pack thrift). */
     private boolean homeActivityResumed = false;
+    /**
+     * ProcessLifecycleOwner ON_STOP (app not visible). Set only after the
+     * ~700ms stop timeout, so permission dialogs and in-app screens never set it.
+     * Consumed on the next {@link #onStart()}.
+     */
+    private boolean appEnteredBackground = false;
+    /** Cold {@link #onStart()} must not treat process startup as a background return. */
+    private boolean homeHasStartedOnce = false;
+    /**
+     * This resume is a new push/share (or other feed-changing) intent. Do not
+     * replace that open with a page-0 reload.
+     */
+    private boolean suppressFeedRefreshForIncomingIntent = false;
+    /**
+     * Share chooser / ACTION_SEND we launched. A sheet that stays up past the
+     * process-stop timeout still is not "user pressed Home".
+     */
+    private boolean suppressFeedRefreshForShareSheet = false;
+    private long shareSheetStartedElapsed = 0L;
+    /** Chooser returns inside this window stay on the card the user was reading. */
+    private static final long SHARE_SHEET_RETURN_IGNORE_MS = 5000L;
+    private LifecycleObserver processBackgroundObserver;
     int positionx=0,requestPostition=1;
     int requestSize=0;
     boolean isFromLocalArticles=false;
@@ -1068,6 +1093,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        registerProcessBackgroundObserver();
         // Promote previous-session flip views into permanent Read before News binds.
         // Once per process — same-session views stay in News until next process start.
         try {
@@ -1845,6 +1871,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         super.onNewIntent(intent);
         if (intent != null) {
             setIntent(intent);
+            // Before handlers strip TITLE / SHARE_REDIRECT_ID.
+            noteIncomingIntentSkipsBackgroundFeedRefresh(intent);
             handleFooterTabExtra(intent);
             applySearchQueryExtra(intent);
             applyCategorySessionExtra(intent);
@@ -18841,6 +18869,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void onDestroy() {
+        unregisterProcessBackgroundObserver();
         // Drop pending auto-hide callback; next show will re-arm.
         cancelHomeModeChromeAutoHide();
         cancelPendingFlipSettleCallbacks();
@@ -18968,10 +18997,262 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                         != appliedNightUiMask);
     }
 
+    /**
+     * Home / recents → process not visible. {@link ProcessLifecycleOwner} ON_STOP
+     * is what sets {@link #appEnteredBackground} (not onPause). On the way back,
+     * reload My Feed at the first article unless this open is a new push/share
+     * (or another feed-changing intent) or a share sheet we just launched.
+     */
+    @Override
+    protected void onStart() {
+        final boolean refreshFeed = consumeBackgroundFeedRefresh();
+        super.onStart();
+        homeHasStartedOnce = true;
+        if (!refreshFeed) {
+            return;
+        }
+        try {
+            showLog("background resume → performFeedReload (first article)");
+            performFeedReload();
+        } catch (Exception e) {
+            showLog("background feed refresh failed: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void startActivity(Intent intent, @Nullable Bundle options) {
+        noteShareSheetDeparture(intent);
+        super.startActivity(intent, options);
+    }
+
+    private void registerProcessBackgroundObserver() {
+        if (processBackgroundObserver != null) {
+            return;
+        }
+        processBackgroundObserver = new LifecycleObserver() {
+            @OnLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_STOP)
+            public void onAppBackground() {
+                // Whole process left the foreground (Home, recents, another app).
+                // In-app activities keep the process started, so this does not run.
+                appEnteredBackground = true;
+            }
+        };
+        try {
+            ProcessLifecycleOwner.get().getLifecycle().addObserver(processBackgroundObserver);
+        } catch (Exception e) {
+            processBackgroundObserver = null;
+            showLog("process background observer failed: " + e.getMessage());
+        }
+    }
+
+    private void unregisterProcessBackgroundObserver() {
+        if (processBackgroundObserver == null) {
+            return;
+        }
+        try {
+            ProcessLifecycleOwner.get().getLifecycle().removeObserver(processBackgroundObserver);
+        } catch (Exception ignored) {
+        }
+        processBackgroundObserver = null;
+    }
+
+    /**
+     * True only for a plain return from real background onto the main news feed.
+     * Clears one-shot latches so a later Home return can refresh again.
+     */
+    private boolean consumeBackgroundFeedRefresh() {
+        final boolean fromProcessBackground = appEnteredBackground;
+        appEnteredBackground = false;
+        final boolean incomingIntent = suppressFeedRefreshForIncomingIntent;
+        suppressFeedRefreshForIncomingIntent = false;
+        final boolean recentShareSheet = suppressFeedRefreshForShareSheet
+                && shareSheetStartedElapsed > 0L
+                && (SystemClock.elapsedRealtime() - shareSheetStartedElapsed)
+                        < SHARE_SHEET_RETURN_IGNORE_MS;
+        suppressFeedRefreshForShareSheet = false;
+
+        if (!homeHasStartedOnce || isChangingConfigurations() || isFinishing()) {
+            return false;
+        }
+        if (!fromProcessBackground) {
+            return false;
+        }
+        if (incomingIntent || recentShareSheet || expectNotifSettingsOrPermReturn) {
+            showLog("background resume skip feed refresh intent=" + incomingIntent
+                    + " shareSheet=" + recentShareSheet
+                    + " notifSettings=" + expectNotifSettingsOrPermReturn);
+            return false;
+        }
+        if (pendingNightModeRecreate || isNightUiOutOfSync()) {
+            return false;
+        }
+        return isPlainMainNewsFeed();
+    }
+
+    /** Main My Feed only — not Special, Flash, search, Read, calendar, or local. */
+    private boolean isPlainMainNewsFeed() {
+        if (searchFeedActive || bookmarksModeSelected || localFeedFromDailyUpdates) {
+            return false;
+        }
+        if (category_id != 0) {
+            return false;
+        }
+        try {
+            if (isSpecialFeedMode() || isVideoFeedMode()
+                    || isCalendarMode() || isDailyUpdatesMode()) {
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * A push tap or share link (and other intents that already seat a feed)
+     * must survive the background→foreground reload. Only when this activity
+     * was not resumed — a foreground onNewIntent never reaches {@link #onStart()}.
+     */
+    private void noteIncomingIntentSkipsBackgroundFeedRefresh(@Nullable Intent intent) {
+        if (intent == null || homeActivityResumed) {
+            return;
+        }
+        // Share sheet / permission UI pauses without onStop. onNewIntent in that
+        // window is not followed by onStart, so a latch set here would stick and
+        // skip the next real Home return. Only a stopped activity gets onStart next.
+        try {
+            if (getLifecycle().getCurrentState().isAtLeast(
+                    androidx.lifecycle.Lifecycle.State.STARTED)) {
+                return;
+            }
+        } catch (Exception ignored) {
+        }
+        if (incomingIntentChangesFeed(intent)) {
+            suppressFeedRefreshForIncomingIntent = true;
+            showLog("background resume keep incoming intent (no page-0 reset)");
+        }
+    }
+
+    private boolean incomingIntentChangesFeed(@Nullable Intent intent) {
+        if (intent == null) {
+            return false;
+        }
+        if (incomingIntentPinsSpecificPost(intent)) {
+            return true;
+        }
+        if (intent.hasExtra(EXTRA_SEARCH_QUERY)
+                || intent.hasExtra(EXTRA_SEARCH_POST_ID)
+                || intent.getBooleanExtra(EXTRA_SEARCH_SINGLE_ONLY, false)
+                || intent.hasExtra(EXTRA_DU_OPEN)
+                || intent.hasExtra(EXTRA_FOOTER_TAB)) {
+            return true;
+        }
+        if (isPositivePostId(intent.getStringExtra("JOB_REDIRECT_ID"))) {
+            return true;
+        }
+        try {
+            if (intent.hasExtra("EXTRA_SESSION_ID")) {
+                String raw = intent.getStringExtra("EXTRA_SESSION_ID");
+                if (raw != null) {
+                    int catId = Integer.parseInt(raw.trim().replaceAll("[^0-9-]", ""));
+                    if (catId > 0) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Push TITLE / share id on this intent, or the one-shot share pref it will consume. */
+    private boolean incomingIntentPinsSpecificPost(@Nullable Intent intent) {
+        if (intent == null) {
+            return false;
+        }
+        if (isPushOpenIntent(intent)) {
+            if (isPositivePostId(intent.getStringExtra("TITLE"))
+                    || isPositivePostId(intent.getStringExtra("TITILE"))
+                    || isPositivePostId(postIdFromPushIntentUri(intent.getData()))) {
+                return true;
+            }
+            try {
+                String pendingPush = SharedPrefsData.getString(
+                        getApplicationContext(), Constants.PENDING_PUSH_POST, Constants.PREF_NAME);
+                if (isPositivePostId(pendingPush)) {
+                    return true;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (isPositivePostId(intent.getStringExtra("SHARE_REDIRECT_ID"))) {
+            return true;
+        }
+        try {
+            String pendingShare = SharedPrefsData.getString(
+                    getApplicationContext(), Constants.PENDING_SHARE_POST, Constants.PREF_NAME);
+            if (isPositivePostId(pendingShare)) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private static boolean isPositivePostId(@Nullable String raw) {
+        if (raw == null) {
+            return false;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty() || "0".equals(trimmed) || "null".equalsIgnoreCase(trimmed)) {
+            return false;
+        }
+        try {
+            return Long.parseLong(trimmed) > 0L;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private void noteShareSheetDeparture(@Nullable Intent intent) {
+        if (!isShareSheetIntent(intent)) {
+            return;
+        }
+        suppressFeedRefreshForShareSheet = true;
+        shareSheetStartedElapsed = SystemClock.elapsedRealtime();
+    }
+
+    private static boolean isShareSheetIntent(@Nullable Intent intent) {
+        if (intent == null) {
+            return false;
+        }
+        if (isSendAction(intent.getAction()) || Intent.ACTION_CHOOSER.equals(intent.getAction())) {
+            return true;
+        }
+        try {
+            Intent inner;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                inner = intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent.class);
+            } else {
+                inner = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+            }
+            return inner != null && isSendAction(inner.getAction());
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isSendAction(@Nullable String action) {
+        return Intent.ACTION_SEND.equals(action) || Intent.ACTION_SEND_MULTIPLE.equals(action);
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         homeActivityResumed = true;
+        // onStart already applied a background return. Drop a deep-link latch that
+        // was set during a pause-only onNewIntent (no matching onStart).
+        suppressFeedRefreshForIncomingIntent = false;
         try {
             ViewsBatchTracker.get().setHomeFlushActive(true);
             MediaAccessReporter.get().setHomeFlushActive(true);
