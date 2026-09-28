@@ -18,6 +18,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -63,9 +64,10 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 /**
  * In-app Search: mist + teal chrome, recent-searches idle state.
- * Typing shows topic rows with counts (highest first) and, under them, the
- * matching stories (title, date, photo) from that same response. Tapping a
- * topic filters those stories in place. It does not open a second list.
+ * Typing shows suggestion chips, then story groups (highest count first),
+ * then each matching article (title, date, photo) from that same response.
+ * Tapping a story group lists the articles in that story. Tapping an article
+ * opens it. A chip writes its word into the box and the results follow.
  * Empty state only after the suggest request settles with zero hits — never
  * flash "No matching stories" while a request is still in flight.
  */
@@ -78,7 +80,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     private static final long SUGGEST_DEBOUNCE_MS = 80L;
     /** Topic rows with counts, stories listed under them. */
     private static final int MODE_TOPICS = 0;
-    /** Article rows after a topic row is tapped. */
+    /** Articles of one story group, after that row is tapped. */
     private static final int MODE_ARTICLES = 1;
 
     private View root;
@@ -108,6 +110,8 @@ public class InAppSearchActivity extends AppCompatActivity {
     private int articleNextSkip = 0;
     private int articleLayoutRetries = 0;
     private String articleQuery = "";
+    /** Completion and meaning chips from the latest suggest payload. */
+    private final List<String> chipTexts = new ArrayList<>();
     private final TextWatcher queryWatcher =
             new TextWatcher() {
                 @Override
@@ -298,7 +302,8 @@ public class InAppSearchActivity extends AppCompatActivity {
         for (Row r : rows) {
             if (r.type == Row.TYPE_SUGGEST
                     || r.type == Row.TYPE_ARTICLE
-                    || r.type == Row.TYPE_FUZZY) {
+                    || r.type == Row.TYPE_FUZZY
+                    || r.type == Row.TYPE_CHIPS) {
                 return true;
             }
         }
@@ -322,6 +327,7 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     private void applyMixed(@Nullable JsonObject obj, @NonNull String q, boolean append) {
         boolean articleMode = isArticleSuggestMode(obj);
+        if (!append && !articleMode) readChips(obj);
         if (!append) {
             if (!articleMode) topicRows.clear();
             articleRows.clear();
@@ -354,6 +360,13 @@ public class InAppSearchActivity extends AppCompatActivity {
         while (lastSuggestTexts.size() > 40) lastSuggestTexts.remove(0);
         articleQuery = q;
         if (topicRows.isEmpty() && articleRows.isEmpty()) {
+            if (!chipTexts.isEmpty()) {
+                hideEmptyState();
+                rows.clear();
+                rows.add(Row.chips());
+                adapter.notifyDataSetChanged();
+                return;
+            }
             rows.clear();
             adapter.notifyDataSetChanged();
             paintLocalLiveSuggestions(q);
@@ -448,9 +461,10 @@ public class InAppSearchActivity extends AppCompatActivity {
         return n;
     }
 
-    /** Topics stay put. A focused topic only hides the other stories. */
+    /** Chips, then story groups, then every matching article. */
     private void renderMixed() {
         List<Row> next = new ArrayList<>();
+        if (listMode == MODE_TOPICS && !chipTexts.isEmpty()) next.add(Row.chips());
         next.addAll(topicRows);
         List<Row> stories = new ArrayList<>();
         for (Row art : articleRows) {
@@ -476,33 +490,72 @@ public class InAppSearchActivity extends AppCompatActivity {
         if (adapter != null) adapter.notifyDataSetChanged();
     }
 
-    /** Show this topic's stories on this screen. A second tap shows every story again. */
+    /**
+     * Story row (the count) opens that group's articles. Back returns to the
+     * groups. Tapping an article in the list opens the article.
+     */
     private void openTopic(@Nullable String topic) {
         String next = topic == null ? "" : topic.trim();
         if (next.isEmpty()) return;
-        if (next.equalsIgnoreCase(focusedTopic) && visibleArticleCount() > 0) {
-            focusedTopic = "";
-            renderMixed();
-            return;
-        }
         focusedTopic = next;
-        renderMixed();
-        if (visibleArticleCount() == 0) {
-            String typed =
-                    searchInput != null && searchInput.getText() != null
-                            ? searchInput.getText().toString().trim()
-                            : "";
-            String q = TextUtils.isEmpty(typed) ? next : typed;
-            fetchSuggestions(q, true, 0, !topicRows.isEmpty());
-        }
-        if (listView == null || TextUtils.isEmpty(focusedTopic)) return;
-        for (int i = 0; i < rows.size(); i++) {
-            Row r = rows.get(i);
-            if (r.topicBucket && focusedTopic.equalsIgnoreCase(r.title)) {
-                listView.scrollToPosition(i);
-                break;
+        listMode = MODE_ARTICLES;
+        resetArticlePaging();
+        articleQuery = next;
+        List<Row> story = new ArrayList<>();
+        for (Row art : articleRows) {
+            if (art != null && art.type == Row.TYPE_ARTICLE && articleMatchesFocus(art)) {
+                story.add(art);
             }
         }
+        if (!story.isEmpty()) {
+            hideEmptyState();
+            rows.clear();
+            rows.addAll(story);
+            if (adapter != null) adapter.notifyDataSetChanged();
+        }
+        fetchSuggestions(next, true, 0, false);
+    }
+
+    private void readChips(@Nullable JsonObject obj) {
+        chipTexts.clear();
+        JsonArray arr = jsonArray(obj, "suggestions");
+        if (arr == null) return;
+        for (JsonElement el : arr) {
+            if (el == null || !el.isJsonObject()) continue;
+            JsonObject o = el.getAsJsonObject();
+            String text = "";
+            try {
+                if (o.has("text") && !o.get("text").isJsonNull()) text = o.get("text").getAsString();
+            } catch (Exception ignored) {
+                text = "";
+            }
+            if (text == null) continue;
+            text = text.trim();
+            if (text.length() < 2 || "null".equalsIgnoreCase(text)) continue;
+            boolean dup = false;
+            for (String prev : chipTexts) {
+                if (prev.equalsIgnoreCase(text)) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup) chipTexts.add(text);
+            if (chipTexts.size() >= 6) break;
+        }
+    }
+
+    /** Chip tap writes the word into the box. The text watcher loads its results. */
+    private void applyChip(@NonNull String word) {
+        if (searchInput == null) return;
+        String next = word.trim();
+        if (next.isEmpty()) return;
+        String cur = searchInput.getText() != null ? searchInput.getText().toString() : "";
+        if (cur.equals(next)) {
+            showTopicCounts(next);
+            return;
+        }
+        searchInput.setText(next);
+        searchInput.setSelection(next.length());
     }
 
     private void dropArticleRows() {
@@ -651,6 +704,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
         if (articles
                 && !append
+                && TextUtils.isEmpty(focusedTopic)
                 && q.equals(lastSuggestQuery)
                 && listMode == MODE_ARTICLES
                 && hasArticleRows()) {
@@ -738,6 +792,12 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 }
                                 if (!hasStory) {
                                     articleHasMore = false;
+                                    // A story tap already painted that group's articles.
+                                    // Keep them when this follow-up lookup comes back empty.
+                                    if (listMode == MODE_ARTICLES && hasArticleRows()) {
+                                        hideEmptyState();
+                                        return;
+                                    }
                                     // Stale article rows from the previous letter must not stick
                                     // when this query truly has zero hits.
                                     rows.clear();
@@ -780,6 +840,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 rows.clear();
                                 rows.addAll(next);
                                 adapter.notifyDataSetChanged();
+                                articleQuery = q;
                                 noteArticlePage(obj, pageCount);
                             } catch (Exception e) {
                                 if (append && (hasArticleRows() || hasTopicRows())) {
@@ -1293,6 +1354,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         static final int TYPE_SUGGEST = 3;
         static final int TYPE_ARTICLE = 4;
         static final int TYPE_FUZZY = 5;
+        static final int TYPE_CHIPS = 6;
 
         final int type;
         final String title;
@@ -1403,6 +1465,10 @@ public class InAppSearchActivity extends AppCompatActivity {
         static Row fuzzy(String t) {
             return new Row(TYPE_FUZZY, t, 0, null, 0L, null, null);
         }
+
+        static Row chips() {
+            return new Row(TYPE_CHIPS, "", 0, null, 0L, null, null);
+        }
     }
 
     private class SearchRowsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
@@ -1422,6 +1488,12 @@ public class InAppSearchActivity extends AppCompatActivity {
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            if (viewType == Row.TYPE_CHIPS) {
+                View v =
+                        LayoutInflater.from(parent.getContext())
+                                .inflate(R.layout.item_in_app_search_chips, parent, false);
+                return new ChipVH(v);
+            }
             if (viewType == Row.TYPE_HEADER) {
                 TextView tv = new TextView(parent.getContext());
                 tv.setLayoutParams(
@@ -1444,6 +1516,10 @@ public class InAppSearchActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             final Row row = rows.get(position);
+            if (row.type == Row.TYPE_CHIPS) {
+                bindChips((ChipVH) holder);
+                return;
+            }
             if (row.type == Row.TYPE_HEADER) {
                 ((TextView) holder.itemView).setText(row.title);
                 return;
@@ -1668,6 +1744,41 @@ public class InAppSearchActivity extends AppCompatActivity {
             idx = lower.indexOf(n, idx + n.length());
         }
         return ss;
+    }
+
+    private void bindChips(@NonNull ChipVH vh) {
+        vh.box.removeAllViews();
+        float density = getResources().getDisplayMetrics().density;
+        int padH = (int) (12 * density);
+        int padV = (int) (6 * density);
+        int gap = (int) (8 * density);
+        int color = ContextCompat.getColor(this, R.color.search_chrome_accent);
+        for (int i = 0; i < chipTexts.size(); i++) {
+            final String word = chipTexts.get(i);
+            TextView tv = new TextView(this);
+            tv.setText(word);
+            tv.setTextSize(14f);
+            tv.setTextColor(color);
+            tv.setBackgroundResource(R.drawable.bg_search_suggest_chip);
+            tv.setPadding(padH, padV, padH, padV);
+            LinearLayout.LayoutParams lp =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.setMarginEnd(gap);
+            tv.setLayoutParams(lp);
+            tv.setOnClickListener(v -> applyChip(word));
+            vh.box.addView(tv);
+        }
+    }
+
+    private static class ChipVH extends RecyclerView.ViewHolder {
+        final LinearLayout box;
+
+        ChipVH(@NonNull View itemView) {
+            super(itemView);
+            box = itemView.findViewById(R.id.search_chip_row);
+        }
     }
 
     private static class RowVH extends RecyclerView.ViewHolder {
