@@ -9,6 +9,7 @@ import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 import android.graphics.drawable.Drawable;
 import android.view.KeyEvent;
@@ -24,6 +25,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -568,7 +570,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             postId = 0L;
         }
         String image = firstImageUrl(o);
-        return Row.article(title, highlight, postId, image);
+        return Row.article(title, highlight, postId, image, parseMatch(o));
     }
 
     @Nullable
@@ -599,10 +601,75 @@ public class InAppSearchActivity extends AppCompatActivity {
         // Article-shaped row (count 1 + post_id and/or image) → thumbnail UI.
         if ((count == 1 && postId > 0L) || !TextUtils.isEmpty(image)) {
             if (count != 1) postId = postId > 0L ? postId : 0L;
-            return Row.article(text, highlight, postId > 0L ? postId : 0L, image);
+            return Row.article(text, highlight, postId > 0L ? postId : 0L, image, parseMatch(o));
         }
         // Legacy keyword bucket — still open FlipView keyword search.
         return Row.suggest(text, count, highlight, 0L);
+    }
+
+    /**
+     * Server `match`: title ranges, or one body snippet. Missing on old servers.
+     * Ranges are UTF-16 indexes, same as Java String.
+     */
+    @Nullable
+    private static MatchBits parseMatch(@Nullable JsonObject o) {
+        if (o == null || !o.has("match") || !o.get("match").isJsonObject()) return null;
+        JsonObject m = o.getAsJsonObject("match");
+        String matchIn = "";
+        if (m.has("match_in") && !m.get("match_in").isJsonNull()) {
+            matchIn = m.get("match_in").getAsString();
+        }
+        if (matchIn == null) matchIn = "";
+        matchIn = matchIn.trim().toLowerCase(Locale.ROOT);
+        if (!"title".equals(matchIn) && !"body".equals(matchIn)) return null;
+        int[][] titleRanges = "title".equals(matchIn) ? readRanges(m, "ranges") : null;
+        String snippet = "";
+        int[][] snipRanges = null;
+        if ("body".equals(matchIn) && m.has("snippet") && !m.get("snippet").isJsonNull()) {
+            snippet = m.get("snippet").getAsString();
+            if (snippet == null) snippet = "";
+            snippet = snippet.replace('\n', ' ').replace('\r', ' ').trim();
+            snipRanges = readRanges(m, "snippet_ranges");
+        }
+        return new MatchBits(
+                matchIn,
+                snippet,
+                titleRanges,
+                snipRanges);
+    }
+
+    @Nullable
+    private static int[][] readRanges(@Nullable JsonObject m, String key) {
+        if (m == null || !m.has(key) || !m.get(key).isJsonArray()) return null;
+        JsonArray arr = m.getAsJsonArray(key);
+        int n = Math.min(arr.size(), 4);
+        int[] starts = new int[n];
+        int[] ends = new int[n];
+        int kept = 0;
+        for (int i = 0; i < n; i++) {
+            JsonElement el = arr.get(i);
+            if (el == null || !el.isJsonObject()) continue;
+            JsonObject r = el.getAsJsonObject();
+            int s = -1;
+            int e = -1;
+            try {
+                if (r.has("start") && !r.get("start").isJsonNull()) s = r.get("start").getAsInt();
+                if (r.has("end") && !r.get("end").isJsonNull()) e = r.get("end").getAsInt();
+            } catch (Exception ignored) {
+                continue;
+            }
+            if (s < 0 || e <= s) continue;
+            starts[kept] = s;
+            ends[kept] = e;
+            kept++;
+        }
+        if (kept == 0) return null;
+        if (kept == n) return new int[][] {starts, ends};
+        int[] ss = new int[kept];
+        int[] ee = new int[kept];
+        System.arraycopy(starts, 0, ss, 0, kept);
+        System.arraycopy(ends, 0, ee, 0, kept);
+        return new int[][] {ss, ee};
     }
 
     @NonNull
@@ -760,6 +827,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         final String highlight;
         final long postId;
         final String imageUrl;
+        @Nullable final MatchBits match;
 
         private Row(
                 int type,
@@ -767,17 +835,19 @@ public class InAppSearchActivity extends AppCompatActivity {
                 int meta,
                 String highlight,
                 long postId,
-                String imageUrl) {
+                String imageUrl,
+                @Nullable MatchBits match) {
             this.type = type;
             this.title = title;
             this.meta = meta;
             this.highlight = highlight;
             this.postId = postId;
             this.imageUrl = imageUrl;
+            this.match = match;
         }
 
         static Row header(String t) {
-            return new Row(TYPE_HEADER, t, 0, null, 0L, null);
+            return new Row(TYPE_HEADER, t, 0, null, 0L, null, null);
         }
 
         static Row recent(String t) {
@@ -785,7 +855,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
 
         static Row recent(String t, long postId) {
-            return new Row(TYPE_RECENT, t, 0, null, postId, null);
+            return new Row(TYPE_RECENT, t, 0, null, postId, null, null);
         }
 
         static Row suggest(String t, int count, String highlight) {
@@ -793,15 +863,24 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
 
         static Row suggest(String t, int count, String highlight, long postId) {
-            return new Row(TYPE_SUGGEST, t, count, highlight, postId, null);
+            return new Row(TYPE_SUGGEST, t, count, highlight, postId, null, null);
         }
 
         static Row article(String t, String highlight, long postId, String imageUrl) {
-            return new Row(TYPE_ARTICLE, t, 1, highlight, postId, imageUrl);
+            return article(t, highlight, postId, imageUrl, null);
+        }
+
+        static Row article(
+                String t,
+                String highlight,
+                long postId,
+                String imageUrl,
+                @Nullable MatchBits match) {
+            return new Row(TYPE_ARTICLE, t, 1, highlight, postId, imageUrl, match);
         }
 
         static Row fuzzy(String t) {
-            return new Row(TYPE_FUZZY, t, 0, null, 0L, null);
+            return new Row(TYPE_FUZZY, t, 0, null, 0L, null, null);
         }
     }
 
@@ -849,12 +928,11 @@ public class InAppSearchActivity extends AppCompatActivity {
                 return;
             }
             RowVH vh = (RowVH) holder;
-            if ((row.type == Row.TYPE_SUGGEST || row.type == Row.TYPE_ARTICLE)
-                    && !TextUtils.isEmpty(row.highlight)) {
-                vh.title.setText(highlightMatch(row.title, row.highlight));
-            } else {
-                vh.title.setText(row.title);
+            if (vh.snippet != null) {
+                vh.snippet.setVisibility(View.GONE);
+                vh.snippet.setText("");
             }
+            bindRowText(vh, row);
             if (row.type == Row.TYPE_ARTICLE) {
                 vh.meta.setVisibility(View.GONE);
                 vh.icon.setVisibility(View.GONE);
@@ -959,6 +1037,67 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
     }
 
+    private void bindRowText(@NonNull RowVH vh, @NonNull Row row) {
+        int accent =
+                ContextCompat.getColor(vh.itemView.getContext(), R.color.search_chrome_accent);
+        MatchBits match = row.match;
+        if (match != null && "title".equals(match.matchIn)) {
+            CharSequence styled =
+                    highlightRanges(row.title, match.titleStarts, match.titleEnds, accent);
+            if (styled != null) {
+                vh.title.setText(styled);
+            } else if (!TextUtils.isEmpty(row.highlight)) {
+                vh.title.setText(highlightMatch(row.title, row.highlight));
+            } else {
+                vh.title.setText(row.title);
+            }
+            return;
+        }
+        if (match != null && "body".equals(match.matchIn)) {
+            // Title does not explain the hit — one short line under it does.
+            vh.title.setText(row.title != null ? row.title : "");
+            if (vh.snippet != null && !TextUtils.isEmpty(match.snippet)) {
+                vh.snippet.setVisibility(View.VISIBLE);
+                CharSequence snip =
+                        highlightRanges(match.snippet, match.snipStarts, match.snipEnds, accent);
+                vh.snippet.setText(snip != null ? snip : match.snippet);
+            }
+            return;
+        }
+        if ((row.type == Row.TYPE_SUGGEST || row.type == Row.TYPE_ARTICLE)
+                && !TextUtils.isEmpty(row.highlight)) {
+            vh.title.setText(highlightMatch(row.title, row.highlight));
+        } else {
+            vh.title.setText(row.title);
+        }
+    }
+
+    @Nullable
+    private static CharSequence highlightRanges(
+            String text, @Nullable int[] starts, @Nullable int[] ends, int color) {
+        if (TextUtils.isEmpty(text) || starts == null || ends == null) return null;
+        SpannableString ss = new SpannableString(text);
+        boolean any = false;
+        int n = Math.min(starts.length, ends.length);
+        for (int i = 0; i < n; i++) {
+            int a = starts[i];
+            int b = ends[i];
+            if (a < 0 || b > text.length() || a >= b) continue;
+            ss.setSpan(
+                    new StyleSpan(android.graphics.Typeface.BOLD),
+                    a,
+                    b,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            ss.setSpan(
+                    new ForegroundColorSpan(color),
+                    a,
+                    b,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            any = true;
+        }
+        return any ? ss : null;
+    }
+
     private static CharSequence highlightMatch(String title, String needle) {
         if (TextUtils.isEmpty(title) || TextUtils.isEmpty(needle)) return title;
         SpannableString ss = new SpannableString(title);
@@ -979,6 +1118,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     private static class RowVH extends RecyclerView.ViewHolder {
         final ImageView icon;
         final TextView title;
+        final TextView snippet;
         final TextView meta;
         final ImageView thumb;
         final ImageView action;
@@ -987,9 +1127,33 @@ public class InAppSearchActivity extends AppCompatActivity {
             super(itemView);
             icon = itemView.findViewById(R.id.row_icon);
             title = itemView.findViewById(R.id.row_title);
+            snippet = itemView.findViewById(R.id.row_snippet);
             meta = itemView.findViewById(R.id.row_meta);
             thumb = itemView.findViewById(R.id.row_thumb);
             action = itemView.findViewById(R.id.row_action);
+        }
+    }
+
+    /** Why a suggestion matched. Null on old servers (title/image only). */
+    private static final class MatchBits {
+        final String matchIn;
+        final String snippet;
+        @Nullable final int[] titleStarts;
+        @Nullable final int[] titleEnds;
+        @Nullable final int[] snipStarts;
+        @Nullable final int[] snipEnds;
+
+        MatchBits(
+                String matchIn,
+                String snippet,
+                @Nullable int[][] titleRanges,
+                @Nullable int[][] snipRanges) {
+            this.matchIn = matchIn;
+            this.snippet = snippet != null ? snippet : "";
+            this.titleStarts = titleRanges != null ? titleRanges[0] : null;
+            this.titleEnds = titleRanges != null ? titleRanges[1] : null;
+            this.snipStarts = snipRanges != null ? snipRanges[0] : null;
+            this.snipEnds = snipRanges != null ? snipRanges[1] : null;
         }
     }
 }
