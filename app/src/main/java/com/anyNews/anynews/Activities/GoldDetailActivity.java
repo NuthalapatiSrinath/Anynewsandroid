@@ -40,6 +40,7 @@ import com.google.android.material.datepicker.MaterialDatePicker;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -56,6 +57,9 @@ import java.util.TreeSet;
  * Date chip opens a picker; tables refresh from cached {@code history} when present.
  */
 public class GoldDetailActivity extends AppCompatActivity {
+
+    @Nullable
+    private static WeakReference<GoldDetailActivity> openRef;
 
     private static final int COLOR_GOLD = 0xFFD4AF37;
     private static final int COLOR_GOLD_TEXT = 0xFFE8D48A;
@@ -139,6 +143,58 @@ public class GoldDetailActivity extends AppCompatActivity {
                 finish();
             }
         }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        openRef = new WeakReference<>(this);
+    }
+
+    @Override
+    protected void onStop() {
+        GoldDetailActivity cur = openRef != null ? openRef.get() : null;
+        if (cur == this) openRef = null;
+        super.onStop();
+    }
+
+    /**
+     * Feed response replaced {@code gold_config_json}. Repaint if this screen
+     * is open. Keeps the selected 10g / 1g tab.
+     */
+    public static void onGoldPackUpdated() {
+        GoldDetailActivity activity = openRef != null ? openRef.get() : null;
+        if (activity == null || activity.isFinishing()) return;
+        activity.runOnUiThread(() -> {
+            if (activity.isFinishing()) return;
+            activity.reloadFromSavedPack();
+        });
+    }
+
+    private void reloadFromSavedPack() {
+        String previousLive = goldSource == null
+                ? ""
+                : LocalUpdatesConfigHelper.optString(goldSource, "rate_date", "");
+        boolean wasOnLive = !isIsoDate(previousLive) || previousLive.equals(selectedDateIso);
+        JSONObject next = LocalUpdatesConfigHelper.goldJson(this);
+        if (next == null) return;
+        goldSource = next;
+        ratesAvailable = LocalUpdatesConfigHelper.hasRealGoldRates(this);
+        if (wasOnLive) {
+            String live = resolveDefaultDateIso(goldSource);
+            if (isIsoDate(live)) selectedDateIso = live;
+        }
+        applyRatesForSelectedDate();
+        if (!displayHasRates && ratesAvailable) {
+            displayGold = goldSource;
+            displayHasRates = true;
+            goldData = displayGold;
+        }
+        bindStatic();
+        styleGoldTabs();
+        styleSilverTabs();
+        refreshTables();
+        bindCharts();
     }
 
     private void applySystemBars(int rootId) {

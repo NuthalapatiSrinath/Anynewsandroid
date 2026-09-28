@@ -283,6 +283,15 @@ public class EncreptionRequest {
     @Expose
     private Boolean gold_enabled;
 
+    /**
+     * Splash-shaped gold pack piggybacked on List_All_Articles.
+     * Null when omitted — do not wipe {@code gold_config_json}.
+     * Old APKs ignore this unknown field.
+     */
+    @SerializedName("gold")
+    @Expose
+    private Object gold;
+
     @SerializedName("ttd_enabled")
     @Expose
     private Boolean ttd_enabled;
@@ -725,6 +734,10 @@ public class EncreptionRequest {
 
     public Boolean getGold_enabled() {
         return gold_enabled;
+    }
+
+    public Object getGold() {
+        return gold;
     }
 
     public Boolean getTtd_enabled() {

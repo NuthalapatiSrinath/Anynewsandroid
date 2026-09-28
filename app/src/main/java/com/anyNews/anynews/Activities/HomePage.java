@@ -18143,6 +18143,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     enc.getFuel_enabled(),
                     enc.getGold_enabled(),
                     enc.getJobs_enabled());
+            // List_All_Articles already carries the saved splash gold pack.
+            // Replace prefs and repaint an open gold screen. No extra request.
+            if (enc.getGold() != null) {
+                LocalUpdatesConfigHelper.saveGoldFromSplash(this, enc.getGold());
+                GoldDetailActivity.onGoldPackUpdated();
+            }
             TtdConfigHelper.saveEnabledFromPoll(this, enc.getTtd_enabled());
             if (enc.getDaily_updates() != null) {
                 DailyUpdatesConfigHelper.saveFromSplash(this, enc.getDaily_updates());
