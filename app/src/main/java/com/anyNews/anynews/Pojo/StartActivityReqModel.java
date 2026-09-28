@@ -872,6 +872,19 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Integer magazineShareIconSizeDp;
 
+        /** Footer WhatsApp glyph (dp). Null = old server / keep cache. */
+        @SerializedName("footer_whatsapp_icon_size_dp")
+        @Expose
+        private Integer footerWhatsappIconSizeDp;
+
+        /**
+         * Likes-row and full-post right-side WhatsApp (icon and count).
+         * Null = old server / keep cache. Default ON.
+         */
+        @SerializedName("action_row_whatsapp_enabled")
+        @Expose
+        private Boolean actionRowWhatsappEnabled;
+
         // Home bottom-nav slot visibility (null = old server / keep cache). Defaults true.
         @SerializedName("footer_show_reload")
         @Expose
@@ -1511,6 +1524,14 @@ public class StartActivityReqModel implements Serializable {
 
         public Integer getMagazineShareIconSizeDp() {
             return magazineShareIconSizeDp;
+        }
+
+        public Integer getFooterWhatsappIconSizeDp() {
+            return footerWhatsappIconSizeDp;
+        }
+
+        public Boolean getActionRowWhatsappEnabled() {
+            return actionRowWhatsappEnabled;
         }
 
         public Boolean getFooterShowReload() {

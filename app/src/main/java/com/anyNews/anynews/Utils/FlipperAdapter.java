@@ -2902,6 +2902,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         ViewGroup parent = (ViewGroup) shareSlot.getParent();
         View slot = parent.findViewById(R.id.half_whatsapp);
+        if (!isActionRowWhatsappEnabled(context)) {
+            if (slot != null) {
+                slot.setVisibility(View.GONE);
+            }
+            return;
+        }
         if (slot == null) {
             slot = LayoutInflater.from(context).inflate(
                     R.layout.item_half_whatsapp_action, parent, false);
@@ -4801,6 +4807,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (context == null || convertView == null) {
             return;
         }
+        applyActionRowWhatsappVisibility(context, convertView);
         int gapPx = Math.round(readFullSideActionGapDp(context)
                 * context.getResources().getDisplayMetrics().density);
         boolean touched = false;
@@ -4831,6 +4838,41 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (railLp != null && railLp.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
             railLp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
             rail.setLayoutParams(railLp);
+        }
+    }
+
+    /** Likes-row and full-post right-side WhatsApp. Default ON. Not the footer icon. */
+    public static boolean isActionRowWhatsappEnabled(Context context) {
+        if (context == null) {
+            return true;
+        }
+        try {
+            return SharedPrefsData.getBool(
+                    context,
+                    Constants.ACTION_ROW_WHATSAPP_ENABLED,
+                    Constants.PREF_NAME,
+                    true);
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /**
+     * Hides or shows the WhatsApp icon and its count together: half-row chip
+     * and the full-image / full-video right-side button. Footer WhatsApp is separate.
+     */
+    public static void applyActionRowWhatsappVisibility(Context context, View convertView) {
+        if (convertView == null) {
+            return;
+        }
+        int vis = isActionRowWhatsappEnabled(context) ? View.VISIBLE : View.GONE;
+        View half = convertView.findViewById(R.id.half_whatsapp);
+        if (half != null) {
+            half.setVisibility(vis);
+        }
+        View full = convertView.findViewById(R.id.full_image_whatsapp);
+        if (full != null) {
+            full.setVisibility(vis);
         }
     }
 

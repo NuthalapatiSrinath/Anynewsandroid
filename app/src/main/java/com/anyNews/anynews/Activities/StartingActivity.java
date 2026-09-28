@@ -2105,6 +2105,37 @@ public class StartingActivity extends AppCompatActivity {
                             );
                         }
 
+                        // Footer WhatsApp glyph. Omitted field keeps a saved value;
+                        // first launch uses 48dp (28 July 2026 center icon, no count).
+                        Integer footerWhatsappDp =
+                                startActivityReqModel.getData().getFooterWhatsappIconSizeDp();
+                        if (footerWhatsappDp != null) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.FOOTER_WHATSAPP_ICON_SIZE_DP,
+                                    com.anyNews.anynews.Utils.FooterStyleHelper
+                                            .clampFooterWhatsappIconDp(footerWhatsappDp),
+                                    Constants.PREF_NAME
+                            );
+                        } else if (!getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE)
+                                .contains(Constants.FOOTER_WHATSAPP_ICON_SIZE_DP)) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.FOOTER_WHATSAPP_ICON_SIZE_DP,
+                                    com.anyNews.anynews.Utils.FooterStyleHelper
+                                            .FOOTER_WHATSAPP_ICON_DEFAULT_DP,
+                                    Constants.PREF_NAME
+                            );
+                        }
+                        if (startActivityReqModel.getData().getActionRowWhatsappEnabled() != null) {
+                            SharedPrefsData.putBool(
+                                    getApplicationContext(),
+                                    Constants.ACTION_ROW_WHATSAPP_ENABLED,
+                                    startActivityReqModel.getData().getActionRowWhatsappEnabled(),
+                                    Constants.PREF_NAME
+                            );
+                        }
+
                         com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getSearchIconOnEngagement(),

@@ -346,6 +346,61 @@ public final class FooterStyleHelper {
         }
     }
 
+    /**
+     * Footer WhatsApp in place of the center + (28 July 2026: 48dp,
+     * {@code ic_whatsapp_home}, no tint, no count). Does not change footer
+     * bar height or the magazine Share icon.
+     */
+    public static final int FOOTER_WHATSAPP_ICON_DEFAULT_DP = 48;
+    public static final int FOOTER_WHATSAPP_ICON_MIN_DP = 24;
+    public static final int FOOTER_WHATSAPP_ICON_MAX_DP = 48;
+
+    public static int clampFooterWhatsappIconDp(int dp) {
+        if (dp < FOOTER_WHATSAPP_ICON_MIN_DP) return FOOTER_WHATSAPP_ICON_MIN_DP;
+        if (dp > FOOTER_WHATSAPP_ICON_MAX_DP) return FOOTER_WHATSAPP_ICON_MAX_DP;
+        return dp;
+    }
+
+    public static int readFooterWhatsappIconDp(Context context) {
+        if (context == null) {
+            return FOOTER_WHATSAPP_ICON_DEFAULT_DP;
+        }
+        try {
+            android.content.SharedPreferences sp = context.getSharedPreferences(
+                    Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (!sp.contains(Constants.FOOTER_WHATSAPP_ICON_SIZE_DP)) {
+                return FOOTER_WHATSAPP_ICON_DEFAULT_DP;
+            }
+            int stored = sp.getInt(
+                    Constants.FOOTER_WHATSAPP_ICON_SIZE_DP, FOOTER_WHATSAPP_ICON_DEFAULT_DP);
+            if (stored <= 0) {
+                return FOOTER_WHATSAPP_ICON_DEFAULT_DP;
+            }
+            return clampFooterWhatsappIconDp(stored);
+        } catch (Exception e) {
+            return FOOTER_WHATSAPP_ICON_DEFAULT_DP;
+        }
+    }
+
+    /** Sizes only the footer WhatsApp ImageView. Bar height stays with magazine Share. */
+    public static void applyFooterWhatsappIcon(Context context, android.widget.ImageView icon) {
+        if (context == null || icon == null) {
+            return;
+        }
+        try {
+            float density = context.getResources().getDisplayMetrics().density;
+            int px = Math.round(readFooterWhatsappIconDp(context) * density);
+            ViewGroup.LayoutParams lp = icon.getLayoutParams();
+            if (lp != null && (lp.width != px || lp.height != px)) {
+                lp.width = px;
+                lp.height = px;
+                icon.setLayoutParams(lp);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "footer whatsapp size failed", e);
+        }
+    }
+
     private static void setViewHeightPx(View view, int heightPx) {
         if (view == null || heightPx <= 0) {
             return;

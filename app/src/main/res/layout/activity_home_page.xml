@@ -642,47 +642,8 @@
                             android:textColor="@color/selector_item_primary_color" />
                     </LinearLayout>
 
-                    <!-- Non-magazine articles: WhatsApp between Special and Daily Updates.
-                         No blink. Count matches the full-post WhatsApp total. -->
-                    <LinearLayout
-                        android:id="@+id/layoutFooterWhatsapp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="52dp"
-                        android:layout_gravity="center"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:clickable="true"
-                        android:elevation="12dp"
-                        android:focusable="true"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:paddingTop="2dp"
-                        android:paddingBottom="2dp"
-                        android:visibility="gone"
-                        app:layout_anchor="@+id/nav_view"
-                        app:layout_anchorGravity="center">
-
-                        <ImageView
-                            android:id="@+id/ivFooterWhatsapp"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
-                            android:contentDescription="WhatsApp"
-                            android:scaleType="fitCenter"
-                            android:src="@drawable/ic_whatsapp_home" />
-
-                        <TextView
-                            android:id="@+id/tvFooterWhatsappCount"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="1dp"
-                            android:ellipsize="end"
-                            android:includeFontPadding="false"
-                            android:maxLines="1"
-                            android:textColor="@color/selector_item_primary_color"
-                            android:textSize="10sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <!-- Product: center + overlay stays off. Article WhatsApp uses layoutFooterWhatsapp. -->
+                    <!-- Center + returns when reporter login is ON. When it is OFF,
+                         imageVIewShareWhatsapp (icon only, no count) sits in this slot. -->
                     <com.google.android.material.floatingactionbutton.FloatingActionButton
                         android:id="@+id/fab"
                         android:layout_width="wrap_content"

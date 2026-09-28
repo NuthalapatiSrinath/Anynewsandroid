@@ -557,6 +557,18 @@ public class Constants {
      * Not the article action-row share icon. Missing pref uses 32.
      */
     public static String MAGAZINE_SHARE_ICON_SIZE_DP = "magazine_share_icon_size_dp";
+    /**
+     * Footer WhatsApp glyph between Special and Daily Updates (dp).
+     * Splash + feed poll. Missing pref uses 48 (28 July 2026 center icon).
+     * Not the likes-row WhatsApp.
+     */
+    public static String FOOTER_WHATSAPP_ICON_SIZE_DP = "footer_whatsapp_icon_size_dp";
+    /**
+     * Likes / comments / share row WhatsApp, icon and count together.
+     * Also the full-image / full-video right-side WhatsApp. Default ON.
+     * Not the footer icon.
+     */
+    public static String ACTION_ROW_WHATSAPP_ENABLED = "action_row_whatsapp_enabled";
     // Home bottom-nav slot visibility (admin Root_Settings; defaults true except categories).
     public static String FOOTER_SHOW_RELOAD = "footer_show_reload";
     public static String FOOTER_SHOW_SPECIAL = "footer_show_special";

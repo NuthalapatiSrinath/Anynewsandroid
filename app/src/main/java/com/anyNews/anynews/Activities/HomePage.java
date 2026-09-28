@@ -368,10 +368,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private View layoutMagazineShareFooter;
     private ImageView ivMagazineShareFooter;
     private TextView tvMagazineShareFooter;
-    /** Middle footer WhatsApp for every non-magazine article. Does not blink. */
-    private View layoutFooterWhatsapp;
-    private ImageView ivFooterWhatsapp;
-    private TextView tvFooterWhatsappCount;
+    /** Guards footer rebalance so center + / WhatsApp updates cannot recurse. */
+    private int footerRebalanceDepth;
     // Admin-controlled bottom-footer cricket tab (APK 3.40.79+). Shown only when
     // the admin enables it AND there is an active match; hidden otherwise so the
     // footer is exactly as before. Opens the same Match Center as the mini player.
@@ -1241,16 +1239,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         layoutMagazineShareFooter = findViewById(R.id.layoutMagazineShareFooter);
         ivMagazineShareFooter = findViewById(R.id.ivMagazineShareFooter);
         tvMagazineShareFooter = findViewById(R.id.tvMagazineShareFooter);
-        layoutFooterWhatsapp = findViewById(R.id.layoutFooterWhatsapp);
-        ivFooterWhatsapp = findViewById(R.id.ivFooterWhatsapp);
-        tvFooterWhatsappCount = findViewById(R.id.tvFooterWhatsappCount);
         FooterStyleHelper.applyMagazineShareChrome(
                 this,
                 home_page_navigation,
                 findViewById(R.id.nav_view),
                 layoutMagazineShareFooter,
                 ivMagazineShareFooter);
-        syncFooterWhatsappColumnHeight();
         // Product: never flash center + / WhatsApp before footer rebalance / API.
         hideCenterPlusOverlays();
 
@@ -8476,6 +8470,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         hideMagazineShareFooter();
+        if (showReporterLogin && isDeviceOnline()) {
+            applyReporterPlusFab();
+            Log.i(MAGAZINE_GLOW_TAG, "MODE=PLUS showReporterLogin=true");
+            showLog("updateCenterFab reporter plus");
+            ensureMagazineShareFooterSlot();
+            return;
+        }
         hideCenterPlusOverlays();
         if (shouldShowFooterWhatsapp()) {
             applyFooterWhatsapp();
@@ -8855,98 +8856,138 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private boolean isFooterWhatsappShowing() {
-        return layoutFooterWhatsapp != null
-                && layoutFooterWhatsapp.getVisibility() == View.VISIBLE;
+        return imageVIewShareWhatsapp != null
+                && imageVIewShareWhatsapp.getVisibility() == View.VISIBLE;
     }
 
-    /** Middle column is open for Share or WhatsApp, and Panchangam is not using it. */
+    private boolean isReporterPlusShowing() {
+        return floatingActionButtonHome != null
+                && floatingActionButtonHome.getVisibility() == View.VISIBLE;
+    }
+
+    /**
+     * Middle column should be open for Share, the reporter +, or the footer
+     * WhatsApp. Based on the post and reporter-login flag, not view visibility.
+     */
+    private boolean wantsCenterFooterActionSlot() {
+        if (!isDeviceOnline() || isFooterCalendarTabWanted()) {
+            return false;
+        }
+        if (visibleFlipIsInviteOrAdShell()) {
+            return false;
+        }
+        if (shouldShowMagazineFooterShare()) {
+            return true;
+        }
+        if (showReporterLogin) {
+            return true;
+        }
+        return shouldShowFooterWhatsapp();
+    }
+
+    /** Middle column is open for Share, +, or WhatsApp, and Panchangam is not using it. */
     private boolean isCenterFooterActionSlotOpen() {
         return !isFooterCalendarTabWanted()
-                && (isMagazineShareFooterShowing() || isFooterWhatsappShowing());
+                && (isMagazineShareFooterShowing() || isFooterWhatsappShowing()
+                || isReporterPlusShowing());
     }
 
+    /**
+     * July 28 footer WhatsApp: ic_whatsapp_home, no tint, no count,
+     * admin size (default 48dp), in the slot the plus uses.
+     */
     private void applyFooterWhatsapp() {
-        if (layoutFooterWhatsapp == null) {
+        if (imageVIewShareWhatsapp == null) {
             return;
         }
-        if (ivFooterWhatsapp != null) {
-            ivFooterWhatsapp.clearAnimation();
-            ivFooterWhatsapp.setAlpha(1f);
-            ivFooterWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
-            ivFooterWhatsapp.clearColorFilter();
-        }
-        layoutFooterWhatsapp.clearAnimation();
-        layoutFooterWhatsapp.setAlpha(1f);
-        layoutFooterWhatsapp.setVisibility(View.VISIBLE);
-        layoutFooterWhatsapp.setEnabled(true);
-        layoutFooterWhatsapp.setClickable(true);
-        layoutFooterWhatsapp.setOnClickListener(v -> {
-            int visibleIdx = getVisiblePostIndex();
-            onArticleWhatsappClicked(visibleIdx);
-        });
-        bindFooterWhatsappCountFromVisiblePost();
-        syncFooterWhatsappColumnHeight();
-        layoutFooterWhatsapp.bringToFront();
+        imageVIewShareWhatsapp.clearAnimation();
+        imageVIewShareWhatsapp.setScaleX(1f);
+        imageVIewShareWhatsapp.setScaleY(1f);
+        imageVIewShareWhatsapp.setAlpha(1f);
+        imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
+        imageVIewShareWhatsapp.clearColorFilter();
+        FooterStyleHelper.applyFooterWhatsappIcon(this, imageVIewShareWhatsapp);
+        imageVIewShareWhatsapp.setVisibility(View.VISIBLE);
+        imageVIewShareWhatsapp.setEnabled(true);
+        imageVIewShareWhatsapp.setClickable(true);
+        imageVIewShareWhatsapp.setOnClickListener(v ->
+                onArticleWhatsappClicked(getVisiblePostIndex()));
+        imageVIewShareWhatsapp.bringToFront();
         if (home_page_navigation != null) {
-            home_page_navigation.bringChildToFront(layoutFooterWhatsapp);
+            home_page_navigation.bringChildToFront(imageVIewShareWhatsapp);
         }
         ensureMagazineShareFooterSlot();
     }
 
     private void hideFooterWhatsapp() {
-        if (layoutFooterWhatsapp == null) {
+        if (imageVIewShareWhatsapp == null) {
             return;
         }
-        layoutFooterWhatsapp.setOnClickListener(null);
-        layoutFooterWhatsapp.setClickable(false);
-        layoutFooterWhatsapp.clearAnimation();
-        layoutFooterWhatsapp.setAlpha(1f);
-        layoutFooterWhatsapp.setVisibility(View.GONE);
-        layoutFooterWhatsapp.setTranslationX(0f);
-        ViewGroup.LayoutParams lp = layoutFooterWhatsapp.getLayoutParams();
-        if (lp != null && lp.width != ViewGroup.LayoutParams.WRAP_CONTENT) {
-            lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
-            layoutFooterWhatsapp.setLayoutParams(lp);
-        }
+        imageVIewShareWhatsapp.setOnClickListener(null);
+        imageVIewShareWhatsapp.setClickable(false);
+        imageVIewShareWhatsapp.clearAnimation();
+        imageVIewShareWhatsapp.setAlpha(1f);
+        imageVIewShareWhatsapp.setScaleX(1f);
+        imageVIewShareWhatsapp.setScaleY(1f);
+        imageVIewShareWhatsapp.setVisibility(View.GONE);
+        imageVIewShareWhatsapp.setTranslationX(0f);
     }
 
-    private void syncFooterWhatsappColumnHeight() {
-        if (layoutFooterWhatsapp == null || bottomNavigationView == null) {
+    /**
+     * Reporter login ON: the old center "+" in the middle footer slot.
+     * Icon-only WhatsApp stays hidden. Magazines never call this.
+     */
+    private void applyReporterPlusFab() {
+        hideFooterWhatsapp();
+        if (floatingActionButtonHome == null) {
             return;
         }
-        ViewGroup.LayoutParams navLp = bottomNavigationView.getLayoutParams();
-        if (navLp == null || navLp.height <= 0) {
-            return;
+        floatingActionButtonHome.clearAnimation();
+        floatingActionButtonHome.setScaleX(1f);
+        floatingActionButtonHome.setScaleY(1f);
+        floatingActionButtonHome.setAlpha(1f);
+        floatingActionButtonHome.setBackgroundTintList(
+                ContextCompat.getColorStateList(this, R.color.bottom_navigation_view_color));
+        floatingActionButtonHome.setRippleColor(
+                ContextCompat.getColorStateList(this, R.color.bottom_navigation_view_color));
+        if (!isCenterPlusMenuOpen()) {
+            floatingActionButtonHome.setRotation(0f);
+            floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
         }
-        ViewGroup.LayoutParams lp = layoutFooterWhatsapp.getLayoutParams();
-        if (lp != null && lp.height != navLp.height) {
-            lp.height = navLp.height;
-            layoutFooterWhatsapp.setLayoutParams(lp);
-        }
-    }
-
-    private void bindFooterWhatsappCountFromVisiblePost() {
-        int count = 0;
+        floatingActionButtonHome.setContentDescription(getString(R.string.post_selection));
+        floatingActionButtonHome.setEnabled(true);
+        floatingActionButtonHome.setClickable(true);
+        floatingActionButtonHome.setFocusable(true);
+        floatingActionButtonHome.setOnClickListener(v -> onReporterPlusFooterClicked());
+        floatingActionButtonHome.setVisibility(View.VISIBLE);
         try {
-            int idx = getVisiblePostIndex();
-            if (list != null && idx >= 0 && idx < list.size() && list.get(idx) != null
-                    && list.get(idx).getWhatsappShares() != null) {
-                count = list.get(idx).getWhatsappShares();
-            }
+            floatingActionButtonHome.show();
         } catch (Exception ignored) {
         }
-        bindFooterWhatsappCount(count);
+        FooterStyleHelper.applyFab(this, floatingActionButtonHome);
     }
 
-    private void bindFooterWhatsappCount(int count) {
-        if (tvFooterWhatsappCount == null) {
-            return;
+    /** Logged-in reporters open the create menu; everyone else opens login. */
+    private void onReporterPlusFooterClicked() {
+        try {
+            if (isCenterPlusMenuOpen()) {
+                closeCenterPlusMenu(true);
+                return;
+            }
+            boolean isLogin = SharedPrefsData.getBool(
+                    this, Constants.is_login, Constants.PREF_NAME);
+            if (isLogin) {
+                openCenterPlusMenu();
+            } else {
+                Intent intent = new Intent(HomePage.this, LoginActivityDetails.class);
+                if (getApplicationContext() != null
+                        && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                    startActivity(intent);
+                }
+            }
+        } catch (Exception e) {
+            showLog("onReporterPlusFooterClicked: " + e.getMessage());
         }
-        if (count < 0) {
-            count = 0;
-        }
-        tvFooterWhatsappCount.setText(FlipperAdapter.formatEngagementCount(count));
-        tvFooterWhatsappCount.setVisibility(View.VISIBLE);
     }
 
     /**
@@ -8967,21 +9008,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** In-place footer count after the existing WhatsApp share increment. */
+    /** Footer WhatsApp is icon-only. Row count still updates on the card. */
     public void onWhatsappShareCountUpdated(long postId, int count) {
-        if (!isFooterWhatsappShowing()) {
-            return;
-        }
-        try {
-            int idx = getVisiblePostIndex();
-            if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null
-                    || list.get(idx).getPostId() == null
-                    || list.get(idx).getPostId().longValue() != postId) {
-                return;
-            }
-            bindFooterWhatsappCount(count);
-        } catch (Exception ignored) {
-        }
     }
 
     /** Panchangam footer tab is product-off; the same menu id is the share column. */
@@ -9016,7 +9044,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         boolean calendar = isFooterCalendarTabWanted();
-        boolean wantSpacer = isCenterFooterActionSlotOpen();
+        boolean wantSpacer = wantsCenterFooterActionSlot();
         MenuItem slot = bottomNavigationView.getMenu().findItem(R.id.navigation_stricker);
         boolean spacerOpen = slot != null && slot.isVisible() && !calendar;
         if (wantSpacer == spacerOpen) {
@@ -9027,12 +9055,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             repositionCenterFabForVisibleTabs();
             return;
         }
+        if (footerRebalanceDepth > 0) {
+            return;
+        }
         rebalanceFooterTabs();
     }
 
     /** Hide the spacer item's own icon and label; the Share overlay is the control. */
     private void hideShareCenterSlotChrome() {
-        if (!isCenterFooterActionSlotOpen()) {
+        if (!wantsCenterFooterActionSlot() && !isCenterFooterActionSlotOpen()) {
             return;
         }
         View item = findFooterMenuItemView(R.id.navigation_stricker);
@@ -11563,9 +11594,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             // Middle column: real Panchangam tab, or an empty slot under blinking Share.
             // Never paint Share on the Special item.
             MenuItem centerSlot = menu.findItem(R.id.navigation_stricker);
-            boolean shareSlot = isCenterFooterActionSlotOpen() && !showCalendar;
+            boolean shareSlot = wantsCenterFooterActionSlot() && !showCalendar;
             if (!online) {
                 hideFooterWhatsapp();
+                hideCenterPlusOverlays();
                 shareSlot = false;
             }
             if (shareSlot) {
@@ -11573,8 +11605,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } else {
                 setFooterMenuItemVisible(centerSlot, showCalendar);
             }
-            // Create-post FAB overlays stay permanently off (Profile desk owns posting).
-            hideCenterPlusOverlays();
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_status), showVideos);
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_profile), showProfile);
 
@@ -11818,9 +11848,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * +/Share/WA overlays onto the FAB menu slot.
      */
     private void rebalanceFooterTabs() {
-        if (bottomNavigationView == null) {
+        if (bottomNavigationView == null || footerRebalanceDepth > 0) {
             return;
         }
+        footerRebalanceDepth++;
         try {
             applyFooterSlotVisibility();
             View menuChild = bottomNavigationView.getChildAt(0);
@@ -11874,16 +11905,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     bottomNavigationView,
                     layoutMagazineShareFooter,
                     ivMagazineShareFooter);
-            syncFooterWhatsappColumnHeight();
             // Weights / visibility changes rebuild item views — re-pin Special + Profile glyphs
             // only when their slots are allowed (never while offline).
             ensureSpecialMenuIconAlwaysVisible();
-            // Reposition after weights measure; size FAB from admin toggle as well.
-            if (ProfileHubConfigHelper.isFooterShowPlus(this) && isDeviceOnline()) {
-                FooterStyleHelper.applyFab(HomePage.this, floatingActionButtonHome);
-            } else {
-                hideCenterPlusOverlays();
-            }
+            updateCenterFab();
             hideShareCenterSlotChrome();
             bottomNavigationView.post(this::repositionCenterFabForVisibleTabs);
             bottomNavigationView.postDelayed(this::repositionCenterFabForVisibleTabs, 80);
@@ -11910,6 +11935,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception e) {
             showLog("rebalanceFooterTabs: " + e.getMessage());
+        } finally {
+            footerRebalanceDepth--;
         }
     }
 
@@ -11951,17 +11978,37 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         float dx = overlayDxForSlot(fabSlot);
+        if (isReporterPlusShowing()) {
+            View plusSlot = findFooterMenuItemView(R.id.navigation_stricker);
+            if (plusSlot != null && plusSlot.getVisibility() == View.VISIBLE && plusSlot.getWidth() > 0) {
+                dx = overlayDxForSlot(plusSlot);
+            }
+        }
         if (floatingActionButtonHome != null) {
             floatingActionButtonHome.setTranslationX(dx);
         }
-        if (imageVIewShareWhatsapp != null) {
-            imageVIewShareWhatsapp.setTranslationX(dx);
-        }
+        positionFooterWhatsappIcon();
         positionFooterActionOverlay(layoutMagazineShareFooter, isMagazineShareFooterShowing());
-        positionFooterActionOverlay(layoutFooterWhatsapp, isFooterWhatsappShowing());
-        if (isCenterFooterActionSlotOpen()) {
+        if (isCenterFooterActionSlotOpen() || wantsCenterFooterActionSlot()) {
             hideShareCenterSlotChrome();
         }
+    }
+
+    /** July WhatsApp stays a square. Only its center moves onto the middle slot. */
+    private void positionFooterWhatsappIcon() {
+        if (imageVIewShareWhatsapp == null) {
+            return;
+        }
+        if (!isFooterWhatsappShowing()) {
+            imageVIewShareWhatsapp.setTranslationX(0f);
+            return;
+        }
+        View shareSlot = findFooterMenuItemView(R.id.navigation_stricker);
+        float dx = 0f;
+        if (shareSlot != null && shareSlot.getVisibility() == View.VISIBLE && shareSlot.getWidth() > 0) {
+            dx = overlayDxForSlot(shareSlot);
+        }
+        imageVIewShareWhatsapp.setTranslationX(dx);
     }
 
     /** Place Share or WhatsApp on the middle column. A missing slot stays at bar center. */
@@ -17038,6 +17085,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     );
                     applyFullSideActionGapConfig(encreptionRequest.getFull_side_action_gap_dp());
                     applyMagazineShareIconConfig(encreptionRequest.getMagazine_share_icon_size_dp());
+                    applyFooterWhatsappIconConfig(encreptionRequest.getFooter_whatsapp_icon_size_dp());
+                    applyActionRowWhatsappConfig(encreptionRequest.getAction_row_whatsapp_enabled());
                     applySearchIconConfig(
                             encreptionRequest.getSearch_icon_on_engagement(),
                             encreptionRequest.getSearch_icon_on_toggle(),
@@ -18746,10 +18795,67 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     bottomNavigationView,
                     layoutMagazineShareFooter,
                     ivMagazineShareFooter);
-            syncFooterWhatsappColumnHeight();
         } catch (Exception ignored) {
         }
     }
+
+    /** Footer WhatsApp glyph size. Missing field keeps a saved value; default 48dp. */
+    private void applyFooterWhatsappIconConfig(Integer footerWhatsappDp) {
+        try {
+            if (footerWhatsappDp != null) {
+                int clamped = FooterStyleHelper.clampFooterWhatsappIconDp(footerWhatsappDp);
+                android.content.SharedPreferences sp =
+                        getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+                int prev = sp.getInt(
+                        Constants.FOOTER_WHATSAPP_ICON_SIZE_DP,
+                        FooterStyleHelper.FOOTER_WHATSAPP_ICON_DEFAULT_DP);
+                if (!sp.contains(Constants.FOOTER_WHATSAPP_ICON_SIZE_DP) || prev != clamped) {
+                    SharedPrefsData.putInt(
+                            HomePage.this,
+                            Constants.FOOTER_WHATSAPP_ICON_SIZE_DP,
+                            clamped,
+                            Constants.PREF_NAME);
+                }
+            }
+            if (isFooterWhatsappShowing()) {
+                FooterStyleHelper.applyFooterWhatsappIcon(this, imageVIewShareWhatsapp);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Likes-row and full-post right-side WhatsApp (icon and count together).
+     * Null leaves the saved value. Default ON. Does not hide the footer icon.
+     */
+    private void applyActionRowWhatsappConfig(Boolean enabled) {
+        try {
+            if (enabled == null) {
+                return;
+            }
+            boolean prev = FlipperAdapter.isActionRowWhatsappEnabled(this);
+            if (prev == enabled) {
+                return;
+            }
+            SharedPrefsData.putBool(
+                    HomePage.this,
+                    Constants.ACTION_ROW_WHATSAPP_ENABLED,
+                    enabled,
+                    Constants.PREF_NAME);
+            if (mFlipView != null) {
+                final FlipView flipView = mFlipView;
+                flipView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        FlipperAdapter.applyActionRowWhatsappVisibility(HomePage.this, flipView);
+                        FlipperAdapter.applyFullSideActionGap(HomePage.this, flipView);
+                    }
+                });
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
 
     /** Admin search icon placement — null fields leave prefs (no wipe). */
     private void applySearchIconConfig(
@@ -20733,9 +20839,20 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     performDailyUpdatesOpen();
                     return true;
                 case R.id.navigation_stricker:
-                    // Middle column is Share or WhatsApp, not a destination tab.
-                    // Panchangam stays product-off; this id only opens calendar if that flag is on.
-                    if (isFooterWhatsappShowing() && !isFooterCalendarTabWanted()) {
+                    // Middle column is Share, reporter +, or icon-only WhatsApp.
+                    if (isFooterCalendarTabWanted()) {
+                        closeCenterPlusMenu(true);
+                        performCalendarOpen(false);
+                        return true;
+                    }
+                    if (isMagazineShareFooterShowing()) {
+                        return false;
+                    }
+                    if (showReporterLogin && isReporterPlusShowing()) {
+                        onReporterPlusFooterClicked();
+                        return false;
+                    }
+                    if (isFooterWhatsappShowing()) {
                         onArticleWhatsappClicked(getVisiblePostIndex());
                         return false;
                     }

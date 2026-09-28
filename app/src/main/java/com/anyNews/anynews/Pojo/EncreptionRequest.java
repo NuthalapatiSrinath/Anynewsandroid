@@ -409,6 +409,19 @@ public class EncreptionRequest {
     @Expose
     private Integer magazine_share_icon_size_dp;
 
+    /** Footer WhatsApp glyph dp. Null when the poll omits the field. */
+    @SerializedName("footer_whatsapp_icon_size_dp")
+    @Expose
+    private Integer footer_whatsapp_icon_size_dp;
+
+    /**
+     * Likes-row WhatsApp icon and count. Null when the poll omits the field.
+     * Not the footer icon.
+     */
+    @SerializedName("action_row_whatsapp_enabled")
+    @Expose
+    private Boolean action_row_whatsapp_enabled;
+
     @SerializedName("like_circle_size_dp")
     @Expose
     private Integer like_circle_size_dp;
@@ -825,6 +838,14 @@ public class EncreptionRequest {
 
     public Integer getMagazine_share_icon_size_dp() {
         return magazine_share_icon_size_dp;
+    }
+
+    public Integer getFooter_whatsapp_icon_size_dp() {
+        return footer_whatsapp_icon_size_dp;
+    }
+
+    public Boolean getAction_row_whatsapp_enabled() {
+        return action_row_whatsapp_enabled;
     }
 
     public void setMagazine_share_icon_size_dp(Integer magazine_share_icon_size_dp) {
