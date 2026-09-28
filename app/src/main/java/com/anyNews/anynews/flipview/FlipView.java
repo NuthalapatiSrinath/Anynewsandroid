@@ -2394,6 +2394,42 @@ public class FlipView extends FrameLayout {
                 || view instanceof androidx.core.widget.NestedScrollView;
     }
 
+    /**
+     * Seat {@code page} and rebuild its view even when FlipView is already there.
+     * {@link #flipTo(int)} no-ops the rebind when the index is unchanged, which
+     * left a house-ad invite card on screen after a share pin moved a magazine
+     * into that same index.
+     */
+    public void rebindSettledPage(int page) {
+        if (mAdapter == null || mPageCount < 1) {
+            return;
+        }
+        int safe = Math.max(0, Math.min(page, mPageCount - 1));
+        try {
+            endFlip();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (mPeakAnim != null) {
+                mPeakAnim.cancel();
+                mPeakAnim = null;
+            }
+        } catch (Exception ignored) {
+        }
+        mBindGeneration++;
+        try {
+            if (mRecycler != null) {
+                mRecycler.invalidateScraps();
+            }
+        } catch (Exception ignored) {
+        }
+        // Force the inequality path as well as forceRebind so a same-index
+        // house-ad scrap cannot stay up as the current page.
+        mCurrentPageIndex = INVALID_PAGE_POSITION;
+        setFlipDistance(safe * (float) FLIP_DISTANCE_PER_PAGE, true);
+        commitExplicitPage(safe);
+    }
+
     public void flipTo(int page) {
         // Keyword search clears FlipView to 0 pages then seats hits — never crash
         // with IllegalArgumentException when notify is still catching up.

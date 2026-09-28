@@ -788,6 +788,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private int pendingShareGalleryPage = -1;
     /** Latest bind/jump wins; earlier settle runnables must not clear the page. */
     private int shareGalleryApplyGen = 0;
+    /** Caps invite-shell repair so a stuck ad view cannot rebind forever. */
+    private int shareInviteRepairAttempts = 0;
     /**
      * One extra page-0 after a sticky share miss — List_All_Articles with
      * {@code share_post_id} re-fetches the post by id when the first page did not
@@ -2117,7 +2119,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         SHARE_REDIRECT_ID = String.valueOf(shareId);
         SHARE_ID = shareId;
         deepLinkShareRescueAttempted = false;
+        shareInviteRepairAttempts = 0;
         capturePendingShareGalleryPage(intent, shareId);
+        // Drop an in-flight plain page-0 (background "first article" refresh)
+        // so it cannot replace this share target after we seat it.
+        feedModeEpoch++;
         showLog("share onNewIntent SHARE_ID=" + SHARE_ID);
         try {
             intent.removeExtra("SHARE_REDIRECT_ID");
@@ -2136,7 +2142,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         try {
-            if (findListIndexForPostId(shareId) >= 0) {
+            if (indexOfRealDeepLinkTarget(list, shareId) >= 0) {
                 maybeLandDeepLinkPostOnNews(false);
             } else if (!scheduleDeepLinkShareRescue(shareId)) {
                 // Force a page-0 refresh with share sticky so List_All_Articles pins it.
@@ -2152,9 +2158,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             showLog("share onNewIntent land failed: " + e.getMessage());
             android.util.Log.e("MagazineCrash", "share onNewIntent: " + e.getMessage());
         }
-        // Already reading this magazine: flipTo the same card does not rebind
-        // the nested pager, so move that slide here too.
-        jumpVisibleShareGalleryPage(shareId);
     }
 
     /** Enter FlipView keyword / single-article search mode from {@link InAppSearchActivity}. */
@@ -8296,6 +8299,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Otherwise keep reporter "+" / WhatsApp overlays hidden (product: plus slot off).
      */
     private void updateCenterFab() {
+        if (visibleFlipIsInviteOrAdShell()) {
+            hideMagazineShareFooter();
+            hideCenterPlusOverlays();
+            repairVisibleShareTargetIfInviteShell();
+            showLog("updateCenterFab hide share footer (invite/ad shell visible)");
+            return;
+        }
         boolean showShare = shouldShowMagazineFooterShare();
         int idx = getVisiblePostIndex();
         String type = "";
@@ -8322,17 +8332,85 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Footer blinking Share: true magazines / Magazines-cat specials, plus
-     * Special-tab image_gallery / magazine pages (same set that used to show
-     * the floating on-post blue Share).
+     * The drawn flip child is the "Share AnyNews with your friends" invite
+     * (unfilled ad placeholder or {@code share_app}), not a magazine pager.
+     * List index can still say magazine after a pin that did not rebind.
      */
+    private boolean visibleFlipIsInviteOrAdShell() {
+        try {
+            if (mFlipView == null) {
+                return false;
+            }
+            View page = mFlipView.getCurrentPageView();
+            if (page == null) {
+                return false;
+            }
+            if (page.findViewById(R.id.ad_default_placeholder_root) != null) {
+                return true;
+            }
+            if (page.findViewById(R.id.fl_adplaceholder) != null
+                    && page.findViewById(R.id.magzine_viewPager_data) == null
+                    && page.findViewById(R.id.viewpager) == null) {
+                return true;
+            }
+            return page.findViewById(R.id.imageViewWhatsapp) != null
+                    && page.findViewById(R.id.magzine_viewPager_data) == null
+                    && page.findViewById(R.id.viewpager) == null
+                    && page.findViewById(R.id.gallery_horizontal_flip) == null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** One-shot: invite shell is showing but a share/push target is in the list. */
+    private void repairVisibleShareTargetIfInviteShell() {
+        if (shareInviteRepairAttempts >= 2) {
+            return;
+        }
+        if (resolvePendingDeepLinkPostId() <= 0 || list == null || mFlipView == null) {
+            return;
+        }
+        if (indexOfRealDeepLinkTarget(list, resolvePendingDeepLinkPostId()) < 0) {
+            return;
+        }
+        shareInviteRepairAttempts++;
+        final int attempt = shareInviteRepairAttempts;
+        mFlipView.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (resolvePendingDeepLinkPostId() <= 0) {
+                        return;
+                    }
+                    showLog("share invite-shell repair attempt=" + attempt);
+                    pinDeepLinkTargetToFront(list);
+                    if (mFlipView != null) {
+                        mFlipView.beginForcedPage0Seat();
+                    }
+                    if (adapter != null) {
+                        adapter.notifyWhenFlipSettled();
+                    }
+                    flipToDeepLinkPage(0, true);
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
     private boolean shouldShowMagazineFooterShare() {
         try {
+            if (visibleFlipIsInviteOrAdShell()) {
+                return false;
+            }
             int idx = getVisiblePostIndex();
             if (list == null || idx < 0 || idx >= list.size()) {
                 return false;
             }
             ModelClass.Datum item = list.get(idx);
+            if (item != null && (ReadArticleStore.isSyntheticFeedSlot(item)
+                    || ReadArticleStore.isShareFeedSlot(item))) {
+                return false;
+            }
             if (usesMagazineGlowShare(item, idx)) {
                 return true;
             }
@@ -16989,10 +17067,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             } else if (!fromCache && listSizeBeforeAppend > 0 && listSizeBeforeAppend < list.size()) {
                                 adapter.appendData(list, listSizeBeforeAppend);
                             } else {
+                                // Share/push must be the card that binds, not the ad
+                                // that rebalance left in front of it, and not the
+                                // article FlipView would restore from last session.
+                                if (page0Replace && resolvePendingDeepLinkPostId() > 0) {
+                                    pinDeepLinkTargetToFront(list);
+                                    clearPendingFlipRestore();
+                                    if (mFlipView != null) {
+                                        mFlipView.beginForcedPage0Seat();
+                                    }
+                                }
                                 adapter.setData(list);
                             }
-                            if (!fromCache && !searchFeedActive) {
+                            if (!fromCache && !searchFeedActive
+                                    && resolvePendingDeepLinkPostId() <= 0) {
                                 maybeRestoreFlipPositionAfterArticlesLoad();
+                            } else if (resolvePendingDeepLinkPostId() > 0) {
+                                clearPendingFlipRestore();
                             }
                             // Always show flip when list has paintables — never empty white forever.
                             if (list != null && !list.isEmpty()) {
@@ -17013,7 +17104,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             // Don't leave first seat on an empty ad spinner when real cards exist.
                             // Search has no ad seats — skip (would race hub seating).
                             try {
-                                if (!searchFeedActive) {
+                                // A pending share/push must not be "seated away" onto
+                                // the invite card or a neighboring article.
+                                if (!searchFeedActive && resolvePendingDeepLinkPostId() <= 0) {
                                     seatAwayFromUnfilledAdIfNeeded();
                                 }
                             } catch (Exception ignored) {
@@ -19077,10 +19170,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (!fromProcessBackground) {
             return false;
         }
-        if (incomingIntent || recentShareSheet || expectNotifSettingsOrPermReturn) {
+        if (incomingIntent || recentShareSheet || expectNotifSettingsOrPermReturn
+                || resolvePendingDeepLinkPostId() > 0) {
             showLog("background resume skip feed refresh intent=" + incomingIntent
                     + " shareSheet=" + recentShareSheet
-                    + " notifSettings=" + expectNotifSettingsOrPermReturn);
+                    + " notifSettings=" + expectNotifSettingsOrPermReturn
+                    + " sticky=" + resolvePendingDeepLinkPostId());
             return false;
         }
         if (pendingNightModeRecreate || isNightUiOutOfSync()) {
@@ -20124,7 +20219,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         long targetId = resolvePendingDeepLinkPostId();
         if (targetId <= 0) return;
-        int idx = findListIndexForPostId(targetId);
+        // Real post only — never treat an ad / share_app shell that shares a
+        // synthetic id as the magazine. One copy, at index 0, ads stay behind it.
+        boolean reordered = pinDeepLinkTargetToFront(list);
+        int idx = indexOfRealDeepLinkTarget(list, targetId);
         if (idx < 0) {
             if (!fromCache && scheduleDeepLinkShareRescue(targetId)) {
                 return;
@@ -20132,22 +20230,18 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             if (!fromCache) {
                 showLog("deep-link News land: postId=" + targetId + " not in list after network");
                 // Avoid sticky force-network loops if server never pins the post.
+                releaseSharePage0Lock();
                 consumeDeepLinkStickyIds();
             }
             return;
         }
-        // Prefer shared/push card as the current (first) flip item when it arrived mid-list.
-        if (idx > 0) {
-            try {
-                ModelClass.Datum pinned = list.remove(idx);
-                list.add(0, pinned);
-                idx = 0;
-                if (adapter != null) {
-                    adapter.notifyWhenFlipSettled();
-                }
-                showLog("deep-link moved sticky post to index 0 postId=" + targetId);
-            } catch (Exception e) {
-                showLog("deep-link reorder sticky failed: " + e.getMessage());
+        if (reordered) {
+            showLog("deep-link moved sticky post to index 0 postId=" + targetId);
+            if (mFlipView != null) {
+                mFlipView.beginForcedPage0Seat();
+            }
+            if (adapter != null) {
+                adapter.notifyWhenFlipSettled();
             }
         }
         showLog("deep-link land → News flip postId=" + targetId + " idx=" + idx
@@ -20156,15 +20250,83 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 + SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
         // Prefer sticky open over theme/config flip restore for this one shot.
         clearPendingFlipRestore();
-        flipToDeepLinkPage(idx);
+        // Cache paint must keep SHARE_ID so the following network body still
+        // sends share_post_id. Consume only after the network seat rebinds.
+        flipToDeepLinkPage(idx, !fromCache);
         // Kick AdMob for seats ahead of the landed card (push open often skips early
         // settle-path prefetch while FlipView is still rebinding).
         try {
             prefetchUpcomingNativeAds(idx, getAdPrefetchLookahead());
         } catch (Exception ignored) {
         }
-        // Clear sticky ids only — never touch LanguageID (cross-lang share must not stick).
-        consumeDeepLinkStickyIds();
+    }
+
+    /**
+     * Put the share/push article at index 0 and drop extra copies.
+     * Ads, {@code share_app}, and ratings stay in the feed behind it — they
+     * are not the shared post, and they must not occupy the visible seat.
+     *
+     * @return true when the list order changed
+     */
+    private boolean pinDeepLinkTargetToFront(
+            @androidx.annotation.Nullable java.util.List<ModelClass.Datum> items) {
+        long targetId = resolvePendingDeepLinkPostId();
+        if (targetId <= 0 || items == null || items.isEmpty()) {
+            return false;
+        }
+        int first = indexOfRealDeepLinkTarget(items, targetId);
+        if (first < 0) {
+            return false;
+        }
+        int copies = 0;
+        for (int i = 0; i < items.size(); i++) {
+            if (isRealDeepLinkTarget(items.get(i), targetId)) {
+                copies++;
+            }
+        }
+        if (first == 0 && copies == 1) {
+            return false;
+        }
+        ModelClass.Datum keep = items.get(first);
+        for (int i = items.size() - 1; i >= 0; i--) {
+            if (isRealDeepLinkTarget(items.get(i), targetId)) {
+                items.remove(i);
+            }
+        }
+        items.add(0, keep);
+        return true;
+    }
+
+    private int indexOfRealDeepLinkTarget(
+            @androidx.annotation.Nullable java.util.List<ModelClass.Datum> items,
+            long targetId) {
+        if (targetId <= 0 || items == null) {
+            return -1;
+        }
+        for (int i = 0; i < items.size(); i++) {
+            if (isRealDeepLinkTarget(items.get(i), targetId)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isRealDeepLinkTarget(
+            @androidx.annotation.Nullable ModelClass.Datum d, long targetId) {
+        if (targetId <= 0 || d == null || d.getPostId() == null || d.getPostId() != targetId) {
+            return false;
+        }
+        return !ReadArticleStore.isSyntheticFeedSlot(d)
+                && !ReadArticleStore.isShareFeedSlot(d);
+    }
+
+    private void releaseSharePage0Lock() {
+        try {
+            if (mFlipView != null) {
+                mFlipView.releaseForcedPage0Seat();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -20187,7 +20349,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
                 if (resolvePendingDeepLinkPostId() <= 0) return;
-                if (findListIndexForPostId(targetId) >= 0) {
+                if (indexOfRealDeepLinkTarget(list, targetId) >= 0) {
                     maybeLandDeepLinkPostOnNews(false);
                     return;
                 }
@@ -20200,6 +20362,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 ShowNews_Data_Values(category_id, 0);
             } catch (Exception e) {
                 showLog("deep-link rescue failed: " + e.getMessage());
+                releaseSharePage0Lock();
                 consumeDeepLinkStickyIds();
             }
         });
@@ -20207,6 +20370,15 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     private void flipToDeepLinkPage(int page) {
+        flipToDeepLinkPage(page, false);
+    }
+
+    /**
+     * @param releaseSticky when true, drop the one-shot share/push id after the
+     *                      visible card has been rebound (not before — a same-index
+     *                      {@code flipTo(0)} used to leave the invite ad on screen).
+     */
+    private void flipToDeepLinkPage(int page, final boolean releaseSticky) {
         if (mFlipView == null || list == null || list.isEmpty()) return;
         final int safe = Math.max(0, Math.min(page, list.size() - 1));
         positionx = safe;
@@ -20225,17 +20397,27 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         final long jumpPostId = nestedPostId;
         // Double-post: setData often resets FlipView to 0 in the next frames.
+        // rebindSettledPage rebuilds the view even when the index is already 0,
+        // so a house-ad scrap cannot stay up after the magazine moves to front.
         mFlipView.post(new Runnable() {
             @Override
             public void run() {
-                flipToRestoredPage(safe);
+                if (mFlipView != null) {
+                    mFlipView.rebindSettledPage(safe);
+                }
                 if (mFlipView != null) {
                     mFlipView.post(new Runnable() {
                         @Override
                         public void run() {
-                            flipToRestoredPage(safe);
+                            if (mFlipView != null) {
+                                mFlipView.rebindSettledPage(safe);
+                            }
                             if (jumpPostId > 0L) {
                                 jumpVisibleShareGalleryPage(jumpPostId);
+                            }
+                            if (releaseSticky) {
+                                releaseSharePage0Lock();
+                                consumeDeepLinkStickyIds();
                             }
                         }
                     });
