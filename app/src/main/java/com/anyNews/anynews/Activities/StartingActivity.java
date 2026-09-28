@@ -2044,14 +2044,22 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
-                        // Admin global FlipView video autoplay master (null = keep cache).
-                        if (startActivityReqModel.getData().hasVideoAutoplayEnabled()) {
-                            SharedPrefsData.putBool(
+                        // Admin full/half autoplay (null fields keep cache; legacy-only
+                        // payloads copy the global onto both card types).
+                        if (startActivityReqModel.getData().hasVideoAutoplayEnabled()
+                                || startActivityReqModel.getData().hasVideoAutoplayFullEnabled()
+                                || startActivityReqModel.getData().hasVideoAutoplayHalfEnabled()) {
+                            com.anyNews.anynews.Utils.VideoAutoplayConfig.saveFromServer(
                                     getApplicationContext(),
-                                    Constants.VIDEO_AUTOPLAY_ENABLED,
-                                    Boolean.TRUE.equals(
-                                            startActivityReqModel.getData().getVideoAutoplayEnabled()),
-                                    Constants.PREF_NAME
+                                    startActivityReqModel.getData().hasVideoAutoplayEnabled()
+                                            ? startActivityReqModel.getData().getVideoAutoplayEnabled()
+                                            : null,
+                                    startActivityReqModel.getData().hasVideoAutoplayFullEnabled()
+                                            ? startActivityReqModel.getData().getVideoAutoplayFullEnabled()
+                                            : null,
+                                    startActivityReqModel.getData().hasVideoAutoplayHalfEnabled()
+                                            ? startActivityReqModel.getData().getVideoAutoplayHalfEnabled()
+                                            : null
                             );
                         }
 

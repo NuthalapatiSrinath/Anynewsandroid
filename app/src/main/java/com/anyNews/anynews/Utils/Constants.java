@@ -78,13 +78,20 @@ public class Constants {
 
     public static String switchNotification = "switchNotification";
 
-    /** User prefs on Settings screen (SharedPreferences {@link #PREF_NAME}). */
+    /**
+     * Legacy in-app Settings pref. Not consulted for playback: it defaulted off
+     * and the Settings column no longer writes it, which blocked admin ON.
+     */
     public static String VIDEO_AUTOPLAY = "settings_video_autoplay";
     /**
-     * Admin global FlipView video autoplay master ({@code video_autoplay_enabled}).
-     * Splash + feed poll. Default OFF when unset. ON only when admin saved true.
+     * Legacy admin global ({@code video_autoplay_enabled}). Splash + feed poll.
+     * Old APKs read only this. New APK uses it when the split flags are absent.
      */
     public static String VIDEO_AUTOPLAY_ENABLED = "video_autoplay_enabled";
+    /** Admin full-video card autoplay ({@code video_autoplay_full_enabled}). */
+    public static String VIDEO_AUTOPLAY_FULL_ENABLED = "video_autoplay_full_enabled";
+    /** Admin half-article / half-video card autoplay ({@code video_autoplay_half_enabled}). */
+    public static String VIDEO_AUTOPLAY_HALF_ENABLED = "video_autoplay_half_enabled";
     /**
      * Article card TTS / read-aloud master ({@code tts_enabled}). Splash.
      * Default OFF — hide speaker until admin enables.

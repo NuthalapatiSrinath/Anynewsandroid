@@ -13718,29 +13718,37 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
-    /** Settings → Video Autoplay user pref (default OFF when unset). */
+    /**
+     * Settings → Video Autoplay user pref. Unset is not "off" — see
+     * {@link VideoAutoplayConfig#isUserOptOut(Context)}.
+     */
     public static boolean isVideoAutoplayUserPrefEnabled(Context ctx) {
-        return SharedPrefsData.getBool(ctx, Constants.VIDEO_AUTOPLAY, Constants.PREF_NAME, false);
+        return !VideoAutoplayConfig.isUserOptOut(ctx);
     }
 
     /**
-     * Admin master {@code video_autoplay_enabled} (splash + feed poll).
-     * Default OFF when unset — admin must explicitly enable.
+     * Legacy admin global {@code video_autoplay_enabled}. Split flags fall back
+     * to this when they have never been stored.
      */
     public static boolean isAdminVideoAutoplayEnabled(Context ctx) {
-        if (ctx == null) {
-            return false;
-        }
-        return SharedPrefsData.getBool(
-                ctx, Constants.VIDEO_AUTOPLAY_ENABLED, Constants.PREF_NAME, false);
+        return VideoAutoplayConfig.isLegacyEnabled(ctx);
     }
 
     /**
-     * Effective autoplay: admin master AND user Settings pref.
-     * Prefer {@link #shouldAutoplayFeedVideo()} for FlipView start/chain.
+     * True when either card type may autoplay and the user has not opted out.
+     * Start/chain should use {@link #shouldAutoplayPostType(Context, String)}.
      */
     public static boolean isVideoAutoplayEnabled(Context ctx) {
-        return isAdminVideoAutoplayEnabled(ctx) && isVideoAutoplayUserPrefEnabled(ctx);
+        if (VideoAutoplayConfig.isUserOptOut(ctx)) {
+            return false;
+        }
+        return VideoAutoplayConfig.isFullEnabled(ctx)
+                || VideoAutoplayConfig.isHalfEnabled(ctx);
+    }
+
+    /** Admin toggle for this card type, minus an explicit user opt-out. */
+    public static boolean shouldAutoplayPostType(Context ctx, String postType) {
+        return VideoAutoplayConfig.shouldAutoplay(ctx, postType);
     }
 
     /** Footer Video / Flash (Breaking) tab is selected. */
@@ -13750,11 +13758,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Autoplay half/full video on FlipView settle in any feed (Main / Local / Special / Flash / Video)
-     * when admin master + user pref are ON and the user has not paused on this page.
+     * Autoplay this card when its admin toggle is ON, the user has not explicitly
+     * opted out, and they have not paused on this page.
      */
-    public boolean shouldAutoplayFeedVideo() {
-        return isVideoAutoplayEnabled(context)
+    public boolean shouldAutoplayFeedVideo(String postType) {
+        return shouldAutoplayPostType(context, postType)
                 && !userPausedVideoAutoplay;
     }
 
@@ -13770,13 +13778,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Notify HomePage to chain to the next flip page when a video ends under autoplay rules.
      */
     private void notifyVideoEndedForAutoplay(int position) {
-        if (context == null || !isVideoAutoplayEnabled(context)) {
+        if (context == null || list == null || position < 0 || position >= list.size()
+                || list.get(position) == null) {
+            return;
+        }
+        if (!shouldAutoplayPostType(context, list.get(position).getPostType())) {
             return;
         }
         if (userPausedVideoAutoplay) {
-            return;
-        }
-        if (position < 0 || list == null || position >= list.size()) {
             return;
         }
         // Debounce duplicate ended events from stacked listeners.
@@ -13800,16 +13809,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Does not force-restart if the user paused on this page.
      */
     public void maybeAutoplayVisibleVideo(View convertView, int position) {
-        if (!shouldAutoplayFeedVideo() || convertView == null || list == null) {
+        if (convertView == null || list == null) {
             return;
         }
-        if (position < 0 || position >= list.size()) {
+        if (position < 0 || position >= list.size() || list.get(position) == null) {
             return;
         }
         String postType = list.get(position).getPostType();
-        if (postType == null
-                || (!"normal_video".equalsIgnoreCase(postType)
-                && !"full_video".equalsIgnoreCase(postType))) {
+        if (!shouldAutoplayFeedVideo(postType)) {
             return;
         }
         // Already playing this card — leave alone. After Reload, do not resume the
@@ -13832,21 +13839,34 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } catch (Exception ignored) {
         }
         try {
-            ImageView exoCenterPlay = convertView.findViewById(R.id.imageViewVideoPlayVideo);
-            if (exoCenterPlay != null
-                    && exoCenterPlay.getVisibility() == View.VISIBLE
-                    && exoCenterPlay.isEnabled()) {
-                exoCenterPlay.performClick();
+            if (clickAutoplayControl(convertView.findViewById(R.id.imageViewVideoPlayVideo))) {
                 return;
             }
-            ImageView ytCenterPlay = convertView.findViewById(R.id.imageViewPlayVideo);
-            if (ytCenterPlay != null
-                    && ytCenterPlay.getVisibility() == View.VISIBLE
-                    && ytCenterPlay.isEnabled()) {
-                ytCenterPlay.performClick();
-            }
+            clickAutoplayControl(convertView.findViewById(R.id.imageViewPlayVideo));
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Center-play overlay starts Exo or YouTube. Visibility used to skip the click
+     * when the poster button was not yet VISIBLE, so a settled card never started.
+     */
+    private boolean clickAutoplayControl(ImageView button) {
+        if (button == null) {
+            return false;
+        }
+        try {
+            if (!button.isEnabled()) {
+                button.setEnabled(true);
+            }
+            if (button.getVisibility() != View.VISIBLE) {
+                button.setVisibility(View.VISIBLE);
+            }
+            return button.performClick();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
         }
     }
 

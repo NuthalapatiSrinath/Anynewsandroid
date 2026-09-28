@@ -882,12 +882,22 @@ public class StartActivityReqModel implements Serializable {
         private Boolean settingsShowLocalStories;
 
         /**
-         * Admin global FlipView video autoplay master.
-         * Null = old server / keep cache. Default ON when unset on client.
+         * Legacy admin global. Null = old server / keep cache.
+         * New clients prefer the full/half flags; this remains for old APKs.
          */
         @SerializedName("video_autoplay_enabled")
         @Expose
         private Boolean videoAutoplayEnabled;
+
+        /** Full-video cards. Null = omitted — follow legacy on the client. */
+        @SerializedName("video_autoplay_full_enabled")
+        @Expose
+        private Boolean videoAutoplayFullEnabled;
+
+        /** Half-article / half-video cards. Null = omitted — follow legacy. */
+        @SerializedName("video_autoplay_half_enabled")
+        @Expose
+        private Boolean videoAutoplayHalfEnabled;
 
         /**
          * Article TTS / read-aloud master. Null = old server / keep cache. Default OFF.
@@ -1516,6 +1526,22 @@ public class StartActivityReqModel implements Serializable {
 
         public boolean hasVideoAutoplayEnabled() {
             return videoAutoplayEnabled != null;
+        }
+
+        public Boolean getVideoAutoplayFullEnabled() {
+            return videoAutoplayFullEnabled;
+        }
+
+        public boolean hasVideoAutoplayFullEnabled() {
+            return videoAutoplayFullEnabled != null;
+        }
+
+        public Boolean getVideoAutoplayHalfEnabled() {
+            return videoAutoplayHalfEnabled;
+        }
+
+        public boolean hasVideoAutoplayHalfEnabled() {
+            return videoAutoplayHalfEnabled != null;
         }
 
         public Boolean getTtsEnabled() {

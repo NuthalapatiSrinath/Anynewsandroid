@@ -217,6 +217,14 @@ public class EncreptionRequest {
     @Expose
     private Boolean video_autoplay_enabled;
 
+    @SerializedName("video_autoplay_full_enabled")
+    @Expose
+    private Boolean video_autoplay_full_enabled;
+
+    @SerializedName("video_autoplay_half_enabled")
+    @Expose
+    private Boolean video_autoplay_half_enabled;
+
     /** Article TTS master. Null when omitted — do not wipe splash. */
     @SerializedName("tts_enabled")
     @Expose
@@ -576,6 +584,22 @@ public class EncreptionRequest {
 
     public void setVideo_autoplay_enabled(Boolean video_autoplay_enabled) {
         this.video_autoplay_enabled = video_autoplay_enabled;
+    }
+
+    public Boolean getVideo_autoplay_full_enabled() {
+        return video_autoplay_full_enabled;
+    }
+
+    public boolean hasVideo_autoplay_full_enabled() {
+        return video_autoplay_full_enabled != null;
+    }
+
+    public Boolean getVideo_autoplay_half_enabled() {
+        return video_autoplay_half_enabled;
+    }
+
+    public boolean hasVideo_autoplay_half_enabled() {
+        return video_autoplay_half_enabled != null;
     }
 
     public Boolean getTts_enabled() {

@@ -6393,10 +6393,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (isFinishing() || isDestroyed()) {
             return;
         }
-        if (!FlipperAdapter.isVideoAutoplayEnabled(this)) {
+        if (list == null || endedPosition < 0 || endedPosition >= list.size()
+                || list.get(endedPosition) == null) {
             return;
         }
-        if (list == null || endedPosition < 0) {
+        if (!FlipperAdapter.shouldAutoplayPostType(
+                this, list.get(endedPosition).getPostType())) {
             return;
         }
         final int next = endedPosition + 1;
@@ -6417,7 +6419,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (mFlipView == null || mFlipView.mIsFlipping) {
                 return;
             }
-            if (!FlipperAdapter.isVideoAutoplayEnabled(this)) {
+            if (list == null || endedPosition < 0 || endedPosition >= list.size()
+                    || list.get(endedPosition) == null
+                    || !FlipperAdapter.shouldAutoplayPostType(
+                            this, list.get(endedPosition).getPostType())) {
                 return;
             }
             try {
@@ -6457,16 +6462,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void scheduleVideoFooterAutoplayStart(final int settlePos) {
         cancelVideoAutoplayStart();
-        if (!FlipperAdapter.isVideoAutoplayEnabled(this)) {
+        if (list == null || settlePos < 0 || settlePos >= list.size()
+                || list.get(settlePos) == null) {
             return;
         }
-        if (list == null || settlePos < 0 || settlePos >= list.size()) {
-            return;
-        }
-        String type = list.get(settlePos).getPostType();
-        if (type == null
-                || (!"normal_video".equalsIgnoreCase(type)
-                && !"full_video".equalsIgnoreCase(type))) {
+        final String type = list.get(settlePos).getPostType();
+        if (!FlipperAdapter.shouldAutoplayPostType(this, type)) {
             return;
         }
         videoAutoplayStartRunnable = () -> {
@@ -6477,14 +6478,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (positionx != settlePos) {
                 return;
             }
-            if (!FlipperAdapter.isVideoAutoplayEnabled(this)) {
+            if (!FlipperAdapter.shouldAutoplayPostType(this, type)) {
                 return;
             }
             if (adapter == null || mFlipView == null || mFlipView.mIsFlipping) {
                 return;
             }
             try {
-                View flipChild = getFlipChildForShare();
+                // FlipView keeps prev/current/next children. getChildAt(ppi) is not
+                // the settled page, so the play click never hit the visible card.
+                View flipChild = mFlipView.getCurrentPageView();
+                if (flipChild == null) {
+                    flipChild = getFlipChildForShare();
+                }
                 adapter.maybeAutoplayVisibleVideo(flipChild, settlePos);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -16392,13 +16398,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     } else {
                         cachedCaptureAllowed = ScreenCaptureHelper.isCaptureAllowed(HomePage.this);
                     }
-                    // Admin global FlipView video autoplay master (null = keep splash cache).
-                    if (encreptionRequest.hasVideo_autoplay_enabled()) {
-                        SharedPrefsData.putBool(
+                    // Admin full/half autoplay (null = keep splash cache).
+                    if (encreptionRequest.hasVideo_autoplay_enabled()
+                            || encreptionRequest.hasVideo_autoplay_full_enabled()
+                            || encreptionRequest.hasVideo_autoplay_half_enabled()) {
+                        com.anyNews.anynews.Utils.VideoAutoplayConfig.saveFromServer(
                                 HomePage.this,
-                                Constants.VIDEO_AUTOPLAY_ENABLED,
-                                Boolean.TRUE.equals(encreptionRequest.getVideo_autoplay_enabled()),
-                                Constants.PREF_NAME);
+                                encreptionRequest.hasVideo_autoplay_enabled()
+                                        ? encreptionRequest.getVideo_autoplay_enabled()
+                                        : null,
+                                encreptionRequest.hasVideo_autoplay_full_enabled()
+                                        ? encreptionRequest.getVideo_autoplay_full_enabled()
+                                        : null,
+                                encreptionRequest.hasVideo_autoplay_half_enabled()
+                                        ? encreptionRequest.getVideo_autoplay_half_enabled()
+                                        : null);
+                        scheduleVideoFooterAutoplayStart(positionx);
                     }
                     // Feed Exo chrome A/B (null = keep splash cache).
                     if (encreptionRequest.hasFeed_video_player()) {
