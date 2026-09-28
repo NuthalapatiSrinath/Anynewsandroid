@@ -747,6 +747,12 @@ public class Constants {
      * or on non-push splash.
      */
     public static String PENDING_PUSH_POST = "pending_push_post_id";
+    /**
+     * Recent tray posts (post id + visible title), written when the notification
+     * is shown. A notification-history tap sometimes rebuilds the launcher
+     * intent with the title and no post id; this log maps that title back.
+     */
+    public static String RECENT_PUSH_OPEN_LOG = "recent_push_open_log";
     /** One-shot job id from /job/{id} or legacy /job-{base64} share deep links. */
     public static String PENDING_SHARE_JOB = "pending_share_job_id";
     /**

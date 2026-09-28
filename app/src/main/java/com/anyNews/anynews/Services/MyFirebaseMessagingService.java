@@ -4,6 +4,7 @@ import static com.anyNews.anynews.Utils.AppHelper.showLog;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -287,9 +288,312 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     }
 
     /**
+     * Action prefix so each post is a different {@link Intent#filterEquals} identity.
+     * Extras are not part of PendingIntent identity; a shared action let a later
+     * notification overwrite this post's id under {@code FLAG_UPDATE_CURRENT}.
+     */
+    public static final String ACTION_OPEN_PUSH_PREFIX = "com.anyNews.anynews.OPEN_PUSH/";
+
+    /** Numeric post id. {@code TITLE} is sometimes overwritten with the visible headline. */
+    public static final String EXTRA_PUSH_POST_ID = "post_id";
+
+    private static final int RECENT_PUSH_LOG_CAP = 24;
+    private static final long HISTORY_PUSH_MAX_AGE_MS = 24L * 60L * 60L * 1000L;
+
+    public static boolean isOpenPushAction(@Nullable String action) {
+        return action != null && action.startsWith(ACTION_OPEN_PUSH_PREFIX);
+    }
+
+    /**
+     * Post id carried by a push tap. Numeric extras and the data URI win. A
+     * non-numeric {@code TITLE} is the visible headline (notification history
+     * rebuilds sometimes do this) and is matched against the tray log.
+     */
+    @Nullable
+    public static String resolvePushPostId(@Nullable Context context, @Nullable Intent intent) {
+        if (intent == null) {
+            return null;
+        }
+        String fromAction = postIdFromOpenAction(intent.getAction());
+        if (isNumericPostId(fromAction)) {
+            return fromAction.trim();
+        }
+        String fromUri = postIdFromPushUri(intent.getData());
+        if (isNumericPostId(fromUri)) {
+            return fromUri.trim();
+        }
+        String postExtra = intent.getStringExtra(EXTRA_PUSH_POST_ID);
+        if (isNumericPostId(postExtra)) {
+            return postExtra.trim();
+        }
+        String titile = intent.getStringExtra("TITILE");
+        if (isNumericPostId(titile)) {
+            return titile.trim();
+        }
+        String title = intent.getStringExtra("TITLE");
+        if (isNumericPostId(title)) {
+            return title.trim();
+        }
+        String fromObject = postIdFromObjectJson(intent.getStringExtra("OBJECT"));
+        if (isNumericPostId(fromObject)) {
+            return fromObject.trim();
+        }
+        if (context != null && isPushShapedIntent(intent)) {
+            String matched = matchRememberedTitle(context, intent);
+            if (isNumericPostId(matched)) {
+                return matched;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Stock notification history falls back to the launcher activity when the
+     * archived notification has no activity {@link PendingIntent}. Referrer is
+     * Settings or SystemUI, not the home launcher.
+     */
+    public static boolean isHistoryLauncherFallback(
+            @Nullable Activity activity, @Nullable Intent intent) {
+        if (activity == null || intent == null) {
+            return false;
+        }
+        if (!Intent.ACTION_MAIN.equals(intent.getAction())) {
+            return false;
+        }
+        if (intent.getCategories() == null
+                || !intent.getCategories().contains(Intent.CATEGORY_LAUNCHER)) {
+            return false;
+        }
+        Uri referrer;
+        try {
+            referrer = activity.getReferrer();
+        } catch (Exception e) {
+            return false;
+        }
+        if (referrer == null || referrer.getHost() == null) {
+            return false;
+        }
+        String host = referrer.getHost().toLowerCase();
+        return "com.android.settings".equals(host)
+                || "com.android.systemui".equals(host)
+                || host.contains("notification");
+    }
+
+    /**
+     * Post id for a history launcher fallback that kept the visible headline
+     * ({@code android.title} / {@code TITLE}) but dropped the numeric id.
+     * No match when the intent has no headline — a Settings "Open" must stay
+     * a normal launch.
+     */
+    @Nullable
+    public static String resolveHistoryDisplayedTitle(
+            @Nullable Context context, @Nullable Intent intent) {
+        if (context == null || intent == null) {
+            return null;
+        }
+        return matchRememberedTitle(context, intent);
+    }
+
+    private static void rememberDisplayedPush(
+            @NonNull Context context, @Nullable String postId, @Nullable String title) {
+        if (!isNumericPostId(postId)) {
+            return;
+        }
+        String id = postId.trim();
+        String plain = plainPushTitle(title);
+        long now = System.currentTimeMillis();
+        String prev = SharedPrefsData.getString(
+                context.getApplicationContext(),
+                com.anyNews.anynews.Utils.Constants.RECENT_PUSH_OPEN_LOG,
+                com.anyNews.anynews.Utils.Constants.PREF_NAME);
+        StringBuilder sb = new StringBuilder();
+        sb.append(now).append('\t').append(id).append('\t').append(plain);
+        int kept = 1;
+        if (prev != null) {
+            String[] lines = prev.split("\n");
+            for (String line : lines) {
+                ParsedPush remembered = parseRememberedLine(line);
+                if (remembered == null || id.equals(remembered.postId)) {
+                    continue;
+                }
+                sb.append('\n').append(line);
+                kept++;
+                if (kept >= RECENT_PUSH_LOG_CAP) {
+                    break;
+                }
+            }
+        }
+        SharedPrefsData.putStringImmediate(
+                context.getApplicationContext(),
+                com.anyNews.anynews.Utils.Constants.RECENT_PUSH_OPEN_LOG,
+                sb.toString(),
+                com.anyNews.anynews.Utils.Constants.PREF_NAME);
+    }
+
+    private static boolean isPushShapedIntent(@NonNull Intent intent) {
+        if (isOpenPushAction(intent.getAction()) || isPushOpenUri(intent.getData())) {
+            return true;
+        }
+        try {
+            if (intent.getBooleanExtra("notification", false)) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return isNumericPostId(intent.getStringExtra("TITILE"))
+                || isNumericPostId(intent.getStringExtra(EXTRA_PUSH_POST_ID));
+    }
+
+    @Nullable
+    private static String postIdFromOpenAction(@Nullable String action) {
+        if (!isOpenPushAction(action)) {
+            return null;
+        }
+        String rest = action.substring(ACTION_OPEN_PUSH_PREFIX.length());
+        int slash = rest.indexOf('/');
+        if (slash >= 0) {
+            rest = rest.substring(0, slash);
+        }
+        return rest;
+    }
+
+    @Nullable
+    private static String postIdFromObjectJson(@Nullable String objectJson) {
+        if (objectJson == null || objectJson.trim().isEmpty() || "{}".equals(objectJson.trim())) {
+            return null;
+        }
+        try {
+            org.json.JSONObject object = new org.json.JSONObject(objectJson);
+            String postId = object.optString("post_id", "");
+            return postId;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private static String matchRememberedTitle(@NonNull Context context, @NonNull Intent intent) {
+        String[] keys = new String[] {
+                "TITLE",
+                "TITILE",
+                "TITLE_REWARDS",
+                "title",
+                "pn_title",
+                Notification.EXTRA_TITLE,
+                Notification.EXTRA_TEXT
+        };
+        for (String key : keys) {
+            String raw;
+            try {
+                raw = intent.getStringExtra(key);
+            } catch (Exception e) {
+                raw = null;
+            }
+            if (raw == null || isNumericPostId(raw)) {
+                continue;
+            }
+            String matched = findRememberedByTitle(context, raw);
+            if (matched != null) {
+                return matched;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private static String findRememberedByTitle(@NonNull Context context, @Nullable String title) {
+        String want = plainPushTitle(title);
+        if (want.isEmpty()) {
+            return null;
+        }
+        String raw = SharedPrefsData.getString(
+                context.getApplicationContext(),
+                com.anyNews.anynews.Utils.Constants.RECENT_PUSH_OPEN_LOG,
+                com.anyNews.anynews.Utils.Constants.PREF_NAME);
+        if (raw == null || raw.isEmpty()) {
+            return null;
+        }
+        long now = System.currentTimeMillis();
+        String[] lines = raw.split("\n");
+        for (String line : lines) {
+            ParsedPush remembered = parseRememberedLine(line);
+            if (remembered == null) {
+                continue;
+            }
+            if (now - remembered.at > HISTORY_PUSH_MAX_AGE_MS) {
+                continue;
+            }
+            if (want.equals(remembered.title)) {
+                return remembered.postId;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private static ParsedPush parseRememberedLine(@Nullable String line) {
+        if (line == null || line.isEmpty()) {
+            return null;
+        }
+        int tab = line.indexOf('\t');
+        if (tab <= 0) {
+            return null;
+        }
+        int tab2 = line.indexOf('\t', tab + 1);
+        if (tab2 < 0) {
+            return null;
+        }
+        try {
+            long at = Long.parseLong(line.substring(0, tab).trim());
+            String postId = line.substring(tab + 1, tab2).trim();
+            String title = line.substring(tab2 + 1).trim();
+            if (!isNumericPostId(postId)) {
+                return null;
+            }
+            ParsedPush parsed = new ParsedPush();
+            parsed.at = at;
+            parsed.postId = postId;
+            parsed.title = title;
+            return parsed;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @NonNull
+    private static String plainPushTitle(@Nullable String title) {
+        if (title == null) {
+            return "";
+        }
+        String plain = title.replace("[", "").replace("]", "");
+        plain = plain.replace('\n', ' ').replace('\t', ' ').trim();
+        while (plain.contains("  ")) {
+            plain = plain.replace("  ", " ");
+        }
+        return plain;
+    }
+
+    private static boolean isNumericPostId(@Nullable String postId) {
+        if (!isUsablePostId(postId)) {
+            return false;
+        }
+        try {
+            return Long.parseLong(postId.trim()) > 0L;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private static final class ParsedPush {
+        long at;
+        String postId;
+        String title;
+    }
+
+    /**
      * Build the tap Intent. Targets {@link HomePage} with CLEAR_TOP|SINGLE_TOP so a
      * foreground feed receives {@code onNewIntent} (splash singleTask + finish() used
-     * to drop TITLE). Unique data URI keeps PendingIntent extras from colliding.
+     * to drop TITLE). Unique action + data URI keep PendingIntent extras from colliding.
      */
     @NonNull
     private Intent buildPushOpenIntent(@NonNull String postId, @Nullable String title, @Nullable String objectJson) {
@@ -297,6 +601,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         resultIntent.putExtra("notification", true);
         resultIntent.putExtra("TITILE", postId);
         resultIntent.putExtra("TITLE", postId);
+        resultIntent.putExtra(EXTRA_PUSH_POST_ID, postId);
         if (title != null) {
             resultIntent.putExtra("TITLE_REWARDS", title);
         }
@@ -305,6 +610,8 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         }
         String diversifier = objectJson != null ? objectJson : title;
         int notificationId = safeNotificationId(postId, diversifier);
+        String actionId = isNumericPostId(postId) ? postId.trim() : String.valueOf(notificationId);
+        resultIntent.setAction(ACTION_OPEN_PUSH_PREFIX + actionId);
         // Same int passed to notify(). Tap handlers cancel this id; auto-cancel
         // does not run when RemoteViews own the click.
         resultIntent.putExtra(EXTRA_PUSH_NOTIFICATION_ID, notificationId);
@@ -894,6 +1201,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         if (appearance == null) {
             appearance = resolveAppearance(null);
         }
+        rememberDisplayedPush(getApplicationContext(), post_id, title);
 
         boolean showImage = appearance.showArticleImage
                 && !STYLE_TEXT_ONLY.equals(appearance.styleMode)

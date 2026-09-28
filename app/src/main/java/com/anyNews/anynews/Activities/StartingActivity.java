@@ -288,58 +288,7 @@ public class StartingActivity extends AppCompatActivity {
         showLog("EMAIL-ID:::::"+prefManager.getEmailId());
         showLog("CHECK POINT 1");
         Intent intent = getIntent();
-        TITLE = "" + intent.getStringExtra("TITILE");
-        // FCM also writes TITLE (correct spelling); prefer non-empty either key.
-        if (TITLE == null || TITLE.isEmpty() || "null".equalsIgnoreCase(TITLE)) {
-            String titleAlt = intent.getStringExtra("TITLE");
-            if (titleAlt != null && !titleAlt.isEmpty() && !"null".equalsIgnoreCase(titleAlt)) {
-                TITLE = titleAlt;
-            }
-        }
-        // PendingIntent data URI still carries post id when OEM drops extras.
-        if (TITLE == null || TITLE.isEmpty() || "null".equalsIgnoreCase(TITLE)
-                || "0".equals(TITLE.trim())) {
-            try {
-                Uri data = intent.getData();
-                if (isFcmPushIntentUri(data)) {
-                    String path = data.getPath();
-                    if (path != null && path.length() > 1) {
-                        String seg = path.startsWith("/") ? path.substring(1) : path;
-                        int slash = seg.indexOf('/');
-                        if (slash > 0) {
-                            seg = seg.substring(0, slash);
-                        }
-                        if (!seg.isEmpty() && !"0".equals(seg)) {
-                            Long.parseLong(seg);
-                            TITLE = seg;
-                        }
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        if (TITLE != null && !TITLE.isEmpty() && !"null".equalsIgnoreCase(TITLE)
-                && !"0".equals(TITLE.trim())) {
-            try {
-                SharedPrefsData.putString(
-                        getApplicationContext(),
-                        Constants.PENDING_PUSH_POST,
-                        TITLE.trim(),
-                        Constants.PREF_NAME);
-            } catch (Exception ignored) {
-            }
-        } else {
-            // Launcher / non-push splash: drop stale sticky so HomePage cannot pin
-            // a previously received (but untapped) notification article.
-            try {
-                SharedPrefsData.putString(
-                        getApplicationContext(),
-                        Constants.PENDING_PUSH_POST,
-                        "",
-                        Constants.PREF_NAME);
-            } catch (Exception ignored) {
-            }
-        }
+        absorbLaunchPushId(intent);
         if (isIncomingPushTap(intent)) {
             MyFirebaseMessagingService.dismissOpenedPush(this, intent);
         }
@@ -1248,28 +1197,10 @@ public class StartingActivity extends AppCompatActivity {
         if (intent == null) {
             return;
         }
-        // FCM tray tap while splash singleTask is still alive: refresh TITLE and
-        // deliver to Home (share/App-Link path below is URI-only).
-        if (intent.getBooleanExtra("notification", false)
-                || intent.hasExtra("TITILE")
-                || intent.hasExtra("TITLE")) {
-            if (isIncomingPushTap(intent)) {
-                MyFirebaseMessagingService.dismissOpenedPush(this, intent);
-            }
-            String pushTitle = intent.getStringExtra("TITILE");
-            if (pushTitle == null || pushTitle.isEmpty() || "null".equalsIgnoreCase(pushTitle)) {
-                pushTitle = intent.getStringExtra("TITLE");
-            }
-            if (pushTitle != null
-                    && !pushTitle.isEmpty()
-                    && !"null".equalsIgnoreCase(pushTitle)
-                    && !"0".equals(pushTitle.trim())) {
-                TITLE = pushTitle.trim();
-                TITLE_REWARDS = "" + intent.getStringExtra("TITLE_REWARDS");
-                OBJECT = "" + intent.getStringExtra("OBJECT");
-                deliverPushRedirectToHome(TITLE);
-                return;
-            }
+        // FCM tray / notification-history tap while splash singleTask is still
+        // alive: refresh TITLE and deliver to Home (share path below is URI-only).
+        if (deliverWarmPushOpen(intent)) {
+            return;
         }
         if (intent.getData() != null) {
             Uri data = intent.getData();
@@ -1325,13 +1256,102 @@ public class StartingActivity extends AppCompatActivity {
             return false;
         }
         if (isFcmPushIntentUri(intent.getData())
-                || intent.getBooleanExtra("notification", false)) {
+                || intent.getBooleanExtra("notification", false)
+                || MyFirebaseMessagingService.isOpenPushAction(intent.getAction())) {
             return true;
         }
         String titile = intent.getStringExtra("TITILE");
-        return titile != null && !titile.isEmpty()
-                && !"null".equalsIgnoreCase(titile)
-                && !"0".equals(titile.trim());
+        if (titile == null || titile.isEmpty() || "null".equalsIgnoreCase(titile)) {
+            return false;
+        }
+        try {
+            return Long.parseLong(titile.trim()) > 0L;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Copy a numeric push post id onto {@link #TITLE}. Notification history
+     * sometimes launches the launcher activity with the visible headline and
+     * no numeric id. A plain icon launch does not pin a tray post.
+     */
+    private void absorbLaunchPushId(@Nullable Intent intent) {
+        String resolved = MyFirebaseMessagingService.resolvePushPostId(this, intent);
+        if (!isNumericPushId(resolved)
+                && MyFirebaseMessagingService.isHistoryLauncherFallback(this, intent)) {
+            resolved = MyFirebaseMessagingService.resolveHistoryDisplayedTitle(this, intent);
+        }
+        if (isNumericPushId(resolved)) {
+            TITLE = resolved.trim();
+            try {
+                SharedPrefsData.putString(
+                        getApplicationContext(),
+                        Constants.PENDING_PUSH_POST,
+                        TITLE,
+                        Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
+        } else {
+            TITLE = "0";
+            // Launcher / non-push splash: drop stale sticky so HomePage cannot pin
+            // a previously received (but untapped) notification article.
+            try {
+                SharedPrefsData.putString(
+                        getApplicationContext(),
+                        Constants.PENDING_PUSH_POST,
+                        "",
+                        Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** @return true when this intent was a push open and Home was asked to pin it. */
+    private boolean deliverWarmPushOpen(@Nullable Intent intent) {
+        if (intent == null) {
+            return false;
+        }
+        String pushTitle = MyFirebaseMessagingService.resolvePushPostId(this, intent);
+        boolean historyFallback = false;
+        if (!isNumericPushId(pushTitle)
+                && MyFirebaseMessagingService.isHistoryLauncherFallback(this, intent)) {
+            pushTitle = MyFirebaseMessagingService.resolveHistoryDisplayedTitle(this, intent);
+            historyFallback = isNumericPushId(pushTitle);
+        }
+        if (!isNumericPushId(pushTitle)) {
+            return false;
+        }
+        if (!isIncomingPushTap(intent) && !historyFallback) {
+            return false;
+        }
+        if (isIncomingPushTap(intent)) {
+            MyFirebaseMessagingService.dismissOpenedPush(this, intent);
+        }
+        TITLE = pushTitle.trim();
+        TITLE_REWARDS = "" + intent.getStringExtra("TITLE_REWARDS");
+        OBJECT = "" + intent.getStringExtra("OBJECT");
+        try {
+            SharedPrefsData.putString(
+                    getApplicationContext(),
+                    Constants.PENDING_PUSH_POST,
+                    TITLE,
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+        deliverPushRedirectToHome(TITLE);
+        return true;
+    }
+
+    private static boolean isNumericPushId(@Nullable String raw) {
+        if (raw == null) {
+            return false;
+        }
+        try {
+            return Long.parseLong(raw.trim()) > 0L;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /**

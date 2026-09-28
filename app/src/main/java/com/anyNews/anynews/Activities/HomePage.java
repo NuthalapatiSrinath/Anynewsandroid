@@ -726,6 +726,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private boolean suppressFeedRefreshForIncomingIntent = false;
     /**
+     * Background return posts the first-article reload so {@link #onNewIntent}
+     * can seat a notification-history / shade push first. Cleared when that
+     * check runs.
+     */
+    private boolean pendingBackgroundRefreshCheck = false;
+    /** Last intent identity seen, so a leftover push intent is not a new tap. */
+    @Nullable private Intent lastSeenHomeIntent;
+    /** Post id already landed. Same id on the stale intent must not block Reload. */
+    @Nullable private String lastConsumedPushPostId;
+    /** Push id already on {@link #getIntent()} before onNewIntent copies it. */
+    @Nullable private String resumeArrivedPushId;
+    /** News tab was stuck in Special; reload unless a push tap owns this resume. */
+    private boolean resumeUnstuckSpecial = false;
+    private final Handler backgroundRefreshHandler = new Handler(Looper.getMainLooper());
+    private final Runnable deferredBackgroundFeedRefresh = this::runDeferredBackgroundFeedRefresh;
+    /**
      * Share chooser / ACTION_SEND we launched. A sheet that stays up past the
      * process-stop timeout still is not "user pressed Home".
      */
@@ -1373,25 +1389,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
         String sessionId = "" + getIntent().getStringExtra("EXTRA_SESSION_ID");
-        pushUpdatedID = "" + getIntent().getStringExtra("TITLE");
-        // FCM tray: prefer TITILE typo key, then data URI, then PENDING_PUSH_POST
-        // (only when this launch looks like a push tap — splash always forwards TITLE).
-        if (pushUpdatedID == null || pushUpdatedID.isEmpty()
-                || "null".equalsIgnoreCase(pushUpdatedID)) {
-            String titleAlt = getIntent().getStringExtra("TITILE");
-            if (titleAlt != null && !titleAlt.isEmpty() && !"null".equalsIgnoreCase(titleAlt)) {
-                pushUpdatedID = titleAlt;
-            }
-        }
-        if (pushUpdatedID == null || pushUpdatedID.isEmpty()
-                || "null".equalsIgnoreCase(pushUpdatedID)
-                || "0".equals(pushUpdatedID.trim())) {
-            String fromUri = postIdFromPushIntentUri(getIntent() != null ? getIntent().getData() : null);
-            if (fromUri != null) {
-                pushUpdatedID = fromUri;
-            }
-        }
-        boolean pushTapOpen = isPushOpenIntent(getIntent());
+        lastSeenHomeIntent = getIntent();
+        // Numeric TITLE / TITILE / post_id / anynews://push / OPEN_PUSH action.
+        // A headline stuffed into TITLE (history rebuild) falls through to the URI
+        // and the tray-title log. Splash still forwards TITLE="0" for non-push.
+        String resolvedPush = pushPostIdFromIntent(getIntent());
+        pushUpdatedID = resolvedPush != null ? resolvedPush : "0";
+        boolean pushTapOpen = isPushOpenIntent(getIntent()) || resolvedPush != null;
         if (pushTapOpen) {
             // Custom RemoteViews clicks skip setAutoCancel. Drop this tray row only.
             MyFirebaseMessagingService.dismissOpenedPush(this, getIntent());
@@ -1887,6 +1891,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         super.onNewIntent(intent);
         if (intent != null) {
             setIntent(intent);
+            lastSeenHomeIntent = intent;
             // Before handlers strip TITLE / SHARE_REDIRECT_ID.
             noteIncomingIntentSkipsBackgroundFeedRefresh(intent);
             handleFooterTabExtra(intent);
@@ -1910,36 +1915,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (isPushOpenIntent(intent)) {
             MyFirebaseMessagingService.dismissOpenedPush(this, intent);
         }
-        String pushRaw = intent.getStringExtra("TITLE");
-        if (pushRaw == null || pushRaw.trim().isEmpty()
-                || "null".equalsIgnoreCase(pushRaw.trim())
-                || "0".equals(pushRaw.trim())) {
-            pushRaw = intent.getStringExtra("TITILE");
-        }
-        if (pushRaw == null || pushRaw.trim().isEmpty()
-                || "null".equalsIgnoreCase(pushRaw.trim())
-                || "0".equals(pushRaw.trim())) {
-            pushRaw = postIdFromPushIntentUri(intent.getData());
-        }
+        String pushRaw = pushPostIdFromIntent(intent);
         // PENDING only when this onNewIntent is a push tap (not every warm resume).
-        if ((pushRaw == null || pushRaw.trim().isEmpty()
-                || "null".equalsIgnoreCase(pushRaw.trim())
-                || "0".equals(pushRaw.trim()))
-                && isPushOpenIntent(intent)) {
+        if (!isPositivePostId(pushRaw) && isPushOpenIntent(intent)) {
             try {
                 String pendingPush = SharedPrefsData.getString(
                         getApplicationContext(), Constants.PENDING_PUSH_POST, Constants.PREF_NAME);
-                if (pendingPush != null && !pendingPush.trim().isEmpty()
-                        && !"0".equals(pendingPush.trim())
-                        && !"null".equalsIgnoreCase(pendingPush.trim())) {
+                if (isPositivePostId(pendingPush)) {
                     pushRaw = pendingPush.trim();
                 }
             } catch (Exception ignored) {
             }
         }
-        if (pushRaw == null || pushRaw.trim().isEmpty()
-                || "null".equalsIgnoreCase(pushRaw.trim())
-                || "0".equals(pushRaw.trim())) {
+        if (!isPositivePostId(pushRaw)) {
             return;
         }
         long pushId;
@@ -1950,6 +1938,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         if (pushId <= 0) {
+            return;
+        }
+        // Shade + history can deliver the same tap twice (onNewIntent and the
+        // deferred background check). Do not start a second page-0.
+        if (pushOpenWireConsumed
+                && isPositivePostId(pushUpdatedID)
+                && pushUpdatedID.trim().equals(String.valueOf(pushId))
+                && isApiRequested) {
+            suppressFeedRefreshForIncomingIntent = true;
+            showLog("push onNewIntent already seating " + pushId);
             return;
         }
         try {
@@ -1982,6 +1980,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             intent.putExtra("notification", true);
             intent.putExtra("TITLE", pushUpdatedID);
             intent.putExtra("TITILE", pushUpdatedID);
+            intent.putExtra(MyFirebaseMessagingService.EXTRA_PUSH_POST_ID, pushUpdatedID);
             intent.removeExtra("SHARE_REDIRECT_ID");
         } catch (Exception ignored) {
         }
@@ -2028,9 +2027,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
+     * Positive post id on a push tap. Non-numeric {@code TITLE} (the visible
+     * headline) does not count — history rebuilds put that string in TITLE.
+     */
+    @Nullable
+    private String pushPostIdFromIntent(@Nullable Intent intent) {
+        String resolved = MyFirebaseMessagingService.resolvePushPostId(this, intent);
+        if (isPositivePostId(resolved)) {
+            return resolved.trim();
+        }
+        return null;
+    }
+
+    /**
      * True when this Intent is a notification tray tap (not splash forwarding a
      * blank TITLE). Splash always puts {@code TITLE}; only FCM sets
-     * {@code notification}, {@code TITILE}, or {@code anynews://push/…}.
+     * {@code notification}, {@code TITILE}, {@code anynews://push/…}, or
+     * {@code OPEN_PUSH}.
      */
     private static boolean isPushOpenIntent(@Nullable Intent intent) {
         if (intent == null) {
@@ -2042,6 +2055,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception ignored) {
         }
+        if (MyFirebaseMessagingService.isOpenPushAction(intent.getAction())) {
+            return true;
+        }
         if (postIdFromPushIntentUri(intent.getData()) != null) {
             return true;
         }
@@ -2050,7 +2066,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (titile != null && !titile.trim().isEmpty()
                     && !"null".equalsIgnoreCase(titile.trim())
                     && !"0".equals(titile.trim())) {
-                return true;
+                return Long.parseLong(titile.trim()) > 0L;
             }
         } catch (Exception ignored) {
         }
@@ -14663,6 +14679,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * intentional soft feed reload so Open is not inflated.
      */
     private void clearStickyPushPostId() {
+        if (isPositivePostId(pushUpdatedID)) {
+            lastConsumedPushPostId = pushUpdatedID.trim();
+        }
         TITLE_VALUE = 0;
         pushUpdatedID = "0";
         // Wire-once flag stays true so Reload cannot re-fire Open without a new intent.
@@ -19413,10 +19432,99 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         // A Special latch left on while News is highlighted skips this reload
         // (isPlainMainNewsFeed is false). Clear it first so resume loads the mix.
         final boolean unstuckSpecialOnNews = clearStuckSpecialModeOnNewsTab();
-        final boolean refreshFeed = consumeBackgroundFeedRefresh();
+        final boolean fromProcessBackground = appEnteredBackground;
+        appEnteredBackground = false;
         super.onStart();
+        final boolean coldStart = !homeHasStartedOnce;
         homeHasStartedOnce = true;
-        if (!refreshFeed && !unstuckSpecialOnNews) {
+        String arrivedPush = null;
+        if (fromProcessBackground && !coldStart) {
+            Intent now = getIntent();
+            boolean newDelivery = now != null && now != lastSeenHomeIntent;
+            String resolved = pushPostIdFromIntent(now);
+            if (!newDelivery
+                    && isPositivePostId(resolved)
+                    && (lastConsumedPushPostId == null
+                    || !resolved.equals(lastConsumedPushPostId))) {
+                // Same Intent object, extras replaced (history / OEM fill-in).
+                newDelivery = true;
+            }
+            if (now != null) {
+                lastSeenHomeIntent = now;
+            }
+            if (newDelivery && isPositivePostId(resolved) && isPushOpenIntent(now)) {
+                arrivedPush = resolved;
+            }
+        }
+        if (coldStart || isChangingConfigurations() || isFinishing()) {
+            pendingBackgroundRefreshCheck = false;
+            return;
+        }
+        if (!fromProcessBackground && !unstuckSpecialOnNews) {
+            pendingBackgroundRefreshCheck = false;
+            return;
+        }
+        // Let onNewIntent seat the push before the first-article reload clears it.
+        // Some devices run onStart first and used to strip TITLE off this intent.
+        resumeArrivedPushId = arrivedPush;
+        resumeUnstuckSpecial = unstuckSpecialOnNews;
+        pendingBackgroundRefreshCheck = true;
+        backgroundRefreshHandler.removeCallbacks(deferredBackgroundFeedRefresh);
+        backgroundRefreshHandler.post(deferredBackgroundFeedRefresh);
+    }
+
+    /**
+     * Plain return from background reloads My Feed at the first article.
+     * A push that arrived in this resume (history or shade, including a local
+     * article) is seated instead. Magazine share and a share-sheet return stay put.
+     */
+    private void runDeferredBackgroundFeedRefresh() {
+        pendingBackgroundRefreshCheck = false;
+        final boolean incomingIntent = suppressFeedRefreshForIncomingIntent;
+        suppressFeedRefreshForIncomingIntent = false;
+        final boolean recentShareSheet = suppressFeedRefreshForShareSheet
+                && shareSheetStartedElapsed > 0L
+                && (SystemClock.elapsedRealtime() - shareSheetStartedElapsed)
+                        < SHARE_SHEET_RETURN_IGNORE_MS;
+        suppressFeedRefreshForShareSheet = false;
+        final String arrivedPush = resumeArrivedPushId;
+        resumeArrivedPushId = null;
+        final boolean unstuckSpecial = resumeUnstuckSpecial;
+        resumeUnstuckSpecial = false;
+        if (isFinishing() || isChangingConfigurations()) {
+            return;
+        }
+        if (isPositivePostId(arrivedPush) || resolvePendingDeepLinkPostId() > 0) {
+            if (resolvePendingDeepLinkPostId() <= 0 && isPositivePostId(arrivedPush)) {
+                try {
+                    Intent seat = getIntent();
+                    if (seat != null) {
+                        seat.putExtra("notification", true);
+                        seat.putExtra("TITLE", arrivedPush);
+                        seat.putExtra("TITILE", arrivedPush);
+                        seat.putExtra(MyFirebaseMessagingService.EXTRA_PUSH_POST_ID, arrivedPush);
+                        applyPushRedirectFromIntent(seat);
+                    }
+                } catch (Exception e) {
+                    showLog("background push seat failed: " + e.getMessage());
+                }
+            }
+            showLog("background resume skip feed refresh intent=" + incomingIntent
+                    + " sticky=" + resolvePendingDeepLinkPostId()
+                    + " arrived=" + arrivedPush);
+            return;
+        }
+        if (!unstuckSpecial
+                && (incomingIntent || recentShareSheet || expectNotifSettingsOrPermReturn)) {
+            showLog("background resume skip feed refresh intent=" + incomingIntent
+                    + " shareSheet=" + recentShareSheet
+                    + " notifSettings=" + expectNotifSettingsOrPermReturn);
+            return;
+        }
+        if (!unstuckSpecial && (pendingNightModeRecreate || isNightUiOutOfSync())) {
+            return;
+        }
+        if (!unstuckSpecial && !isPlainMainNewsFeed()) {
             return;
         }
         try {
@@ -19462,41 +19570,6 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         } catch (Exception ignored) {
         }
         processBackgroundObserver = null;
-    }
-
-    /**
-     * True only for a plain return from real background onto the main news feed.
-     * Clears one-shot latches so a later Home return can refresh again.
-     */
-    private boolean consumeBackgroundFeedRefresh() {
-        final boolean fromProcessBackground = appEnteredBackground;
-        appEnteredBackground = false;
-        final boolean incomingIntent = suppressFeedRefreshForIncomingIntent;
-        suppressFeedRefreshForIncomingIntent = false;
-        final boolean recentShareSheet = suppressFeedRefreshForShareSheet
-                && shareSheetStartedElapsed > 0L
-                && (SystemClock.elapsedRealtime() - shareSheetStartedElapsed)
-                        < SHARE_SHEET_RETURN_IGNORE_MS;
-        suppressFeedRefreshForShareSheet = false;
-
-        if (!homeHasStartedOnce || isChangingConfigurations() || isFinishing()) {
-            return false;
-        }
-        if (!fromProcessBackground) {
-            return false;
-        }
-        if (incomingIntent || recentShareSheet || expectNotifSettingsOrPermReturn
-                || resolvePendingDeepLinkPostId() > 0) {
-            showLog("background resume skip feed refresh intent=" + incomingIntent
-                    + " shareSheet=" + recentShareSheet
-                    + " notifSettings=" + expectNotifSettingsOrPermReturn
-                    + " sticky=" + resolvePendingDeepLinkPostId());
-            return false;
-        }
-        if (pendingNightModeRecreate || isNightUiOutOfSync()) {
-            return false;
-        }
-        return isPlainMainNewsFeed();
     }
 
     /** Main My Feed only — not Special, Flash, search, Read, calendar, or local. */
@@ -19581,9 +19654,8 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             return false;
         }
         if (isPushOpenIntent(intent)) {
-            if (isPositivePostId(intent.getStringExtra("TITLE"))
-                    || isPositivePostId(intent.getStringExtra("TITILE"))
-                    || isPositivePostId(postIdFromPushIntentUri(intent.getData()))) {
+            if (isPositivePostId(MyFirebaseMessagingService.resolvePushPostId(
+                    getApplicationContext(), intent))) {
                 return true;
             }
             try {
@@ -19660,9 +19732,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     public void onResume() {
         super.onResume();
         homeActivityResumed = true;
-        // onStart already applied a background return. Drop a deep-link latch that
-        // was set during a pause-only onNewIntent (no matching onStart).
-        suppressFeedRefreshForIncomingIntent = false;
+        // Pause-only onNewIntent (shade over a started activity) has no onStart.
+        // A background return posts the reload; keep the latch until that check
+        // so a history tap is not replaced by the first article.
+        if (!pendingBackgroundRefreshCheck) {
+            suppressFeedRefreshForIncomingIntent = false;
+        }
         try {
             ViewsBatchTracker.get().setHomeFlushActive(true);
             MediaAccessReporter.get().setHomeFlushActive(true);
