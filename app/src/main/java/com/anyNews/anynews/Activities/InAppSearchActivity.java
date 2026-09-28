@@ -64,8 +64,8 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 /**
  * In-app Search: mist + teal chrome, recent-searches idle state.
  * Typing shows topic rows with counts (highest first) and, under them, the
- * matching stories (title, date, photo). Tapping a topic filters those
- * stories in place. It does not open a second list.
+ * matching stories (title, date, photo) from that same response. Tapping a
+ * topic filters those stories in place. It does not open a second list.
  * Empty state only after the suggest request settles with zero hits — never
  * flash "No matching stories" while a request is still in flight.
  */
@@ -108,8 +108,6 @@ public class InAppSearchActivity extends AppCompatActivity {
     private int articleNextSkip = 0;
     private int articleLayoutRetries = 0;
     private String articleQuery = "";
-    /** One follow-up story fetch when a topic response came back without stories. */
-    private boolean articleFillSent = false;
     private final TextWatcher queryWatcher =
             new TextWatcher() {
                 @Override
@@ -124,7 +122,6 @@ public class InAppSearchActivity extends AppCompatActivity {
                     // Editing the box clears a topic filter and refreshes this screen.
                     listMode = MODE_TOPICS;
                     focusedTopic = "";
-                    articleFillSent = false;
                     resetArticlePaging();
                     dropArticleRows();
                     hideEmptyState();
@@ -209,7 +206,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         searchInput.setText(clean);
         searchInput.setSelection(clean.length());
         searchInput.addTextChangedListener(queryWatcher);
-        // Topic counts for the seeded query. Articles wait for a row tap.
+        // One response: topic counts, then the stories under them.
         scheduleSuggest(clean);
         if (showEmpty && !hasStorySuggestRows()) {
             paintEmptyOrFuzzy(clean);
@@ -324,40 +321,36 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void applyMixed(@Nullable JsonObject obj, @NonNull String q, boolean append) {
+        boolean articleMode = isArticleSuggestMode(obj);
         if (!append) {
-            topicRows.clear();
+            if (!articleMode) topicRows.clear();
             articleRows.clear();
-            JsonArray data =
-                    obj != null && obj.has("data") && obj.get("data").isJsonArray()
-                            ? obj.getAsJsonArray("data")
-                            : null;
-            if (data != null) {
-                for (JsonElement el : data) {
-                    Row topic = parseTopicRow(el);
-                    if (topic == null) continue;
-                    topicRows.add(topic);
-                    if (!TextUtils.isEmpty(topic.title)) lastSuggestTexts.add(topic.title);
+            if (!articleMode) {
+                JsonArray data = jsonArray(obj, "data");
+                if (data != null) {
+                    for (JsonElement el : data) {
+                        // A post_id row is one story, not a topic count.
+                        if (readPostId(el) > 0L) continue;
+                        Row topic = parseTopicRow(el);
+                        if (topic == null) continue;
+                        topicRows.add(topic);
+                        if (!TextUtils.isEmpty(topic.title)) lastSuggestTexts.add(topic.title);
+                    }
                 }
-            }
-            Collections.sort(
-                    topicRows,
-                    (a, b) -> {
-                        int byCount = Integer.compare(b.meta, a.meta);
-                        if (byCount != 0) return byCount;
-                        int la = a.title != null ? a.title.length() : 0;
-                        int lb = b.title != null ? b.title.length() : 0;
-                        return Integer.compare(la, lb);
-                    });
-        }
-        if (obj != null && obj.has("articles") && obj.get("articles").isJsonArray()) {
-            for (JsonElement el : obj.getAsJsonArray("articles")) {
-                Row art = parseArticleRow(el, q);
-                if (art == null) continue;
-                if (art.postId > 0L && articleRowsHave(art.postId)) continue;
-                articleRows.add(art);
-                if (!TextUtils.isEmpty(art.title)) lastSuggestTexts.add(art.title);
+                Collections.sort(
+                        topicRows,
+                        (a, b) -> {
+                            int byCount = Integer.compare(b.meta, a.meta);
+                            if (byCount != 0) return byCount;
+                            int la = a.title != null ? a.title.length() : 0;
+                            int lb = b.title != null ? b.title.length() : 0;
+                            return Integer.compare(la, lb);
+                        });
             }
         }
+        int before = articleRows.size();
+        ingestArticleElements(obj, q);
+        int received = articleRows.size() - before;
         while (lastSuggestTexts.size() > 40) lastSuggestTexts.remove(0);
         articleQuery = q;
         if (topicRows.isEmpty() && articleRows.isEmpty()) {
@@ -367,17 +360,70 @@ public class InAppSearchActivity extends AppCompatActivity {
             if (!hasStorySuggestRows()) paintEmptyOrFuzzy(q);
             return;
         }
-        int received = 0;
-        if (obj != null && obj.has("articles") && obj.get("articles").isJsonArray()) {
-            received = obj.getAsJsonArray("articles").size();
-        }
         renderMixed();
         noteArticlePage(obj, received);
-        // Topic counts arrived with no stories. Load the stories under them.
-        if (!append && !topicRows.isEmpty() && articleRows.isEmpty() && !articleFillSent) {
-            articleFillSent = true;
-            fetchSuggestions(q, true, 0, true);
+    }
+
+    private static boolean isArticleSuggestMode(@Nullable JsonObject obj) {
+        if (obj == null || !obj.has("suggest_mode") || obj.get("suggest_mode").isJsonNull()) {
+            return false;
         }
+        try {
+            return "articles".equalsIgnoreCase(obj.get("suggest_mode").getAsString());
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    @Nullable
+    private static JsonArray jsonArray(@Nullable JsonObject obj, @NonNull String key) {
+        if (obj == null || !obj.has(key) || obj.get(key).isJsonNull()) return null;
+        JsonElement el = obj.get(key);
+        return el.isJsonArray() ? el.getAsJsonArray() : null;
+    }
+
+    /** Stories from `articles` (and article-shaped `data` rows) onto this screen. */
+    private void ingestArticleElements(@Nullable JsonObject obj, @NonNull String q) {
+        if (obj == null) return;
+        addArticleElements(jsonArray(obj, "articles"), q);
+        addArticleElements(jsonArray(obj, "stories"), q);
+        JsonArray data = jsonArray(obj, "data");
+        if (data == null) return;
+        for (JsonElement el : data) {
+            if (readPostId(el) <= 0L) continue;
+            addArticleElement(el, q);
+        }
+    }
+
+    private void addArticleElements(@Nullable JsonArray arr, @NonNull String q) {
+        if (arr == null) return;
+        for (JsonElement el : arr) addArticleElement(el, q);
+    }
+
+    private void addArticleElement(@Nullable JsonElement el, @NonNull String q) {
+        Row art;
+        try {
+            art = parseArticleRow(el, q);
+        } catch (Exception ignored) {
+            return;
+        }
+        if (art == null) return;
+        if (art.postId > 0L && articleRowsHave(art.postId)) return;
+        articleRows.add(art);
+        if (!TextUtils.isEmpty(art.title)) lastSuggestTexts.add(art.title);
+    }
+
+    private static long readPostId(@Nullable JsonElement el) {
+        if (el == null || !el.isJsonObject()) return 0L;
+        JsonObject o = el.getAsJsonObject();
+        try {
+            if (o.has("post_id") && !o.get("post_id").isJsonNull()) {
+                return o.get("post_id").getAsLong();
+            }
+        } catch (Exception ignored) {
+            return 0L;
+        }
+        return 0L;
     }
 
     private boolean articleRowsHave(long postId) {
@@ -447,7 +493,6 @@ public class InAppSearchActivity extends AppCompatActivity {
                             ? searchInput.getText().toString().trim()
                             : "";
             String q = TextUtils.isEmpty(typed) ? next : typed;
-            articleFillSent = true;
             fetchSuggestions(q, true, 0, !topicRows.isEmpty());
         }
         if (listView == null || TextUtils.isEmpty(focusedTopic)) return;
@@ -600,7 +645,8 @@ public class InAppSearchActivity extends AppCompatActivity {
         if (!articles
                 && q.equals(lastSuggestQuery)
                 && listMode == MODE_TOPICS
-                && hasTopicRows()) {
+                && hasTopicRows()
+                && !articleRows.isEmpty()) {
             return;
         }
         if (articles
@@ -627,8 +673,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                 req.addProperty("include_articles", true);
                 req.addProperty("suggest_mode", "articles");
             } else {
-                // Counts first. Old servers ignore suggest_mode and return data[].
-                req.addProperty("limit", 12);
+                // Same response: topic counts in data[], stories in articles[].
+                req.addProperty("limit", ARTICLE_PAGE);
                 req.addProperty("suggest_mode", "topics");
             }
             String enc = encrypt(new Gson().toJson(req));
@@ -1123,7 +1169,6 @@ public class InAppSearchActivity extends AppCompatActivity {
     private void showTopicCounts(String q) {
         String clean = softenClientQuery(q);
         listMode = MODE_TOPICS;
-        articleFillSent = false;
         resetArticlePaging();
         dropArticleRows();
         if (clean.isEmpty() || "null".equalsIgnoreCase(clean)) {
