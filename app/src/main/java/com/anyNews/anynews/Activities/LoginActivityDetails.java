@@ -35,8 +35,6 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowCompat;
@@ -71,8 +69,6 @@ import com.anyNews.anynews.Utils.TranslatorPackHelper;
 import com.google.android.gms.auth.api.phone.SmsRetriever;
 import com.google.android.gms.auth.api.phone.SmsRetrieverClient;
 import com.google.android.gms.common.AccountPicker;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -118,7 +114,6 @@ public class LoginActivityDetails extends AppCompatActivity {
     String phone_number_data;
     EditText[] editTexts;
     LinearLayout login_detailes, otp_layout, verify_layout, resend_layout, post_layout, sendotpnew;
-    private static final int REQ_USER_CONSENT = 200;
     private static final long RESEND_COOLDOWN_MS = 45_000L;
     private static final long OTP_LOADING_DOT_MS = 400L;
     private static final String TAG_OTP = "LoginOtp";
@@ -140,21 +135,6 @@ public class LoginActivityDetails extends AppCompatActivity {
     private final Handler otpLoadingHandler = new Handler(Looper.getMainLooper());
     private Runnable otpLoadingDotsRunnable;
     private int otpLoadingDotStep = 0;
-    private final ActivityResultLauncher<Intent> smsConsentLauncher =
-            registerForActivityResult(
-                    new ActivityResultContracts.StartActivityForResult(),
-                    new ActivityResultCallback<ActivityResult>() {
-                        @Override
-                        public void onActivityResult(ActivityResult result) {
-                            if (result.getResultCode() == Activity.RESULT_OK
-                                    && result.getData() != null) {
-                                String message = result.getData()
-                                        .getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE);
-                                getOtpFromMessage(message);
-                            }
-                        }
-                    });
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -862,6 +842,9 @@ public class LoginActivityDetails extends AppCompatActivity {
             resendCountDownTimer = null;
         }
         txt_resend_otp.setText(resendOtpLabel);
+        // Listen before the SMS is sent. Retriever does not see messages that
+        // arrived earlier, and it does not show an Allow sheet.
+        startSmsAutoRead();
         JsonObject otp = generateOtpRequest();
 
         APIService apiService = RestApiClient.getClient().create(APIService.class);
@@ -881,7 +864,6 @@ public class LoginActivityDetails extends AppCompatActivity {
 
 
                 if (OtpRequest.getSuccess()) {
-                    startSmsAutoRead();
                     startResendCooldown();
                     focusFirstOtpBox();
                 } else {
@@ -1234,14 +1216,13 @@ public class LoginActivityDetails extends AppCompatActivity {
 
     private void startSmsAutoRead() {
         logAppSignatureForSmsRetriever();
-        // Primary: User Consent (no app hash; matches Google Allow dialog in screenshot).
-        startSmsUserConsent();
-        // Also start Retriever when OTP SMS includes the app signature hash (silent fill).
+        // SMS Retriever reads one matching SMS silently (no Allow sheet).
+        // The OTP body must end with this build's 11-character app hash.
         SmsRetrieverClient client = SmsRetriever.getClient(this);
         client.startSmsRetriever()
                 .addOnSuccessListener(aVoid -> Log.d(TAG_OTP, "SMS Retriever started"))
                 .addOnFailureListener(e ->
-                        Log.w(TAG_OTP, "SMS Retriever failed (Consent still active)", e));
+                        Log.w(TAG_OTP, "SMS Retriever failed; user can type the OTP", e));
     }
 
     private void logAppSignatureForSmsRetriever() {
@@ -1253,33 +1234,6 @@ public class LoginActivityDetails extends AppCompatActivity {
             }
         } catch (Exception e) {
             Log.w(TAG_OTP, "Could not compute app signature hash", e);
-        }
-    }
-
-    private void startSmsUserConsent() {
-        SmsRetrieverClient client = SmsRetriever.getClient(this);
-        client.startSmsUserConsent(null).addOnSuccessListener(new OnSuccessListener<Void>() {
-            @Override
-            public void onSuccess(Void aVoid) {
-                Log.d(TAG_OTP, "SMS User Consent started");
-            }
-        }).addOnFailureListener(new OnFailureListener() {
-            @Override
-            public void onFailure(@NonNull Exception e) {
-                Log.w(TAG_OTP, "SMS User Consent failed", e);
-            }
-        });
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        // Legacy fallback if consent was started via startActivityForResult.
-        if (requestCode == REQ_USER_CONSENT) {
-            if ((resultCode == RESULT_OK) && (data != null)) {
-                String message = data.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE);
-                getOtpFromMessage(message);
-            }
         }
     }
 
@@ -1321,7 +1275,7 @@ public class LoginActivityDetails extends AppCompatActivity {
         if (otp_4.getText() != null) {
             otp_4.setSelection(otp_4.getText().length());
         }
-        // Allow → fill → auto-verify (same path as tapping Verify).
+        // Silent fill → auto-verify (same path as tapping Verify, including loading dots).
         otp_4.post(() -> submitOtpFromBoxes(true));
     }
 
@@ -1338,21 +1292,8 @@ public class LoginActivityDetails extends AppCompatActivity {
                     }
 
                     @Override
-                    public void onConsentIntent(Intent intent) {
-                        try {
-                            smsConsentLauncher.launch(intent);
-                        } catch (ActivityNotFoundException e) {
-                            Log.w(TAG_OTP, "SMS consent activity missing", e);
-                            try {
-                                startActivityForResult(intent, REQ_USER_CONSENT);
-                            } catch (ActivityNotFoundException ignored) {
-                            }
-                        }
-                    }
-
-                    @Override
                     public void onFailure() {
-                        Log.d(TAG_OTP, "SMS auto-read timed out or failed");
+                        Log.d(TAG_OTP, "SMS Retriever timed out or failed; manual OTP still available");
                     }
                 };
         IntentFilter intentFilter = new IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION);
