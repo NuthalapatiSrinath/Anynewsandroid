@@ -412,6 +412,7 @@ public class StartingActivity extends AppCompatActivity {
             // never treat it as a share / DATAFROM2G deep link.
             if (!isFcmPushIntentUri(data)) {
                 extractData(data);
+                absorbSharePageExtra(intent);
                 maybeResolveLegacyPageLink(data);
                 maybeResolveShareShortCode(data);
             }
@@ -983,10 +984,14 @@ public class StartingActivity extends AppCompatActivity {
         }
         final String shortCode = code;
         final String resolveHost = host.toLowerCase(java.util.Locale.US);
-        final String resolveUrl = "https://" + resolveHost + "/" + shortCode + "?format=json";
+        // Forward ?page= so the JSON echo can restore it if the VIEW uri lost the query.
+        final int pageAtResolve = Math.max(0, shareGalleryPage);
+        final String resolveUrl = "https://" + resolveHost + "/" + shortCode + "?format=json"
+                + (pageAtResolve > 0 ? "&page=" + pageAtResolve : "");
         shareShortCodeResolvePending = true;
         backgroundExecutor.execute(() -> {
             String resolvedId = null;
+            int resolvedPage = 0;
             HttpURLConnection conn = null;
             BufferedReader reader = null;
             try {
@@ -1009,6 +1014,12 @@ public class StartingActivity extends AppCompatActivity {
                     if (obj != null && obj.has("post_id") && !obj.get("post_id").isJsonNull()) {
                         resolvedId = String.valueOf(obj.get("post_id").getAsLong());
                     }
+                    if (obj != null && obj.has("page") && !obj.get("page").isJsonNull()) {
+                        try {
+                            resolvedPage = Math.max(0, obj.get("page").getAsInt());
+                        } catch (Exception ignored) {
+                        }
+                    }
                 }
             } catch (Exception e) {
                 Logone.w(TAG, "share short code resolve failed", e);
@@ -1024,13 +1035,20 @@ public class StartingActivity extends AppCompatActivity {
                 }
             }
             final String id = resolvedId;
+            final int pageFromJson = resolvedPage;
             new Handler(Looper.getMainLooper()).post(() -> {
                 shareShortCodeResolvePending = false;
+                if (pageFromJson > 0) {
+                    shareGalleryPage = pageFromJson;
+                    SharedPrefsData.putInt(getApplicationContext(), Constants.PENDING_SHARE_PAGE,
+                            shareGalleryPage, Constants.PREF_NAME);
+                }
                 if (id != null && !id.isEmpty()) {
                     articleId1 = id;
                     SharedPrefsData.putString(getApplicationContext(),
                             Constants.PENDING_SHARE_POST, id, Constants.PREF_NAME);
                     showLog("CHECK POINT share short-code resolved articleId:" + id
+                            + " page=" + shareGalleryPage
                             + " host=" + resolveHost);
                     deliverShareRedirectToHome(id);
                 }
@@ -1068,6 +1086,53 @@ public class StartingActivity extends AppCompatActivity {
             startActivity(intent);
         } catch (Exception e) {
             Logone.w(TAG, "deliverShareRedirectToHome failed", e);
+        }
+    }
+
+    /**
+     * Intent string extra {@code page} / {@code slide} from the landing
+     * {@code S.page=} handoff. Used only when the VIEW uri has no query —
+     * a uri query always wins. 0-based, same as {@code ?page=}.
+     */
+    private void absorbSharePageExtra(@Nullable Intent intent) {
+        if (intent == null || shareGalleryPage > 0) {
+            return;
+        }
+        int page = 0;
+        try {
+            page = pageExtraValue(intent, "page");
+            if (page <= 0) {
+                page = pageExtraValue(intent, "slide");
+            }
+        } catch (Exception ignored) {
+        }
+        if (page <= 0) {
+            return;
+        }
+        shareGalleryPage = page;
+        SharedPrefsData.putInt(getApplicationContext(), Constants.PENDING_SHARE_PAGE,
+                shareGalleryPage, Constants.PREF_NAME);
+    }
+
+    private static int pageExtraValue(@NonNull Intent intent, @NonNull String key) {
+        if (!intent.hasExtra(key) || intent.getExtras() == null) {
+            return 0;
+        }
+        Object raw = intent.getExtras().get(key);
+        if (raw == null) {
+            return 0;
+        }
+        try {
+            if (raw instanceof Number) {
+                return Math.max(0, ((Number) raw).intValue());
+            }
+            String text = String.valueOf(raw).trim().replaceAll("[^0-9]", "");
+            if (text.isEmpty()) {
+                return 0;
+            }
+            return Math.max(0, Integer.parseInt(text));
+        } catch (Exception ignored) {
+            return 0;
         }
     }
 
@@ -1187,6 +1252,7 @@ public class StartingActivity extends AppCompatActivity {
             Uri data = intent.getData();
             if (!isFcmPushIntentUri(data)) {
                 extractData(data);
+                absorbSharePageExtra(intent);
                 maybeResolveLegacyPageLink(data);
                 maybeResolveShareShortCode(data);
             }
