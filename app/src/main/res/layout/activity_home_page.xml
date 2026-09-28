@@ -642,8 +642,8 @@
                             android:textColor="@color/selector_item_primary_color" />
                     </LinearLayout>
 
-                    <!-- Center + returns when reporter login is ON. When it is OFF,
-                         imageVIewShareWhatsapp (icon only, no count) sits in this slot. -->
+                    <!-- Reporter plus stays gone. Non-magazine posts use
+                         imageVIewShareWhatsapp (steady icon, no count). -->
                     <com.google.android.material.floatingactionbutton.FloatingActionButton
                         android:id="@+id/fab"
                         android:layout_width="wrap_content"

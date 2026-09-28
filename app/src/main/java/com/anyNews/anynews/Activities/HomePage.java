@@ -8434,8 +8434,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Middle column between Special and Daily Updates.
      * Magazines / special galleries: blinking Share.
-     * Every other article: WhatsApp share of that article (Play Store footer action).
-     * The reporter "+" overlay stays off.
+     * Every other article: a steady WhatsApp icon. It does not pulse.
+     * The reporter "+" is not a footer control on this build.
      */
     private void updateCenterFab() {
         if (visibleFlipIsInviteOrAdShell()) {
@@ -8461,8 +8461,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         Log.i(MAGAZINE_GLOW_TAG, "updateCenterFab idx=" + idx
                 + " postType=[" + type + "]"
-                + " showShare=" + showShare
-                + " showReporterLogin=" + showReporterLogin);
+                + " showShare=" + showShare);
+        hideCenterPlusOverlays();
         if (showShare) {
             applyMagazineCenterShare();
             Log.i(MAGAZINE_GLOW_TAG, "MODE=SHARE_FOOTER postType=[" + type + "]");
@@ -8470,14 +8470,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         hideMagazineShareFooter();
-        if (showReporterLogin && isDeviceOnline()) {
-            applyReporterPlusFab();
-            Log.i(MAGAZINE_GLOW_TAG, "MODE=PLUS showReporterLogin=true");
-            showLog("updateCenterFab reporter plus");
-            ensureMagazineShareFooterSlot();
-            return;
-        }
-        hideCenterPlusOverlays();
         if (shouldShowFooterWhatsapp()) {
             applyFooterWhatsapp();
             Log.i(MAGAZINE_GLOW_TAG, "MODE=WHATSAPP_FOOTER postType=[" + type + "]");
@@ -8866,8 +8858,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Middle column should be open for Share, the reporter +, or the footer
-     * WhatsApp. Based on the post and reporter-login flag, not view visibility.
+     * Middle column should be open for magazine Share or the footer WhatsApp.
+     * The reporter-login flag does not open a plus here.
      */
     private boolean wantsCenterFooterActionSlot() {
         if (!isDeviceOnline() || isFooterCalendarTabWanted()) {
@@ -8877,9 +8869,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return false;
         }
         if (shouldShowMagazineFooterShare()) {
-            return true;
-        }
-        if (showReporterLogin) {
             return true;
         }
         return shouldShowFooterWhatsapp();
@@ -8894,27 +8883,37 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * July 28 footer WhatsApp: ic_whatsapp_home, no tint, no count,
-     * admin size (default 48dp), in the slot the plus uses.
+     * admin size (default 48dp). Steady icon — never the magazine Share pulse.
+     * Already-visible calls do not hide and reshow the view (that fade is the
+     * per-article blink from {@code animateLayoutChanges}).
      */
     private void applyFooterWhatsapp() {
         if (imageVIewShareWhatsapp == null) {
             return;
         }
         imageVIewShareWhatsapp.clearAnimation();
+        imageVIewShareWhatsapp.animate().cancel();
         imageVIewShareWhatsapp.setScaleX(1f);
         imageVIewShareWhatsapp.setScaleY(1f);
         imageVIewShareWhatsapp.setAlpha(1f);
-        imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
-        imageVIewShareWhatsapp.clearColorFilter();
+        boolean alreadyShowing = imageVIewShareWhatsapp.getVisibility() == View.VISIBLE
+                && imageVIewShareWhatsapp.getDrawable() != null;
+        if (!alreadyShowing) {
+            imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
+            imageVIewShareWhatsapp.clearColorFilter();
+            imageVIewShareWhatsapp.setVisibility(View.VISIBLE);
+        }
         FooterStyleHelper.applyFooterWhatsappIcon(this, imageVIewShareWhatsapp);
-        imageVIewShareWhatsapp.setVisibility(View.VISIBLE);
         imageVIewShareWhatsapp.setEnabled(true);
         imageVIewShareWhatsapp.setClickable(true);
         imageVIewShareWhatsapp.setOnClickListener(v ->
                 onArticleWhatsappClicked(getVisiblePostIndex()));
-        imageVIewShareWhatsapp.bringToFront();
         if (home_page_navigation != null) {
-            home_page_navigation.bringChildToFront(imageVIewShareWhatsapp);
+            int last = home_page_navigation.getChildCount() - 1;
+            if (last < 0 || home_page_navigation.getChildAt(last) != imageVIewShareWhatsapp) {
+                imageVIewShareWhatsapp.bringToFront();
+                home_page_navigation.bringChildToFront(imageVIewShareWhatsapp);
+            }
         }
         ensureMagazineShareFooterSlot();
     }
@@ -8934,37 +8933,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Reporter login ON: the old center "+" in the middle footer slot.
-     * Icon-only WhatsApp stays hidden. Magazines never call this.
+     * The new footer does not show the reporter plus. Posting stays on the
+     * profile entry for a user whose role is reporter. {@code show_reporter_login}
+     * is still read from the server for older builds.
      */
     private void applyReporterPlusFab() {
-        hideFooterWhatsapp();
-        if (floatingActionButtonHome == null) {
-            return;
-        }
-        floatingActionButtonHome.clearAnimation();
-        floatingActionButtonHome.setScaleX(1f);
-        floatingActionButtonHome.setScaleY(1f);
-        floatingActionButtonHome.setAlpha(1f);
-        floatingActionButtonHome.setBackgroundTintList(
-                ContextCompat.getColorStateList(this, R.color.bottom_navigation_view_color));
-        floatingActionButtonHome.setRippleColor(
-                ContextCompat.getColorStateList(this, R.color.bottom_navigation_view_color));
-        if (!isCenterPlusMenuOpen()) {
-            floatingActionButtonHome.setRotation(0f);
-            floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
-        }
-        floatingActionButtonHome.setContentDescription(getString(R.string.post_selection));
-        floatingActionButtonHome.setEnabled(true);
-        floatingActionButtonHome.setClickable(true);
-        floatingActionButtonHome.setFocusable(true);
-        floatingActionButtonHome.setOnClickListener(v -> onReporterPlusFooterClicked());
-        floatingActionButtonHome.setVisibility(View.VISIBLE);
-        try {
-            floatingActionButtonHome.show();
-        } catch (Exception ignored) {
-        }
-        FooterStyleHelper.applyFab(this, floatingActionButtonHome);
+        hideCenterPlusOverlays();
     }
 
     /** Logged-in reporters open the create menu; everyone else opens login. */
@@ -8991,8 +8965,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * One WhatsApp share of the visible article. Half-row chip and the middle
-     * footer icon both call this, so one tap increments {@code whatsapp_shares} once.
+     * One WhatsApp share of the visible article. The half-row chip and the middle
+     * footer icon both call this. Opening WhatsApp does not write a share count.
      */
     public void onArticleWhatsappClicked(int position) {
         try {
@@ -11706,8 +11680,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Force-hide center FAB + WhatsApp overlays when the + slot is off.
-     * Magazine footer Share visibility is owned solely by
+     * Hide the reporter plus. The new footer never shows it.
+     * WhatsApp visibility is owned by {@link #applyFooterWhatsapp()} /
+     * {@link #hideFooterWhatsapp()}. Magazine Share is owned by
      * {@link #updateCenterFab()} / {@link #hideMagazineShareFooter()}.
      */
     private void hideCenterPlusOverlays() {
@@ -11720,9 +11695,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 } catch (Exception ignored) {
                 }
             }
-            if (imageVIewShareWhatsapp != null) {
-                imageVIewShareWhatsapp.setVisibility(View.GONE);
-            }
+            // Leave the WhatsApp icon alone. Hiding it here and showing it on the
+            // next article fades the glyph because the footer animates layout changes.
         } catch (Exception e) {
             showLog("hideCenterPlusOverlays: " + e.getMessage());
         }
@@ -20862,10 +20836,6 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                         return true;
                     }
                     if (isMagazineShareFooterShowing()) {
-                        return false;
-                    }
-                    if (showReporterLogin && isReporterPlusShowing()) {
-                        onReporterPlusFooterClicked();
                         return false;
                     }
                     if (isFooterWhatsappShowing()) {

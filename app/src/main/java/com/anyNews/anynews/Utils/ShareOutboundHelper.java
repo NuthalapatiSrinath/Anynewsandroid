@@ -52,15 +52,22 @@ public final class ShareOutboundHelper {
      * picks an app — dismiss / back without choosing does <strong>not</strong> count.
      * Android cannot confirm the user pressed Send inside the target app.
      *
-     * <p>WhatsApp button shares use this same callback. Do not increment
-     * {@code whatsapp_shares} from {@code startActivity}; a packaged intent still
-     * waits here until a target is chosen.
+     * <p>A direct WhatsApp intent ({@code setPackage("com.whatsapp")}) must not use
+     * that callback. The system reports the package as chosen as soon as WhatsApp's
+     * activity starts, which is the same moment as launch — not a tap on Send.
+     * Returning to AnyNews is also not a send. This method starts that activity and
+     * does not run {@code onTargetChosen}. Callers must not increment
+     * {@code whatsapp_shares} on launch or on resume.
      */
     public static void launchChooserOnTargetChosen(
             @NonNull Context context,
             @NonNull Intent sendIntent,
             @Nullable CharSequence title,
             @Nullable Runnable onTargetChosen) {
+        if (isDirectPackageLaunch(sendIntent)) {
+            startActivityDirect(context, sendIntent);
+            return;
+        }
         final Context app = context.getApplicationContext();
         final int req = CHOOSER_REQ.getAndIncrement() & 0x7fffffff;
         final String action = app.getPackageName() + ".SHARE_TARGET_CHOSEN." + req;
@@ -126,6 +133,23 @@ public final class ShareOutboundHelper {
             cleanup.run();
             throw e;
         }
+    }
+
+    /** True when the intent is already aimed at one app (WhatsApp), not a chooser. */
+    private static boolean isDirectPackageLaunch(@NonNull Intent sendIntent) {
+        String pkg = sendIntent.getPackage();
+        return pkg != null && !pkg.isEmpty();
+    }
+
+    /**
+     * Starts a packaged share. Does not invoke a count callback: launch and
+     * returning from the other app are not a completed send.
+     */
+    private static void startActivityDirect(@NonNull Context context, @NonNull Intent sendIntent) {
+        if (!(context instanceof Activity)) {
+            sendIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        context.startActivity(sendIntent);
     }
 
     private static void startChooserPlain(

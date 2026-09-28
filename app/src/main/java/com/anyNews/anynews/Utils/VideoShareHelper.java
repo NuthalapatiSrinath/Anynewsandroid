@@ -775,7 +775,7 @@ public class VideoShareHelper {
                     intent.putExtra("jid", "status@broadcast");
                 }
                 // Skip scanning all share targets — grant WhatsApp only.
-                // Count only when the user picks WhatsApp in the sheet, not when it opens.
+                // Opening WhatsApp does not confirm a send, so there is no count callback.
                 context.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 if (activity != null) {
                     activity.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -785,11 +785,7 @@ public class VideoShareHelper {
                         launchCtx,
                         intent,
                         "Share Video",
-                        () -> {
-                            if (listener != null) {
-                                listener.onShareConfirmed();
-                            }
-                        });
+                        null);
                 return;
             }
 
