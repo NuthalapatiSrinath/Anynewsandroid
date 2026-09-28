@@ -172,6 +172,11 @@ public class StartingActivity extends AppCompatActivity {
      * Forwarded to Home as {@code SHARE_GALLERY_PAGE}; 0 = first page (legacy links).
      */
     int shareGalleryPage = 0;
+    /**
+     * Short code last resolved in this process. A later tap of the same
+     * {@code /{code}?page=N} can jump the open magazine without waiting on JSON.
+     */
+    private String resolvedShareShortCode;
     String scrren;
     // firebase storage
     FirebaseDatabase database = FirebaseDatabase.getInstance();
@@ -963,38 +968,44 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     /**
-     * Resolve https://share*.anynews.co.in/{code} → numeric post_id via ?format=json.
-     * App Links open the short URL directly; landing HTML is not loaded.
+     * Alphanumeric {@code https://share*.anynews.co.in/{code}} segment, or null
+     * when this URI is already a numeric /p/{id} (or not a share host).
      */
-    private void maybeResolveShareShortCode(Uri data) {
-        if (data == null) {
-            return;
-        }
-        String host = data.getHost();
-        if (!isShareShortHost(host)) {
-            return;
-        }
-        if (articleId1 != null && !articleId1.isEmpty()) {
-            return;
+    @Nullable
+    private String shareShortCodeFromUri(@Nullable Uri data) {
+        if (data == null || !isShareShortHost(data.getHost())) {
+            return null;
         }
         String path = data.getPath();
         if (path == null || path.isEmpty() || "/".equals(path)) {
-            return;
+            return null;
         }
         String code = path.startsWith("/") ? path.substring(1) : path;
         int slash = code.indexOf('/');
         if (slash >= 0) {
             code = code.substring(0, slash);
         }
-        // Skip /p/{id} (already handled) and pure digits
-        if (code.isEmpty() || code.equals("p") || code.matches("\\d+")) {
+        if (code.isEmpty() || "p".equals(code) || code.matches("\\d+")) {
+            return null;
+        }
+        if (!code.matches("[A-Za-z0-9]{5,12}")) {
+            return null;
+        }
+        return code;
+    }
+
+    /**
+     * Resolve https://share*.anynews.co.in/{code} → numeric post_id via ?format=json.
+     * App Links open the short URL directly; landing HTML is not loaded.
+     * A previous {@link #articleId1} must not skip this — warm taps of
+     * {@code /{code}?page=N} still need a resolve when the code changed.
+     */
+    private void maybeResolveShareShortCode(Uri data) {
+        final String shortCode = shareShortCodeFromUri(data);
+        if (shortCode == null || data == null || data.getHost() == null) {
             return;
         }
-        if (!code.matches("[A-Za-z0-9]{5,12}") || code.matches("\\d+")) {
-            return;
-        }
-        final String shortCode = code;
-        final String resolveHost = host.toLowerCase(java.util.Locale.US);
+        final String resolveHost = data.getHost().toLowerCase(java.util.Locale.US);
         // Forward ?page= so the JSON echo can restore it if the VIEW uri lost the query.
         final int pageAtResolve = Math.max(0, shareGalleryPage);
         final String resolveUrl = "https://" + resolveHost + "/" + shortCode + "?format=json"
@@ -1055,6 +1066,7 @@ public class StartingActivity extends AppCompatActivity {
                             shareGalleryPage, Constants.PREF_NAME);
                 }
                 if (id != null && !id.isEmpty()) {
+                    resolvedShareShortCode = shortCode;
                     articleId1 = id;
                     SharedPrefsData.putString(getApplicationContext(),
                             Constants.PENDING_SHARE_POST, id, Constants.PREF_NAME);
@@ -1265,7 +1277,19 @@ public class StartingActivity extends AppCompatActivity {
                 extractData(data);
                 absorbSharePageExtra(intent);
                 maybeResolveLegacyPageLink(data);
-                maybeResolveShareShortCode(data);
+                // Same magazine already resolved: deliver now so ?page= moves the
+                // open pager. A different code must not reuse the previous post id.
+                String incomingCode = shareShortCodeFromUri(data);
+                boolean sameShort = incomingCode != null
+                        && incomingCode.equals(resolvedShareShortCode)
+                        && articleId1 != null
+                        && !articleId1.isEmpty();
+                if (incomingCode != null && !sameShort) {
+                    articleId1 = null;
+                    maybeResolveShareShortCode(data);
+                } else if (incomingCode == null) {
+                    maybeResolveShareShortCode(data);
+                }
             }
             // Warm start: open Jobs hub immediately for job share App Links.
             if (jobId1 != null && !jobId1.isEmpty()) {

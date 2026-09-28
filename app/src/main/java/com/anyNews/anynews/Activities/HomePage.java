@@ -754,12 +754,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     String SHARE_REDIRECT_ID = "", TITLE_REWARDS = "", pushUpdatedID,DATAFROM2G;
     long SHARE_ID;
     /**
-     * One-shot 0-based nested gallery/magazine page from share {@code ?page=}.
-     * Held until FlipperAdapter binds the shared post's FlipView/ViewPager.
+     * 0-based nested gallery/magazine page from share {@code ?page=}.
+     * Kept across binds until the visible pager actually shows it — a second
+     * getView used to consume it once, then {@code setAdapter} snapped back to 0.
      * {@code -1} = none pending; {@code 0+} = land on that nested page.
      */
     private long pendingShareGalleryPostId = 0L;
     private int pendingShareGalleryPage = -1;
+    /** Latest bind/jump wins; earlier settle runnables must not clear the page. */
+    private int shareGalleryApplyGen = 0;
     /**
      * One extra page-0 after a sticky share miss — List_All_Articles with
      * {@code share_post_id} re-fetches the post by id when the first page did not
@@ -2119,6 +2122,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             showLog("share onNewIntent land failed: " + e.getMessage());
             android.util.Log.e("MagazineCrash", "share onNewIntent: " + e.getMessage());
         }
+        // Already reading this magazine: flipTo the same card does not rebind
+        // the nested pager, so move that slide here too.
+        jumpVisibleShareGalleryPage(shareId);
     }
 
     /** Enter FlipView keyword / single-article search mode from {@link InAppSearchActivity}. */
@@ -19846,6 +19852,14 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
         } catch (Exception ignored) {
         }
+        long nestedPostId = 0L;
+        try {
+            if (list != null && safe >= 0 && safe < list.size() && list.get(safe) != null) {
+                nestedPostId = list.get(safe).getPostId();
+            }
+        } catch (Exception ignored) {
+        }
+        final long jumpPostId = nestedPostId;
         // Double-post: setData often resets FlipView to 0 in the next frames.
         mFlipView.post(new Runnable() {
             @Override
@@ -19856,6 +19870,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                         @Override
                         public void run() {
                             flipToRestoredPage(safe);
+                            if (jumpPostId > 0L) {
+                                jumpVisibleShareGalleryPage(jumpPostId);
+                            }
                         }
                     });
                 }
@@ -19929,6 +19946,65 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         pendingShareGalleryPostId = sharePostId;
         pendingShareGalleryPage = page;
         showLog("share gallery page pending postId=" + sharePostId + " page=" + page);
+    }
+
+    /**
+     * Pending nested page for {@code postId}, or {@code -1}. Does not clear —
+     * a later magazine bind must still see it.
+     */
+    public int peekShareGalleryPage(long postId) {
+        if (postId <= 0 || pendingShareGalleryPostId <= 0
+                || postId != pendingShareGalleryPostId
+                || pendingShareGalleryPage < 0) {
+            return -1;
+        }
+        return pendingShareGalleryPage;
+    }
+
+    /** Token for {@link #finishShareGalleryApply(long, int)}. Last caller wins. */
+    public int bumpShareGalleryApplyGen() {
+        return ++shareGalleryApplyGen;
+    }
+
+    /** Clear the pending slide only if no newer bind/jump replaced {@code gen}. */
+    public void finishShareGalleryApply(long postId, int gen) {
+        if (gen != shareGalleryApplyGen) {
+            return;
+        }
+        if (peekShareGalleryPage(postId) < 0) {
+            return;
+        }
+        consumeShareGalleryPage(postId);
+    }
+
+    /**
+     * Move the on-screen magazine/gallery to the pending share slide.
+     * Retries until the nested pager exists. No-op once the page is consumed.
+     */
+    private void jumpVisibleShareGalleryPage(long postId) {
+        jumpVisibleShareGalleryPage(postId, 0);
+    }
+
+    private void jumpVisibleShareGalleryPage(final long postId, final int attempt) {
+        if (postId <= 0 || peekShareGalleryPage(postId) < 0) {
+            return;
+        }
+        boolean moved = false;
+        try {
+            if (adapter != null && mFlipView != null) {
+                moved = adapter.landVisibleShareGalleryPage(
+                        postId, mFlipView.getCurrentPageView());
+            }
+        } catch (Exception ignored) {
+        }
+        if (!moved && attempt < 10 && mFlipView != null) {
+            mFlipView.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    jumpVisibleShareGalleryPage(postId, attempt + 1);
+                }
+            }, 60L);
+        }
     }
 
     /**
