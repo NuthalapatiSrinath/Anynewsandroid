@@ -308,6 +308,8 @@ public class StartingActivity extends AppCompatActivity {
                     .putString(Constants.FLIP_RESTORE_POST_ID, "-1")
                     .putBoolean(Constants.FLIP_RESTORE_PENDING, false)
                     .putString(Constants.FLIP_RESTORE_AT, "0")
+                    .putBoolean(Constants.DAILY_UPDATES_RESTORE, false)
+                    .putString(Constants.DAILY_UPDATES_RESTORE_AT, "0")
                     .apply();
         } catch (Exception ignored) {
         }

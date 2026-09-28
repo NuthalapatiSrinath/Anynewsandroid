@@ -294,6 +294,13 @@ public class Constants {
     /** Language id that owned {@link #FLIP_RESTORE_INDEX}. Mismatch → stay on article 0. */
     public static String FLIP_RESTORE_LANGUAGE_ID = "flip_restore_language_id";
     /**
+     * Daily Updates hub was the Home destination across a DayNight recreate.
+     * Cleared on splash cold start. Does not change language or night-mode prefs.
+     */
+    public static String DAILY_UPDATES_RESTORE = "daily_updates_restore";
+    /** epoch ms when {@link #DAILY_UPDATES_RESTORE} was written (theme recreate TTL). */
+    public static String DAILY_UPDATES_RESTORE_AT = "daily_updates_restore_at";
+    /**
      * Set when the user picks a different language so the next Home open
      * starts at that language's latest article instead of the previous seat.
      */

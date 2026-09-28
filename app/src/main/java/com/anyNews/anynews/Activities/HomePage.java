@@ -772,6 +772,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Bundle keys for flip position across DayNight recreates (manual night toggle). */
     private static final String STATE_FLIP_INDEX = "home_flip_index";
     private static final String STATE_FLIP_POST_ID = "home_flip_post_id";
+    /** Daily Updates hub was showing when this activity was recreated. */
+    private static final String STATE_DAILY_UPDATES_OPEN = "home_daily_updates_open";
+    /**
+     * Theme / config recreate should reopen the Daily Updates hub. The footer
+     * check is restored by the menu view state without running the tab listener,
+     * which used to leave the news flipper on screen under a lit Daily Updates tab.
+     */
+    private boolean restoreDailyUpdatesOnCreate = false;
     /** True after recreate until we apply (or abandon) restored flip position. */
     private boolean pendingFlipRestore = false;
     private int pendingRestoreFlipIndex = 0;
@@ -1158,6 +1166,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         pendingNightModeRecreate = false;
         readPendingFlipRestoreState(savedInstanceState);
+        // Before language-switch consume clears its flag. Does not touch night mode.
+        restoreDailyUpdatesOnCreate = peekDailyUpdatesRestoreRequest(savedInstanceState);
         // Language switch: do not re-seat the previous language's flip index.
         consumeLanguageSwitchFlipReset();
         // Secure by default (blocks screenshots/recording); cleared only when the
@@ -1373,7 +1383,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
         }
-        if (!expectInstantMainPaint) {
+        if (restoreDailyUpdatesOnCreate) {
+            // Hub covers the feed. Do not flash the news flipper on this recreate.
+            try {
+                hideHomeFeedLoadingReveal(true);
+            } catch (Exception ignored) {
+            }
+            layout_with_data.setVisibility(View.GONE);
+        } else if (!expectInstantMainPaint) {
             showHomeFeedLoadingReveal();
             layout_with_data.setVisibility(View.GONE);
         } else {
@@ -1587,6 +1604,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             overridePendingTransition(0, 0);
         }
         showLog("ONCREATE CALLED");
+        // Share / push seating and offline stay on the feed. Do not steal those opens.
+        if (restoreDailyUpdatesOnCreate
+                && (openAsSpecial
+                || SHARE_ID > 0
+                || pushOwnsSeating
+                || !isDeviceOnline()
+                || !ProfileHubConfigHelper.isFooterShowVideos(this))) {
+            restoreDailyUpdatesOnCreate = false;
+            dailyUpdatesModeActive = false;
+            persistDailyUpdatesDestination(false);
+        }
+        if (restoreDailyUpdatesOnCreate) {
+            // Set before inlist so a feed paint cannot treat this as the news surface
+            // and syncFooterSelectionToFeedMode cannot force the News tab.
+            dailyUpdatesModeActive = true;
+        }
         // Special must never inherit main-feed skip/cursor or flip-restore mid-state.
         if (openAsSpecial) {
             prepareSpecialFeedFromTop();
@@ -1899,6 +1932,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         bottomNavigationView.setOnNavigationItemReselectedListener(mOnNavigationItemReselectedListener);
         handleFooterTabExtra(getIntent());
         applyDailyUpdatesOpenExtra(getIntent());
+        if (restoreDailyUpdatesOnCreate) {
+            restoreDailyUpdatesDestination();
+        }
         // firebase store
         hashMapUser = new HashMap<>();
         draft_id_firebase = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
@@ -9607,10 +9643,34 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Hide embedded Daily Updates page. */
     private void hideHomeDailyUpdatesMode() {
         dailyUpdatesModeActive = false;
+        persistDailyUpdatesDestination(false);
         try {
             if (homeDailyUpdatesHost != null) {
                 homeDailyUpdatesHost.setVisibility(View.GONE);
             }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Late feed paints set the news flipper visible. While Daily Updates is the
+     * destination, keep that hub above the flipper (light and dark).
+     */
+    private void keepDailyUpdatesCovered() {
+        if (!isDailyUpdatesMode() || homeDailyUpdatesHost == null
+                || isFinishing() || isDestroyed()) {
+            return;
+        }
+        try {
+            hideHomeFeedLoadingReveal(true);
+            if (layout_with_data != null) {
+                layout_with_data.setVisibility(View.GONE);
+            }
+            if (comment_page != null) {
+                comment_page.setVisibility(View.GONE);
+            }
+            homeDailyUpdatesHost.setVisibility(View.VISIBLE);
+            homeDailyUpdatesHost.bringToFront();
         } catch (Exception ignored) {
         }
     }
@@ -9675,6 +9735,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         softMergeOnNextPage0 = false;
         setFeedModeFlags(false, false);
         dailyUpdatesModeActive = true;
+        persistDailyUpdatesDestination(true);
         feedModeEpoch++;
         clearPendingFlipRestore();
         try {
@@ -9722,6 +9783,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception ignored) {
             ensureDailyUpdatesController();
+        }
+        keepDailyUpdatesCovered();
+        if (homeDailyUpdatesHost != null) {
+            homeDailyUpdatesHost.post(this::keepDailyUpdatesCovered);
+            homeDailyUpdatesHost.postDelayed(this::keepDailyUpdatesCovered, 250L);
         }
     }
 
@@ -15332,6 +15398,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private boolean isVideoFeedMode() {
         if (videoFeedModeActive) return true;
+        // After the first explicit mode write, memory wins. A leftover
+        // isVideoPostsSelected pref must not light the Daily Updates tab
+        // (same menu id) while the news flipper is still the surface.
+        if (feedModeFlagsApplied) return false;
         return SharedPrefsData.getBool(
                 HomePage.this, Constants.isVideoPostsSelected, Constants.PREF_NAME);
     }
@@ -16224,6 +16294,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (cached != null) {
                 showLog("OpenPath: paint feed from warm disk cat=" + category_id);
                 convertListOfArticles(cached, reqPos, true);
+                keepDailyUpdatesCovered();
                 paintedFromDisk = list != null && !list.isEmpty();
                 if (paintedFromDisk) {
                     try {
@@ -16444,6 +16515,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 // isFirstPage → replace (reload/special/open + network over disk paint).
                 // Held next page (reqPos=-1 apply of dummy held at 3) uses Response overload: append.
                 convertListOfArticles(response, articlesReqPos, isFirstPage);
+                keepDailyUpdatesCovered();
             }
 
             @Override
@@ -16542,6 +16614,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         mFlipView.setVisibility(View.VISIBLE);
                     }
                 }
+                keepDailyUpdatesCovered();
             }
         };
 
@@ -17776,8 +17849,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             } else if (resolvePendingDeepLinkPostId() > 0) {
                                 clearPendingFlipRestore();
                             }
-                            // Always show flip when list has paintables — never empty white forever.
-                            if (list != null && !list.isEmpty()) {
+                            // Daily Updates hub stays on top of any in-flight news paint.
+                            if (isDailyUpdatesMode() || isCalendarMode()) {
+                                if (layout_with_data != null) {
+                                    layout_with_data.setVisibility(View.GONE);
+                                }
+                                if (txtNoData != null) {
+                                    txtNoData.setVisibility(View.GONE);
+                                }
+                                keepDailyUpdatesCovered();
+                            } else if (list != null && !list.isEmpty()) {
                                 if (mFlipView != null) {
                                     mFlipView.setVisibility(View.VISIBLE);
                                 }
@@ -18166,6 +18247,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
 
             initialCall=true;
+            keepDailyUpdatesCovered();
             home_page_navigation.setVisibility(View.VISIBLE);
             ensureOnlineBottomNavVisible();
             if (!fromCache) {
@@ -19474,6 +19556,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (isFinishing() || languageSwitchReset) {
             outState.putInt(STATE_FLIP_INDEX, 0);
             outState.putLong(STATE_FLIP_POST_ID, -1L);
+            outState.putBoolean(STATE_DAILY_UPDATES_OPEN, false);
+            persistDailyUpdatesDestination(false);
             showLog("onSaveInstanceState skip flip checkpoint finishing="
                     + isFinishing() + " languageSwitch=" + languageSwitchReset);
             return;
@@ -19482,8 +19566,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         long postId = resolvePostIdForFlipIndex(flipIndex);
         outState.putInt(STATE_FLIP_INDEX, flipIndex);
         outState.putLong(STATE_FLIP_POST_ID, postId);
-        // Mirror to prefs so light↔dark restore works even if bundle is dropped
-        // (e.g. CLEAR_TASK relaunch during uiMode) or read after a delayed recreate.
+        outState.putBoolean(STATE_DAILY_UPDATES_OPEN, dailyUpdatesModeActive);
+        // Mirror to prefs so light↔dark restore works even if the bundle is dropped.
+        // Does not rewrite night mode or language.
+        persistDailyUpdatesDestination(dailyUpdatesModeActive);
         persistFlipRestoreCheckpoint(flipIndex, postId, flipIndex > 0 || postId > 0);
         showLog("onSaveInstanceState flip index=" + flipIndex + " postId=" + postId);
     }
@@ -19491,10 +19577,93 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
-        // onCreate already reads this; re-read as a safety net if recreate skipped that path.
-        if (!pendingFlipRestore) {
+        // Menu restore checks Daily Updates without the tab listener. If that
+        // check is not the hub, put News back. If the hub was the destination,
+        // cover the flipper again (view state can land after onCreate).
+        if (isDailyUpdatesMode() || restoreDailyUpdatesOnCreate) {
+            restoreDailyUpdatesDestination();
+        } else if (bottomNavigationView != null
+                && bottomNavigationView.getSelectedItemId() == R.id.navigation_status
+                && !videoFeedModeActive
+                && !isCalendarMode()) {
+            releaseDailyUpdatesCheckLeftByQuietCard();
+        }
+        // onCreate already reads flip state. Do not re-arm a news seat over the hub.
+        if (!pendingFlipRestore && !isDailyUpdatesMode()) {
             readPendingFlipRestoreState(savedInstanceState);
         }
+    }
+
+    /**
+     * Bundle wins when present. Prefs cover a DayNight recreate whose bundle was
+     * dropped. Language-switch and splash cold start do not reopen the hub.
+     * Does not read or write night mode.
+     */
+    private boolean peekDailyUpdatesRestoreRequest(@Nullable Bundle savedInstanceState) {
+        try {
+            if (SharedPrefsData.getBool(
+                    this, Constants.LANGUAGE_SWITCH_RESET_FLIP, Constants.PREF_NAME)) {
+                persistDailyUpdatesDestination(false);
+                return false;
+            }
+        } catch (Exception ignored) {
+        }
+        if (savedInstanceState != null) {
+            return savedInstanceState.getBoolean(STATE_DAILY_UPDATES_OPEN, false);
+        }
+        try {
+            boolean pending = SharedPrefsData.getBool(
+                    this, Constants.DAILY_UPDATES_RESTORE, Constants.PREF_NAME);
+            long at = 0L;
+            String raw = SharedPrefsData.getString(
+                    this, Constants.DAILY_UPDATES_RESTORE_AT, Constants.PREF_NAME);
+            if (raw != null && !raw.isEmpty()) {
+                at = Long.parseLong(raw.trim());
+            }
+            final long ttlMs = 120_000L;
+            return pending && at > 0L && (System.currentTimeMillis() - at) <= ttlMs;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    /** Durable hub flag for the next Home create. Does not touch language or theme. */
+    private void persistDailyUpdatesDestination(boolean open) {
+        try {
+            getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE).edit()
+                    .putBoolean(Constants.DAILY_UPDATES_RESTORE, open)
+                    .putString(
+                            Constants.DAILY_UPDATES_RESTORE_AT,
+                            open ? String.valueOf(System.currentTimeMillis()) : "0")
+                    .commit();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Re-open the Daily Updates hub after a configuration change and light the
+     * footer tab without going through a second feed reload.
+     */
+    private void restoreDailyUpdatesDestination() {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        restoreDailyUpdatesOnCreate = false;
+        try {
+            if (bottomNavigationView != null
+                    && bottomNavigationView.getSelectedItemId() != R.id.navigation_status
+                    && ProfileHubConfigHelper.isFooterShowVideos(this)) {
+                suppressBottomNavCallbacks = true;
+                try {
+                    bottomNavigationView.setSelectedItemId(R.id.navigation_status);
+                } finally {
+                    suppressBottomNavCallbacks = false;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        performDailyUpdatesOpen();
+        keepDailyUpdatesCovered();
     }
 
     private void readPendingFlipRestoreState(Bundle savedInstanceState) {
@@ -19935,9 +20104,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         try {
             // Refresh flip checkpoint so onCreate restore survives this single recreate.
+            // Daily Updates destination is saved too — recreate must not drop it or
+            // clear the night mode the user just picked.
             int flipIndex = resolveCurrentFlipIndexForSave();
             long postId = resolvePostIdForFlipIndex(flipIndex);
             persistFlipRestoreCheckpoint(flipIndex, postId, flipIndex > 0 || postId > 0);
+            persistDailyUpdatesDestination(dailyUpdatesModeActive);
         } catch (Exception ignored) {
         }
         com.anyNews.anynews.Utils.NightModeHelper.recreateWithFade(this);
@@ -20287,6 +20459,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             if (isDailyUpdatesMode() && dailyUpdatesController != null) {
                 dailyUpdatesController.onHostResume();
             }
+            keepDailyUpdatesCovered();
         } catch (Exception ignored) {
         }
         // If create-menu was left open while backgrounded, collapse so feed + icon match.
@@ -20812,6 +20985,11 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 performSpecialFeedOpen();
             } else if (item.getItemId() == R.id.navigation_status) {
                 performDailyUpdatesOpen();
+                if (!isDailyUpdatesMode()) {
+                    releaseDailyUpdatesCheckLeftByQuietCard();
+                } else {
+                    keepDailyUpdatesCovered();
+                }
             } else if (item.getItemId() == R.id.navigation_stricker) {
                 if (ProfileHubConfigHelper.isFooterShowCalendar(HomePage.this)
                         && isDeviceOnline()) {
@@ -20878,6 +21056,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     }
                     closeCenterPlusMenu(true);
                     performDailyUpdatesOpen();
+                    if (!isDailyUpdatesMode()) {
+                        return false;
+                    }
+                    keepDailyUpdatesCovered();
                     return true;
                 case R.id.navigation_stricker:
                     // Middle column is Share, reporter +, or icon-only WhatsApp.
