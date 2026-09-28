@@ -53,6 +53,8 @@ public final class ArticleTtsHelper {
     /** Image overlay uses white glyphs; engagement row uses tintable action icons. */
     public static final int STYLE_IMAGE = 0;
     public static final int STYLE_ENGAGEMENT = 1;
+    /** Peak uniform scale of the pink speaker ring. Layout padding must fit this. */
+    static final float PULSE_MAX_SCALE = 1.55f;
 
     private static TextToSpeech tts;
     private static boolean ttsReady;
@@ -616,9 +618,9 @@ public final class ArticleTtsHelper {
         pulseView.setScaleX(1f);
         pulseView.setScaleY(1f);
         ObjectAnimator sx =
-                ObjectAnimator.ofFloat(pulseView, View.SCALE_X, 1f, 1.55f, 1f);
+                ObjectAnimator.ofFloat(pulseView, View.SCALE_X, 1f, PULSE_MAX_SCALE, 1f);
         ObjectAnimator sy =
-                ObjectAnimator.ofFloat(pulseView, View.SCALE_Y, 1f, 1.55f, 1f);
+                ObjectAnimator.ofFloat(pulseView, View.SCALE_Y, 1f, PULSE_MAX_SCALE, 1f);
         ObjectAnimator alpha =
                 ObjectAnimator.ofFloat(pulseView, View.ALPHA, 0.55f, 0.15f, 0.55f);
         sx.setRepeatCount(ValueAnimator.INFINITE);

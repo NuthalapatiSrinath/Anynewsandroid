@@ -74,6 +74,7 @@ import android.view.LayoutInflater;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.webkit.MimeTypeMap;
@@ -4658,6 +4659,71 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         // Engagement search uses the same circle/glyph sizes as like/share/report
         // (Configuration ACTION_ICON / LIKE_CIRCLE) — do not boost larger.
+        ensureHalfTtsPulseVisible(convertView, slotPx);
+    }
+
+    /**
+     * Speaker ring scales to {@link ArticleTtsHelper#PULSE_MAX_SCALE}. Size it to the
+     * icon slot and keep enough padding that the full circle stays out of the headline.
+     * Ancestors above a photo must not clip the top of that ring.
+     */
+    private static void ensureHalfTtsPulseVisible(View convertView, int slotPx) {
+        View pulse = convertView.findViewById(R.id.half_tts_pulse);
+        if (pulse == null || slotPx <= 0) {
+            return;
+        }
+        ViewGroup.LayoutParams pulseLp = pulse.getLayoutParams();
+        if (pulseLp != null && (pulseLp.width != slotPx || pulseLp.height != slotPx)) {
+            pulseLp.width = slotPx;
+            pulseLp.height = slotPx;
+            pulse.setLayoutParams(pulseLp);
+        }
+        float density = convertView.getResources().getDisplayMetrics().density;
+        int overflow = Math.round(slotPx * (ArticleTtsHelper.PULSE_MAX_SCALE - 1f) / 2f)
+                + Math.round(2f * density);
+        View row = convertView.findViewById(R.id.with_out_strips_layout);
+        if (row != null) {
+            // Photo cards: top of the ring draws over the image, so only the bottom
+            // needs padding (keeps the headline clear). Poll rows pad both sides.
+            boolean underPhoto = convertView.findViewById(R.id.layoutImageHeight) != null;
+            int padTop = underPhoto ? row.getPaddingTop() : Math.max(row.getPaddingTop(), overflow);
+            int padBottom = Math.max(row.getPaddingBottom(), overflow);
+            if (padTop != row.getPaddingTop() || padBottom != row.getPaddingBottom()) {
+                row.setPadding(row.getPaddingLeft(), padTop, row.getPaddingRight(), padBottom);
+            }
+            clearClipForTtsPulse(row);
+        } else {
+            clearClipForTtsPulse(pulse);
+        }
+    }
+
+    /** Let the scaled ring paint over the photo; stop at the card root or poll card. */
+    private static void clearClipForTtsPulse(View start) {
+        View current = start;
+        for (int i = 0; i < 8 && current != null; i++) {
+            if (current instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) current;
+                group.setClipChildren(false);
+                group.setClipToPadding(false);
+            }
+            ViewParent parent = current.getParent();
+            if (!(parent instanceof ViewGroup)) {
+                break;
+            }
+            ViewGroup group = (ViewGroup) parent;
+            int id = group.getId();
+            if (id == R.id.rl_question || id == R.id.rl_survay_main) {
+                break;
+            }
+            group.setClipChildren(false);
+            group.setClipToPadding(false);
+            if (id == R.id.relative_half_contents
+                    || id == R.id.layoutMain
+                    || id == R.id.parent_layout) {
+                break;
+            }
+            current = group;
+        }
     }
 
     /**
