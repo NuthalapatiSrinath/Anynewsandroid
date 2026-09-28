@@ -608,16 +608,51 @@ public class InAppSearchActivity extends AppCompatActivity {
     @NonNull
     private static String firstImageUrl(JsonObject o) {
         if (o == null) return "";
-        String[] keys = {"thumb_image", "image", "video_thumb"};
+        String[] keys = {
+            "thumb_image", "image", "video_thumb", "thumbnail", "full_image"
+        };
         for (String k : keys) {
-            try {
-                if (o.has(k) && !o.get(k).isJsonNull()) {
-                    String s = o.get(k).getAsString();
-                    if (!TextUtils.isEmpty(s)) return s.trim();
-                }
-            } catch (Exception ignored) {
-                /* skip */
+            if (!o.has(k)) continue;
+            String s = urlFromElement(o.get(k));
+            if (!TextUtils.isEmpty(s)) return s;
+        }
+        String[] lists = {"images", "gallery", "thumbnails", "wifi_images"};
+        for (String k : lists) {
+            if (!o.has(k)) continue;
+            String s = urlFromElement(o.get(k));
+            if (!TextUtils.isEmpty(s)) return s;
+        }
+        return "";
+    }
+
+    /** String, first array element, or {url|src|image} — skip blanks. */
+    @NonNull
+    private static String urlFromElement(@Nullable JsonElement el) {
+        if (el == null || el.isJsonNull()) return "";
+        try {
+            if (el.isJsonPrimitive()) {
+                String s = el.getAsString();
+                return s == null ? "" : s.trim();
             }
+            if (el.isJsonArray()) {
+                JsonArray arr = el.getAsJsonArray();
+                for (JsonElement child : arr) {
+                    String s = urlFromElement(child);
+                    if (!TextUtils.isEmpty(s)) return s;
+                }
+                return "";
+            }
+            if (el.isJsonObject()) {
+                JsonObject obj = el.getAsJsonObject();
+                String[] nested = {"url", "src", "image", "uri", "thumb"};
+                for (String k : nested) {
+                    if (!obj.has(k)) continue;
+                    String s = urlFromElement(obj.get(k));
+                    if (!TextUtils.isEmpty(s)) return s;
+                }
+            }
+        } catch (Exception ignored) {
+            /* skip malformed media */
         }
         return "";
     }
