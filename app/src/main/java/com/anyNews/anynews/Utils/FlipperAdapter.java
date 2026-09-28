@@ -4858,22 +4858,41 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Hides or shows the WhatsApp icon and its count together: half-row chip
-     * and the full-image / full-video right-side button. Footer WhatsApp is separate.
+     * Hides or shows the WhatsApp icon and its count together: every half-row
+     * chip and every full-image / full-video right-side button under {@code convertView}.
+     * FlipView keeps previous, current, and next pages, and those pages reuse the
+     * same ids, so one {@code findViewById} would leave the open card showing.
+     * Footer WhatsApp ({@code imageVIewShareWhatsapp}) is a different id and stays.
+     *
+     * @return true if any icon's visibility changed
      */
-    public static void applyActionRowWhatsappVisibility(Context context, View convertView) {
+    public static boolean applyActionRowWhatsappVisibility(Context context, View convertView) {
         if (convertView == null) {
-            return;
+            return false;
         }
         int vis = isActionRowWhatsappEnabled(context) ? View.VISIBLE : View.GONE;
-        View half = convertView.findViewById(R.id.half_whatsapp);
-        if (half != null) {
-            half.setVisibility(vis);
+        boolean changed = setVisibilityDeep(convertView, R.id.half_whatsapp, vis);
+        changed |= setVisibilityDeep(convertView, R.id.full_image_whatsapp, vis);
+        return changed;
+    }
+
+    /** Sets visibility on every view with {@code id} in this tree, not only the first. */
+    private static boolean setVisibilityDeep(View root, int id, int vis) {
+        if (root == null) {
+            return false;
         }
-        View full = convertView.findViewById(R.id.full_image_whatsapp);
-        if (full != null) {
-            full.setVisibility(vis);
+        boolean changed = false;
+        if (root.getId() == id && root.getVisibility() != vis) {
+            root.setVisibility(vis);
+            changed = true;
         }
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                changed |= setVisibilityDeep(group.getChildAt(i), id, vis);
+            }
+        }
+        return changed;
     }
 
     /**

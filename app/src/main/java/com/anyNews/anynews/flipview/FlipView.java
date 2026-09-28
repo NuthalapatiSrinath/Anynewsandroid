@@ -1059,6 +1059,17 @@ public class FlipView extends FrameLayout {
             scrap = null;
         }
         if (canReturnScrapWithoutRebind(scrap, want) && !isActivePageView(scrap.v)) {
+            // Scrap skips getView, which is where the likes-row WhatsApp is gated.
+            // Apply the admin switch here so a card bound while the icon was ON
+            // does not bring it back after staff turn it off.
+            try {
+                Context ctx = scrap.v.getContext();
+                if (FlipperAdapter.applyActionRowWhatsappVisibility(ctx, scrap.v)) {
+                    FlipperAdapter.applyHalfActionIconSizes(ctx, scrap.v);
+                    FlipperAdapter.applyFullSideActionGap(ctx, scrap.v);
+                }
+            } catch (Exception ignored) {
+            }
             return scrap.v;
         }
         View convert = scrap == null ? null : scrap.v;

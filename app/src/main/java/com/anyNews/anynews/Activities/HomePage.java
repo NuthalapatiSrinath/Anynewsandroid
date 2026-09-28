@@ -18970,8 +18970,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 flipView.post(new Runnable() {
                     @Override
                     public void run() {
-                        FlipperAdapter.applyActionRowWhatsappVisibility(HomePage.this, flipView);
-                        FlipperAdapter.applyFullSideActionGap(HomePage.this, flipView);
+                        // Every attached page (half, normal, survey, full). One
+                        // findViewById only reached the first page, so the open
+                        // half post kept the WhatsApp chip.
+                        if (!FlipperAdapter.applyActionRowWhatsappVisibility(HomePage.this, flipView)) {
+                            return;
+                        }
+                        for (int i = 0; i < flipView.getChildCount(); i++) {
+                            View page = flipView.getChildAt(i);
+                            FlipperAdapter.applyHalfActionIconSizes(HomePage.this, page);
+                            FlipperAdapter.applyFullSideActionGap(HomePage.this, page);
+                        }
                     }
                 });
             }
