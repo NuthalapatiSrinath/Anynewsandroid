@@ -366,7 +366,39 @@ public class GoldDetailActivity extends AppCompatActivity {
             }
 
             JSONArray purity = new JSONArray();
-            if (g24_10 > 0) {
+            boolean joyalukkas = "joyalukkas".equalsIgnoreCase(
+                    LocalUpdatesConfigHelper.optString(src, "fetch_source", ""));
+            if (joyalukkas) {
+                // Saved Joyalukkas days quote each purity. A missing karat stays
+                // off the table — do not scale it from 24K.
+                if (g24_10 > 0) {
+                    purity.put(purityObj("24K", "99.9%", g24_10, ch24));
+                }
+                double g22 = LocalUpdatesConfigHelper.optNumber(day, "gold_22k", 0);
+                double prev22 = prev != null
+                        ? LocalUpdatesConfigHelper.optNumber(prev, "gold_22k", Double.NaN)
+                        : Double.NaN;
+                if (g22 > 0) {
+                    double ch22 = (Double.isFinite(prev22) && prev22 > 0) ? g22 - prev22 : Double.NaN;
+                    purity.put(purityObj("22K", "91.6%", g22, ch22));
+                }
+                double g18 = LocalUpdatesConfigHelper.optNumber(day, "gold_18k", 0);
+                double prev18 = prev != null
+                        ? LocalUpdatesConfigHelper.optNumber(prev, "gold_18k", Double.NaN)
+                        : Double.NaN;
+                if (g18 > 0) {
+                    double ch18 = (Double.isFinite(prev18) && prev18 > 0) ? g18 - prev18 : Double.NaN;
+                    purity.put(purityObj("18K", "75.0%", g18, ch18));
+                }
+                double g14 = LocalUpdatesConfigHelper.optNumber(day, "gold_14k", 0);
+                double prev14 = prev != null
+                        ? LocalUpdatesConfigHelper.optNumber(prev, "gold_14k", Double.NaN)
+                        : Double.NaN;
+                if (g14 > 0) {
+                    double ch14 = (Double.isFinite(prev14) && prev14 > 0) ? g14 - prev14 : Double.NaN;
+                    purity.put(purityObj("14K", "58.5%", g14, ch14));
+                }
+            } else if (g24_10 > 0) {
                 purity.put(purityObj("24K", "99.9%", g24_10, ch24));
                 purity.put(purityObj("22K", "91.6%", g22_10,
                         Double.isFinite(ch24) ? ch24 * 0.916 : Double.NaN));

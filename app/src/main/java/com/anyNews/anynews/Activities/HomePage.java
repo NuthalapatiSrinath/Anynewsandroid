@@ -18497,6 +18497,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (enc.getStock_market() != null) {
                 DailyUpdatesConfigHelper.saveStockSummaryFromSplash(this, enc.getStock_market());
             }
+            if (enc.getJobs() != null) {
+                LocalUpdatesConfigHelper.saveJobsFromSplash(this, enc.getJobs());
+            }
+            if (enc.getTtd() != null) {
+                TtdConfigHelper.saveFromSplash(this, enc.getTtd());
+            }
+            if (enc.getFlash_news() != null) {
+                DailyUpdatesConfigHelper.saveFlashHeadlinesFromSplash(this, enc.getFlash_news());
+            }
+            if (enc.getLocal_headlines() != null) {
+                DailyUpdatesConfigHelper.saveLocalHeadlinesFromSplash(this, enc.getLocal_headlines());
+            }
+            if (enc.getCalendar_panchang_source() != null) {
+                ProfileHubConfigHelper.saveCalendarPanchangSource(
+                        this, enc.getCalendar_panchang_source());
+            }
             TtdConfigHelper.saveEnabledFromPoll(this, enc.getTtd_enabled());
             if (enc.getDaily_updates() != null) {
                 DailyUpdatesConfigHelper.saveFromSplash(this, enc.getDaily_updates());

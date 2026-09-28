@@ -322,6 +322,41 @@ public class EncreptionRequest {
     @Expose
     private Boolean jobs_enabled;
 
+    /**
+     * Saved jobs pack on the feed. Null when omitted — do not wipe prefs.
+     */
+    @SerializedName("jobs")
+    @Expose
+    private Object jobs;
+
+    /**
+     * Saved TTD pack on the feed. Null when omitted — do not wipe prefs.
+     */
+    @SerializedName("ttd")
+    @Expose
+    private Object ttd;
+
+    /**
+     * Cached Flash ticker. Null when the Redis pack was not warm.
+     */
+    @SerializedName("flash_news")
+    @Expose
+    private Object flash_news;
+
+    /**
+     * Cached Mana Zilla titles. Null when omitted — do not wipe prefs.
+     */
+    @SerializedName("local_headlines")
+    @Expose
+    private Object local_headlines;
+
+    /**
+     * Admin calendar engine. Null when omitted — do not wipe splash.
+     */
+    @SerializedName("calendar_panchang_source")
+    @Expose
+    private String calendar_panchang_source;
+
     /** Writers-row chips from feed poll. Null when omitted — do not wipe splash. */
     @SerializedName("hide_district_on_main_feed")
     @Expose
@@ -814,6 +849,26 @@ public class EncreptionRequest {
 
     public Boolean getJobs_enabled() {
         return jobs_enabled;
+    }
+
+    public Object getJobs() {
+        return jobs;
+    }
+
+    public Object getTtd() {
+        return ttd;
+    }
+
+    public Object getFlash_news() {
+        return flash_news;
+    }
+
+    public Object getLocal_headlines() {
+        return local_headlines;
+    }
+
+    public String getCalendar_panchang_source() {
+        return calendar_panchang_source;
     }
 
     public Object getDaily_updates() {
