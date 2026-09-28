@@ -646,6 +646,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * could still enqueue special_posts=false and paint main half posts.
      */
     private boolean specialFeedModeActive = false;
+    /**
+     * After {@link #setFeedModeFlags}, the in-memory flag is the session source of
+     * truth. A late SharedPreferences apply() from a previous Special visit must
+     * not turn News pagination into {@code special_posts}.
+     */
+    private boolean feedModeFlagsApplied = false;
+    /**
+     * Intentional Special open whose footer highlight may still be News for this
+     * one {@link #ShowNews_Data_Values} (cold {@code from=special} before the tab moves).
+     */
+    private boolean explicitSpecialOpen = false;
     private boolean videoFeedModeActive = false;
     /**
      * Footer Calendar mode: Telugu calendar FlipView embedded above bottom nav
@@ -14349,7 +14360,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         pruneImpressedNativeAdsKeepWarm();
         showLog("inlist called:"+category_id);
         initialCall=false;
-        ShowNews_Data_Values(category_id,-1);
+        // Highlight Special / News before the request so a News-tab guard cannot
+        // cancel an intentional Special open, and a stuck Special flag cannot
+        // ride a News highlight.
+        syncFooterSelectionToFeedMode();
+        try {
+            ShowNews_Data_Values(category_id,-1);
+        } finally {
+            explicitSpecialOpen = false;
+        }
 
         try {
 
@@ -14377,24 +14396,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 // Local → Pradhana (→ Main); Main → district (→ Local);
                 // category → category name.
                 type = resolveLocationPillTypeForCategory(category_id);
-                // Programmatic chrome only — avoid re-entering Special/Video/Reload open paths.
-                // Mutual exclusive: Special | Video News | News (home). Without Video branch,
-                // inlist after performVideoFeedOpen forced navigation_home (re-tap → News).
-                suppressBottomNavCallbacks = true;
-                try {
-                    if (isSpecialFeedMode()) {
-                        showLog("setSelectedItemId(R.id.navigation_catagiries)");
-                        bottomNavigationView.setSelectedItemId(R.id.navigation_catagiries);
-                    } else if (isVideoFeedMode()) {
-                        showLog("setSelectedItemId(R.id.navigation_status)");
-                        bottomNavigationView.setSelectedItemId(R.id.navigation_status);
-                    } else {
-                        showLog("setSelectedItemId(R.id.navigation_home)");
-                        bottomNavigationView.setSelectedItemId(R.id.navigation_home);
-                    }
-                } finally {
-                    suppressBottomNavCallbacks = false;
-                }
 
                 showLog("List size:"+list.size());
 
@@ -14817,7 +14818,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void prepareSpecialFeedFromTop() {
         showLog("prepareSpecialFeedFromTop");
         // Mode first — any concurrent getView/setData strip uses Special immediately.
+        // Flag stays set until inlist's ShowNews returns, so a still-highlighted
+        // News tab cannot cancel this open.
         softMergeOnNextPage0 = false;
+        explicitSpecialOpen = true;
         setFeedModeFlags(true, false);
         prepareFreshPage0FeedCursors();
         // prepareFresh also bumps epoch again after mode flag (stale News responses die).
@@ -14851,6 +14855,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (video) {
             special = false;
         }
+        feedModeFlagsApplied = true;
         specialFeedModeActive = special;
         videoFeedModeActive = video;
         SharedPrefsData.putBoolImmediate(
@@ -14882,10 +14887,76 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return isSpecialFeedMode();
     }
 
+    /**
+     * News footer is showing the main surface (not Local, search, calendar, or
+     * Daily Updates). Special mode must not stay on while this tab is highlighted.
+     */
+    private boolean isNewsTabShowingMainSurface() {
+        if (bottomNavigationView == null) return false;
+        if (bottomNavigationView.getSelectedItemId() != R.id.navigation_home) return false;
+        if (isCalendarMode() || isDailyUpdatesMode()) return false;
+        if (category_id == -1 || localFeedFromDailyUpdates) return false;
+        if (searchFeedActive) return false;
+        return true;
+    }
+
+    /**
+     * News tab highlighted while Special mode is still latched: clear the latch
+     * and drop the Special pagination cursor so the next list call is main page 0.
+     *
+     * @return true when a live Special latch was cleared
+     */
+    private boolean clearStuckSpecialModeOnNewsTab() {
+        if (explicitSpecialOpen || !isNewsTabShowingMainSurface()) {
+            return false;
+        }
+        if (!specialFeedModeActive) {
+            return false;
+        }
+        showLog("News tab stuck in special mode — reset to main feed");
+        setFeedModeFlags(false, false);
+        last_post_id = 0;
+        skip = 0;
+        actual_skip = 0;
+        return true;
+    }
+
+    /**
+     * Match the footer highlight to the feed about to load. Runs before the
+     * network call so News vs Special cannot diverge for that request.
+     */
+    private void syncFooterSelectionToFeedMode() {
+        if (bottomNavigationView == null) return;
+        // Programmatic chrome only — avoid re-entering Special/Video/Reload open paths.
+        final boolean prevSuppress = suppressBottomNavCallbacks;
+        suppressBottomNavCallbacks = true;
+        try {
+            if (isSpecialFeedMode()) {
+                showLog("setSelectedItemId(R.id.navigation_catagiries)");
+                bottomNavigationView.setSelectedItemId(R.id.navigation_catagiries);
+            } else if (isVideoFeedMode()) {
+                showLog("setSelectedItemId(R.id.navigation_status)");
+                bottomNavigationView.setSelectedItemId(R.id.navigation_status);
+            } else if (!isCalendarMode() && !isDailyUpdatesMode()) {
+                showLog("setSelectedItemId(R.id.navigation_home)");
+                bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            suppressBottomNavCallbacks = prevSuppress;
+        }
+    }
+
     private boolean isSpecialFeedMode() {
-        // Prefer in-memory; prefs may lag only if someone wrote via apply() elsewhere.
         if (videoFeedModeActive) return false;
+        // Cold Special deep-link: request is special even if the footer has not moved yet.
+        if (explicitSpecialOpen) return true;
+        // Highlighted News tab is the main mix, even if a Special latch is still set.
+        if (isNewsTabShowingMainSurface()) return false;
         if (specialFeedModeActive) return true;
+        // Before the first setFeedModeFlags, honor a committed Special pref (process restart
+        // mid-Special). After that, memory wins — a queued apply(true) must not stick News.
+        if (feedModeFlagsApplied) return false;
         return SharedPrefsData.getBool(
                 HomePage.this, Constants.isUnreadPostsSelected, Constants.PREF_NAME)
                 && !SharedPrefsData.getBool(
@@ -14910,6 +14981,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * even if the server errs or a main-list response races in. Mutates list in place.
      */
     private void filterListStripHalfPosts(@Nullable java.util.List<ModelClass.Datum> items) {
+        // News tab keeps half news even if a Special latch was still set.
+        if (isNewsTabShowingMainSurface() && !explicitSpecialOpen) return;
         if (items == null || items.isEmpty()) return;
         for (int i = items.size() - 1; i >= 0; i--) {
             ModelClass.Datum d = items.get(i);
@@ -15665,6 +15738,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         // Page-0 open path: optional disk paint for plain reopen only.
         // Never paint cache / never throttle when: Reload, Special, push/share sticky.
+        // News highlighted + Special latch: drop the latch and restart at main page 0
+        // (Special actual_skip must not keep paging the specials-only list).
+        if (clearStuckSpecialModeOnNewsTab()) {
+            reqPos = 0;
+        }
         final boolean isFirstPage = skip == 0 && actual_skip == 0 && last_post_id == 0
                 && reqPos != 3;
         final boolean special = isSpecialFeedMode();
@@ -19332,10 +19410,13 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
      */
     @Override
     protected void onStart() {
+        // A Special latch left on while News is highlighted skips this reload
+        // (isPlainMainNewsFeed is false). Clear it first so resume loads the mix.
+        final boolean unstuckSpecialOnNews = clearStuckSpecialModeOnNewsTab();
         final boolean refreshFeed = consumeBackgroundFeedRefresh();
         super.onStart();
         homeHasStartedOnce = true;
-        if (!refreshFeed) {
+        if (!refreshFeed && !unstuckSpecialOnNews) {
             return;
         }
         try {
