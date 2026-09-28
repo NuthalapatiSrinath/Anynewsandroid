@@ -37,6 +37,18 @@
             android:textColor="@color/title_color"
             android:textSize="15sp" />
 
+        <!-- Published date on a single-article row only. -->
+        <TextView
+            android:id="@+id/row_date"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/search_chrome_muted"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
         <!-- Body-only reason. Hidden when the title itself contains the match. -->
         <TextView
             android:id="@+id/row_snippet"

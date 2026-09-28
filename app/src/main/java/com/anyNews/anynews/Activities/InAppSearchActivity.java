@@ -47,10 +47,14 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -96,6 +100,12 @@ public class InAppSearchActivity extends AppCompatActivity {
     private boolean suggestInFlight = false;
     /** Topics until a suggestion row is chosen; back returns here. */
     private int listMode = MODE_TOPICS;
+    /** Article list pages inside the server recall cap. */
+    private static final int ARTICLE_PAGE = 30;
+    private boolean articleHasMore = false;
+    private int articleNextSkip = 0;
+    private int articleLayoutRetries = 0;
+    private String articleQuery = "";
     private final TextWatcher queryWatcher =
             new TextWatcher() {
                 @Override
@@ -109,6 +119,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                     String q = s != null ? s.toString().trim() : "";
                     // Editing the box leaves the article list and refreshes counts.
                     listMode = MODE_TOPICS;
+                    resetArticlePaging();
                     dropArticleRows();
                     hideEmptyState();
                     if (q.isEmpty()) {
@@ -131,6 +142,14 @@ public class InAppSearchActivity extends AppCompatActivity {
         listView.setLayoutManager(new LinearLayoutManager(this));
         adapter = new SearchRowsAdapter();
         listView.setAdapter(adapter);
+        listView.addOnScrollListener(
+                new RecyclerView.OnScrollListener() {
+                    @Override
+                    public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                        if (dy <= 0) return;
+                        maybeLoadMoreArticles();
+                    }
+                });
 
         findViewById(R.id.search_back_row).setOnClickListener(v -> closeSearch());
         findViewById(R.id.search_back).setOnClickListener(v -> closeSearch());
@@ -235,6 +254,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     public void onBackPressed() {
         if (listMode == MODE_ARTICLES) {
             listMode = MODE_TOPICS;
+            resetArticlePaging();
             dropArticleRows();
             String q =
                     searchInput != null && searchInput.getText() != null
@@ -465,13 +485,22 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void fetchSuggestions(final String q) {
-        fetchSuggestions(q, false);
+        fetchSuggestions(q, false, 0, false);
     }
 
     /**
      * @param articles false = topic rows with counts; true = stories for one topic
      */
     private void fetchSuggestions(final String q, final boolean articles) {
+        fetchSuggestions(q, articles, 0, false);
+    }
+
+    /**
+     * @param articles false = topic rows with counts; true = stories for one topic
+     * @param append true = next page of the article list already on screen
+     */
+    private void fetchSuggestions(
+            final String q, final boolean articles, final int skip, final boolean append) {
         if (TextUtils.isEmpty(q) || "null".equalsIgnoreCase(q.trim())) {
             suggestInFlight = false;
             return;
@@ -483,12 +512,13 @@ public class InAppSearchActivity extends AppCompatActivity {
             return;
         }
         if (articles
+                && !append
                 && q.equals(lastSuggestQuery)
                 && listMode == MODE_ARTICLES
                 && hasArticleRows()) {
             return;
         }
-        lastSuggestQuery = q;
+        if (!append) lastSuggestQuery = q;
         suggestInFlight = true;
         try {
             JsonObject req = new JsonObject();
@@ -500,7 +530,8 @@ public class InAppSearchActivity extends AppCompatActivity {
                     SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME));
             req.addProperty("search_text", q);
             if (articles) {
-                req.addProperty("limit", 20);
+                req.addProperty("limit", ARTICLE_PAGE);
+                req.addProperty("skip", Math.max(0, skip));
                 req.addProperty("include_articles", true);
                 req.addProperty("suggest_mode", "articles");
             } else {
@@ -533,7 +564,6 @@ public class InAppSearchActivity extends AppCompatActivity {
                             if (articles && listMode != MODE_ARTICLES) return;
                             if (!articles && listMode != MODE_TOPICS) return;
                             try {
-                                List<Row> next = new ArrayList<>();
                                 JsonObject obj = null;
                                 if (response.body() != null
                                         && response.body().getData() != null) {
@@ -544,44 +574,19 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     applyTopicRows(obj, q);
                                     return;
                                 }
-                                if (obj != null) {
-                                    // Prefer articles[] (thumbs + highlight); fall back to data[].
-                                    JsonArray articleArr =
-                                            obj.has("articles") && obj.get("articles").isJsonArray()
-                                                    ? obj.getAsJsonArray("articles")
-                                                    : null;
-                                    if (articleArr != null && articleArr.size() > 0) {
-                                        for (JsonElement el : articleArr) {
-                                            Row art = parseArticleRow(el, q);
-                                            if (art != null) {
-                                                next.add(art);
-                                                if (!TextUtils.isEmpty(art.title)) {
-                                                    lastSuggestTexts.add(art.title);
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if (next.isEmpty()) {
-                                        JsonArray data =
-                                                obj.has("data") && obj.get("data").isJsonArray()
-                                                        ? obj.getAsJsonArray("data")
-                                                        : null;
-                                        if (data != null) {
-                                            for (JsonElement el : data) {
-                                                Row parsed = parseSuggestDataRow(el, q);
-                                                if (parsed != null) {
-                                                    next.add(parsed);
-                                                    if (!TextUtils.isEmpty(parsed.title)) {
-                                                        lastSuggestTexts.add(parsed.title);
-                                                    }
-                                                }
-                                            }
-                                        }
+                                List<Row> next = readArticleRows(obj, q);
+                                for (Row art : next) {
+                                    if (art != null && !TextUtils.isEmpty(art.title)) {
+                                        lastSuggestTexts.add(art.title);
                                     }
                                 }
-                                // Cap cached suggest texts for local fuzzy reuse.
                                 while (lastSuggestTexts.size() > 40) {
                                     lastSuggestTexts.remove(0);
+                                }
+                                if (append) {
+                                    appendArticleRows(next);
+                                    noteArticlePage(obj, next.size());
+                                    return;
                                 }
                                 boolean hasStory = false;
                                 for (Row r : next) {
@@ -592,6 +597,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     }
                                 }
                                 if (!hasStory) {
+                                    articleHasMore = false;
                                     // Stale article rows from the previous letter must not stick
                                     // when this query truly has zero hits.
                                     rows.clear();
@@ -604,6 +610,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     return;
                                 }
                                 hideEmptyState();
+                                final int pageCount = next.size();
                                 // Append Did-you-mean under results when typed looks like a typo.
                                 List<String> pool = new ArrayList<>(lastSuggestTexts);
                                 for (RecentSearchStore.Entry e :
@@ -633,8 +640,13 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 rows.clear();
                                 rows.addAll(next);
                                 adapter.notifyDataSetChanged();
+                                noteArticlePage(obj, pageCount);
                             } catch (Exception e) {
-                                paintEmptyOrFuzzy(q);
+                                if (append && hasArticleRows()) {
+                                    articleHasMore = false;
+                                } else {
+                                    paintEmptyOrFuzzy(q);
+                                }
                             }
                         }
 
@@ -652,6 +664,10 @@ public class InAppSearchActivity extends AppCompatActivity {
                                                 ? listMode == MODE_ARTICLES
                                                 : typed.equals(q) && listMode == MODE_TOPICS;
                                 if (stillCurrent) {
+                                    if (append && hasArticleRows()) {
+                                        articleHasMore = false;
+                                        return;
+                                    }
                                     paintLocalLiveSuggestions(q);
                                     if (!hasStorySuggestRows()) {
                                         paintEmptyOrFuzzy(q);
@@ -662,8 +678,117 @@ public class InAppSearchActivity extends AppCompatActivity {
                     });
         } catch (Exception e) {
             suggestInFlight = false;
-            paintEmptyOrFuzzy(q);
+            if (append && hasArticleRows()) {
+                articleHasMore = false;
+            } else {
+                paintEmptyOrFuzzy(q);
+            }
         }
+    }
+
+    @NonNull
+    private List<Row> readArticleRows(@Nullable JsonObject obj, @NonNull String q) {
+        List<Row> next = new ArrayList<>();
+        if (obj == null) return next;
+        JsonArray articleArr =
+                obj.has("articles") && obj.get("articles").isJsonArray()
+                        ? obj.getAsJsonArray("articles")
+                        : null;
+        if (articleArr != null && articleArr.size() > 0) {
+            for (JsonElement el : articleArr) {
+                Row art = parseArticleRow(el, q);
+                if (art != null) next.add(art);
+            }
+        }
+        if (!next.isEmpty()) return next;
+        JsonArray data =
+                obj.has("data") && obj.get("data").isJsonArray()
+                        ? obj.getAsJsonArray("data")
+                        : null;
+        if (data == null) return next;
+        for (JsonElement el : data) {
+            Row parsed = parseSuggestDataRow(el, q);
+            if (parsed != null) next.add(parsed);
+        }
+        return next;
+    }
+
+    private void appendArticleRows(@NonNull List<Row> more) {
+        if (more.isEmpty() || adapter == null) return;
+        int insertAt = rows.size();
+        for (int i = 0; i < rows.size(); i++) {
+            int type = rows.get(i).type;
+            if (type == Row.TYPE_HEADER || type == Row.TYPE_FUZZY) {
+                insertAt = i;
+                break;
+            }
+        }
+        int added = 0;
+        for (Row art : more) {
+            if (art == null || art.type != Row.TYPE_ARTICLE) continue;
+            if (art.postId > 0L && articleListHasPost(art.postId)) continue;
+            rows.add(insertAt, art);
+            insertAt++;
+            added++;
+        }
+        if (added > 0) adapter.notifyDataSetChanged();
+    }
+
+    private boolean articleListHasPost(long postId) {
+        for (Row r : rows) {
+            if (r.type == Row.TYPE_ARTICLE && r.postId == postId) return true;
+        }
+        return false;
+    }
+
+    private void noteArticlePage(@Nullable JsonObject obj, int received) {
+        boolean more = false;
+        int next = articleNextSkip;
+        if (obj != null) {
+            try {
+                if (obj.has("has_more") && !obj.get("has_more").isJsonNull()) {
+                    more = obj.get("has_more").getAsBoolean();
+                }
+            } catch (Exception ignored) {
+                more = false;
+            }
+            try {
+                if (obj.has("next_skip") && !obj.get("next_skip").isJsonNull()) {
+                    next = obj.get("next_skip").getAsInt();
+                }
+            } catch (Exception ignored) {
+                next = articleNextSkip;
+            }
+        }
+        if (received <= 0 || next <= articleNextSkip) more = false;
+        articleHasMore = more;
+        if (more) articleNextSkip = next;
+        if (listView != null) listView.post(this::maybeLoadMoreArticles);
+    }
+
+    private void maybeLoadMoreArticles() {
+        if (listMode != MODE_ARTICLES || !articleHasMore || suggestInFlight) return;
+        if (TextUtils.isEmpty(articleQuery) || listView == null) return;
+        RecyclerView.LayoutManager layout = listView.getLayoutManager();
+        if (!(layout instanceof LinearLayoutManager)) return;
+        int last = ((LinearLayoutManager) layout).findLastVisibleItemPosition();
+        if (last < 0) {
+            if (articleLayoutRetries < 2 && listView.getChildCount() == 0) {
+                articleLayoutRetries++;
+                listView.post(this::maybeLoadMoreArticles);
+            }
+            return;
+        }
+        articleLayoutRetries = 0;
+        if (last < rows.size() - 3) return;
+        fetchSuggestions(articleQuery, true, articleNextSkip, true);
+    }
+
+    private void resetArticlePaging() {
+        articleHasMore = false;
+        articleNextSkip = 0;
+        articleLayoutRetries = 0;
+        articleQuery = "";
     }
 
     @Nullable
@@ -687,7 +812,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             postId = 0L;
         }
         String image = firstImageUrl(o);
-        return Row.article(title, highlight, postId, image, parseMatch(o));
+        return Row.article(title, highlight, postId, image, parseMatch(o), readPublishedTime(o));
     }
 
     @Nullable
@@ -719,7 +844,8 @@ public class InAppSearchActivity extends AppCompatActivity {
         // Article-shaped row (count 1 + post_id and/or image) → thumbnail UI.
         if ((count == 1 && postId > 0L) || !TextUtils.isEmpty(image)) {
             if (count != 1) postId = postId > 0L ? postId : 0L;
-            return Row.article(text, highlight, postId > 0L ? postId : 0L, image, parseMatch(o));
+            return Row.article(
+                    text, highlight, postId > 0L ? postId : 0L, image, parseMatch(o), readPublishedTime(o));
         }
         // Legacy keyword bucket — still open FlipView keyword search.
         return Row.suggest(text, count, highlight, 0L);
@@ -745,8 +871,11 @@ public class InAppSearchActivity extends AppCompatActivity {
         int[][] snipRanges = null;
         if ("body".equals(matchIn) && m.has("snippet") && !m.get("snippet").isJsonNull()) {
             snippet = m.get("snippet").getAsString();
-            if (snippet == null) snippet = "";
-            snippet = snippet.replace('\n', ' ').replace('\r', ' ').trim();
+        if (snippet == null) snippet = "";
+        snippet = snippet.replace('\n', ' ').replace('\r', ' ').trim();
+        if ("null".equalsIgnoreCase(snippet) || "undefined".equalsIgnoreCase(snippet)) {
+            snippet = "";
+        }
             snipRanges = readRanges(m, "snippet_ranges");
         }
         return new MatchBits(
@@ -810,6 +939,39 @@ public class InAppSearchActivity extends AppCompatActivity {
         return "";
     }
 
+    /** Epoch millis from the server. Seconds are scaled up. 0 if missing. */
+    private static long readPublishedTime(@Nullable JsonObject o) {
+        if (o == null || !o.has("published_time") || o.get("published_time").isJsonNull()) {
+            return 0L;
+        }
+        try {
+            long ms = o.get("published_time").getAsLong();
+            if (ms > 0L && ms < 100000000000L) ms *= 1000L;
+            return ms > 0L ? ms : 0L;
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
+
+    /** Short IST date for an article row: 28 Sep, or 28 Sep 2025 when not this year. */
+    @NonNull
+    private static String formatArticleDate(long publishedMs) {
+        if (publishedMs <= 0L) return "";
+        try {
+            TimeZone ist = TimeZone.getTimeZone("Asia/Kolkata");
+            Calendar when = Calendar.getInstance(ist);
+            when.setTimeInMillis(publishedMs);
+            Calendar now = Calendar.getInstance(ist);
+            String pattern =
+                    when.get(Calendar.YEAR) == now.get(Calendar.YEAR) ? "d MMM" : "d MMM yyyy";
+            SimpleDateFormat fmt = new SimpleDateFormat(pattern, Locale.ENGLISH);
+            fmt.setTimeZone(ist);
+            return fmt.format(new Date(publishedMs));
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     /** String, first array element, or {url|src|image} — skip blanks. */
     @NonNull
     private static String urlFromElement(@Nullable JsonElement el) {
@@ -853,6 +1015,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     private void showTopicCounts(String q) {
         String clean = softenClientQuery(q);
         listMode = MODE_TOPICS;
+        resetArticlePaging();
         dropArticleRows();
         if (clean.isEmpty() || "null".equalsIgnoreCase(clean)) {
             showIdleState();
@@ -868,9 +1031,12 @@ public class InAppSearchActivity extends AppCompatActivity {
         String clean = softenClientQuery(topic);
         if (clean.isEmpty() || "null".equalsIgnoreCase(clean)) return;
         listMode = MODE_ARTICLES;
+        articleQuery = clean;
+        articleNextSkip = 0;
+        articleHasMore = false;
         RecentSearchStore.add(this, clean, 0L);
         cancelSuggest();
-        fetchSuggestions(clean, true);
+        fetchSuggestions(clean, true, 0, false);
     }
 
     @Nullable
@@ -996,6 +1162,8 @@ public class InAppSearchActivity extends AppCompatActivity {
         @Nullable final MatchBits match;
         /** Count bucket (Way2News row). Tap loads stories; it is not one article. */
         final boolean topicBucket;
+        /** published_time epoch millis. 0 on topic / count rows. */
+        final long publishedTime;
 
         private Row(
                 int type,
@@ -1005,7 +1173,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                 long postId,
                 String imageUrl,
                 @Nullable MatchBits match) {
-            this(type, title, meta, highlight, postId, imageUrl, match, false);
+            this(type, title, meta, highlight, postId, imageUrl, match, false, 0L);
         }
 
         private Row(
@@ -1017,6 +1185,19 @@ public class InAppSearchActivity extends AppCompatActivity {
                 String imageUrl,
                 @Nullable MatchBits match,
                 boolean topicBucket) {
+            this(type, title, meta, highlight, postId, imageUrl, match, topicBucket, 0L);
+        }
+
+        private Row(
+                int type,
+                String title,
+                int meta,
+                String highlight,
+                long postId,
+                String imageUrl,
+                @Nullable MatchBits match,
+                boolean topicBucket,
+                long publishedTime) {
             this.type = type;
             this.title = title;
             this.meta = meta;
@@ -1025,6 +1206,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             this.imageUrl = imageUrl;
             this.match = match;
             this.topicBucket = topicBucket;
+            this.publishedTime = publishedTime;
         }
 
         static Row header(String t) {
@@ -1061,7 +1243,18 @@ public class InAppSearchActivity extends AppCompatActivity {
                 long postId,
                 String imageUrl,
                 @Nullable MatchBits match) {
-            return new Row(TYPE_ARTICLE, t, 1, highlight, postId, imageUrl, match);
+            return article(t, highlight, postId, imageUrl, match, 0L);
+        }
+
+        static Row article(
+                String t,
+                String highlight,
+                long postId,
+                String imageUrl,
+                @Nullable MatchBits match,
+                long publishedTime) {
+            return new Row(
+                    TYPE_ARTICLE, t, 1, highlight, postId, imageUrl, match, false, publishedTime);
         }
 
         static Row fuzzy(String t) {
@@ -1113,12 +1306,21 @@ public class InAppSearchActivity extends AppCompatActivity {
                 return;
             }
             RowVH vh = (RowVH) holder;
+            if (vh.date != null) {
+                vh.date.setVisibility(View.GONE);
+                vh.date.setText("");
+            }
             if (vh.snippet != null) {
                 vh.snippet.setVisibility(View.GONE);
                 vh.snippet.setText("");
             }
             bindRowText(vh, row);
             if (row.type == Row.TYPE_ARTICLE) {
+                String when = formatArticleDate(row.publishedTime);
+                if (vh.date != null && !TextUtils.isEmpty(when)) {
+                    vh.date.setText(when);
+                    vh.date.setVisibility(View.VISIBLE);
+                }
                 vh.meta.setVisibility(View.GONE);
                 vh.icon.setVisibility(View.GONE);
                 vh.action.setVisibility(View.GONE);
@@ -1320,6 +1522,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     private static class RowVH extends RecyclerView.ViewHolder {
         final ImageView icon;
         final TextView title;
+        final TextView date;
         final TextView snippet;
         final TextView meta;
         final ImageView thumb;
@@ -1329,6 +1532,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             super(itemView);
             icon = itemView.findViewById(R.id.row_icon);
             title = itemView.findViewById(R.id.row_title);
+            date = itemView.findViewById(R.id.row_date);
             snippet = itemView.findViewById(R.id.row_snippet);
             meta = itemView.findViewById(R.id.row_meta);
             thumb = itemView.findViewById(R.id.row_thumb);
