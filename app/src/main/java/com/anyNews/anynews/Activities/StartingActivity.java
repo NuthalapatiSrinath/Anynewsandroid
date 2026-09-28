@@ -1049,7 +1049,7 @@ public class StartingActivity extends AppCompatActivity {
             Intent intent = new Intent(StartingActivity.this, HomePage.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             intent.putExtra("SHARE_REDIRECT_ID", shareId.trim());
-            intent.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
+            stampShareGalleryHandoff(intent);
             intent.putExtra("EXTRA_SESSION_ID", "0");
             // Share path must not re-forward a stale splash TITLE as push_post_id.
             intent.putExtra("TITLE", "0");
@@ -1380,6 +1380,10 @@ public class StartingActivity extends AppCompatActivity {
             homeIntent.putExtra(MyFirebaseMessagingService.EXTRA_PUSH_NOTIFICATION_ID, nid);
         }
         try {
+            Uri existing = homeIntent.getData();
+            if (existing != null && ShareOutboundHelper.parseGalleryPage(existing) > 0) {
+                return;
+            }
             String uri = nid != 0
                     ? "anynews://push/" + id + "/" + nid
                     : "anynews://push/" + id;
@@ -3146,12 +3150,46 @@ public class StartingActivity extends AppCompatActivity {
         }
         intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
         intent.putExtra("SHARE_REDIRECT_ID", articleId1);
-        intent.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
+        stampShareGalleryHandoff(intent);
         intent.putExtra("JOB_REDIRECT_ID", jobId1);
         intent.putExtra("DATAFROM2G", DATAFROM2G);
         if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
             startActivity(intent);
             finish();
+        }
+    }
+
+    /**
+     * Forward the magazine slide without replacing the launch VIEW uri.
+     * {@code setData(anynews://push/...)} drops {@code ?page=} / {@code S.page}.
+     */
+    private void stampShareGalleryHandoff(@NonNull Intent home) {
+        refreshShareGalleryPageFromLaunchIntent();
+        home.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
+        try {
+            Uri data = getIntent() != null ? getIntent().getData() : null;
+            if (data != null && !isFcmPushIntentUri(data)) {
+                home.putExtra("SHARE_LINK_URI", data.toString());
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Uri query wins; {@code S.page} fills in when Chrome stripped the query. */
+    private void refreshShareGalleryPageFromLaunchIntent() {
+        try {
+            Intent launch = getIntent();
+            Uri data = launch != null ? launch.getData() : null;
+            if (data != null && !isFcmPushIntentUri(data)) {
+                int fromUri = ShareOutboundHelper.parseGalleryPage(data);
+                if (fromUri > 0) {
+                    shareGalleryPage = fromUri;
+                    SharedPrefsData.putInt(getApplicationContext(), Constants.PENDING_SHARE_PAGE,
+                            shareGalleryPage, Constants.PREF_NAME);
+                }
+            }
+            absorbSharePageExtra(launch);
+        } catch (Exception ignored) {
         }
     }
 
@@ -3486,7 +3524,7 @@ public class StartingActivity extends AppCompatActivity {
                                 }
                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
                                 intent.putExtra("SHARE_REDIRECT_ID",articleId1);
-                                intent.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
+                                stampShareGalleryHandoff(intent);
                                 intent.putExtra("JOB_REDIRECT_ID", jobId1);
                                 intent.putExtra("DATAFROM2G",DATAFROM2G);
                                 if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){
@@ -3586,7 +3624,7 @@ public class StartingActivity extends AppCompatActivity {
                                                 }
                                                 intent.putExtra("TITLE_REWARDS",TITLE_REWARDS);
                                                 intent.putExtra("SHARE_REDIRECT_ID",articleId1);
-                                                intent.putExtra("SHARE_GALLERY_PAGE", shareGalleryPage);
+                                                stampShareGalleryHandoff(intent);
                                                 intent.putExtra("JOB_REDIRECT_ID", jobId1);
                                                 intent.putExtra("DATAFROM2G",DATAFROM2G);
                                                 if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)){

@@ -102,7 +102,7 @@ public final class SpecialGalleryFlipHelper {
                 && existing.getWindowToken() != null) {
             if (landPage > 0) {
                 try {
-                    existing.flipTo(landPage);
+                    existing.rebindSettledPage(landPage);
                 } catch (Exception ignored) {
                 }
             }
@@ -211,11 +211,24 @@ public final class SpecialGalleryFlipHelper {
                 flipRef.setVisibility(View.GONE);
                 return null;
             }
-            // Land on share page (or 0) after adapter swap — never leave a mid-peak seat.
+            // Land on share page after the adapter's page-0 seat. flipTo(0) no-ops
+            // when the flip is already there, so a later slide never replaced the cover.
             try {
-                flipRef.flipTo(landPage);
+                flipRef.rebindSettledPage(landPage);
             } catch (Exception ignored) {
             }
+            final int seat = landPage;
+            flipRef.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (flipRef.getPageCount() > 0 && flipRef.getCurrentPage() != seat) {
+                            flipRef.rebindSettledPage(seat);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
             // First bind often runs before FlipView has non-zero size; Glide wait-for-layout
             // then loses to scrap/detach and page-0 stays on transparent stub until the user
             // leaves and returns. Re-kick cover once laid out and force FlipView redraw.
@@ -227,7 +240,7 @@ public final class SpecialGalleryFlipHelper {
                     (GalleryImageFlipAdapter) flipRef.getAdapter();
             if (landPage > 0) {
                 try {
-                    flipRef.flipTo(landPage);
+                    flipRef.rebindSettledPage(landPage);
                 } catch (Exception ignored) {
                 }
             } else if (!priorAdapter.isPage0Loaded()) {

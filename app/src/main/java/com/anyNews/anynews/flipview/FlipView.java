@@ -2447,8 +2447,15 @@ public class FlipView extends FrameLayout {
             mForcePage0OnDataChange = false;
         }
         // Explicit navigation (deep link, restore) is a real land — including page 0.
+        // setFlipDistance skips the rebind when the index is unchanged, so flipTo(0)
+        // while already at 0 left the invite card painted, and a magazine slide
+        // requested before the adapter existed never left the cover.
+        if (mCurrentPageIndex == page) {
+            mCurrentPageIndex = INVALID_PAGE_POSITION;
+        }
         mCommittedPageIndex = page;
-        setFlipDistance(page * FLIP_DISTANCE_PER_PAGE);
+        int per = Math.max(1, FLIP_DISTANCE_PER_PAGE);
+        setFlipDistance(page * (float) per, true);
         commitExplicitPage(page);
     }
 

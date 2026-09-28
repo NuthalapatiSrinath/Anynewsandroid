@@ -11624,17 +11624,23 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (flip != null) {
             try {
                 int count = flip.getPageCount();
-                int safe = Math.max(0, Math.min(land, Math.max(0, count - 1)));
-                flip.flipTo(safe);
-                return safe;
+                if (count <= 0) {
+                    return -1;
+                }
+                int safe = Math.max(0, Math.min(land, count - 1));
+                flip.rebindSettledPage(safe);
+                return flipIsOnSharePage(flip, safe) ? safe : -1;
             } catch (Exception ignored) {
             }
         }
         if (pager != null && pager.getAdapter() != null) {
             try {
                 int count = pager.getAdapter().getCount();
-                int safe = Math.max(0, Math.min(land, Math.max(0, count - 1)));
-                pager.setCurrentItem(safe, false);
+                if (count <= 0) {
+                    return -1;
+                }
+                int safe = Math.max(0, Math.min(land, count - 1));
+                movePagerToSharePage(pager, safe, false);
                 return safe;
             } catch (Exception ignored) {
             }
@@ -11644,9 +11650,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (nested != null) {
                 try {
                     int count = nested.getPageCount();
-                    int safe = Math.max(0, Math.min(land, Math.max(0, count - 1)));
-                    nested.flipTo(safe);
-                    return safe;
+                    if (count <= 0) {
+                        return -1;
+                    }
+                    int safe = Math.max(0, Math.min(land, count - 1));
+                    nested.rebindSettledPage(safe);
+                    return flipIsOnSharePage(nested, safe) ? safe : -1;
                 } catch (Exception ignored) {
                 }
             }
@@ -11675,6 +11684,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         final int gen = home.bumpShareGalleryApplyGen();
+        if (gen < 0) {
+            return;
+        }
         final int safe = page;
         Runnable confirm = new Runnable() {
             @Override
@@ -11684,10 +11696,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     @Override
                     public void run() {
                         reapplyShareGalleryPage(anchor, safe);
-                        try {
-                            home.finishShareGalleryApply(postId, gen);
-                        } catch (Exception ignored) {
-                        }
+                        // Leave the pending slide in place. Home consumes it only
+                        // after the visible pager is still on that index, so the
+                        // feed rebind that follows a share pin can apply it again.
                     }
                 };
                 if (anchor != null) {
@@ -11719,7 +11730,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 if (count <= 0) {
                     return;
                 }
-                flip.flipTo(Math.max(0, Math.min(page, count - 1)));
+                flip.rebindSettledPage(Math.max(0, Math.min(page, count - 1)));
                 return;
             }
             moveNestedGalleryToPage(anchor, page);
@@ -11751,7 +11762,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (!moved) {
             moved = moveShownHolderToSharePage(page);
         }
-        if (!moved) {
+        if (!moved || !visibleShareGalleryIsOnPage(postId, page, pageRoot)) {
             return false;
         }
         View anchor = pageRoot;
@@ -11790,7 +11801,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (flip != null && flip.isShown()) {
                 int count = flip.getPageCount();
                 if (count > 0) {
-                    flip.flipTo(Math.max(0, Math.min(page, count - 1)));
+                    flip.rebindSettledPage(Math.max(0, Math.min(page, count - 1)));
                     moved = true;
                 }
             }
@@ -11823,7 +11834,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (flip != null) {
                 int count = flip.getPageCount();
                 if (count > 0) {
-                    flip.flipTo(Math.max(0, Math.min(page, count - 1)));
+                    flip.rebindSettledPage(Math.max(0, Math.min(page, count - 1)));
                     moved = true;
                 }
             }
@@ -11845,7 +11856,115 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         int safe = Math.max(0, Math.min(page, count - 1));
         pager.setCurrentItem(safe, false);
-        return true;
+        if (pager.getCurrentItem() != safe) {
+            final int landSafe = safe;
+            pager.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (pager.getAdapter() != null && pager.getCurrentItem() != landSafe) {
+                            pager.setCurrentItem(landSafe, false);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
+        }
+        return pager.getCurrentItem() == safe;
+    }
+
+    /**
+     * True when the on-screen magazine ViewPager or gallery FlipView is already
+     * on the share slide. Used to decide when {@code ?page=} can be consumed.
+     */
+    public boolean visibleShareGalleryIsOnPage(long postId, int page, @Nullable View pageRoot) {
+        if (page < 0) {
+            return false;
+        }
+        if (nestedControlIsOnSharePage(pageRoot, page)) {
+            return true;
+        }
+        try {
+            if (image_magazineHolder != null
+                    && image_magazineHolder.magzine_viewPager_data != null
+                    && image_magazineHolder.magzine_viewPager_data.isShown()
+                    && pagerIsOnSharePage(image_magazineHolder.magzine_viewPager_data, page)) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (imageGallaryHolder != null
+                    && imageGallaryHolder.viewpager != null
+                    && imageGallaryHolder.viewpager.isShown()
+                    && pagerIsOnSharePage(imageGallaryHolder.viewpager, page)) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private boolean nestedControlIsOnSharePage(@Nullable View anchor, int page) {
+        if (anchor == null || page < 0) {
+            return false;
+        }
+        try {
+            if (anchor instanceof ViewPager) {
+                return pagerIsOnSharePage((ViewPager) anchor, page);
+            }
+            if (anchor instanceof FlipView) {
+                return flipIsOnSharePage((FlipView) anchor, page);
+            }
+            ViewPager mag = anchor.findViewById(R.id.magzine_viewPager_data);
+            if (pagerIsOnSharePage(mag, page)) {
+                return true;
+            }
+            ViewPager gallery = anchor.findViewById(R.id.viewpager);
+            if (gallery != null && gallery.getVisibility() == VISIBLE
+                    && pagerIsOnSharePage(gallery, page)) {
+                return true;
+            }
+            FlipView flip = SpecialGalleryFlipHelper.findNestedGalleryFlip(anchor);
+            if (flipIsOnSharePage(flip, page)) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private static boolean pagerIsOnSharePage(@Nullable ViewPager pager, int page) {
+        if (pager == null || pager.getAdapter() == null) {
+            return false;
+        }
+        int count = pager.getAdapter().getCount();
+        if (count <= 0) {
+            return false;
+        }
+        int want = Math.max(0, Math.min(page, count - 1));
+        return pager.getCurrentItem() == want;
+    }
+
+    private static boolean flipIsOnSharePage(@Nullable FlipView flip, int page) {
+        if (flip == null) {
+            return false;
+        }
+        int count;
+        try {
+            count = flip.getPageCount();
+        } catch (Exception e) {
+            return false;
+        }
+        if (count <= 0) {
+            return false;
+        }
+        int want = Math.max(0, Math.min(page, count - 1));
+        try {
+            return flip.getCurrentPage() == want;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

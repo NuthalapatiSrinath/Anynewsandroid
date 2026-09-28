@@ -163,6 +163,7 @@ import com.anyNews.anynews.Utils.FeedExoSurfaceHost;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
+import com.anyNews.anynews.Utils.ShareOutboundHelper;
 import com.anyNews.anynews.Utils.ProfileHubLabels;
 import com.anyNews.anynews.Utils.DailyUpdatesConfigHelper;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
@@ -816,6 +817,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private long pendingShareGalleryPostId = 0L;
     private int pendingShareGalleryPage = -1;
+    /** Debounced consume so a second feed rebind can still read the slide. */
+    private Runnable shareGalleryConsumeRunnable;
+    private int shareGalleryJumpPasses = 0;
     /** Latest bind/jump wins; earlier settle runnables must not clear the page. */
     private int shareGalleryApplyGen = 0;
     /** Caps invite-shell repair so a stuck ad view cannot rebind forever. */
@@ -2183,6 +2187,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         deepLinkShareRescueAttempted = false;
         shareInviteRepairAttempts = 0;
         capturePendingShareGalleryPage(intent, shareId);
+        // Share open paints News. Daily Updates must not stay the lit footer tab.
+        leaveDailyUpdatesForShareOpen();
         // Drop an in-flight plain page-0 (background "first article" refresh)
         // so it cannot replace this share target after we seat it.
         feedModeEpoch++;
@@ -8695,6 +8701,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             home_page_navigation.bringChildToFront(layoutMagazineShareFooter);
         }
         startMagazineShareBlink();
+        // Pulse the center Share control only. Special and Daily Updates stay still.
+        stopSpecialTabBlinkAnimation();
+        if (specialTabBulbOverlay != null) {
+            specialTabBulbOverlay.setVisibility(View.GONE);
+        }
         // Middle column (not the Special tab). Footer reflows to News | Special | Share | …
         ensureMagazineShareFooterSlot();
         Log.i(MAGAZINE_GLOW_TAG, "applyMagazineCenterShare OK mode=FOOTER_SHARE"
@@ -11893,6 +11904,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     positionx = boundPosition;
                 }
                 updateCenterFab();
+                try {
+                    if (list != null && boundPosition >= 0 && boundPosition < list.size()
+                            && list.get(boundPosition) != null
+                            && list.get(boundPosition).getPostId() != null) {
+                        long sharePost = list.get(boundPosition).getPostId();
+                        if (peekShareGalleryPage(sharePost) >= 0) {
+                            shareGalleryJumpPasses = 0;
+                            armShareGalleryConsume(sharePost);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
             } else {
                 Log.i(MAGAZINE_GLOW_TAG, "onMagazinePageBound skipped (preloading) bound="
                         + boundPosition + " visible=" + visible);
@@ -20944,6 +20967,25 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
         } catch (Exception ignored) {
         }
+        if (page <= 0 && intent != null) {
+            try {
+                int fromLink = ShareOutboundHelper.parseGalleryPage(
+                        intent.getStringExtra("SHARE_LINK_URI"));
+                if (fromLink > 0) {
+                    page = fromLink;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (page <= 0 && intent != null) {
+            try {
+                int fromData = ShareOutboundHelper.parseGalleryPage(intent.getData());
+                if (fromData > 0) {
+                    page = fromData;
+                }
+            } catch (Exception ignored) {
+            }
+        }
         if (page < 0) {
             try {
                 page = SharedPrefsData.getInt(
@@ -20951,6 +20993,13 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             } catch (Exception ignored) {
                 page = 0;
             }
+        }
+        if (page <= 0
+                && pendingShareGalleryPostId == sharePostId
+                && pendingShareGalleryPage > 0) {
+            showLog("share gallery page kept postId=" + sharePostId
+                    + " page=" + pendingShareGalleryPage);
+            return;
         }
         try {
             SharedPrefsData.putInt(
@@ -20966,9 +21015,42 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (page < 0) {
             page = 0;
         }
+        shareGalleryJumpPasses = 0;
         pendingShareGalleryPostId = sharePostId;
         pendingShareGalleryPage = page;
         showLog("share gallery page pending postId=" + sharePostId + " page=" + page);
+    }
+
+    /**
+     * Share link opened while Daily Updates (or Special) was the checked tab.
+     * The magazine stays on News. The orange check must not stay on Daily Updates.
+     * Callbacks stay suppressed so this does not reload the feed.
+     */
+    private void leaveDailyUpdatesForShareOpen() {
+        try {
+            hideHomeCalendarMode();
+            hideHomeDailyUpdatesMode();
+        } catch (Exception ignored) {
+        }
+        try {
+            stopSpecialTabBlinkAnimation();
+            if (specialTabBulbOverlay != null) {
+                specialTabBulbOverlay.setVisibility(View.GONE);
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (bottomNavigationView != null
+                    && bottomNavigationView.getSelectedItemId() != R.id.navigation_home) {
+                suppressBottomNavCallbacks = true;
+                try {
+                    bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+                } finally {
+                    suppressBottomNavCallbacks = false;
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -21020,14 +21102,59 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
         } catch (Exception ignored) {
         }
-        if (!moved && attempt < 10 && mFlipView != null) {
+        if (moved) {
+            armShareGalleryConsume(postId);
+            return;
+        }
+        if (attempt < 12 && mFlipView != null) {
             mFlipView.postDelayed(new Runnable() {
                 @Override
                 public void run() {
                     jumpVisibleShareGalleryPage(postId, attempt + 1);
                 }
-            }, 60L);
+            }, 80L);
         }
+    }
+
+    /**
+     * Consume {@code ?page=} only after the visible magazine/gallery has stayed
+     * on that slide. A feed rebind in the next frames builds a new pager at 0
+     * and must still be able to peek the pending index.
+     */
+    private void armShareGalleryConsume(final long postId) {
+        if (postId <= 0 || mFlipView == null || peekShareGalleryPage(postId) < 0) {
+            return;
+        }
+        if (shareGalleryConsumeRunnable != null) {
+            mFlipView.removeCallbacks(shareGalleryConsumeRunnable);
+        }
+        shareGalleryConsumeRunnable = new Runnable() {
+            @Override
+            public void run() {
+                shareGalleryConsumeRunnable = null;
+                int page = peekShareGalleryPage(postId);
+                if (page < 0 || adapter == null || mFlipView == null) {
+                    return;
+                }
+                boolean onPage = false;
+                try {
+                    onPage = adapter.visibleShareGalleryIsOnPage(
+                            postId, page, mFlipView.getCurrentPageView());
+                } catch (Exception ignored) {
+                }
+                if (onPage) {
+                    shareGalleryJumpPasses = 0;
+                    consumeShareGalleryPage(postId);
+                    return;
+                }
+                if (shareGalleryJumpPasses >= 8) {
+                    return;
+                }
+                shareGalleryJumpPasses++;
+                jumpVisibleShareGalleryPage(postId, 0);
+            }
+        };
+        mFlipView.postDelayed(shareGalleryConsumeRunnable, 450L);
     }
 
     /**
@@ -21756,6 +21883,13 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
             return;
         }
+        if (isMagazineShareFooterShowing()) {
+            stopSpecialTabBlinkAnimation();
+            if (specialTabBulbOverlay != null) {
+                specialTabBulbOverlay.setVisibility(View.GONE);
+            }
+            return;
+        }
         // Menu icon first — independent of overlay success.
         ensureSpecialMenuIconAlwaysVisible();
 
@@ -21822,6 +21956,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
 
     private void showSpecialTabBlink() {
         if (bottomNavigationView == null) {
+            return;
+        }
+        if (isMagazineShareFooterShowing()) {
+            stopSpecialTabBlinkAnimation();
             return;
         }
         ensureSpecialMenuIconAlwaysVisible();
@@ -21905,6 +22043,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
 
     private void startSpecialTabBlinkAnimation() {
         if (specialTabViewedThisSession || !isFooterSpecialTabAllowed()) {
+            return;
+        }
+        // Magazine / special-gallery cards blink the center Share slot, never
+        // Special (menu index 1) and never Daily Updates (navigation_status).
+        if (isMagazineShareFooterShowing()) {
+            stopSpecialTabBlinkAnimation();
             return;
         }
         ensureSpecialMenuIconAlwaysVisible();
