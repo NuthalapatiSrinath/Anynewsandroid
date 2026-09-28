@@ -48,6 +48,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -59,10 +60,10 @@ import static com.anyNews.anynews.Utils.MyUtils.decrypt;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 /**
- * In-app Search: mist + teal chrome, recent-searches idle state,
- * debounced Google-style article typeahead (title + right thumb) while typing,
- * submit opens HomePage search mode. No category / Daily Updates suggestions.
- * Typo intent: local edit-distance against recent (+ last suggest texts).
+ * In-app Search: mist + teal chrome, recent-searches idle state.
+ * Typing and the search icon show topic rows with counts (highest first).
+ * Tapping a topic row loads the article list (thumbs + highlight) for that
+ * topic. A single article opens only from that list.
  * Empty state only after the suggest request settles with zero hits — never
  * flash "No matching stories" while a request is still in flight.
  */
@@ -73,6 +74,10 @@ public class InAppSearchActivity extends AppCompatActivity {
     public static final String EXTRA_SHOW_NO_RESULTS = "extra_search_show_no_results";
 
     private static final long SUGGEST_DEBOUNCE_MS = 80L;
+    /** Count rows while typing / after the search icon. */
+    private static final int MODE_TOPICS = 0;
+    /** Article rows after a topic row is tapped. */
+    private static final int MODE_ARTICLES = 1;
 
     private View root;
     private EditText searchInput;
@@ -89,6 +94,8 @@ public class InAppSearchActivity extends AppCompatActivity {
     private int suggestSeq = 0;
     /** True while a suggest XHR is outstanding for the current typed query. */
     private boolean suggestInFlight = false;
+    /** Topics until a suggestion row is chosen; back returns here. */
+    private int listMode = MODE_TOPICS;
     private final TextWatcher queryWatcher =
             new TextWatcher() {
                 @Override
@@ -100,14 +107,15 @@ public class InAppSearchActivity extends AppCompatActivity {
                 @Override
                 public void afterTextChanged(Editable s) {
                     String q = s != null ? s.toString().trim() : "";
+                    // Editing the box leaves the article list and refreshes counts.
+                    listMode = MODE_TOPICS;
+                    dropArticleRows();
                     hideEmptyState();
                     if (q.isEmpty()) {
                         cancelSuggest();
                         showIdleState();
                         return;
                     }
-                    // Instant local prefix/contains + typo hints while network runs.
-                    paintLocalLiveSuggestions(q);
                     scheduleSuggest(q);
                 }
             };
@@ -198,8 +206,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         searchInput.setText(clean);
         searchInput.setSelection(clean.length());
         searchInput.addTextChangedListener(queryWatcher);
-        // Always try live + network suggestions so similar/fuzzy rows can appear.
-        paintLocalLiveSuggestions(clean);
+        // Topic counts for the seeded query. Articles wait for a row tap.
         scheduleSuggest(clean);
         if (showEmpty && !hasStorySuggestRows()) {
             paintEmptyOrFuzzy(clean);
@@ -226,6 +233,21 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        if (listMode == MODE_ARTICLES) {
+            listMode = MODE_TOPICS;
+            dropArticleRows();
+            String q =
+                    searchInput != null && searchInput.getText() != null
+                            ? searchInput.getText().toString().trim()
+                            : "";
+            if (q.isEmpty()) {
+                showIdleState();
+                return;
+            }
+            cancelSuggest();
+            fetchSuggestions(q, false);
+            return;
+        }
         closeSearch();
     }
 
@@ -272,6 +294,66 @@ public class InAppSearchActivity extends AppCompatActivity {
         return false;
     }
 
+    private boolean hasTopicRows() {
+        for (Row r : rows) {
+            if (r.type == Row.TYPE_SUGGEST && r.topicBucket) return true;
+        }
+        return false;
+    }
+
+    /**
+     * First list: topic text + count, highest count first. Not one article per row.
+     */
+    private void applyTopicRows(@Nullable JsonObject obj, @NonNull String q) {
+        List<Row> next = new ArrayList<>();
+        JsonArray data =
+                obj != null && obj.has("data") && obj.get("data").isJsonArray()
+                        ? obj.getAsJsonArray("data")
+                        : null;
+        if (data != null) {
+            for (JsonElement el : data) {
+                Row topic = parseTopicRow(el);
+                if (topic != null) {
+                    next.add(topic);
+                    if (!TextUtils.isEmpty(topic.title)) {
+                        lastSuggestTexts.add(topic.title);
+                    }
+                }
+            }
+        }
+        while (lastSuggestTexts.size() > 40) {
+            lastSuggestTexts.remove(0);
+        }
+        Collections.sort(
+                next,
+                (a, b) -> {
+                    int byCount = Integer.compare(b.meta, a.meta);
+                    if (byCount != 0) return byCount;
+                    int la = a.title != null ? a.title.length() : 0;
+                    int lb = b.title != null ? b.title.length() : 0;
+                    return Integer.compare(la, lb);
+                });
+        if (next.isEmpty()) {
+            rows.clear();
+            adapter.notifyDataSetChanged();
+            paintLocalLiveSuggestions(q);
+            if (!hasStorySuggestRows()) {
+                paintEmptyOrFuzzy(q);
+            }
+            return;
+        }
+        hideEmptyState();
+        rows.clear();
+        rows.addAll(next);
+        adapter.notifyDataSetChanged();
+    }
+
+    private void dropArticleRows() {
+        if (!hasArticleRows() || adapter == null) return;
+        rows.clear();
+        adapter.notifyDataSetChanged();
+    }
+
     private boolean hasArticleRows() {
         for (Row r : rows) {
             if (r.type == Row.TYPE_ARTICLE) return true;
@@ -291,14 +373,11 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     /**
-     * Google-like live rows on every keystroke: prefix/contains as suggestions,
-     * then Did-you-mean typos underneath. Network article results replace this
-     * when ready. Never clear existing article rows to empty while waiting.
+     * Local prefix/typo hints when the server returned nothing. Not used while
+     * an article list for a chosen topic is on screen.
      */
     private void paintLocalLiveSuggestions(@NonNull String q) {
-        // Keep prior article hits visible while the next letter's XHR runs —
-        // avoids blank / empty flash between keystrokes.
-        if (hasArticleRows() || suggestInFlight) {
+        if (listMode == MODE_ARTICLES) {
             return;
         }
         List<String> pool = localSuggestPool();
@@ -386,8 +465,26 @@ public class InAppSearchActivity extends AppCompatActivity {
     }
 
     private void fetchSuggestions(final String q) {
-        if (q.equals(lastSuggestQuery)
-                && !rows.isEmpty()
+        fetchSuggestions(q, false);
+    }
+
+    /**
+     * @param articles false = topic rows with counts; true = stories for one topic
+     */
+    private void fetchSuggestions(final String q, final boolean articles) {
+        if (TextUtils.isEmpty(q) || "null".equalsIgnoreCase(q.trim())) {
+            suggestInFlight = false;
+            return;
+        }
+        if (!articles
+                && q.equals(lastSuggestQuery)
+                && listMode == MODE_TOPICS
+                && hasTopicRows()) {
+            return;
+        }
+        if (articles
+                && q.equals(lastSuggestQuery)
+                && listMode == MODE_ARTICLES
                 && hasArticleRows()) {
             return;
         }
@@ -402,10 +499,15 @@ public class InAppSearchActivity extends AppCompatActivity {
                     "language_id",
                     SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME));
             req.addProperty("search_text", q);
-            req.addProperty("limit", 12);
-            // Additive flag — old servers ignore; new servers return article rows.
-            req.addProperty("include_articles", true);
-            req.addProperty("suggest_mode", "articles");
+            if (articles) {
+                req.addProperty("limit", 20);
+                req.addProperty("include_articles", true);
+                req.addProperty("suggest_mode", "articles");
+            } else {
+                // Counts first. Old servers ignore suggest_mode and return data[].
+                req.addProperty("limit", 12);
+                req.addProperty("suggest_mode", "topics");
+            }
             String enc = encrypt(new Gson().toJson(req));
             JsonObject body = new JsonObject();
             body.addProperty("data", enc);
@@ -425,21 +527,31 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     searchInput.getText() != null
                                             ? searchInput.getText().toString().trim()
                                             : "";
-                            if (!typed.equals(q)) return;
+                            // Topic search follows the box. Article search follows the
+                            // tapped row, which may be Telugu while the box stays English.
+                            if (!articles && !typed.equals(q)) return;
+                            if (articles && listMode != MODE_ARTICLES) return;
+                            if (!articles && listMode != MODE_TOPICS) return;
                             try {
                                 List<Row> next = new ArrayList<>();
+                                JsonObject obj = null;
                                 if (response.body() != null
                                         && response.body().getData() != null) {
                                     String raw = decrypt(response.body().getData());
-                                    JsonObject obj = new Gson().fromJson(raw, JsonObject.class);
-                                    // Prefer articles[] (Google-style); fall back to data[].
-                                    JsonArray articles =
-                                            obj != null && obj.has("articles")
-                                                            && obj.get("articles").isJsonArray()
+                                    obj = new Gson().fromJson(raw, JsonObject.class);
+                                }
+                                if (!articles) {
+                                    applyTopicRows(obj, q);
+                                    return;
+                                }
+                                if (obj != null) {
+                                    // Prefer articles[] (thumbs + highlight); fall back to data[].
+                                    JsonArray articleArr =
+                                            obj.has("articles") && obj.get("articles").isJsonArray()
                                                     ? obj.getAsJsonArray("articles")
                                                     : null;
-                                    if (articles != null && articles.size() > 0) {
-                                        for (JsonElement el : articles) {
+                                    if (articleArr != null && articleArr.size() > 0) {
+                                        for (JsonElement el : articleArr) {
                                             Row art = parseArticleRow(el, q);
                                             if (art != null) {
                                                 next.add(art);
@@ -451,7 +563,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                     }
                                     if (next.isEmpty()) {
                                         JsonArray data =
-                                                obj != null && obj.has("data")
+                                                obj.has("data") && obj.get("data").isJsonArray()
                                                         ? obj.getAsJsonArray("data")
                                                         : null;
                                         if (data != null) {
@@ -535,7 +647,11 @@ public class InAppSearchActivity extends AppCompatActivity {
                                         searchInput.getText() != null
                                                 ? searchInput.getText().toString().trim()
                                                 : "";
-                                if (typed.equals(q)) {
+                                boolean stillCurrent =
+                                        articles
+                                                ? listMode == MODE_ARTICLES
+                                                : typed.equals(q) && listMode == MODE_TOPICS;
+                                if (stillCurrent) {
                                     paintLocalLiveSuggestions(q);
                                     if (!hasStorySuggestRows()) {
                                         paintEmptyOrFuzzy(q);
@@ -561,6 +677,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 ? o.get("text").getAsString()
                                 : "");
         if (TextUtils.isEmpty(title) || title.trim().length() < 2) return null;
+        if ("null".equalsIgnoreCase(title.trim())) return null;
         long postId = 0L;
         try {
             if (o.has("post_id") && !o.get("post_id").isJsonNull()) {
@@ -581,6 +698,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                 ? o.get("text").getAsString()
                 : "";
         if (TextUtils.isEmpty(text) || text.trim().length() < 2) return null;
+        if ("null".equalsIgnoreCase(text.trim())) return null;
         int count = 0;
         try {
             if (o.has("count") && !o.get("count").isJsonNull()) {
@@ -699,7 +817,10 @@ public class InAppSearchActivity extends AppCompatActivity {
         try {
             if (el.isJsonPrimitive()) {
                 String s = el.getAsString();
-                return s == null ? "" : s.trim();
+                if (s == null) return "";
+                s = s.trim();
+                if (s.isEmpty() || "null".equalsIgnoreCase(s)) return "";
+                return s;
             }
             if (el.isJsonArray()) {
                 JsonArray arr = el.getAsJsonArray();
@@ -724,8 +845,53 @@ public class InAppSearchActivity extends AppCompatActivity {
         return "";
     }
 
+    /** Search icon / IME search: topic counts under the box, not article rows. */
     private void submitQuery(String q) {
-        openSearch(q, 0L);
+        showTopicCounts(q);
+    }
+
+    private void showTopicCounts(String q) {
+        String clean = softenClientQuery(q);
+        listMode = MODE_TOPICS;
+        dropArticleRows();
+        if (clean.isEmpty() || "null".equalsIgnoreCase(clean)) {
+            showIdleState();
+            return;
+        }
+        RecentSearchStore.add(this, clean, 0L);
+        cancelSuggest();
+        fetchSuggestions(clean, false);
+    }
+
+    /** Second step: every story for the tapped topic, with thumbs and highlight. */
+    private void loadArticlesForTopic(String topic) {
+        String clean = softenClientQuery(topic);
+        if (clean.isEmpty() || "null".equalsIgnoreCase(clean)) return;
+        listMode = MODE_ARTICLES;
+        RecentSearchStore.add(this, clean, 0L);
+        cancelSuggest();
+        fetchSuggestions(clean, true);
+    }
+
+    @Nullable
+    private static Row parseTopicRow(JsonElement el) {
+        if (el == null || !el.isJsonObject()) return null;
+        JsonObject o = el.getAsJsonObject();
+        String text =
+                o.has("text") && !o.get("text").isJsonNull() ? o.get("text").getAsString() : "";
+        if (text == null) return null;
+        text = text.trim();
+        if (text.length() < 2 || "null".equalsIgnoreCase(text)) return null;
+        int count = 0;
+        try {
+            if (o.has("count") && !o.get("count").isJsonNull()) {
+                count = o.get("count").getAsInt();
+            }
+        } catch (Exception ignored) {
+            count = 0;
+        }
+        if (count < 1) return null;
+        return Row.topic(text, count);
     }
 
     /** Keyword FlipView search (multi-hit + Continue-reading hub). */
@@ -828,6 +994,8 @@ public class InAppSearchActivity extends AppCompatActivity {
         final long postId;
         final String imageUrl;
         @Nullable final MatchBits match;
+        /** Count bucket (Way2News row). Tap loads stories; it is not one article. */
+        final boolean topicBucket;
 
         private Row(
                 int type,
@@ -837,6 +1005,18 @@ public class InAppSearchActivity extends AppCompatActivity {
                 long postId,
                 String imageUrl,
                 @Nullable MatchBits match) {
+            this(type, title, meta, highlight, postId, imageUrl, match, false);
+        }
+
+        private Row(
+                int type,
+                String title,
+                int meta,
+                String highlight,
+                long postId,
+                String imageUrl,
+                @Nullable MatchBits match,
+                boolean topicBucket) {
             this.type = type;
             this.title = title;
             this.meta = meta;
@@ -844,6 +1024,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             this.postId = postId;
             this.imageUrl = imageUrl;
             this.match = match;
+            this.topicBucket = topicBucket;
         }
 
         static Row header(String t) {
@@ -864,6 +1045,10 @@ public class InAppSearchActivity extends AppCompatActivity {
 
         static Row suggest(String t, int count, String highlight, long postId) {
             return new Row(TYPE_SUGGEST, t, count, highlight, postId, null, null);
+        }
+
+        static Row topic(String t, int count) {
+            return new Row(TYPE_SUGGEST, t, count, null, 0L, null, null, true);
         }
 
         static Row article(String t, String highlight, long postId, String imageUrl) {
@@ -945,23 +1130,26 @@ public class InAppSearchActivity extends AppCompatActivity {
                 vh.icon.setVisibility(View.VISIBLE);
                 vh.thumb.setVisibility(View.GONE);
                 clearThumb(vh.thumb);
-                // Hide count meta for cleaner Google-like rows when we have a post.
-                if (row.postId > 0L || row.meta == 1) {
-                    vh.meta.setVisibility(View.GONE);
-                } else {
-                    vh.meta.setVisibility(View.VISIBLE);
-                    vh.meta.setText(String.valueOf(row.meta));
-                }
                 vh.icon.setImageResource(R.drawable.ic_action_search);
                 vh.action.setVisibility(View.GONE);
-                vh.itemView.setOnClickListener(
-                        v -> {
-                            if (row.meta == 1 || row.postId > 0L) {
-                                openSearch(suggestSubmitText(row), row.postId, true);
-                            } else {
-                                submitQuery(suggestSubmitText(row));
-                            }
-                        });
+                if (row.topicBucket) {
+                    vh.meta.setVisibility(View.VISIBLE);
+                    vh.meta.setText(String.valueOf(row.meta));
+                    vh.itemView.setOnClickListener(v -> loadArticlesForTopic(row.title));
+                } else if (row.postId > 0L) {
+                    vh.meta.setVisibility(View.GONE);
+                    vh.itemView.setOnClickListener(
+                            v -> openSearch(suggestSubmitText(row), row.postId, true));
+                } else {
+                    if (row.meta > 1) {
+                        vh.meta.setVisibility(View.VISIBLE);
+                        vh.meta.setText(String.valueOf(row.meta));
+                    } else {
+                        vh.meta.setVisibility(View.GONE);
+                    }
+                    vh.itemView.setOnClickListener(
+                            v -> showTopicCounts(suggestSubmitText(row)));
+                }
             } else if (row.type == Row.TYPE_FUZZY) {
                 vh.icon.setVisibility(View.VISIBLE);
                 vh.meta.setVisibility(View.GONE);
@@ -971,11 +1159,17 @@ public class InAppSearchActivity extends AppCompatActivity {
                 vh.action.setVisibility(View.GONE);
                 vh.itemView.setOnClickListener(
                         v -> {
-                            if (searchInput != null) {
-                                searchInput.setText(row.title);
-                                searchInput.setSelection(row.title != null ? row.title.length() : 0);
+                            String next = row.title != null ? row.title : "";
+                            String cur =
+                                    searchInput != null && searchInput.getText() != null
+                                            ? searchInput.getText().toString()
+                                            : "";
+                            if (cur.equals(next)) {
+                                showTopicCounts(next);
+                            } else if (searchInput != null) {
+                                searchInput.setText(next);
+                                searchInput.setSelection(next.length());
                             }
-                            submitQuery(row.title);
                         });
             } else if (row.type == Row.TYPE_RECENT) {
                 vh.icon.setVisibility(View.VISIBLE);
@@ -992,10 +1186,17 @@ public class InAppSearchActivity extends AppCompatActivity {
                         });
                 vh.itemView.setOnClickListener(
                         v -> {
-                            boolean single =
-                                    row.postId > 0L
-                                            || (row.title != null && row.title.trim().length() >= 28);
-                            openSearch(row.title, row.postId, single);
+                            String next = row.title != null ? row.title : "";
+                            String cur =
+                                    searchInput != null && searchInput.getText() != null
+                                            ? searchInput.getText().toString()
+                                            : "";
+                            if (cur.equals(next)) {
+                                showTopicCounts(next);
+                            } else if (searchInput != null) {
+                                searchInput.setText(next);
+                                searchInput.setSelection(next.length());
+                            }
                         });
             } else {
                 vh.icon.setVisibility(View.VISIBLE);
@@ -1064,7 +1265,8 @@ public class InAppSearchActivity extends AppCompatActivity {
             }
             return;
         }
-        if ((row.type == Row.TYPE_SUGGEST || row.type == Row.TYPE_ARTICLE)
+        if (!row.topicBucket
+                && (row.type == Row.TYPE_SUGGEST || row.type == Row.TYPE_ARTICLE)
                 && !TextUtils.isEmpty(row.highlight)) {
             vh.title.setText(highlightMatch(row.title, row.highlight));
         } else {
