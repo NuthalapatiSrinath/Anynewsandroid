@@ -338,6 +338,7 @@ public class Settings_Scrren extends AppCompatActivity {
         com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.setUserRewardsEnabled(this, rewardsOn);
         suppressToggleCallbacks = false;
         applyNotificationSwitchState();
+        syncRewardsSwitchWithServer();
     }
 
     private void wireClicks() {
@@ -462,6 +463,7 @@ public class Settings_Scrren extends AppCompatActivity {
                         if (suppressToggleCallbacks) return;
                         com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.setUserRewardsEnabled(
                                 Settings_Scrren.this, isChecked);
+                        pushRewardsEnabled(isChecked);
                     });
         }
 
@@ -661,6 +663,86 @@ public class Settings_Scrren extends AppCompatActivity {
                                 "settings get failed "
                                         + (t != null ? t.getMessage() : ""));
                     }
+                });
+    }
+
+    /**
+     * Local OFF is pushed so a failed earlier save still reaches the server.
+     * Local ON only reads: an explicit server OFF updates this device.
+     * Missing server flag stays ON (old apps).
+     */
+    private void syncRewardsSwitchWithServer() {
+        if (!com.anyNews.anynews.rewards.RewardsAuth.isLoggedIn(this)) return;
+        boolean localOn =
+                com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.userRewardsEnabled(this);
+        if (!localOn) {
+            pushRewardsEnabled(false);
+            return;
+        }
+        try {
+            APIService apiService = RestApiClient.getClient().create(APIService.class);
+            apiService
+                    .rewards_set_enabled(
+                            "v3", com.anyNews.anynews.rewards.RewardsAuth.authBody(this))
+                    .enqueue(
+                            new Callback<JsonObject>() {
+                                @Override
+                                public void onResponse(
+                                        Call<JsonObject> call, Response<JsonObject> response) {
+                                    applyServerRewardsOff(response != null ? response.body() : null);
+                                }
+
+                                @Override
+                                public void onFailure(Call<JsonObject> call, Throwable t) {}
+                            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void pushRewardsEnabled(boolean enabled) {
+        if (!com.anyNews.anynews.rewards.RewardsAuth.isLoggedIn(this)) return;
+        try {
+            JsonObject body = com.anyNews.anynews.rewards.RewardsAuth.authBody(this);
+            body.addProperty("rewards_enabled", enabled);
+            APIService apiService = RestApiClient.getClient().create(APIService.class);
+            apiService
+                    .rewards_set_enabled("v3", body)
+                    .enqueue(
+                            new Callback<JsonObject>() {
+                                @Override
+                                public void onResponse(
+                                        Call<JsonObject> call, Response<JsonObject> response) {}
+
+                                @Override
+                                public void onFailure(Call<JsonObject> call, Throwable t) {}
+                            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void applyServerRewardsOff(JsonObject body) {
+        if (body == null || !body.has("rewards_enabled_explicit") || !body.has("rewards_enabled")) {
+            return;
+        }
+        try {
+            if (body.get("rewards_enabled_explicit").isJsonNull()
+                    || !body.get("rewards_enabled_explicit").getAsBoolean()) {
+                return;
+            }
+            if (body.get("rewards_enabled").isJsonNull()
+                    || body.get("rewards_enabled").getAsBoolean()) {
+                return;
+            }
+        } catch (Exception ignored) {
+            return;
+        }
+        runOnUiThread(
+                () -> {
+                    suppressToggleCallbacks = true;
+                    com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.setUserRewardsEnabled(
+                            Settings_Scrren.this, false);
+                    if (switchRewards != null) switchRewards.setChecked(false);
+                    suppressToggleCallbacks = false;
                 });
     }
 

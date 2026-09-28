@@ -247,10 +247,33 @@ public final class RewardsConfigHelper {
         }
     }
 
+    /**
+     * Settings switch explicit OFF from the server. Does not force ON, so a missing
+     * flag on old responses cannot stop earning.
+     */
+    private static void applyRewardsSwitchOff(Context context, JsonObject body) {
+        try {
+            if (!body.has("rewards_enabled_explicit")
+                    || body.get("rewards_enabled_explicit").isJsonNull()
+                    || !body.get("rewards_enabled_explicit").getAsBoolean()) {
+                return;
+            }
+            if (!body.has("rewards_enabled")
+                    || body.get("rewards_enabled").isJsonNull()
+                    || body.get("rewards_enabled").getAsBoolean()) {
+                return;
+            }
+            com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.setUserRewardsEnabled(
+                    context, false);
+        } catch (Exception ignored) {
+        }
+    }
+
     /** Pull {@code factor_caps} or the splash/session ads_seen scalars from a payload. */
     public static void applyFromRewardsPayload(
             @Nullable Context context, @Nullable JsonObject body) {
         if (context == null || body == null) return;
+        applyRewardsSwitchOff(context, body);
         applyProgramWindow(context, body);
         if (body.has("factor_caps") && body.get("factor_caps").isJsonObject()) {
             applyFactorCaps(context, body.getAsJsonObject("factor_caps"), null);

@@ -175,6 +175,7 @@ public final class RewardsEngagementBatcher {
         Context c = ctx != null ? ctx.getApplicationContext() : appContext;
         if (c == null) return false;
         if (!DistrictPinVisibilityConfig.rewardsMasterEnabled(c)) return false;
+        if (!DistrictPinVisibilityConfig.userRewardsEnabled(c)) return false;
         if (!SharedPrefsData.getBool(c, Constants.is_login, Constants.PREF_NAME)) return false;
         return RewardsConfigHelper.isJoined(c);
     }

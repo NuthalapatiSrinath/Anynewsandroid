@@ -306,6 +306,17 @@ public class RewardsHubActivity extends AppCompatActivity {
                     toast("Could not load rewards");
                     return;
                 }
+                if (body.has("rewards_enabled_explicit")
+                        && !body.get("rewards_enabled_explicit").isJsonNull()
+                        && body.get("rewards_enabled_explicit").getAsBoolean()
+                        && body.has("rewards_enabled")
+                        && !body.get("rewards_enabled").isJsonNull()
+                        && !body.get("rewards_enabled").getAsBoolean()) {
+                    com.anyNews.anynews.Utils.DistrictPinVisibilityConfig.setUserRewardsEnabled(
+                            RewardsHubActivity.this, false);
+                    finish();
+                    return;
+                }
                 if (body.has("enabled") && !body.get("enabled").getAsBoolean()) {
                     toast("Rewards is currently off");
                     finish();

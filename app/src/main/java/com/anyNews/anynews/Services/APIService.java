@@ -512,6 +512,10 @@ public interface APIService {
     @POST("app/{version}/rewards_earnings_status")
     Call<JsonObject> rewards_earnings_status(@Path("version") String version, @Body JsonObject body);
 
+    /** Settings Rewards switch. Omit rewards_enabled to read; send boolean to save. */
+    @POST("app/{version}/rewards_set_enabled")
+    Call<JsonObject> rewards_set_enabled(@Path("version") String version, @Body JsonObject body);
+
     /** Advertise on AnyNews — offer banner + lead chat (no continuous polling). */
     @POST("app/{version}/advertise_offer")
     Call<JsonObject> advertise_offer(@Path("version") String version, @Body JsonObject body);
