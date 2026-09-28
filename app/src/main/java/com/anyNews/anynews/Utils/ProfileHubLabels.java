@@ -515,6 +515,19 @@ public final class ProfileHubLabels {
         }
     }
 
+    /** Orange "New" badge on profile hub rows (Advertise, Status Videos, and the rest). */
+    public static String badgeNew(@Nullable Context context) {
+        switch (languageId(context)) {
+            case 1: return "പുതിയ";
+            case 2: return "नया";
+            case 3: return "కొత్త";
+            case 4: return "புதிய";
+            case 5: return "ಹೊಸ";
+            case 6: return "ନୂଆ";
+            default: return str(context, R.string.profile_following_new, "New");
+        }
+    }
+
     public static String settings(@Nullable Context context) {
         switch (languageId(context)) {
             case 1: return "ക്രമീകരണങ്ങൾ";

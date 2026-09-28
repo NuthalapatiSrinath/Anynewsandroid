@@ -2400,18 +2400,7 @@ public class newProfileDetails extends AppCompatActivity {
             return;
         }
 
-        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
-        String label;
-        switch (id) {
-            case 1: label = "പുതിയ"; break;
-            case 2: label = "नया"; break;
-            case 3: label = "కొత్త"; break;
-            case 4: label = "புதிய"; break;
-            case 5: label = "ಹೊಸ"; break;
-            case 6: label = "ନୂଆ"; break;
-            default: label = getString(R.string.profile_following_new); break;
-        }
-        badge.setText(label);
+        badge.setText(ProfileHubLabels.badgeNew(this));
         badge.setVisibility(View.VISIBLE);
         startStatusVideosBadgePulse(badge);
     }
@@ -2470,18 +2459,7 @@ public class newProfileDetails extends AppCompatActivity {
             return;
         }
 
-        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
-        String label;
-        switch (id) {
-            case 1: label = "പുതിയ"; break;
-            case 2: label = "नया"; break;
-            case 3: label = "కొత్త"; break;
-            case 4: label = "புதிய"; break;
-            case 5: label = "ಹೊಸ"; break;
-            case 6: label = "ନୂଆ"; break;
-            default: label = getString(R.string.profile_following_new); break;
-        }
-        badge.setText(label);
+        badge.setText(ProfileHubLabels.badgeNew(this));
         badge.setVisibility(View.VISIBLE);
         badge.setAlpha(1f);
         ObjectAnimator anim = ObjectAnimator.ofFloat(badge, View.ALPHA, 1f, 0.4f);
@@ -2532,18 +2510,7 @@ public class newProfileDetails extends AppCompatActivity {
             return;
         }
 
-        int id = SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
-        String label;
-        switch (id) {
-            case 1: label = "പുതിയ"; break;
-            case 2: label = "नया"; break;
-            case 3: label = "కొత్త"; break;
-            case 4: label = "புதிய"; break;
-            case 5: label = "ಹೊಸ"; break;
-            case 6: label = "ନୂଆ"; break;
-            default: label = getString(R.string.profile_following_new); break;
-        }
-        badge.setText(label);
+        badge.setText(ProfileHubLabels.badgeNew(this));
         badge.setVisibility(View.VISIBLE);
         badge.setAlpha(1f);
         ObjectAnimator anim = ObjectAnimator.ofFloat(badge, View.ALPHA, 1f, 0.4f);
@@ -4357,6 +4324,7 @@ public class newProfileDetails extends AppCompatActivity {
             advertiseLabel.setText(ProfileHubLabels.advertiseOnAnyNews(this));
         }
         if (advertiseBadge != null) {
+            advertiseBadge.setText(ProfileHubLabels.badgeNew(this));
             advertiseBadge.setVisibility(View.VISIBLE);
         }
         if (layoutAdvertise != null) {

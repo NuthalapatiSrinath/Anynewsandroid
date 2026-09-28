@@ -102,14 +102,42 @@ public final class TranslatorPackHelper {
 
     /**
      * Prefer pack string only when pack matches LanguageID; otherwise use LanguageID fallback.
+     *
+     * <p>Malayalam (LanguageID 1) static_data still stores English for some menu keys
+     * (Settings, Contact Us, Feedback on Anynews). Those are missing translations, not
+     * real Malayalam copy — use the same LanguageID fallback the other languages use
+     * when their pack value is absent. Pack strings that already contain Malayalam
+     * stay as authored.
      */
     @Nullable
     public static String packOrFallback(
             @Nullable Context context, @Nullable String packValue, @Nullable String fallback) {
-        if (packMatchesLanguage(context) && notEmpty(packValue)) {
+        if (packMatchesLanguage(context)
+                && notEmpty(packValue)
+                && !isUntranslatedMalayalam(context, packValue)) {
             return packValue.trim();
         }
         return fallback;
+    }
+
+    /** True when LanguageID is Malayalam and the pack value has no Malayalam letters. */
+    private static boolean isUntranslatedMalayalam(
+            @Nullable Context context, @Nullable String packValue) {
+        if (selectedLanguageId(context) != 1 || packValue == null) {
+            return false;
+        }
+        return !containsMalayalam(packValue);
+    }
+
+    private static boolean containsMalayalam(@Nullable String s) {
+        if (s == null || s.isEmpty()) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c >= 0x0D00 && c <= 0x0D7F) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean notEmpty(@Nullable String s) {
