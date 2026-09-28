@@ -4610,6 +4610,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public static final int DEFAULT_ACTION_ICON_GAP_DP = 2;
     private static final int ACTION_ICON_GAP_MIN_DP = 0;
     private static final int ACTION_ICON_GAP_MAX_DP = 32;
+    /**
+     * Vertical gap between right-rail actions on full image / full video.
+     * Tighter than the old 20dp full-image margins (share was 17dp; full video was 10dp).
+     */
+    public static final int DEFAULT_FULL_SIDE_ACTION_GAP_DP = 6;
+    private static final int FULL_SIDE_ACTION_GAP_MIN_DP = 0;
+    private static final int FULL_SIDE_ACTION_GAP_MAX_DP = 32;
+    private static final int[] FULL_SIDE_ACTION_IDS = new int[] {
+            R.id.full_image_like, R.id.full_image_comment, R.id.full_image_whatsapp,
+            R.id.full_image_share, R.id.like_for_video, R.id.comment_for_video,
+            R.id.dislike_for_video, R.id.share_for_video
+    };
     /** Trailing inset on the last icon so the cluster does not touch the card edge. */
     private static final int ACTION_ICON_END_INSET_DP = 4;
     /** Extra space past the share-link overlay before the first icon. */
@@ -4695,6 +4707,67 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         } catch (Exception ignored) {
         }
         return clampActionIconGapDp(gapDp);
+    }
+
+    public static int clampFullSideActionGapDp(int gapDp) {
+        return Math.max(FULL_SIDE_ACTION_GAP_MIN_DP, Math.min(FULL_SIDE_ACTION_GAP_MAX_DP, gapDp));
+    }
+
+    private static int readFullSideActionGapDp(Context context) {
+        int gapDp = DEFAULT_FULL_SIDE_ACTION_GAP_DP;
+        try {
+            android.content.SharedPreferences sp =
+                    context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (sp.contains(Constants.FULL_SIDE_ACTION_GAP_DP)) {
+                gapDp = sp.getInt(Constants.FULL_SIDE_ACTION_GAP_DP, DEFAULT_FULL_SIDE_ACTION_GAP_DP);
+            }
+        } catch (Exception ignored) {
+        }
+        return clampFullSideActionGapDp(gapDp);
+    }
+
+    /**
+     * Space between like / comment / WhatsApp / share on the full-image and
+     * full-video right rail. The writer avatar keeps its own margins so the
+     * photo and + badge do not collide with the first button. Each count stays
+     * inside its button. The rail uses wrap height so a larger gap does not clip.
+     * Half-article rows do not have these ids, so this is a no-op there.
+     */
+    public static void applyFullSideActionGap(Context context, View convertView) {
+        if (context == null || convertView == null) {
+            return;
+        }
+        int gapPx = Math.round(readFullSideActionGapDp(context)
+                * context.getResources().getDisplayMetrics().density);
+        boolean touched = false;
+        for (int id : FULL_SIDE_ACTION_IDS) {
+            View action = convertView.findViewById(id);
+            if (action == null) {
+                continue;
+            }
+            ViewGroup.LayoutParams lp = action.getLayoutParams();
+            if (!(lp instanceof ViewGroup.MarginLayoutParams)) {
+                continue;
+            }
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            if (mlp.topMargin != gapPx) {
+                mlp.topMargin = gapPx;
+                action.setLayoutParams(mlp);
+            }
+            touched = true;
+        }
+        if (!touched) {
+            return;
+        }
+        View rail = convertView.findViewById(R.id.video_side_menu);
+        if (rail == null) {
+            return;
+        }
+        ViewGroup.LayoutParams railLp = rail.getLayoutParams();
+        if (railLp != null && railLp.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
+            railLp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            rail.setLayoutParams(railLp);
+        }
     }
 
     /**
@@ -7772,6 +7845,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void showFullVideoWithYoutube(int position, View convertView) {
+        applyFullSideActionGap(context, convertView);
         ImageView newFullImageView1 = convertView.findViewById(R.id.imageViewItem1);
         RelativeLayout layoutMain = convertView.findViewById(R.id.parent_layout);
         layoutMain.getLayoutParams().height=screenHeight;
@@ -8094,6 +8168,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void showFullVideoWithExoPlayer(int position, View convertView) {
+        applyFullSideActionGap(context, convertView);
         RelativeLayout layoutMain = convertView.findViewById(R.id.parent_layout);
         PlayerView simpleExoPlayerViewFull  = convertView.findViewById(R.id.normal_video_player);
         if (!isFeedExoSurfaceLive(simpleExoPlayerViewFull)
@@ -8483,6 +8558,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     private void showFullImage(int position, View convertView) {
+        applyFullSideActionGap(context, convertView);
         showLog("Check Point FULL_IMAGE:: 2");
         ConstraintLayout layout=convertView.findViewById(R.id.parent_layout);
         layout.getLayoutParams().height=screenHeight;

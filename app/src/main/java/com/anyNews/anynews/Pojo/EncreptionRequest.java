@@ -394,6 +394,14 @@ public class EncreptionRequest {
     private Integer action_icon_gap_dp;
 
     /**
+     * Vertical gap (dp) between right-side actions on full image / full video.
+     * Null when the poll omits the field. 0 is a valid tight gap.
+     */
+    @SerializedName("full_side_action_gap_dp")
+    @Expose
+    private Integer full_side_action_gap_dp;
+
+    /**
      * Center Share icon on magazine / special cards (dp).
      * Null when the poll omits the field. Not the article action-row share icon.
      */
@@ -805,6 +813,14 @@ public class EncreptionRequest {
 
     public Integer getAction_icon_gap_dp() {
         return action_icon_gap_dp;
+    }
+
+    public Integer getFull_side_action_gap_dp() {
+        return full_side_action_gap_dp;
+    }
+
+    public void setFull_side_action_gap_dp(Integer full_side_action_gap_dp) {
+        this.full_side_action_gap_dp = full_side_action_gap_dp;
     }
 
     public Integer getMagazine_share_icon_size_dp() {

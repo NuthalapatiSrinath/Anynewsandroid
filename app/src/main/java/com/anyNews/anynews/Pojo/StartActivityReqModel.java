@@ -126,6 +126,18 @@ public class StartActivityReqModel implements Serializable {
             return actionIconGapDp;
         }
 
+        /**
+         * Vertical gap between right-side actions on full image / full video.
+         * Null when splash omits the field (old server). 0 is a valid tight gap.
+         */
+        @SerializedName("full_side_action_gap_dp")
+        @Expose
+        private Integer fullSideActionGapDp;
+
+        public Integer getFullSideActionGapDp() {
+            return fullSideActionGapDp;
+        }
+
         public void setActionIconSizeDp(Integer actionIconSizeDp) {
             this.actionIconSizeDp = actionIconSizeDp;
         }

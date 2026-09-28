@@ -2085,6 +2085,26 @@ public class StartingActivity extends AppCompatActivity {
                             );
                         }
 
+                        // Vertical gap on the full-image / full-video right rail.
+                        // Omitted field keeps a saved value; first launch uses 6dp.
+                        Integer fullSideGapDp = startActivityReqModel.getData().getFullSideActionGapDp();
+                        if (fullSideGapDp != null) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.FULL_SIDE_ACTION_GAP_DP,
+                                    FlipperAdapter.clampFullSideActionGapDp(fullSideGapDp),
+                                    Constants.PREF_NAME
+                            );
+                        } else if (!getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE)
+                                .contains(Constants.FULL_SIDE_ACTION_GAP_DP)) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.FULL_SIDE_ACTION_GAP_DP,
+                                    FlipperAdapter.DEFAULT_FULL_SIDE_ACTION_GAP_DP,
+                                    Constants.PREF_NAME
+                            );
+                        }
+
                         com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getSearchIconOnEngagement(),

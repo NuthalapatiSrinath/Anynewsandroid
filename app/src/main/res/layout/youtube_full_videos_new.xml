@@ -73,7 +73,7 @@
                 <LinearLayout
                     android:id="@+id/video_side_menu"
                     android:layout_width="60dp"
-                    android:layout_height="@dimen/_280sdp"
+                    android:layout_height="wrap_content"
                     android:layout_alignParentRight="true"
                     android:layout_marginTop="140dp"
                     android:layout_marginRight="10dp"
@@ -112,6 +112,7 @@
                         android:id="@+id/like_for_video"
                         android:layout_width="50dp"
                         android:layout_height="50dp"
+                        android:layout_marginTop="6dp"
                         android:gravity="center"
                         android:orientation="vertical">
 
@@ -138,7 +139,7 @@
                         android:id="@+id/comment_for_video"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="15dp"
+                        android:layout_marginTop="6dp"
                         android:gravity="center_horizontal"
                         android:orientation="vertical">
 
@@ -190,7 +191,7 @@
                         android:id="@+id/dislike_for_video"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="15dp"
+                        android:layout_marginTop="6dp"
                         android:visibility="gone"
                         android:gravity="center_horizontal"
                         android:orientation="vertical">
@@ -217,7 +218,7 @@
                         android:id="@+id/full_image_whatsapp"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="6dp"
                         android:visibility="gone"
                         android:gravity="center_horizontal"
                         android:orientation="vertical">
@@ -247,7 +248,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:gravity="center_horizontal"
-                        android:layout_marginTop="@dimen/_10sdp"
+                        android:layout_marginTop="6dp"
                         android:orientation="vertical">
 
                         <ImageView

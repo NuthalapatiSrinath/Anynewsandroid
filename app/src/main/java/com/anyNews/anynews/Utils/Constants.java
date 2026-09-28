@@ -253,6 +253,11 @@ public class Constants {
     public static String ACTION_ICON_SIZE_DP = "action_icon_size_dp";
     /** Horizontal gap (dp) between article action icons. Missing pref uses 2. */
     public static String ACTION_ICON_GAP_DP = "action_icon_gap_dp";
+    /**
+     * Vertical gap (dp) between right-side actions on full image / full video.
+     * Missing pref uses 6 (tighter than the old 20dp full-image spread).
+     */
+    public static String FULL_SIDE_ACTION_GAP_DP = "full_side_action_gap_dp";
     public static String LIKE_CIRCLE_SIZE_DP = "like_circle_size_dp";
     /** In-app Search: show between share and ⋮ on half engagement row. */
     public static String SEARCH_ICON_ON_ENGAGEMENT = "search_icon_on_engagement";

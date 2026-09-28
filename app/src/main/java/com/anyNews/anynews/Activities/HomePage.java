@@ -16800,6 +16800,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getLike_circle_size_dp(),
                             encreptionRequest.getAction_icon_gap_dp()
                     );
+                    applyFullSideActionGapConfig(encreptionRequest.getFull_side_action_gap_dp());
                     applyMagazineShareIconConfig(encreptionRequest.getMagazine_share_icon_size_dp());
                     applySearchIconConfig(
                             encreptionRequest.getSearch_icon_on_engagement(),
@@ -18439,6 +18440,43 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         flipView.requestLayout();
                     }
                 });
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Vertical gap on the full-image / full-video right rail. Same feed poll as
+     * the article action-row gap. Missing field keeps a saved value; a phone
+     * that has never stored it uses 6dp.
+     */
+    private void applyFullSideActionGapConfig(Integer fullSideGapDp) {
+        try {
+            if (fullSideGapDp == null) {
+                return;
+            }
+            int gap = FlipperAdapter.clampFullSideActionGapDp(fullSideGapDp);
+            android.content.SharedPreferences sp =
+                    getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+            int prev = sp.getInt(
+                    Constants.FULL_SIDE_ACTION_GAP_DP,
+                    FlipperAdapter.DEFAULT_FULL_SIDE_ACTION_GAP_DP);
+            if (!sp.contains(Constants.FULL_SIDE_ACTION_GAP_DP) || prev != gap) {
+                SharedPrefsData.putInt(
+                        HomePage.this,
+                        Constants.FULL_SIDE_ACTION_GAP_DP,
+                        gap,
+                        Constants.PREF_NAME);
+                if (mFlipView != null) {
+                    final FlipView flipView = mFlipView;
+                    flipView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            FlipperAdapter.applyFullSideActionGap(HomePage.this, flipView);
+                            flipView.requestLayout();
+                        }
+                    });
+                }
             }
         } catch (Exception ignored) {
         }
