@@ -11,9 +11,7 @@ import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
-import android.graphics.drawable.Drawable;
 import android.view.KeyEvent;
-import android.view.MotionEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -78,7 +76,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     public static final String EXTRA_SHOW_NO_RESULTS = "extra_search_show_no_results";
 
     private static final long SUGGEST_DEBOUNCE_MS = 80L;
-    /** Count rows while typing / after the search icon. */
+    /** Topic rows with counts, stories listed under them. */
     private static final int MODE_TOPICS = 0;
     /** Article rows after a topic row is tapped. */
     private static final int MODE_ARTICLES = 1;
@@ -110,6 +108,8 @@ public class InAppSearchActivity extends AppCompatActivity {
     private int articleNextSkip = 0;
     private int articleLayoutRetries = 0;
     private String articleQuery = "";
+    /** One follow-up story fetch when a topic response came back without stories. */
+    private boolean articleFillSent = false;
     private final TextWatcher queryWatcher =
             new TextWatcher() {
                 @Override
@@ -124,6 +124,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                     // Editing the box clears a topic filter and refreshes this screen.
                     listMode = MODE_TOPICS;
                     focusedTopic = "";
+                    articleFillSent = false;
                     resetArticlePaging();
                     dropArticleRows();
                     hideEmptyState();
@@ -142,6 +143,8 @@ public class InAppSearchActivity extends AppCompatActivity {
         setContentView(R.layout.activity_in_app_search);
         root = findViewById(R.id.in_app_search_root);
         searchInput = findViewById(R.id.search_input);
+        // The field itself and the keyboard search action submit. No icon in the box.
+        searchInput.setCompoundDrawablesRelative(null, null, null, null);
         emptyState = findViewById(R.id.search_empty_state);
         listView = findViewById(R.id.search_list);
         listView.setLayoutManager(new LinearLayoutManager(this));
@@ -172,30 +175,6 @@ public class InAppSearchActivity extends AppCompatActivity {
                         submitQuery(searchInput.getText() != null
                                 ? searchInput.getText().toString()
                                 : "");
-                        return true;
-                    }
-                    return false;
-                });
-        // Pill trailing search icon acts as Search button (same as IME Enter).
-        searchInput.setOnTouchListener(
-                (v, event) -> {
-                    if (event.getAction() != MotionEvent.ACTION_UP) {
-                        return false;
-                    }
-                    Drawable[] drawables = searchInput.getCompoundDrawables();
-                    Drawable end = drawables != null && drawables.length > 2 ? drawables[2] : null;
-                    if (end == null) return false;
-                    int touchX = (int) event.getX();
-                    int iconStart =
-                            searchInput.getWidth()
-                                    - searchInput.getPaddingEnd()
-                                    - end.getBounds().width()
-                                    - (int) (12 * getResources().getDisplayMetrics().density);
-                    if (touchX >= iconStart) {
-                        submitQuery(
-                                searchInput.getText() != null
-                                        ? searchInput.getText().toString()
-                                        : "");
                         return true;
                     }
                     return false;
@@ -394,6 +373,11 @@ public class InAppSearchActivity extends AppCompatActivity {
         }
         renderMixed();
         noteArticlePage(obj, received);
+        // Topic counts arrived with no stories. Load the stories under them.
+        if (!append && !topicRows.isEmpty() && articleRows.isEmpty() && !articleFillSent) {
+            articleFillSent = true;
+            fetchSuggestions(q, true, 0, true);
+        }
     }
 
     private boolean articleRowsHave(long postId) {
@@ -405,19 +389,36 @@ public class InAppSearchActivity extends AppCompatActivity {
 
     private boolean articleMatchesFocus(@NonNull Row art) {
         if (TextUtils.isEmpty(focusedTopic)) return true;
-        if (focusedTopic.equals(art.topicLabel)) return true;
-        return art.title != null && art.title.contains(focusedTopic);
+        if (art.topicLabel != null && art.topicLabel.equalsIgnoreCase(focusedTopic)) return true;
+        if (art.title == null || focusedTopic == null) return false;
+        return art.title.toLowerCase(Locale.ROOT).contains(focusedTopic.toLowerCase(Locale.ROOT));
+    }
+
+    private int visibleArticleCount() {
+        int n = 0;
+        for (Row art : articleRows) {
+            if (art != null && art.type == Row.TYPE_ARTICLE && articleMatchesFocus(art)) n++;
+        }
+        return n;
     }
 
     /** Topics stay put. A focused topic only hides the other stories. */
     private void renderMixed() {
         List<Row> next = new ArrayList<>();
         next.addAll(topicRows);
+        List<Row> stories = new ArrayList<>();
         for (Row art : articleRows) {
             if (art == null || art.type != Row.TYPE_ARTICLE) continue;
             if (!articleMatchesFocus(art)) continue;
-            next.add(art);
+            stories.add(art);
         }
+        // A topic tap must not leave a blank list when the stories are already here.
+        if (stories.isEmpty() && !articleRows.isEmpty() && !TextUtils.isEmpty(focusedTopic)) {
+            for (Row art : articleRows) {
+                if (art != null && art.type == Row.TYPE_ARTICLE) stories.add(art);
+            }
+        }
+        next.addAll(stories);
         if (next.isEmpty()) {
             rows.clear();
             if (adapter != null) adapter.notifyDataSetChanged();
@@ -429,16 +430,30 @@ public class InAppSearchActivity extends AppCompatActivity {
         if (adapter != null) adapter.notifyDataSetChanged();
     }
 
-    /** Filter the stories under the topics. Does not open another screen. */
-    private void focusTopic(@Nullable String topic) {
+    /** Show this topic's stories on this screen. A second tap shows every story again. */
+    private void openTopic(@Nullable String topic) {
         String next = topic == null ? "" : topic.trim();
-        if (next.equals(focusedTopic)) focusedTopic = "";
-        else focusedTopic = next;
+        if (next.isEmpty()) return;
+        if (next.equalsIgnoreCase(focusedTopic) && visibleArticleCount() > 0) {
+            focusedTopic = "";
+            renderMixed();
+            return;
+        }
+        focusedTopic = next;
         renderMixed();
+        if (visibleArticleCount() == 0) {
+            String typed =
+                    searchInput != null && searchInput.getText() != null
+                            ? searchInput.getText().toString().trim()
+                            : "";
+            String q = TextUtils.isEmpty(typed) ? next : typed;
+            articleFillSent = true;
+            fetchSuggestions(q, true, 0, !topicRows.isEmpty());
+        }
         if (listView == null || TextUtils.isEmpty(focusedTopic)) return;
         for (int i = 0; i < rows.size(); i++) {
             Row r = rows.get(i);
-            if (r.topicBucket && focusedTopic.equals(r.title)) {
+            if (r.topicBucket && focusedTopic.equalsIgnoreCase(r.title)) {
                 listView.scrollToPosition(i);
                 break;
             }
@@ -721,7 +736,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                 adapter.notifyDataSetChanged();
                                 noteArticlePage(obj, pageCount);
                             } catch (Exception e) {
-                                if (append && hasArticleRows()) {
+                                if (append && (hasArticleRows() || hasTopicRows())) {
                                     articleHasMore = false;
                                 } else {
                                     paintEmptyOrFuzzy(q);
@@ -744,7 +759,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                                                         || (append && listMode == MODE_TOPICS)
                                                 : typed.equals(q) && listMode == MODE_TOPICS;
                                 if (stillCurrent) {
-                                    if (append && hasArticleRows()) {
+                                    if (append && (hasArticleRows() || hasTopicRows())) {
                                         articleHasMore = false;
                                         return;
                                     }
@@ -758,7 +773,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                     });
         } catch (Exception e) {
             suggestInFlight = false;
-            if (append && hasArticleRows()) {
+            if (append && (hasArticleRows() || hasTopicRows())) {
                 articleHasMore = false;
             } else {
                 paintEmptyOrFuzzy(q);
@@ -1100,7 +1115,7 @@ public class InAppSearchActivity extends AppCompatActivity {
         return "";
     }
 
-    /** Search icon / IME search: topic counts under the box, not article rows. */
+    /** Keyboard search: refresh topic counts and the stories under them. */
     private void submitQuery(String q) {
         showTopicCounts(q);
     }
@@ -1108,6 +1123,7 @@ public class InAppSearchActivity extends AppCompatActivity {
     private void showTopicCounts(String q) {
         String clean = softenClientQuery(q);
         listMode = MODE_TOPICS;
+        articleFillSent = false;
         resetArticlePaging();
         dropArticleRows();
         if (clean.isEmpty() || "null".equalsIgnoreCase(clean)) {
@@ -1117,11 +1133,6 @@ public class InAppSearchActivity extends AppCompatActivity {
         RecentSearchStore.add(this, clean, 0L);
         cancelSuggest();
         fetchSuggestions(clean, false);
-    }
-
-    /** Topic tap filters the stories already on this screen. */
-    private void loadArticlesForTopic(String topic) {
-        focusTopic(topic);
     }
 
     @Nullable
@@ -1406,7 +1417,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             bindRowText(vh, row);
             if (row.topicBucket
                     && !TextUtils.isEmpty(focusedTopic)
-                    && focusedTopic.equals(row.title)) {
+                    && focusedTopic.equalsIgnoreCase(row.title)) {
                 vh.title.setTextColor(
                         ContextCompat.getColor(InAppSearchActivity.this, R.color.search_chrome_accent));
             }
@@ -1432,7 +1443,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                 if (row.topicBucket) {
                     vh.meta.setVisibility(View.VISIBLE);
                     vh.meta.setText(String.valueOf(row.meta));
-                    vh.itemView.setOnClickListener(v -> focusTopic(row.title));
+                    vh.itemView.setOnClickListener(v -> openTopic(row.title));
                 } else if (row.postId > 0L) {
                     vh.meta.setVisibility(View.GONE);
                     vh.itemView.setOnClickListener(
