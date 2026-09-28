@@ -18,6 +18,8 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import java.lang.ref.WeakReference;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.widget.NestedScrollView;
@@ -47,6 +49,8 @@ public class FuelDetailActivity extends AppCompatActivity {
     private static final String KEY_AP = "ap";
     private static final String KEY_TG = "tg";
 
+    @Nullable private static WeakReference<FuelDetailActivity> openRef;
+
     /** Working view of fuel JSON for the selected state (mutated on switch). */
     @Nullable private JSONObject activeFuel;
     @NonNull private String selectedStateKey = KEY_AP;
@@ -69,6 +73,32 @@ public class FuelDetailActivity extends AppCompatActivity {
         activeFuel = overlayState(root, selectedStateKey);
         bindUi(activeFuel);
         wireClicks();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        openRef = new WeakReference<>(this);
+    }
+
+    @Override
+    protected void onStop() {
+        FuelDetailActivity cur = openRef != null ? openRef.get() : null;
+        if (cur == this) openRef = null;
+        super.onStop();
+    }
+
+    /** Feed replaced the saved fuel pack. Keep the state tab the user picked. */
+    public static void onFuelPackUpdated() {
+        FuelDetailActivity activity = openRef != null ? openRef.get() : null;
+        if (activity == null || activity.isFinishing()) return;
+        activity.runOnUiThread(() -> {
+            if (activity.isFinishing()) return;
+            JSONObject root = LocalUpdatesConfigHelper.fuelJson(activity);
+            if (root == null) return;
+            activity.activeFuel = activity.overlayState(root, activity.selectedStateKey);
+            activity.bindUi(activity.activeFuel);
+        });
     }
 
     private void applySystemBars(int rootId) {

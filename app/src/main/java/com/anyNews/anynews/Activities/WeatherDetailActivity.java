@@ -17,6 +17,8 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+
+import java.lang.ref.WeakReference;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -39,6 +41,8 @@ public class WeatherDetailActivity extends AppCompatActivity {
 
     private static final int ACCENT = 0xFFFF6A1A;
 
+    @Nullable private static WeakReference<WeatherDetailActivity> openRef;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -52,6 +56,29 @@ public class WeatherDetailActivity extends AppCompatActivity {
         clipHero();
         bindUi(LocalUpdatesConfigHelper.weatherJson(this));
         wireClicks();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        openRef = new WeakReference<>(this);
+    }
+
+    @Override
+    protected void onStop() {
+        WeatherDetailActivity cur = openRef != null ? openRef.get() : null;
+        if (cur == this) openRef = null;
+        super.onStop();
+    }
+
+    /** Feed replaced the cached weather pack. */
+    public static void onWeatherPackUpdated() {
+        WeatherDetailActivity activity = openRef != null ? openRef.get() : null;
+        if (activity == null || activity.isFinishing()) return;
+        activity.runOnUiThread(() -> {
+            if (activity.isFinishing()) return;
+            activity.bindUi(LocalUpdatesConfigHelper.weatherJson(activity));
+        });
     }
 
     private void applySystemBars(int rootId) {

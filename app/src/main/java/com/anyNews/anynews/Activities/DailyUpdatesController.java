@@ -940,6 +940,15 @@ public final class DailyUpdatesController {
         if (g24 != null) {
             if (real && g10 > 0) {
                 g24.setText("24K  ₹" + LocalUpdatesConfigHelper.formatInr(g10));
+            } else if (real) {
+                org.json.JSONObject row = firstPurityRow();
+                double p10 = row == null ? 0 : LocalUpdatesConfigHelper.optNumber(row, "price_10g", 0);
+                String karat = row == null ? "" : LocalUpdatesConfigHelper.optString(row, "karat", "");
+                if (p10 > 0) {
+                    g24.setText((karat.isEmpty() ? "Gold" : karat) + "  ₹" + LocalUpdatesConfigHelper.formatInr(p10));
+                } else {
+                    g24.setText("24K  —");
+                }
             } else {
                 g24.setText("24K  —");
             }
@@ -953,7 +962,14 @@ public final class DailyUpdatesController {
             }
         }
         if (real) {
-            setTrend(g24ch, LocalUpdatesConfigHelper.gold24kChange(host), true, false);
+            double gch = LocalUpdatesConfigHelper.gold24kChange(host);
+            if (!Double.isFinite(gch)) {
+                org.json.JSONObject row = firstPurityRow();
+                if (row != null && row.has("change") && !row.isNull("change")) {
+                    gch = LocalUpdatesConfigHelper.optNumber(row, "change", Double.NaN);
+                }
+            }
+            setTrend(g24ch, gch, true, false);
             setTrend(silverCh, LocalUpdatesConfigHelper.silverKgChange(host), true, false);
         } else {
             if (g24ch != null) {
@@ -967,9 +983,29 @@ public final class DailyUpdatesController {
         }
     }
 
+    @Nullable
+    private org.json.JSONObject firstPurityRow() {
+        org.json.JSONArray rows = LocalUpdatesConfigHelper.optArray(
+                LocalUpdatesConfigHelper.goldJson(host), "purity_rows");
+        for (int i = 0; i < rows.length(); i++) {
+            org.json.JSONObject row = rows.optJSONObject(i);
+            if (row == null) continue;
+            if (LocalUpdatesConfigHelper.optNumber(row, "price_10g", 0) > 0
+                    || LocalUpdatesConfigHelper.optNumber(row, "price_1g", 0) > 0) {
+                return row;
+            }
+        }
+        return null;
+    }
+
     private void setTrend(@Nullable TextView tv, double change, boolean whole,
                           boolean greenWhenDown) {
         if (tv == null) return;
+        if (!Double.isFinite(change)) {
+            tv.setText("—");
+            tv.setTextColor(Color.parseColor("#FF94A3B8"));
+            return;
+        }
         boolean up = change >= 0;
         String arrow = up ? "▲ " : "▼ ";
         String num = whole

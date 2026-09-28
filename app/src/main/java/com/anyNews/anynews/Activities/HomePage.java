@@ -18149,6 +18149,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 LocalUpdatesConfigHelper.saveGoldFromSplash(this, enc.getGold());
                 GoldDetailActivity.onGoldPackUpdated();
             }
+            if (enc.getFuel() != null) {
+                LocalUpdatesConfigHelper.saveFuelFromSplash(this, enc.getFuel());
+                FuelDetailActivity.onFuelPackUpdated();
+            }
+            if (enc.getWeather() != null) {
+                LocalUpdatesConfigHelper.saveWeatherFromSplash(this, enc.getWeather());
+                WeatherDetailActivity.onWeatherPackUpdated();
+            }
+            if (enc.getStock_market() != null) {
+                DailyUpdatesConfigHelper.saveStockSummaryFromSplash(this, enc.getStock_market());
+            }
             TtdConfigHelper.saveEnabledFromPoll(this, enc.getTtd_enabled());
             if (enc.getDaily_updates() != null) {
                 DailyUpdatesConfigHelper.saveFromSplash(this, enc.getDaily_updates());

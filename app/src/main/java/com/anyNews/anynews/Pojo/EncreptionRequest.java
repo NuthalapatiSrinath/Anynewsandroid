@@ -292,6 +292,28 @@ public class EncreptionRequest {
     @Expose
     private Object gold;
 
+    /**
+     * Saved fuel pack on the feed. Null when omitted — do not wipe prefs.
+     */
+    @SerializedName("fuel")
+    @Expose
+    private Object fuel;
+
+    /**
+     * Cached weather pack (Redis already filled by the weather job).
+     * Null when omitted — do not call a weather provider from the phone.
+     */
+    @SerializedName("weather")
+    @Expose
+    private Object weather;
+
+    /**
+     * Cached stock summary. Null when omitted — do not wipe the last summary.
+     */
+    @SerializedName("stock_market")
+    @Expose
+    private Object stock_market;
+
     @SerializedName("ttd_enabled")
     @Expose
     private Boolean ttd_enabled;
@@ -738,6 +760,18 @@ public class EncreptionRequest {
 
     public Object getGold() {
         return gold;
+    }
+
+    public Object getFuel() {
+        return fuel;
+    }
+
+    public Object getWeather() {
+        return weather;
+    }
+
+    public Object getStock_market() {
+        return stock_market;
     }
 
     public Boolean getTtd_enabled() {

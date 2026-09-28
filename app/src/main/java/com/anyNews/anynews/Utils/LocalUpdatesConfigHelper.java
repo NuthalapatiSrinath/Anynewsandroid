@@ -319,7 +319,11 @@ public final class LocalUpdatesConfigHelper {
     }
 
     public static double gold24kChange(@Nullable Context context) {
-        return optDouble(goldJson(context), "gold_24k_change", 0);
+        JSONObject g = goldJson(context);
+        if (g == null || !g.has("gold_24k_change") || g.isNull("gold_24k_change")) {
+            return Double.NaN;
+        }
+        return optDouble(g, "gold_24k_change", 0);
     }
 
     public static double silver10g(@Nullable Context context) {
@@ -344,7 +348,10 @@ public final class LocalUpdatesConfigHelper {
         if (g != null && g.has("silver_kg_change") && !g.isNull("silver_kg_change")) {
             return optDouble(g, "silver_kg_change", 0);
         }
-        return silverChange(context) * 100;
+        if (g != null && g.has("silver_change") && !g.isNull("silver_change")) {
+            return silverChange(context) * 100;
+        }
+        return Double.NaN;
     }
 
     @NonNull
