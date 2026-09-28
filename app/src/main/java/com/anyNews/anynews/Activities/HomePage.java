@@ -9047,7 +9047,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * One WhatsApp share of the visible article. The half-row chip and the middle
-     * footer icon both call this. Opening WhatsApp does not write a share count.
+     * footer icon both call this. The count is written only after WhatsApp
+     * returns RESULT_OK (the user sent). Opening WhatsApp does not write it.
      */
     public void onArticleWhatsappClicked(int position) {
         try {

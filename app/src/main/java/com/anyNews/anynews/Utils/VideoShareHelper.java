@@ -48,8 +48,9 @@ public class VideoShareHelper {
         void onShareStarted();
 
         /**
-         * User picked a target from the share sheet (WhatsApp or any other app).
-         * Opening the sheet does not call this. Default no-op for callers that only unlock UI.
+         * User picked a target from the share sheet, or WhatsApp returned RESULT_OK
+         * after Send. Opening WhatsApp does not call this. Default no-op for
+         * callers that only unlock UI.
          */
         default void onShareConfirmed() {
         }
@@ -775,7 +776,7 @@ public class VideoShareHelper {
                     intent.putExtra("jid", "status@broadcast");
                 }
                 // Skip scanning all share targets — grant WhatsApp only.
-                // Opening WhatsApp does not confirm a send, so there is no count callback.
+                // Count only when WhatsApp returns RESULT_OK after Send.
                 context.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 if (activity != null) {
                     activity.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -785,7 +786,11 @@ public class VideoShareHelper {
                         launchCtx,
                         intent,
                         "Share Video",
-                        null);
+                        () -> {
+                            if (listener != null) {
+                                listener.onShareConfirmed();
+                            }
+                        });
                 return;
             }
 

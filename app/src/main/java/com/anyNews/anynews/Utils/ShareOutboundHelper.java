@@ -50,14 +50,15 @@ public final class ShareOutboundHelper {
     /**
      * Opens the system share sheet. {@code onTargetChosen} runs only when the user
      * picks an app — dismiss / back without choosing does <strong>not</strong> count.
-     * Android cannot confirm the user pressed Send inside the target app.
+     * Android cannot confirm Send inside a chooser target.
      *
-     * <p>A direct WhatsApp intent ({@code setPackage("com.whatsapp")}) must not use
-     * that callback. The system reports the package as chosen as soon as WhatsApp's
-     * activity starts, which is the same moment as launch — not a tap on Send.
-     * Returning to AnyNews is also not a send. This method starts that activity and
-     * does not run {@code onTargetChosen}. Callers must not increment
-     * {@code whatsapp_shares} on launch or on resume.
+     * <p>A direct WhatsApp intent ({@code setPackage("com.whatsapp")}) does not use
+     * that chooser callback. {@code SHARE_TARGET_CHOSEN} fires when WhatsApp's
+     * activity starts, the same moment as launch. This method starts WhatsApp for
+     * a result instead. {@code onTargetChosen} runs only when WhatsApp returns
+     * {@link Activity#RESULT_OK}, which it sets after the user taps Send.
+     * {@link Activity#RESULT_CANCELED} (opened, then back, without sending) does
+     * not run it, and neither does {@code startActivity}.
      */
     public static void launchChooserOnTargetChosen(
             @NonNull Context context,
@@ -65,7 +66,7 @@ public final class ShareOutboundHelper {
             @Nullable CharSequence title,
             @Nullable Runnable onTargetChosen) {
         if (isDirectPackageLaunch(sendIntent)) {
-            startActivityDirect(context, sendIntent);
+            launchDirectForSendResult(context, sendIntent, onTargetChosen);
             return;
         }
         final Context app = context.getApplicationContext();
@@ -142,9 +143,23 @@ public final class ShareOutboundHelper {
     }
 
     /**
-     * Starts a packaged share. Does not invoke a count callback: launch and
-     * returning from the other app are not a completed send.
+     * Starts a packaged share (WhatsApp). Does not run {@code onSent} from
+     * {@code startActivity}. {@code onSent} runs only when the target returns
+     * {@link Activity#RESULT_OK} after Send. Back / cancel is
+     * {@link Activity#RESULT_CANCELED} and does not run it.
      */
+    private static void launchDirectForSendResult(
+            @NonNull Context context,
+            @NonNull Intent sendIntent,
+            @Nullable Runnable onSent) {
+        if (onSent == null) {
+            startActivityDirect(context, sendIntent);
+            return;
+        }
+        DirectShareResultActivity.launch(context, sendIntent, onSent);
+    }
+
+    /** Starts a packaged share with no count. Used when the caller passed no callback. */
     private static void startActivityDirect(@NonNull Context context, @NonNull Intent sendIntent) {
         if (!(context instanceof Activity)) {
             sendIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
