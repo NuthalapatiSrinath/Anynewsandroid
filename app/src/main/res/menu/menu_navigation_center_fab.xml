@@ -23,7 +23,9 @@
         android:icon="@drawable/ic_footer_special"
         android:title="@string/Events" />
 
-    <!-- Middle column: hidden until a magazine / special gallery needs footer Share.
+    <!-- Middle column between Special and Daily Updates.
+         Magazine / special: empty slot under the blinking Share control.
+         Every other article: empty slot under the WhatsApp control.
          Id stays navigation_stricker. Not the Special tab. -->
     <item
         android:id="@+id/navigation_stricker"

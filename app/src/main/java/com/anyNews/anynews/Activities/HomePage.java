@@ -368,6 +368,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private View layoutMagazineShareFooter;
     private ImageView ivMagazineShareFooter;
     private TextView tvMagazineShareFooter;
+    /** Middle footer WhatsApp for every non-magazine article. Does not blink. */
+    private View layoutFooterWhatsapp;
+    private ImageView ivFooterWhatsapp;
+    private TextView tvFooterWhatsappCount;
     // Admin-controlled bottom-footer cricket tab (APK 3.40.79+). Shown only when
     // the admin enables it AND there is an active match; hidden otherwise so the
     // footer is exactly as before. Opens the same Match Center as the mini player.
@@ -1237,12 +1241,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         layoutMagazineShareFooter = findViewById(R.id.layoutMagazineShareFooter);
         ivMagazineShareFooter = findViewById(R.id.ivMagazineShareFooter);
         tvMagazineShareFooter = findViewById(R.id.tvMagazineShareFooter);
+        layoutFooterWhatsapp = findViewById(R.id.layoutFooterWhatsapp);
+        ivFooterWhatsapp = findViewById(R.id.ivFooterWhatsapp);
+        tvFooterWhatsappCount = findViewById(R.id.tvFooterWhatsappCount);
         FooterStyleHelper.applyMagazineShareChrome(
                 this,
                 home_page_navigation,
                 findViewById(R.id.nav_view),
                 layoutMagazineShareFooter,
                 ivMagazineShareFooter);
+        syncFooterWhatsappColumnHeight();
         // Product: never flash center + / WhatsApp before footer rebalance / API.
         hideCenterPlusOverlays();
 
@@ -8430,11 +8438,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Center slot: Magazines / Special galleries → blinking footer Share (Play Store).
-     * Otherwise keep reporter "+" / WhatsApp overlays hidden (product: plus slot off).
+     * Middle column between Special and Daily Updates.
+     * Magazines / special galleries: blinking Share.
+     * Every other article: WhatsApp share of that article (Play Store footer action).
+     * The reporter "+" overlay stays off.
      */
     private void updateCenterFab() {
         if (visibleFlipIsInviteOrAdShell()) {
+            hideFooterWhatsapp();
             hideMagazineShareFooter();
             hideCenterPlusOverlays();
             repairVisibleShareTargetIfInviteShell();
@@ -8463,7 +8474,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         hideMagazineShareFooter();
         hideCenterPlusOverlays();
-        showLog("updateCenterFab center plus/WA hidden (non-magazine)");
+        if (shouldShowFooterWhatsapp()) {
+            applyFooterWhatsapp();
+            Log.i(MAGAZINE_GLOW_TAG, "MODE=WHATSAPP_FOOTER postType=[" + type + "]");
+            showLog("updateCenterFab footer WhatsApp");
+            return;
+        }
+        hideFooterWhatsapp();
+        ensureMagazineShareFooterSlot();
+        showLog("updateCenterFab middle slot hidden");
     }
 
     /**
@@ -8656,6 +8675,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * control (admin-sized icon + translated label) that blinks like the Special bulb.
      */
     private void applyMagazineCenterShare() {
+        hideFooterWhatsapp();
         if (imageVIewShareWhatsapp != null) {
             imageVIewShareWhatsapp.clearAnimation();
             imageVIewShareWhatsapp.setOnClickListener(null);
@@ -8751,13 +8771,180 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             layoutMagazineShareFooter.setTranslationX(0f);
         }
-        // Drop the empty middle column so the bar returns to News | Special | Daily | Profile.
+        // Keep the middle column when WhatsApp still needs it.
         ensureMagazineShareFooterSlot();
     }
 
     private boolean isMagazineShareFooterShowing() {
         return layoutMagazineShareFooter != null
                 && layoutMagazineShareFooter.getVisibility() == View.VISIBLE;
+    }
+
+    /**
+     * WhatsApp between Special and Daily Updates for every article that is not
+     * a magazine / special gallery. Same share action as the Play Store footer
+     * WhatsApp ({@link #shareCurrentPostViaWhatsAppFooter()}). No blink.
+     */
+    private boolean shouldShowFooterWhatsapp() {
+        try {
+            if (!isDeviceOnline() || visibleFlipIsInviteOrAdShell()) {
+                return false;
+            }
+            if (shouldShowMagazineFooterShare()) {
+                return false;
+            }
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum item = list.get(idx);
+            if (item == null || ReadArticleStore.isSyntheticFeedSlot(item)
+                    || ReadArticleStore.isShareFeedSlot(item)) {
+                return false;
+            }
+            String type = item.getPostType();
+            if (type == null) {
+                return false;
+            }
+            type = type.trim();
+            return !type.equalsIgnoreCase("ad")
+                    && !type.equalsIgnoreCase("web_ads")
+                    && !type.equalsIgnoreCase("web")
+                    && !type.equalsIgnoreCase("ratings")
+                    && !type.equalsIgnoreCase("share_app");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean isFooterWhatsappShowing() {
+        return layoutFooterWhatsapp != null
+                && layoutFooterWhatsapp.getVisibility() == View.VISIBLE;
+    }
+
+    /** Middle column is open for Share or WhatsApp, and Panchangam is not using it. */
+    private boolean isCenterFooterActionSlotOpen() {
+        return !isFooterCalendarTabWanted()
+                && (isMagazineShareFooterShowing() || isFooterWhatsappShowing());
+    }
+
+    private void applyFooterWhatsapp() {
+        if (layoutFooterWhatsapp == null) {
+            return;
+        }
+        if (ivFooterWhatsapp != null) {
+            ivFooterWhatsapp.clearAnimation();
+            ivFooterWhatsapp.setAlpha(1f);
+            ivFooterWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
+            ivFooterWhatsapp.clearColorFilter();
+        }
+        layoutFooterWhatsapp.clearAnimation();
+        layoutFooterWhatsapp.setAlpha(1f);
+        layoutFooterWhatsapp.setVisibility(View.VISIBLE);
+        layoutFooterWhatsapp.setEnabled(true);
+        layoutFooterWhatsapp.setClickable(true);
+        layoutFooterWhatsapp.setOnClickListener(v -> {
+            int visibleIdx = getVisiblePostIndex();
+            onArticleWhatsappClicked(visibleIdx);
+        });
+        bindFooterWhatsappCountFromVisiblePost();
+        syncFooterWhatsappColumnHeight();
+        layoutFooterWhatsapp.bringToFront();
+        if (home_page_navigation != null) {
+            home_page_navigation.bringChildToFront(layoutFooterWhatsapp);
+        }
+        ensureMagazineShareFooterSlot();
+    }
+
+    private void hideFooterWhatsapp() {
+        if (layoutFooterWhatsapp == null) {
+            return;
+        }
+        layoutFooterWhatsapp.setOnClickListener(null);
+        layoutFooterWhatsapp.setClickable(false);
+        layoutFooterWhatsapp.clearAnimation();
+        layoutFooterWhatsapp.setAlpha(1f);
+        layoutFooterWhatsapp.setVisibility(View.GONE);
+        layoutFooterWhatsapp.setTranslationX(0f);
+        ViewGroup.LayoutParams lp = layoutFooterWhatsapp.getLayoutParams();
+        if (lp != null && lp.width != ViewGroup.LayoutParams.WRAP_CONTENT) {
+            lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            layoutFooterWhatsapp.setLayoutParams(lp);
+        }
+    }
+
+    private void syncFooterWhatsappColumnHeight() {
+        if (layoutFooterWhatsapp == null || bottomNavigationView == null) {
+            return;
+        }
+        ViewGroup.LayoutParams navLp = bottomNavigationView.getLayoutParams();
+        if (navLp == null || navLp.height <= 0) {
+            return;
+        }
+        ViewGroup.LayoutParams lp = layoutFooterWhatsapp.getLayoutParams();
+        if (lp != null && lp.height != navLp.height) {
+            lp.height = navLp.height;
+            layoutFooterWhatsapp.setLayoutParams(lp);
+        }
+    }
+
+    private void bindFooterWhatsappCountFromVisiblePost() {
+        int count = 0;
+        try {
+            int idx = getVisiblePostIndex();
+            if (list != null && idx >= 0 && idx < list.size() && list.get(idx) != null
+                    && list.get(idx).getWhatsappShares() != null) {
+                count = list.get(idx).getWhatsappShares();
+            }
+        } catch (Exception ignored) {
+        }
+        bindFooterWhatsappCount(count);
+    }
+
+    private void bindFooterWhatsappCount(int count) {
+        if (tvFooterWhatsappCount == null) {
+            return;
+        }
+        if (count < 0) {
+            count = 0;
+        }
+        tvFooterWhatsappCount.setText(FlipperAdapter.formatEngagementCount(count));
+        tvFooterWhatsappCount.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * One WhatsApp share of the visible article. Half-row chip and the middle
+     * footer icon both call this, so one tap increments {@code whatsapp_shares} once.
+     */
+    public void onArticleWhatsappClicked(int position) {
+        try {
+            if (position >= 0) {
+                positionx = position;
+            }
+            CallShareListener listener = new CallShareListener();
+            listener.setShareInterfaceListener(adapter);
+            listener.triggerEvent();
+            shareCurrentPostViaWhatsAppFooter();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** In-place footer count after the existing WhatsApp share increment. */
+    public void onWhatsappShareCountUpdated(long postId, int count) {
+        if (!isFooterWhatsappShowing()) {
+            return;
+        }
+        try {
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null
+                    || list.get(idx).getPostId() == null
+                    || list.get(idx).getPostId().longValue() != postId) {
+                return;
+            }
+            bindFooterWhatsappCount(count);
+        } catch (Exception ignored) {
+        }
     }
 
     /** Panchangam footer tab is product-off; the same menu id is the share column. */
@@ -8792,7 +8979,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         boolean calendar = isFooterCalendarTabWanted();
-        boolean wantSpacer = isMagazineShareFooterShowing() && !calendar;
+        boolean wantSpacer = isCenterFooterActionSlotOpen();
         MenuItem slot = bottomNavigationView.getMenu().findItem(R.id.navigation_stricker);
         boolean spacerOpen = slot != null && slot.isVisible() && !calendar;
         if (wantSpacer == spacerOpen) {
@@ -8808,7 +8995,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /** Hide the spacer item's own icon and label; the Share overlay is the control. */
     private void hideShareCenterSlotChrome() {
-        if (!isMagazineShareFooterShowing() || isFooterCalendarTabWanted()) {
+        if (!isCenterFooterActionSlotOpen()) {
             return;
         }
         View item = findFooterMenuItemView(R.id.navigation_stricker);
@@ -11293,11 +11480,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 applyFooterSlotVisibility();
                 forceFooterItemViewsMatchMenuVisibility();
             }
-            if (isMagazineShareFooterShowing()) {
+            if (isCenterFooterActionSlotOpen()) {
                 MenuItem slot = bottomNavigationView != null && bottomNavigationView.getMenu() != null
                         ? bottomNavigationView.getMenu().findItem(R.id.navigation_stricker)
                         : null;
-                if (slot != null && !isFooterCalendarTabWanted()) {
+                if (slot != null) {
                     prepareMagazineShareCenterSlot(slot);
                     hideShareCenterSlotChrome();
                 }
@@ -11339,7 +11526,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             // Middle column: real Panchangam tab, or an empty slot under blinking Share.
             // Never paint Share on the Special item.
             MenuItem centerSlot = menu.findItem(R.id.navigation_stricker);
-            boolean shareSlot = isMagazineShareFooterShowing() && !showCalendar;
+            boolean shareSlot = isCenterFooterActionSlotOpen() && !showCalendar;
+            if (!online) {
+                hideFooterWhatsapp();
+                shareSlot = false;
+            }
             if (shareSlot) {
                 prepareMagazineShareCenterSlot(centerSlot);
             } else {
@@ -11646,6 +11837,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     bottomNavigationView,
                     layoutMagazineShareFooter,
                     ivMagazineShareFooter);
+            syncFooterWhatsappColumnHeight();
             // Weights / visibility changes rebuild item views — re-pin Special + Profile glyphs
             // only when their slots are allowed (never while offline).
             ensureSpecialMenuIconAlwaysVisible();
@@ -11697,7 +11889,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             View fabSlot = findFabSlotItemView();
             applyCenterOverlayTranslation(fabSlot);
             boolean shareSlotPending = false;
-            if (isMagazineShareFooterShowing()) {
+            if (isCenterFooterActionSlotOpen()) {
                 View shareSlot = findFooterMenuItemView(R.id.navigation_stricker);
                 shareSlotPending = shareSlot == null
                         || shareSlot.getVisibility() != View.VISIBLE
@@ -11728,26 +11920,33 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (imageVIewShareWhatsapp != null) {
             imageVIewShareWhatsapp.setTranslationX(dx);
         }
-        if (layoutMagazineShareFooter == null) {
+        positionFooterActionOverlay(layoutMagazineShareFooter, isMagazineShareFooterShowing());
+        positionFooterActionOverlay(layoutFooterWhatsapp, isFooterWhatsappShowing());
+        if (isCenterFooterActionSlotOpen()) {
+            hideShareCenterSlotChrome();
+        }
+    }
+
+    /** Place Share or WhatsApp on the middle column. A missing slot stays at bar center. */
+    private void positionFooterActionOverlay(@Nullable View overlay, boolean showing) {
+        if (overlay == null) {
             return;
         }
-        if (!isMagazineShareFooterShowing()) {
-            layoutMagazineShareFooter.setTranslationX(0f);
+        if (!showing) {
+            overlay.setTranslationX(0f);
             return;
         }
-        // Share column only. A missing slot stays at bar center — never the Special icon.
         View shareSlot = findFooterMenuItemView(R.id.navigation_stricker);
         float shareDx = 0f;
         if (shareSlot != null && shareSlot.getVisibility() == View.VISIBLE && shareSlot.getWidth() > 0) {
             shareDx = overlayDxForSlot(shareSlot);
-            ViewGroup.LayoutParams lp = layoutMagazineShareFooter.getLayoutParams();
+            ViewGroup.LayoutParams lp = overlay.getLayoutParams();
             if (lp != null && lp.width != shareSlot.getWidth()) {
                 lp.width = shareSlot.getWidth();
-                layoutMagazineShareFooter.setLayoutParams(lp);
+                overlay.setLayoutParams(lp);
             }
         }
-        layoutMagazineShareFooter.setTranslationX(shareDx);
-        hideShareCenterSlotChrome();
+        overlay.setTranslationX(shareDx);
     }
 
     private float overlayDxForSlot(@Nullable View slot) {
@@ -18510,6 +18709,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     bottomNavigationView,
                     layoutMagazineShareFooter,
                     ivMagazineShareFooter);
+            syncFooterWhatsappColumnHeight();
         } catch (Exception ignored) {
         }
     }
@@ -20496,7 +20696,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     performDailyUpdatesOpen();
                     return true;
                 case R.id.navigation_stricker:
-                    // Panchangam — embed Telugu calendar in HomePage content host.
+                    // Middle column is Share or WhatsApp, not a destination tab.
+                    // Panchangam stays product-off; this id only opens calendar if that flag is on.
+                    if (isFooterWhatsappShowing() && !isFooterCalendarTabWanted()) {
+                        onArticleWhatsappClicked(getVisiblePostIndex());
+                        return false;
+                    }
                     if (!ProfileHubConfigHelper.isFooterShowCalendar(HomePage.this)
                             || !isDeviceOnline()) {
                         return false;

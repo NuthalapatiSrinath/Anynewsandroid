@@ -2807,19 +2807,42 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return true;
     }
 
+    private void bindWhatsappCountForView(@Nullable TextView countView, Integer count) {
+        if (countView == null) return;
+        if (countView.getId() == R.id.half_whatsapp_count) {
+            int c = count == null ? 0 : count;
+            // Always show the number, including 0, the way full-post WhatsApp does.
+            // Color stays the half-row admin count color so it stays readable on the card.
+            countView.setText(formatCount(c));
+            countView.setBackground(null);
+            countView.setTextColor(EngagementCountHelper.getCountColor(context));
+            countView.setTypeface(countView.getTypeface(), Typeface.BOLD);
+            countView.setVisibility(View.VISIBLE);
+            return;
+        }
+        bindFullPostLikeCount(countView, count, null);
+    }
+
     private boolean applyWhatsappShareCountToRememberedView(Long postId, Integer waShares) {
         if (postId == null || waShares == null) return false;
-        TextView countView = findRememberedWhatsappShareCountView(postId);
+        TextView countView = findLiveEngagementTextView(postId, R.id.half_whatsapp_count,
+                R.id.full_img_whtsapp_text, R.id.full_img_whtsapp_text);
         if (countView == null) {
-            countView = findLiveEngagementTextView(postId, R.id.full_img_whtsapp_text,
-                    R.id.full_img_whtsapp_text, R.id.full_img_whtsapp_text);
-            if (countView != null) {
-                rememberWhatsappShareCountView(postId, countView);
-            }
+            countView = findRememberedWhatsappShareCountView(postId);
+        } else {
+            rememberWhatsappShareCountView(postId, countView);
         }
-        if (countView == null) return false;
-        bindFullPostLikeCount(countView, waShares, null);
-        return true;
+        boolean painted = false;
+        if (countView != null) {
+            bindWhatsappCountForView(countView, waShares);
+            painted = true;
+        }
+        // Footer middle WhatsApp uses this same total. One Share_Count_Value call
+        // paints both; this does not increment again.
+        if (context instanceof HomePage) {
+            ((HomePage) context).onWhatsappShareCountUpdated(postId, waShares);
+        }
+        return painted;
     }
 
     /**
@@ -2862,7 +2885,48 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return null;
     }
 
+    /**
+     * Half articles have no right-rail WhatsApp. Insert the same chip full posts
+     * use (icon + whatsapp_shares) before Share. Tap shares once via the footer path.
+     */
+    private void ensureHalfWhatsappAction(View convertView, int position) {
+        if (convertView == null || list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        View shareSlot = convertView.findViewById(R.id.half_share);
+        if (shareSlot == null) {
+            shareSlot = convertView.findViewById(R.id.half_share__);
+        }
+        if (shareSlot == null || !(shareSlot.getParent() instanceof ViewGroup)) {
+            return;
+        }
+        ViewGroup parent = (ViewGroup) shareSlot.getParent();
+        View slot = parent.findViewById(R.id.half_whatsapp);
+        if (slot == null) {
+            slot = LayoutInflater.from(context).inflate(
+                    R.layout.item_half_whatsapp_action, parent, false);
+            parent.addView(slot, parent.indexOfChild(shareSlot));
+        }
+        slot.setVisibility(View.VISIBLE);
+        ImageView icon = slot.findViewById(R.id.half_whatsapp_icon);
+        if (icon != null) {
+            icon.setImageResource(R.drawable.ic_whatsapp_original1);
+            icon.clearColorFilter();
+            androidx.core.widget.ImageViewCompat.setImageTintList(icon, null);
+        }
+        TextView countView = slot.findViewById(R.id.half_whatsapp_count);
+        bindWhatsappCountForView(countView, list.get(position).getWhatsappShares());
+        rememberWhatsappShareCountView(list.get(position).getPostId(), countView);
+        final int sharePosition = position;
+        slot.setOnClickListener(v -> {
+            if (context instanceof HomePage) {
+                ((HomePage) context).onArticleWhatsappClicked(sharePosition);
+            }
+        });
+    }
+
     private void bindHalfPostEngagementCounts(View convertView, int position) {
+        ensureHalfWhatsappAction(convertView, position);
         TextView likeCount = convertView.findViewById(R.id.half_like_count);
         TextView commentCount = convertView.findViewById(R.id.half_comment_count);
         TextView shareCount = convertView.findViewById(R.id.half_share_count);
@@ -4592,13 +4656,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     // White-circle chip ImageViews (have the white_oval background) across the
     // half-image and half-video layouts. Missing ids are skipped safely.
     private static final int[] HALF_ACTION_ICON_IDS = new int[] {
-            R.id.half_image_like, R.id.half_comment_icon, R.id.half_share_icon,
+            R.id.half_image_like, R.id.half_comment_icon, R.id.half_whatsapp_icon, R.id.half_share_icon,
             R.id.half_tts_icon, R.id.half_search_icon, R.id.share, R.id.report_icon, R.id.video_report
     };
 
     // Tappable slot containers that wrap each action icon (image + video layouts).
     private static final int[] HALF_ACTION_SLOT_IDS = new int[] {
-            R.id.half_image_like_icon, R.id.half_comment, R.id.half_share,
+            R.id.half_image_like_icon, R.id.half_comment, R.id.half_whatsapp, R.id.half_share,
             R.id.half_tts, R.id.half_search, R.id.half_share__, R.id.report
     };
 
@@ -4945,6 +5009,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (offsetDp > 40) offsetDp = 40;
         float px = offsetDp * context.getResources().getDisplayMetrics().density;
         iconRow.setTranslationY(px);
+    }
+
+    /** Same compact total the full-post WhatsApp caption uses. */
+    public static String formatEngagementCount(int c) {
+        return formatCount(c);
     }
 
     private static String formatCount(int c) {
@@ -12972,6 +13041,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         // Counts + circle/glyph sizing. Skip half-post row offset — survey row is under
         // options and must stay put (offset was designed for half-image content strip).
+        ensureHalfWhatsappAction(convertView, position);
         TextView likeCountTv = convertView.findViewById(R.id.half_like_count);
         TextView commentCountTv = convertView.findViewById(R.id.half_comment_count);
         TextView shareCountTv = convertView.findViewById(R.id.half_share_count);
