@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First-frame plate when the system splash icon is not drawn (share / push
+     into StartingActivity). Opaque splash_logo_bg — never transparent/black. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_logo_bg" />
+    <item
+        android:width="192dp"
+        android:height="192dp"
+        android:drawable="@drawable/splash_circle_logo"
+        android:gravity="center" />
+</layer-list>

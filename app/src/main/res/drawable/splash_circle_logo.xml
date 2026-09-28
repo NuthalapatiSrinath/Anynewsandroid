@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Centered cold-start mark. Full-bleed circle so the Android 12+ splash
+     mask matches the launcher adaptive icon (image: dark plate + red N). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#EF4923"
+        android:pathData="M24,0C37.255,0 48,10.745 48,24C48,37.255 37.255,48 24,48C10.745,48 0,37.255 0,24C0,10.745 10.745,0 24,0Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M15.801,17H23.801L32.068,30.867H24.068L15.801,17Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M15.001,23.933L19.001,30.867H11.001L15.001,23.933Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32.868,23.933L28.868,17L36.868,17L32.868,23.933Z" />
+</vector>

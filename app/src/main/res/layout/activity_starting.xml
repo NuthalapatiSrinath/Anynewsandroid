@@ -51,6 +51,17 @@
         android:scaleType="fitXY"
         android:visibility="gone" />
 
+    <!-- Banner OFF: same centered mark as the system splash while share/push
+         resolve keeps this activity up. Banner ImageView stays above this. -->
+    <ImageView
+        android:id="@+id/splash_center_logo"
+        android:layout_width="192dp"
+        android:layout_height="192dp"
+        android:layout_gravity="center"
+        android:contentDescription="@null"
+        android:src="@drawable/splash_circle_logo"
+        android:visibility="gone" />
+
     <!-- Full-bleed Opening Banner (FIT_XY — all four edges, no crop). Topmost. -->
     <ImageView
         android:id="@+id/logo_image_server"

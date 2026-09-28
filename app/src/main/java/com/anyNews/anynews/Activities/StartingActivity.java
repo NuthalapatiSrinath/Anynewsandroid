@@ -159,7 +159,7 @@ public class StartingActivity extends AppCompatActivity {
     private boolean isConnected = false;
     private TextView networkStatus, welcome;
 
-    ImageView logo_image_server, logo_image;
+        ImageView logo_image_server, logo_image, splashCenterLogo;
 
     String TAG = "TESTING_VALUE";
     String referlink;
@@ -214,7 +214,9 @@ public class StartingActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         // Before super + installSplashScreen: Opening Banner ON → theme-color
         // + blank icon (never logo, never black). Banner OFF keeps Manifest
-        // classic logo splash (double_splash_screen / new_bg_sp).
+        // centered logo (splash_circle_logo / splash_logo_center_plate).
+        // icon_preferred is on the splash theme so share/VIEW cold starts
+        // draw that mark; Android 13+ otherwise leaves only splash_logo_bg.
         boolean suppressLogoSplash =
                 FestivalSplashHelper.shouldSuppressLogoSplash(this, getIntent());
         final boolean bannerCached =
@@ -276,6 +278,7 @@ public class StartingActivity extends AppCompatActivity {
         logo_image_server = findViewById(R.id.logo_image_server);
         welcome = findViewById(R.id.welcome);
         logo_image = findViewById(R.id.logo_image);
+        splashCenterLogo = findViewById(R.id.splash_center_logo);
         prefManager = new Allsharedpreference(getApplicationContext());
         showLog("EMAIL-ID:::::"+prefManager.getEmailId());
         showLog("CHECK POINT 1");
@@ -378,26 +381,34 @@ public class StartingActivity extends AppCompatActivity {
             logo_image_server.setImageDrawable(null);
             logo_image_server.setVisibility(View.INVISIBLE);
             logo_image.setVisibility(View.GONE);
+            if (splashCenterLogo != null) {
+                splashCenterLogo.setVisibility(View.GONE);
+            }
             if (welcome != null) {
                 welcome.setVisibility(View.GONE);
             }
         } else {
-            // Classic logo splash (Manifest + post theme). Reinforce new_bg_sp for
-            // a seamless handoff after AndroidX splash exit.
+            // Classic logo (banner OFF). Plate matches the system splash so a
+            // share/job/notification cold start is not a flat gray window while
+            // the link resolves. new_bg_sp sat the mark at the top and left the
+            // center empty (#353535 at night).
             try {
-                getWindow().setBackgroundDrawableResource(R.drawable.new_bg_sp);
+                getWindow().setBackgroundDrawableResource(R.drawable.splash_logo_center_plate);
             } catch (Exception ignored) {
             }
             try {
                 View root = findViewById(android.R.id.content);
                 if (root != null) {
-                    root.setBackgroundResource(R.drawable.new_bg_sp);
+                    root.setBackgroundResource(R.drawable.splash_logo_center_plate);
                 }
             } catch (Exception ignored) {
             }
             logo_image_server.setImageDrawable(null);
             logo_image_server.setVisibility(View.INVISIBLE);
             logo_image.setVisibility(View.GONE);
+            if (splashCenterLogo != null) {
+                splashCenterLogo.setVisibility(View.VISIBLE);
+            }
         }
         receiver = new NetworkChangeReceiver();
         networkStatus = (TextView) findViewById(R.id.networkStatus);
@@ -1471,6 +1482,13 @@ public class StartingActivity extends AppCompatActivity {
         }
         if (net_not_avilable != null) {
             net_not_avilable.setVisibility(View.VISIBLE);
+            try {
+                net_not_avilable.bringToFront();
+            } catch (Exception ignored) {
+            }
+        }
+        if (splashCenterLogo != null) {
+            splashCenterLogo.setVisibility(View.GONE);
         }
 
         //   one.setText("You are not connected to Internet!");
@@ -3154,6 +3172,9 @@ public class StartingActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
         logo_image.setVisibility(View.GONE);
+        if (splashCenterLogo != null) {
+            splashCenterLogo.setVisibility(View.GONE);
+        }
         if (welcome != null) {
             welcome.setVisibility(View.GONE);
         }

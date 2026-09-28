@@ -23,10 +23,10 @@
 
     </style>
 
-    <!-- Post system-splash (banner OFF): classic logo plate. -->
+    <!-- Post system-splash (banner OFF): same centered logo as the system splash. -->
     <style name="AppThemeSplash_splash" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:background">@drawable/new_bg_sp</item>
-        <item name="android:windowBackground">@drawable/new_bg_sp</item>
+        <item name="android:background">@drawable/splash_logo_center_plate</item>
+        <item name="android:windowBackground">@drawable/splash_logo_center_plate</item>
         <item name="android:adjustViewBounds">true</item>
     </style>
 
@@ -258,12 +258,17 @@
     </style>
 
 
-    <!-- Default Manifest splash = classic logo (banner OFF / historic Play Store).
+    <!-- Default Manifest splash = centered logo (banner OFF).
+         Android 13+ hides the splash icon for non-launcher starts (share, job
+         link, notification into this activity) unless icon_preferred — that left
+         only splash_logo_bg (#353535 at night), a flat gray window.
          Opening Banner ON: setTheme(AppThemeSplashOpeningBanner) before installSplashScreen. -->
     <style name="AppThemeSplash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_logo_bg</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/double_splash_screen</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_circle_logo</item>
         <item name="windowSplashScreenAnimationDuration">100</item>
+        <item name="android:windowSplashScreenBehavior">icon_preferred</item>
+        <item name="android:windowBackground">@drawable/splash_logo_center_plate</item>
         <item name="postSplashScreenTheme">@style/AppThemeSplash_splash</item>
     </style>
 

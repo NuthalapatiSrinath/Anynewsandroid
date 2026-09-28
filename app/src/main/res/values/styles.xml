@@ -50,11 +50,11 @@
         <item name="android:windowBackground">@color/whitewithblack</item>
     </style>
 
-    <!-- Manifest launch theme: classic logo splash (pre-318). Opening Banner ON
-         swaps to AppThemeSplashOpeningBanner (theme-color + blank icon) in onCreate. -->
+    <!-- Manifest launch theme: centered logo on splash_logo_bg (launcher + share).
+         Opening Banner ON swaps to AppThemeSplashOpeningBanner before super.onCreate. -->
     <style name="AppThemeSplash" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:background">@drawable/new_bg_sp</item>
-        <item name="android:windowBackground">@drawable/new_bg_sp</item>
+        <item name="android:background">@drawable/splash_logo_center_plate</item>
+        <item name="android:windowBackground">@drawable/splash_logo_center_plate</item>
         <item name="android:adjustViewBounds">true</item>
     </style>
     <style name="AppThemeBG" parent="Theme.AppCompat.DayNight.NoActionBar">
