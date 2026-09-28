@@ -547,6 +547,11 @@ public class Constants {
     public static String PROFILE_MENU_TEXT_SIZE_SP = "profile_menu_text_size_sp";
     /** Home footer center "+" FAB diameter (dp). Splash-delivered; default 42. */
     public static String FOOTER_PLUS_ICON_SIZE_DP = "footer_plus_icon_size_dp";
+    /**
+     * Center Share icon on magazine / special cards (dp). Splash + feed poll.
+     * Not the article action-row share icon. Missing pref uses 32.
+     */
+    public static String MAGAZINE_SHARE_ICON_SIZE_DP = "magazine_share_icon_size_dp";
     // Home bottom-nav slot visibility (admin Root_Settings; defaults true except categories).
     public static String FOOTER_SHOW_RELOAD = "footer_show_reload";
     public static String FOOTER_SHOW_SPECIAL = "footer_show_special";

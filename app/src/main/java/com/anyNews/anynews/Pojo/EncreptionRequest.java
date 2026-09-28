@@ -393,6 +393,14 @@ public class EncreptionRequest {
     @Expose
     private Integer action_icon_gap_dp;
 
+    /**
+     * Center Share icon on magazine / special cards (dp).
+     * Null when the poll omits the field. Not the article action-row share icon.
+     */
+    @SerializedName("magazine_share_icon_size_dp")
+    @Expose
+    private Integer magazine_share_icon_size_dp;
+
     @SerializedName("like_circle_size_dp")
     @Expose
     private Integer like_circle_size_dp;
@@ -797,6 +805,14 @@ public class EncreptionRequest {
 
     public Integer getAction_icon_gap_dp() {
         return action_icon_gap_dp;
+    }
+
+    public Integer getMagazine_share_icon_size_dp() {
+        return magazine_share_icon_size_dp;
+    }
+
+    public void setMagazine_share_icon_size_dp(Integer magazine_share_icon_size_dp) {
+        this.magazine_share_icon_size_dp = magazine_share_icon_size_dp;
     }
 
     public void setAction_icon_gap_dp(Integer action_icon_gap_dp) {

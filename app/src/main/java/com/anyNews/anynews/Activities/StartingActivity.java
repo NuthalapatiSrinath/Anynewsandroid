@@ -2038,6 +2038,29 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
+                        // Center magazine / special Share icon. Omitted field keeps a
+                        // saved value; first launch with no key uses 32dp.
+                        Integer magazineShareIconDp =
+                                startActivityReqModel.getData().getMagazineShareIconSizeDp();
+                        if (magazineShareIconDp != null) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.MAGAZINE_SHARE_ICON_SIZE_DP,
+                                    com.anyNews.anynews.Utils.FooterStyleHelper
+                                            .clampMagazineShareIconDp(magazineShareIconDp),
+                                    Constants.PREF_NAME
+                            );
+                        } else if (!getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE)
+                                .contains(Constants.MAGAZINE_SHARE_ICON_SIZE_DP)) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.MAGAZINE_SHARE_ICON_SIZE_DP,
+                                    com.anyNews.anynews.Utils.FooterStyleHelper
+                                            .MAGAZINE_SHARE_ICON_DEFAULT_DP,
+                                    Constants.PREF_NAME
+                            );
+                        }
+
                         // Horizontal gap between article action icons. Omitted field
                         // keeps a saved value; first launch with no key uses 2dp.
                         Integer actionIconGapDp = startActivityReqModel.getData().getActionIconGapDp();

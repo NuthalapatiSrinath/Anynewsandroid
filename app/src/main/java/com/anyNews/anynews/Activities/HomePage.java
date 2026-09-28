@@ -1233,6 +1233,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         layoutMagazineShareFooter = findViewById(R.id.layoutMagazineShareFooter);
         ivMagazineShareFooter = findViewById(R.id.ivMagazineShareFooter);
         tvMagazineShareFooter = findViewById(R.id.tvMagazineShareFooter);
+        FooterStyleHelper.applyMagazineShareChrome(
+                this,
+                home_page_navigation,
+                findViewById(R.id.nav_view),
+                layoutMagazineShareFooter,
+                ivMagazineShareFooter);
         // Product: never flash center + / WhatsApp before footer rebalance / API.
         hideCenterPlusOverlays();
 
@@ -1272,6 +1278,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             public void run() {
                 rebalanceFooterTabs();
                 FooterStyleHelper.apply(HomePage.this, bottomNavigationView);
+                FooterStyleHelper.applyMagazineShareChrome(
+                        HomePage.this,
+                        home_page_navigation,
+                        bottomNavigationView,
+                        layoutMagazineShareFooter,
+                        ivMagazineShareFooter);
                 FooterStyleHelper.applyFab(HomePage.this, floatingActionButtonHome);
                 // Bulb after rebalance so Material item views exist + weights applied.
                 setupSpecialTabBulb();
@@ -8635,7 +8647,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Magazines / image_gallery: replace the center "+" FAB with a footer-style Share
-     * control (24dp tinted icon + translated label) that blinks like the Special bulb.
+     * control (admin-sized icon + translated label) that blinks like the Special bulb.
      */
     private void applyMagazineCenterShare() {
         if (imageVIewShareWhatsapp != null) {
@@ -11617,6 +11629,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             bottomNavigationView.requestLayout();
             // Re-apply admin icon size / label sizes / tints after item-view rebuild.
             FooterStyleHelper.apply(HomePage.this, bottomNavigationView);
+            FooterStyleHelper.applyMagazineShareChrome(
+                    HomePage.this,
+                    home_page_navigation,
+                    bottomNavigationView,
+                    layoutMagazineShareFooter,
+                    ivMagazineShareFooter);
             // Weights / visibility changes rebuild item views — re-pin Special + Profile glyphs
             // only when their slots are allowed (never while offline).
             ensureSpecialMenuIconAlwaysVisible();
@@ -16759,6 +16777,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getLike_circle_size_dp(),
                             encreptionRequest.getAction_icon_gap_dp()
                     );
+                    applyMagazineShareIconConfig(encreptionRequest.getMagazine_share_icon_size_dp());
                     applySearchIconConfig(
                             encreptionRequest.getSearch_icon_on_engagement(),
                             encreptionRequest.getSearch_icon_on_toggle(),
@@ -18398,6 +18417,38 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                 });
             }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Center Share icon on magazine / special cards. Delivered on the same feed
+     * poll as the article action-row sizes. Missing field keeps a saved value;
+     * a phone that has never stored it uses 32dp.
+     */
+    private void applyMagazineShareIconConfig(Integer magazineShareIconDp) {
+        try {
+            if (magazineShareIconDp != null) {
+                int clamped = FooterStyleHelper.clampMagazineShareIconDp(magazineShareIconDp);
+                android.content.SharedPreferences sp =
+                        getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+                int prev = sp.getInt(
+                        Constants.MAGAZINE_SHARE_ICON_SIZE_DP,
+                        FooterStyleHelper.MAGAZINE_SHARE_ICON_DEFAULT_DP);
+                if (!sp.contains(Constants.MAGAZINE_SHARE_ICON_SIZE_DP) || prev != clamped) {
+                    SharedPrefsData.putInt(
+                            HomePage.this,
+                            Constants.MAGAZINE_SHARE_ICON_SIZE_DP,
+                            clamped,
+                            Constants.PREF_NAME);
+                }
+            }
+            FooterStyleHelper.applyMagazineShareChrome(
+                    HomePage.this,
+                    home_page_navigation,
+                    bottomNavigationView,
+                    layoutMagazineShareFooter,
+                    ivMagazineShareFooter);
         } catch (Exception ignored) {
         }
     }

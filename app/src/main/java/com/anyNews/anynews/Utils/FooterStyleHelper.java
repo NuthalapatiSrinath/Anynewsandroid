@@ -255,4 +255,106 @@ public final class FooterStyleHelper {
             return null;
         }
     }
+
+    /**
+     * Center Share glyph on magazine / special cards (the middle footer button).
+     * Compiled layout was 24dp inside a 50dp bar. Missing prefs use 32dp.
+     * This is not the article action-row share icon.
+     */
+    public static final int MAGAZINE_SHARE_ICON_DEFAULT_DP = 32;
+    public static final int MAGAZINE_SHARE_ICON_MIN_DP = 20;
+    public static final int MAGAZINE_SHARE_ICON_MAX_DP = 36;
+    /** Current compiled bar when the share icon is the old 24dp size. */
+    private static final int FOOTER_BAR_BASE_DP = 50;
+    /**
+     * Padding + label under the center Share icon. Bar grows with the icon
+     * so the Share label and the other tab labels stay inside the bar.
+     */
+    private static final int FOOTER_SHARE_CHROME_DP = 20;
+    /** Cap so a large Share icon cannot climb over the magazine page dots. */
+    private static final int FOOTER_BAR_MAX_DP = 56;
+
+    public static int clampMagazineShareIconDp(int dp) {
+        if (dp < MAGAZINE_SHARE_ICON_MIN_DP) return MAGAZINE_SHARE_ICON_MIN_DP;
+        if (dp > MAGAZINE_SHARE_ICON_MAX_DP) return MAGAZINE_SHARE_ICON_MAX_DP;
+        return dp;
+    }
+
+    /** Pref missing or unset → {@link #MAGAZINE_SHARE_ICON_DEFAULT_DP}. */
+    public static int readMagazineShareIconDp(Context context) {
+        if (context == null) {
+            return MAGAZINE_SHARE_ICON_DEFAULT_DP;
+        }
+        try {
+            android.content.SharedPreferences sp = context.getSharedPreferences(
+                    Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (!sp.contains(Constants.MAGAZINE_SHARE_ICON_SIZE_DP)) {
+                return MAGAZINE_SHARE_ICON_DEFAULT_DP;
+            }
+            int stored = sp.getInt(
+                    Constants.MAGAZINE_SHARE_ICON_SIZE_DP, MAGAZINE_SHARE_ICON_DEFAULT_DP);
+            if (stored <= 0) {
+                return MAGAZINE_SHARE_ICON_DEFAULT_DP;
+            }
+            return clampMagazineShareIconDp(stored);
+        } catch (Exception e) {
+            return MAGAZINE_SHARE_ICON_DEFAULT_DP;
+        }
+    }
+
+    /** Footer bar height that fits this Share icon plus its label. */
+    public static int footerBarHeightDpForShareIcon(int iconDp) {
+        int needed = clampMagazineShareIconDp(iconDp) + FOOTER_SHARE_CHROME_DP;
+        if (needed < FOOTER_BAR_BASE_DP) needed = FOOTER_BAR_BASE_DP;
+        if (needed > FOOTER_BAR_MAX_DP) needed = FOOTER_BAR_MAX_DP;
+        return needed;
+    }
+
+    /**
+     * Sizes the center magazine Share icon and grows the footer bar just enough
+     * for that icon and the News / Special / Daily / Profile labels. The Share
+     * control stays inside the bar (it does not draw over the page dots).
+     * {@code shareColumn} and {@code shareIcon} may be null (profile footer).
+     */
+    public static void applyMagazineShareChrome(
+            Context context,
+            View footerBar,
+            BottomNavigationView nav,
+            View shareColumn,
+            android.widget.ImageView shareIcon) {
+        if (context == null) {
+            return;
+        }
+        try {
+            float density = context.getResources().getDisplayMetrics().density;
+            int iconDp = readMagazineShareIconDp(context);
+            int barPx = Math.round(footerBarHeightDpForShareIcon(iconDp) * density);
+            int iconPx = Math.round(iconDp * density);
+            setViewHeightPx(footerBar, barPx);
+            setViewHeightPx(nav, barPx);
+            setViewHeightPx(shareColumn, barPx);
+            if (shareIcon != null) {
+                ViewGroup.LayoutParams lp = shareIcon.getLayoutParams();
+                if (lp != null && (lp.width != iconPx || lp.height != iconPx)) {
+                    lp.width = iconPx;
+                    lp.height = iconPx;
+                    shareIcon.setLayoutParams(lp);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "magazine share size failed", e);
+        }
+    }
+
+    private static void setViewHeightPx(View view, int heightPx) {
+        if (view == null || heightPx <= 0) {
+            return;
+        }
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        if (lp == null || lp.height == heightPx) {
+            return;
+        }
+        lp.height = heightPx;
+        view.setLayoutParams(lp);
+    }
 }

@@ -852,6 +852,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Integer footerPlusIconSizeDp;
 
+        /**
+         * Center Share icon on magazine / special cards (dp).
+         * Null = old server / keep cache. Not the article action-row share icon.
+         */
+        @SerializedName("magazine_share_icon_size_dp")
+        @Expose
+        private Integer magazineShareIconSizeDp;
+
         // Home bottom-nav slot visibility (null = old server / keep cache). Defaults true.
         @SerializedName("footer_show_reload")
         @Expose
@@ -1487,6 +1495,10 @@ public class StartActivityReqModel implements Serializable {
 
         public Integer getFooterPlusIconSizeDp() {
             return footerPlusIconSizeDp;
+        }
+
+        public Integer getMagazineShareIconSizeDp() {
+            return magazineShareIconSizeDp;
         }
 
         public Boolean getFooterShowReload() {

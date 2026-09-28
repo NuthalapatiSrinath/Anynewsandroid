@@ -565,18 +565,19 @@
                     android:layout_width="match_parent"
                     android:layout_height="52dp" />
 
-                <!--  Bottom Menu — fixed 50dp so magazine Share overlay cannot grow the bar -->
+                <!-- Bottom menu. 52dp fits the 32dp magazine Share icon + label.
+                     Java may grow this up to 56dp from magazine_share_icon_size_dp. -->
                 <androidx.coordinatorlayout.widget.CoordinatorLayout
                     android:id="@+id/home_page_navigation"
                     android:layout_width="match_parent"
-                    android:layout_height="50dp"
+                    android:layout_height="52dp"
                     android:animateLayoutChanges="true">
 
 
                     <com.google.android.material.bottomnavigation.BottomNavigationView
                         android:id="@+id/nav_view"
                         android:layout_width="match_parent"
-                        android:layout_height="50dp"
+                        android:layout_height="52dp"
                         android:layout_gravity="bottom"
                         android:background="@drawable/bg_bottom_nav_glass"
                         app:itemIconTint="@color/selector_item_primary_color"
@@ -602,11 +603,11 @@
                         app:layout_anchor="@+id/nav_view"
                         app:layout_anchorGravity="center" />
 
-                    <!-- Magazine Share: tuck into the same 50dp nav slot (do not expand footer) -->
+                    <!-- Magazine Share: stays inside the footer bar (does not cover page dots). -->
                     <LinearLayout
                         android:id="@+id/layoutMagazineShareFooter"
                         android:layout_width="wrap_content"
-                        android:layout_height="50dp"
+                        android:layout_height="52dp"
                         android:layout_gravity="center"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:clickable="true"
@@ -622,8 +623,8 @@
 
                         <ImageView
                             android:id="@+id/ivMagazineShareFooter"
-                            android:layout_width="24dp"
-                            android:layout_height="24dp"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
                             android:contentDescription="@string/share"
                             android:scaleType="fitCenter"
                             android:src="@drawable/ic_share_full" />

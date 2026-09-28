@@ -3222,6 +3222,12 @@ public class newProfileDetails extends AppCompatActivity {
         }
         try {
             FooterStyleHelper.apply(this, profileBottomNav);
+            FooterStyleHelper.applyMagazineShareChrome(
+                    this,
+                    findViewById(R.id.profile_page_navigation),
+                    profileBottomNav,
+                    null,
+                    null);
         } catch (Exception ignored) {
         }
         try {
