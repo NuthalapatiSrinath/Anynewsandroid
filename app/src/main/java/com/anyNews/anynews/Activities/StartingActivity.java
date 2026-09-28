@@ -64,6 +64,7 @@ import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.StatusVideosDaysConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.FestivalSplashHelper;
+import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.ArticleTtsConfigHelper;
 import com.anyNews.anynews.Utils.ArticleTtsHelper;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
@@ -2036,6 +2037,26 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getLikeCircleSizeDp(),
                                 Constants.PREF_NAME
                         );
+
+                        // Horizontal gap between article action icons. Omitted field
+                        // keeps a saved value; first launch with no key uses 2dp.
+                        Integer actionIconGapDp = startActivityReqModel.getData().getActionIconGapDp();
+                        if (actionIconGapDp != null) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.ACTION_ICON_GAP_DP,
+                                    FlipperAdapter.clampActionIconGapDp(actionIconGapDp),
+                                    Constants.PREF_NAME
+                            );
+                        } else if (!getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE)
+                                .contains(Constants.ACTION_ICON_GAP_DP)) {
+                            SharedPrefsData.putInt(
+                                    getApplicationContext(),
+                                    Constants.ACTION_ICON_GAP_DP,
+                                    FlipperAdapter.DEFAULT_ACTION_ICON_GAP_DP,
+                                    Constants.PREF_NAME
+                            );
+                        }
 
                         com.anyNews.anynews.Utils.SearchIconConfig.saveFromServer(
                                 getApplicationContext(),

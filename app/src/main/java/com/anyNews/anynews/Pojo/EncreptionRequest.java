@@ -388,6 +388,11 @@ public class EncreptionRequest {
     @Expose
     private Integer action_icon_size_dp;
 
+    /** Null when the feed poll omits the field. 0 is a valid tight gap. */
+    @SerializedName("action_icon_gap_dp")
+    @Expose
+    private Integer action_icon_gap_dp;
+
     @SerializedName("like_circle_size_dp")
     @Expose
     private Integer like_circle_size_dp;
@@ -788,6 +793,14 @@ public class EncreptionRequest {
 
     public Integer getAction_icon_size_dp() {
         return action_icon_size_dp;
+    }
+
+    public Integer getAction_icon_gap_dp() {
+        return action_icon_gap_dp;
+    }
+
+    public void setAction_icon_gap_dp(Integer action_icon_gap_dp) {
+        this.action_icon_gap_dp = action_icon_gap_dp;
     }
 
     public void setAction_icon_size_dp(Integer action_icon_size_dp) {

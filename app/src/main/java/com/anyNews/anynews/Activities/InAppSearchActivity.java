@@ -1394,7 +1394,7 @@ public class InAppSearchActivity extends AppCompatActivity {
             }
             RowVH vh = (RowVH) holder;
             vh.title.setTextColor(
-                    ContextCompat.getColor(this, R.color.title_color));
+                    ContextCompat.getColor(InAppSearchActivity.this, R.color.title_color));
             if (vh.date != null) {
                 vh.date.setVisibility(View.GONE);
                 vh.date.setText("");
@@ -1408,7 +1408,7 @@ public class InAppSearchActivity extends AppCompatActivity {
                     && !TextUtils.isEmpty(focusedTopic)
                     && focusedTopic.equals(row.title)) {
                 vh.title.setTextColor(
-                        ContextCompat.getColor(this, R.color.search_chrome_accent));
+                        ContextCompat.getColor(InAppSearchActivity.this, R.color.search_chrome_accent));
             }
             if (row.type == Row.TYPE_ARTICLE) {
                 String when = formatArticleDate(row.publishedTime);

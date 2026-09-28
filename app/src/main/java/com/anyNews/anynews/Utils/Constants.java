@@ -251,6 +251,8 @@ public class Constants {
     public static String CUSTOM_FONT_URLS = "custom_font_urls";
     public static String ACTION_ICON_ROW_OFFSET = "action_icon_row_offset";
     public static String ACTION_ICON_SIZE_DP = "action_icon_size_dp";
+    /** Horizontal gap (dp) between article action icons. Missing pref uses 2. */
+    public static String ACTION_ICON_GAP_DP = "action_icon_gap_dp";
     public static String LIKE_CIRCLE_SIZE_DP = "like_circle_size_dp";
     /** In-app Search: show between share and ⋮ on half engagement row. */
     public static String SEARCH_ICON_ON_ENGAGEMENT = "search_icon_on_engagement";

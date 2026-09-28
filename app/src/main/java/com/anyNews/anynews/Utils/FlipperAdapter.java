@@ -4606,6 +4606,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private static final int DEFAULT_ACTION_ICON_SIZE_DP = 21;
     private static final int ACTION_ICON_SIZE_MIN_DP = 10;
     private static final int ACTION_ICON_SIZE_MAX_DP = 40;
+    /** Tighter than the previous 8dp slot margin that spread the row to the share link. */
+    public static final int DEFAULT_ACTION_ICON_GAP_DP = 2;
+    private static final int ACTION_ICON_GAP_MIN_DP = 0;
+    private static final int ACTION_ICON_GAP_MAX_DP = 32;
+    /** Trailing inset on the last icon so the cluster does not touch the card edge. */
+    private static final int ACTION_ICON_END_INSET_DP = 4;
+    /** Extra space past the share-link overlay before the first icon. */
+    private static final int SHARE_LINK_CLEARANCE_DP = 8;
     private static final int DEFAULT_LIKE_CIRCLE_SIZE_DP = 35;
     private static final int LIKE_CIRCLE_SIZE_MIN_DP = 20;
     private static final int LIKE_CIRCLE_SIZE_MAX_DP = 52;
@@ -4669,6 +4677,111 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         // Engagement search uses the same circle/glyph sizes as like/share/report
         // (Configuration ACTION_ICON / LIKE_CIRCLE) — do not boost larger.
         ensureHalfTtsPulseVisible(convertView, slotPx);
+        applyActionIconHorizontalGap(context, convertView, density);
+    }
+
+    public static int clampActionIconGapDp(int gapDp) {
+        return Math.max(ACTION_ICON_GAP_MIN_DP, Math.min(ACTION_ICON_GAP_MAX_DP, gapDp));
+    }
+
+    private static int readActionIconGapDp(Context context) {
+        int gapDp = DEFAULT_ACTION_ICON_GAP_DP;
+        try {
+            android.content.SharedPreferences sp =
+                    context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (sp.contains(Constants.ACTION_ICON_GAP_DP)) {
+                gapDp = sp.getInt(Constants.ACTION_ICON_GAP_DP, DEFAULT_ACTION_ICON_GAP_DP);
+            }
+        } catch (Exception ignored) {
+        }
+        return clampActionIconGapDp(gapDp);
+    }
+
+    /**
+     * Packs like / comment / share / speaker / search / more to the end of the
+     * row with the admin horizontal gap. The row already has a weighted spacer,
+     * so a smaller gap pulls the first icon off the share-link overlay instead
+     * of stretching the icons edge to edge. A post-layout pass shrinks the gap
+     * further (down to 0) if the cluster would still cover that link.
+     */
+    private static void applyActionIconHorizontalGap(Context context, View convertView, float density) {
+        if (context == null || convertView == null) {
+            return;
+        }
+        int gapPx = Math.round(readActionIconGapDp(context) * density);
+        int endInsetPx = Math.round(ACTION_ICON_END_INSET_DP * density);
+        View lastVisible = null;
+        for (int id : HALF_ACTION_SLOT_IDS) {
+            View slot = convertView.findViewById(id);
+            if (slot == null) continue;
+            ViewGroup.LayoutParams lp = slot.getLayoutParams();
+            if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            mlp.setMarginEnd(gapPx);
+            slot.setLayoutParams(mlp);
+            if (slot.getVisibility() != View.GONE) {
+                lastVisible = slot;
+            }
+        }
+        if (lastVisible != null && lastVisible.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lastVisible.getLayoutParams();
+            mlp.setMarginEnd(endInsetPx);
+            lastVisible.setLayoutParams(mlp);
+        }
+        keepActionIconsClearOfShareLink(convertView, density, gapPx);
+    }
+
+    /** Shrink inter-icon gaps so the first icon stays to the right of the share link. */
+    private static void keepActionIconsClearOfShareLink(View convertView, float density, int gapPx) {
+        if (convertView == null || gapPx <= 0) {
+            return;
+        }
+        final View link = convertView.findViewById(R.id.textViewWebUrl);
+        final View row = convertView.findViewById(R.id.with_out_strips_layout);
+        if (link == null || row == null || link.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        row.post(() -> {
+            if (!link.isAttachedToWindow() || !row.isAttachedToWindow()) return;
+            if (link.getWidth() <= 0 || row.getWidth() <= 0) return;
+            View first = null;
+            View last = null;
+            int visible = 0;
+            for (int id : HALF_ACTION_SLOT_IDS) {
+                View slot = row.findViewById(id);
+                if (slot == null) {
+                    slot = convertView.findViewById(id);
+                }
+                if (slot == null || slot.getVisibility() == View.GONE || slot.getWidth() <= 0) {
+                    continue;
+                }
+                if (first == null) first = slot;
+                last = slot;
+                visible++;
+            }
+            if (first == null || last == null || visible < 2) return;
+            int[] linkLoc = new int[2];
+            int[] firstLoc = new int[2];
+            link.getLocationOnScreen(linkLoc);
+            first.getLocationOnScreen(firstLoc);
+            int minLeft = linkLoc[0] + link.getWidth() + Math.round(SHARE_LINK_CLEARANCE_DP * density);
+            int overlap = minLeft - firstLoc[0];
+            if (overlap <= 0) return;
+            int gapCount = visible - 1;
+            int reducePer = (int) Math.ceil(overlap / (float) gapCount);
+            int newGap = Math.max(0, gapPx - reducePer);
+            if (newGap >= gapPx) return;
+            for (int id : HALF_ACTION_SLOT_IDS) {
+                View slot = convertView.findViewById(id);
+                if (slot == null || slot.getVisibility() == View.GONE || slot == last) continue;
+                ViewGroup.LayoutParams lp = slot.getLayoutParams();
+                if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
+                ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+                if (mlp.getMarginEnd() == newGap) continue;
+                mlp.setMarginEnd(newGap);
+                slot.setLayoutParams(mlp);
+            }
+        });
     }
 
     /**

@@ -15767,6 +15767,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (clearStuckSpecialModeOnNewsTab()) {
             reqPos = 0;
         }
+        // Snapshot after the News-tab latch reset so the response callback can
+        // capture it (reqPos is reassigned above, so it is not effectively final).
+        final int articlesReqPos = reqPos;
         final boolean isFirstPage = skip == 0 && actual_skip == 0 && last_post_id == 0
                 && reqPos != 3;
         final boolean special = isSpecialFeedMode();
@@ -16093,7 +16096,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
                 // isFirstPage → replace (reload/special/open + network over disk paint).
                 // Held next page (reqPos=-1 apply of dummy held at 3) uses Response overload: append.
-                convertListOfArticles(response, reqPos, isFirstPage);
+                convertListOfArticles(response, articlesReqPos, isFirstPage);
             }
 
             @Override
@@ -16753,7 +16756,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     // currently visible card so the resize is live (no activity restart).
                     applyActionIconSizeConfig(
                             encreptionRequest.getAction_icon_size_dp(),
-                            encreptionRequest.getLike_circle_size_dp()
+                            encreptionRequest.getLike_circle_size_dp(),
+                            encreptionRequest.getAction_icon_gap_dp()
                     );
                     applySearchIconConfig(
                             encreptionRequest.getSearch_icon_on_engagement(),
@@ -18357,7 +18361,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * bind time) and, when a value actually changes, re-applies to the currently
      * visible card immediately so the resize is live without an activity restart.
      */
-    private void applyActionIconSizeConfig(Integer actionIconSizeDp, Integer likeCircleSizeDp) {
+    private void applyActionIconSizeConfig(Integer actionIconSizeDp, Integer likeCircleSizeDp, Integer actionIconGapDp) {
         try {
             boolean changed = false;
             if (actionIconSizeDp != null) {
@@ -18371,6 +18375,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 int prev = SharedPrefsData.getInt(HomePage.this, Constants.LIKE_CIRCLE_SIZE_DP, Constants.PREF_NAME);
                 if (prev != likeCircleSizeDp) {
                     SharedPrefsData.putInt(HomePage.this, Constants.LIKE_CIRCLE_SIZE_DP, likeCircleSizeDp, Constants.PREF_NAME);
+                    changed = true;
+                }
+            }
+            if (actionIconGapDp != null) {
+                int gap = FlipperAdapter.clampActionIconGapDp(actionIconGapDp);
+                android.content.SharedPreferences sp =
+                        getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE);
+                int prev = sp.getInt(Constants.ACTION_ICON_GAP_DP, FlipperAdapter.DEFAULT_ACTION_ICON_GAP_DP);
+                if (!sp.contains(Constants.ACTION_ICON_GAP_DP) || prev != gap) {
+                    SharedPrefsData.putInt(HomePage.this, Constants.ACTION_ICON_GAP_DP, gap, Constants.PREF_NAME);
                     changed = true;
                 }
             }

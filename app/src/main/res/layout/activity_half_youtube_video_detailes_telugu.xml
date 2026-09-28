@@ -174,7 +174,7 @@
                                 android:id="@+id/half_image_like_icon"
                                 android:layout_width="42dp"
                                 android:layout_height="42dp"
-                                android:layout_marginEnd="8dp"
+                                android:layout_marginEnd="2dp"
                                 android:clipChildren="false"
                                 android:clipToPadding="false"
                                 android:gravity="center">
@@ -223,7 +223,7 @@
                                 android:id="@+id/half_comment"
                                 android:layout_width="42dp"
                                 android:layout_height="42dp"
-                                android:layout_marginEnd="8dp"
+                                android:layout_marginEnd="2dp"
                                 android:clipChildren="false"
                                 android:clipToPadding="false"
                                 android:gravity="center">
@@ -272,7 +272,7 @@
                                 android:id="@+id/half_share__"
                                 android:layout_width="42dp"
                                 android:layout_height="42dp"
-                                android:layout_marginEnd="8dp"
+                                android:layout_marginEnd="2dp"
                                 android:clipChildren="false"
                                 android:clipToPadding="false"
                                 android:gravity="center">
@@ -322,7 +322,7 @@
                                 android:id="@+id/half_search"
                                 android:layout_width="42dp"
                                 android:layout_height="42dp"
-                                android:layout_marginEnd="8dp"
+                                android:layout_marginEnd="2dp"
                                 android:clipChildren="false"
                                 android:clipToPadding="false"
                                 android:gravity="center"

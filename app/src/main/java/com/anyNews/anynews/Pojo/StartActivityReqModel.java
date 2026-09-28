@@ -117,6 +117,15 @@ public class StartActivityReqModel implements Serializable {
             return actionIconSizeDp != null ? actionIconSizeDp : 21;
         }
 
+        /** Null when splash omits the field (old server). 0 is a valid tight gap. */
+        @SerializedName("action_icon_gap_dp")
+        @Expose
+        private Integer actionIconGapDp;
+
+        public Integer getActionIconGapDp() {
+            return actionIconGapDp;
+        }
+
         public void setActionIconSizeDp(Integer actionIconSizeDp) {
             this.actionIconSizeDp = actionIconSizeDp;
         }
