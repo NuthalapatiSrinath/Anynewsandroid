@@ -35,6 +35,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
+import android.graphics.drawable.ColorDrawable;
 import android.media.AudioManager;
 import android.media.RingtoneManager;
 import android.net.ConnectivityManager;
@@ -8441,8 +8442,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             home_page_navigation.bringChildToFront(layoutMagazineShareFooter);
         }
         startMagazineShareBlink();
-        // Keep Share over the same grid slot as the + (rebalance when Categories toggled).
-        repositionCenterFabForVisibleTabs();
+        // Middle column (not the Special tab). Footer reflows to News | Special | Share | …
+        ensureMagazineShareFooterSlot();
         Log.i(MAGAZINE_GLOW_TAG, "applyMagazineCenterShare OK mode=FOOTER_SHARE"
                 + " vis=" + layoutMagazineShareFooter.getVisibility());
     }
@@ -8479,6 +8480,93 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             layoutMagazineShareFooter.setOnClickListener(null);
             layoutMagazineShareFooter.setClickable(false);
             layoutMagazineShareFooter.setVisibility(View.GONE);
+            ViewGroup.LayoutParams lp = layoutMagazineShareFooter.getLayoutParams();
+            if (lp != null && lp.width != ViewGroup.LayoutParams.WRAP_CONTENT) {
+                lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+                layoutMagazineShareFooter.setLayoutParams(lp);
+            }
+            layoutMagazineShareFooter.setTranslationX(0f);
+        }
+        // Drop the empty middle column so the bar returns to News | Special | Daily | Profile.
+        ensureMagazineShareFooterSlot();
+    }
+
+    private boolean isMagazineShareFooterShowing() {
+        return layoutMagazineShareFooter != null
+                && layoutMagazineShareFooter.getVisibility() == View.VISIBLE;
+    }
+
+    /** Panchangam footer tab is product-off; the same menu id is the share column. */
+    private boolean isFooterCalendarTabWanted() {
+        try {
+            return isDeviceOnline() && ProfileHubConfigHelper.isFooterShowCalendar(this);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Empty middle menu column for blinking Share. Special keeps its own glyph.
+     * Caller must already know the calendar tab is not wanted.
+     */
+    private void prepareMagazineShareCenterSlot(@Nullable MenuItem slot) {
+        if (slot == null) {
+            return;
+        }
+        slot.setIcon(new ColorDrawable(Color.TRANSPARENT));
+        slot.setTitle("");
+        slot.setVisible(true);
+        slot.setEnabled(true);
+    }
+
+    /**
+     * Show or hide the middle footer column to match magazine / special-gallery Share.
+     * Does not attach the blink to the Special tab.
+     */
+    private void ensureMagazineShareFooterSlot() {
+        if (bottomNavigationView == null || bottomNavigationView.getMenu() == null) {
+            return;
+        }
+        boolean calendar = isFooterCalendarTabWanted();
+        boolean wantSpacer = isMagazineShareFooterShowing() && !calendar;
+        MenuItem slot = bottomNavigationView.getMenu().findItem(R.id.navigation_stricker);
+        boolean spacerOpen = slot != null && slot.isVisible() && !calendar;
+        if (wantSpacer == spacerOpen) {
+            if (wantSpacer) {
+                prepareMagazineShareCenterSlot(slot);
+                hideShareCenterSlotChrome();
+            }
+            repositionCenterFabForVisibleTabs();
+            return;
+        }
+        rebalanceFooterTabs();
+    }
+
+    /** Hide the spacer item's own icon and label; the Share overlay is the control. */
+    private void hideShareCenterSlotChrome() {
+        if (!isMagazineShareFooterShowing() || isFooterCalendarTabWanted()) {
+            return;
+        }
+        View item = findFooterMenuItemView(R.id.navigation_stricker);
+        if (item == null) {
+            return;
+        }
+        View icon = item.findViewById(
+                com.google.android.material.R.id.navigation_bar_item_icon_view);
+        if (icon != null) {
+            icon.setVisibility(View.INVISIBLE);
+        }
+        int smallId = getResources().getIdentifier(
+                "navigation_bar_item_small_label_view", "id", getPackageName());
+        int largeId = getResources().getIdentifier(
+                "navigation_bar_item_large_label_view", "id", getPackageName());
+        View small = smallId != 0 ? item.findViewById(smallId) : null;
+        View large = largeId != 0 ? item.findViewById(largeId) : null;
+        if (small != null) {
+            small.setVisibility(View.INVISIBLE);
+        }
+        if (large != null) {
+            large.setVisibility(View.INVISIBLE);
         }
     }
 
@@ -10941,6 +11029,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 applyFooterSlotVisibility();
                 forceFooterItemViewsMatchMenuVisibility();
             }
+            if (isMagazineShareFooterShowing()) {
+                MenuItem slot = bottomNavigationView != null && bottomNavigationView.getMenu() != null
+                        ? bottomNavigationView.getMenu().findItem(R.id.navigation_stricker)
+                        : null;
+                if (slot != null && !isFooterCalendarTabWanted()) {
+                    prepareMagazineShareCenterSlot(slot);
+                    hideShareCenterSlotChrome();
+                }
+            }
         } catch (Exception e) {
             showLog("applyFooterTabLabelsFromTranslator: " + e.getMessage());
         }
@@ -10975,7 +11072,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_home), showReload);
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_catagiries), showSpecial);
-            setFooterMenuItemVisible(menu.findItem(R.id.navigation_stricker), showCalendar);
+            // Middle column: real Panchangam tab, or an empty slot under blinking Share.
+            // Never paint Share on the Special item.
+            MenuItem centerSlot = menu.findItem(R.id.navigation_stricker);
+            boolean shareSlot = isMagazineShareFooterShowing() && !showCalendar;
+            if (shareSlot) {
+                prepareMagazineShareCenterSlot(centerSlot);
+            } else {
+                setFooterMenuItemVisible(centerSlot, showCalendar);
+            }
             // Create-post FAB overlays stay permanently off (Profile desk owns posting).
             hideCenterPlusOverlays();
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_status), showVideos);
@@ -11280,6 +11385,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } else {
                 hideCenterPlusOverlays();
             }
+            hideShareCenterSlotChrome();
             bottomNavigationView.post(this::repositionCenterFabForVisibleTabs);
             bottomNavigationView.postDelayed(this::repositionCenterFabForVisibleTabs, 80);
             // Offline: never re-setup Special bulb / force-show Special menu.
@@ -11288,6 +11394,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (isFooterSpecialTabAllowed()) {
                 bottomNavigationView.post(this::setupSpecialTabBulb);
                 bottomNavigationView.postDelayed(this::ensureSpecialMenuIconAlwaysVisible, 120);
+                bottomNavigationView.postDelayed(this::hideShareCenterSlotChrome, 160);
             } else {
                 bottomNavigationView.post(this::forceFooterItemViewsMatchMenuVisibility);
                 bottomNavigationView.postDelayed(this::forceFooterItemViewsMatchMenuVisibility, 120);
@@ -11308,9 +11415,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Centers magazine Share / WA overlays over the Special (center) footer slot —
-     * not the absolute bar center. When Special is hidden, equal weights leave that
-     * slot off geometric center; translationX aligns overlays with the visible-tab grid.
+     * Magazine / special-gallery Share sits in the empty middle column
+     * ({@code navigation_stricker}), never on the Special tab. The hidden + overlay
+     * still tracks the Special slot when that column is closed.
      */
     private void repositionCenterFabForVisibleTabs() {
         if (bottomNavigationView == null) {
@@ -11318,18 +11425,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             View fabSlot = findFabSlotItemView();
-            if (fabSlot == null || fabSlot.getWidth() <= 0 || bottomNavigationView.getWidth() <= 0) {
-                // Layout not ready — retry once.
+            applyCenterOverlayTranslation(fabSlot);
+            boolean shareSlotPending = false;
+            if (isMagazineShareFooterShowing()) {
+                View shareSlot = findFooterMenuItemView(R.id.navigation_stricker);
+                shareSlotPending = shareSlot == null
+                        || shareSlot.getVisibility() != View.VISIBLE
+                        || shareSlot.getWidth() <= 0;
+            }
+            if (fabSlot == null || fabSlot.getWidth() <= 0 || bottomNavigationView.getWidth() <= 0
+                    || shareSlotPending) {
                 bottomNavigationView.postDelayed(() -> {
                     try {
-                        View slot = findFabSlotItemView();
-                        applyCenterOverlayTranslation(slot);
+                        applyCenterOverlayTranslation(findFabSlotItemView());
                     } catch (Exception ignored) {
                     }
                 }, 60);
-                return;
             }
-            applyCenterOverlayTranslation(fabSlot);
         } catch (Exception e) {
             showLog("repositionCenterFabForVisibleTabs: " + e.getMessage());
         }
@@ -11339,30 +11451,60 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (bottomNavigationView == null) {
             return;
         }
-        float dx = 0f;
-        if (fabSlot != null && fabSlot.getWidth() > 0 && bottomNavigationView.getWidth() > 0) {
-            int[] navLoc = new int[2];
-            int[] slotLoc = new int[2];
-            bottomNavigationView.getLocationOnScreen(navLoc);
-            fabSlot.getLocationOnScreen(slotLoc);
-            float slotCenterX = slotLoc[0] + fabSlot.getWidth() / 2f;
-            float navCenterX = navLoc[0] + bottomNavigationView.getWidth() / 2f;
-            dx = slotCenterX - navCenterX;
-        }
+        float dx = overlayDxForSlot(fabSlot);
         if (floatingActionButtonHome != null) {
             floatingActionButtonHome.setTranslationX(dx);
-        }
-        if (layoutMagazineShareFooter != null) {
-            layoutMagazineShareFooter.setTranslationX(dx);
         }
         if (imageVIewShareWhatsapp != null) {
             imageVIewShareWhatsapp.setTranslationX(dx);
         }
+        if (layoutMagazineShareFooter == null) {
+            return;
+        }
+        if (!isMagazineShareFooterShowing()) {
+            layoutMagazineShareFooter.setTranslationX(0f);
+            return;
+        }
+        // Share column only. A missing slot stays at bar center — never the Special icon.
+        View shareSlot = findFooterMenuItemView(R.id.navigation_stricker);
+        float shareDx = 0f;
+        if (shareSlot != null && shareSlot.getVisibility() == View.VISIBLE && shareSlot.getWidth() > 0) {
+            shareDx = overlayDxForSlot(shareSlot);
+            ViewGroup.LayoutParams lp = layoutMagazineShareFooter.getLayoutParams();
+            if (lp != null && lp.width != shareSlot.getWidth()) {
+                lp.width = shareSlot.getWidth();
+                layoutMagazineShareFooter.setLayoutParams(lp);
+            }
+        }
+        layoutMagazineShareFooter.setTranslationX(shareDx);
+        hideShareCenterSlotChrome();
     }
 
-    /** Center Special menu item in the bottom nav (News|DU|Special|Profile). */
+    private float overlayDxForSlot(@Nullable View slot) {
+        if (slot == null || bottomNavigationView == null
+                || slot.getWidth() <= 0 || bottomNavigationView.getWidth() <= 0) {
+            return 0f;
+        }
+        int[] navLoc = new int[2];
+        int[] slotLoc = new int[2];
+        bottomNavigationView.getLocationOnScreen(navLoc);
+        slot.getLocationOnScreen(slotLoc);
+        float slotCenterX = slotLoc[0] + slot.getWidth() / 2f;
+        float navCenterX = navLoc[0] + bottomNavigationView.getWidth() / 2f;
+        return slotCenterX - navCenterX;
+    }
+
+    /**
+     * Plus overlay anchor (Special item). Magazine Share does not use this —
+     * it uses the empty middle column.
+     */
     @Nullable
     private View findFabSlotItemView() {
+        return findFooterMenuItemView(R.id.navigation_catagiries);
+    }
+
+    @Nullable
+    private View findFooterMenuItemView(int itemId) {
         if (bottomNavigationView == null) {
             return null;
         }
@@ -11378,7 +11520,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             BottomNavigationItemView itemView = (BottomNavigationItemView) child;
             if (itemView.getItemData() != null
-                    && itemView.getItemData().getItemId() == R.id.navigation_catagiries) {
+                    && itemView.getItemData().getItemId() == itemId) {
                 return itemView;
             }
         }

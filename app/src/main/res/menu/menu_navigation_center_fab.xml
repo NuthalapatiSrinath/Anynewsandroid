@@ -5,9 +5,12 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context=".Activities.HomePage">
 
-    <!-- Order L→R: News | Special | Daily Updates | Profile.
-         Panchangam menu item kept (id navigation_stricker) but product-hidden via
-         ProfileHubConfigHelper.isFooterShowCalendar — open from Daily Updates only. -->
+    <!-- Order L→R when the center share slot is hidden:
+         News | Special | Daily Updates | Profile.
+         navigation_stricker sits between Special and Daily Updates so magazine /
+         special galleries can open an empty middle column (blinking Share) without
+         covering the Special tab. Panchangam stays product-hidden
+         (ProfileHubConfigHelper.isFooterShowCalendar) — open from Daily Updates. -->
     <item
         android:checked="true"
         android:id="@+id/navigation_home"
@@ -20,18 +23,19 @@
         android:icon="@drawable/ic_footer_special"
         android:title="@string/Events" />
 
-    <!-- Slot 3: Daily Updates. Id stays navigation_status for menu / admin-flag stability. -->
-    <item
-        android:id="@+id/navigation_status"
-        android:icon="@drawable/ic_footer_daily_updates"
-        android:title="@string/daily_updates" />
-
-    <!-- Hidden product slot: Panchangam (Telugu calendar). Id stays navigation_stricker. -->
+    <!-- Middle column: hidden until a magazine / special gallery needs footer Share.
+         Id stays navigation_stricker. Not the Special tab. -->
     <item
         android:id="@+id/navigation_stricker"
         android:icon="@drawable/ic_footer_panchangam"
         android:title="@string/calendar_seg_panchangam"
         android:visible="false" />
+
+    <!-- Daily Updates. Id stays navigation_status for menu / admin-flag stability. -->
+    <item
+        android:id="@+id/navigation_status"
+        android:icon="@drawable/ic_footer_daily_updates"
+        android:title="@string/daily_updates" />
 
     <item
         android:id="@+id/navigation_profile"
