@@ -710,9 +710,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private static final long NETWORK_RESTORE_DEBOUNCE_MS = 2000L;
     /** Brief settle so flapping callbacks coalesce before feed hit. */
     private static final long NETWORK_RESTORE_SETTLE_MS = 350L;
+    /**
+     * Hold the offline announcement across a Wi-Fi/cell handoff. A shorter blip
+     * never posts the system toast (those draw on top of other apps).
+     */
+    private static final long OFFLINE_SAVED_NEWS_CONFIRM_MS = 1200L;
     private long lastNetworkRestoreFlushMs = 0L;
     private final Handler networkRestoreHandler = new Handler(Looper.getMainLooper());
     private Runnable pendingNetworkRestoreRunnable;
+    /**
+     * One "showing saved news" announcement per real offline session.
+     * Cleared only after {@link #onNetworkRestoredFromOffline} commits, so
+     * resume, polls, and reconnect flicker do not toast again.
+     */
+    private boolean offlineSavedNewsAnnounced = false;
+    private boolean offlineSavedNewsToastPending = false;
+    @Nullable private Toast offlineSavedNewsToast;
+    private final Runnable offlineSavedNewsToastRunnable =
+            this::showOfflineSavedNewsToastIfStillOffline;
     private boolean isApiRequested = false;
     /**
      * Bumped on every page-0 feed mode reset (News / Special / Video / Reload).
@@ -13259,6 +13274,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * (hidden on Special/Video), exit offline bookmarks panel, restore admin footer.
      */
     private void applyOnlineChromeUi() {
+        // Path is back. Drop a not-yet-shown offline toast. Keep the
+        // already-announced latch until the debounced restore so a flap
+        // cannot post the banner again.
+        cancelPendingOfflineSavedNewsToast();
         try {
             if (yes_internet != null) {
                 yes_internet.setVisibility(View.VISIBLE);
@@ -13518,6 +13537,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             Logone.v(LOG_TAG, "onNetworkRestoredFromOffline skip offline reason=" + reason);
             return;
         }
+        // Stable online again — the next real offline may announce once.
+        resetOfflineSavedNewsAnnouncement();
         lastNetworkRestoreFlushMs = now;
         pendingOfflineToOnlineRestore = false;
         isConnected = true;
@@ -14258,15 +14279,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         if (showToast) {
-            // Never claim offline when the device still has a network path —
-            // false ServerAvailability / cancel storms used to toast over Search.
-            try {
-                if (!isNetworkConnected()) {
-                    Toast.makeText(this, R.string.offline_showing_saved_news, Toast.LENGTH_SHORT)
-                            .show();
-                }
-            } catch (Exception ignored) {
-            }
+            // Saved-news copy is a system Toast (app icon + text on Android 12+).
+            // It draws over WhatsApp, the browser, and the home screen if posted
+            // while this activity is stopped. Announce only from the foreground,
+            // only when the device has no network path, and only once per offline
+            // session. Server errors, timeouts, and captive-portal flaps while a
+            // network path exists must not post it.
+            maybeAnnounceOfflineSavedNews();
         }
         try {
             refreshHomeModeToggleUi();
@@ -14274,6 +14293,70 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             rebalanceFooterTabs();
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Schedule the saved-news toast only while Home is in the foreground and the
+     * device has no network path. The post is delayed so a handoff blip never
+     * shows it, and a second call in the same offline session is ignored.
+     */
+    private void maybeAnnounceOfflineSavedNews() {
+        if (offlineSavedNewsAnnounced || offlineSavedNewsToastPending) return;
+        if (!canShowOfflineSavedNewsToast()) return;
+        if (isNetworkConnected()) return;
+        offlineSavedNewsToastPending = true;
+        networkRestoreHandler.postDelayed(
+                offlineSavedNewsToastRunnable, OFFLINE_SAVED_NEWS_CONFIRM_MS);
+    }
+
+    private void showOfflineSavedNewsToastIfStillOffline() {
+        offlineSavedNewsToastPending = false;
+        if (offlineSavedNewsAnnounced) return;
+        if (!canShowOfflineSavedNewsToast()) return;
+        // Came back during the confirm window, or the link never really dropped.
+        if (isNetworkConnected()) return;
+        offlineSavedNewsAnnounced = true;
+        try {
+            if (offlineSavedNewsToast != null) {
+                offlineSavedNewsToast.cancel();
+                offlineSavedNewsToast = null;
+            }
+            offlineSavedNewsToast = Toast.makeText(
+                    this, R.string.offline_showing_saved_news, Toast.LENGTH_SHORT);
+            offlineSavedNewsToast.show();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Home is the resumed screen. A system toast posted otherwise floats on other apps. */
+    private boolean canShowOfflineSavedNewsToast() {
+        return homeActivityResumed && !isFinishing() && !isDestroyed();
+    }
+
+    private void cancelPendingOfflineSavedNewsToast() {
+        offlineSavedNewsToastPending = false;
+        try {
+            networkRestoreHandler.removeCallbacks(offlineSavedNewsToastRunnable);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Remove a visible or queued saved-news toast. Does not arm the next announcement. */
+    private void dismissOfflineSavedNewsToast() {
+        cancelPendingOfflineSavedNewsToast();
+        if (offlineSavedNewsToast != null) {
+            try {
+                offlineSavedNewsToast.cancel();
+            } catch (Exception ignored) {
+            }
+            offlineSavedNewsToast = null;
+        }
+    }
+
+    /** After a debounced return online, the next real offline may announce once. */
+    private void resetOfflineSavedNewsAnnouncement() {
+        offlineSavedNewsAnnounced = false;
+        dismissOfflineSavedNewsToast();
     }
 
     /**
@@ -20073,6 +20156,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
             if (receiver != null) unregisterReceiver(receiver);
             unregisterOfflineConnectivityCallbacks();
+            dismissOfflineSavedNewsToast();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -20862,6 +20946,8 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     @Override
     public void onPause() {
         homeActivityResumed = false;
+        // System toasts outlive the activity and sit on top of the next app.
+        dismissOfflineSavedNewsToast();
         stopGreetingSlotPoll();
         stopReadBadgePoll();
         try {
