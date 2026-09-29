@@ -7044,9 +7044,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("onOverFlip::positionx:"+ positionx);
         showLog("onOverFlip::positionx:"+((list.size()-1)==positionx));
 
+        // Fast fling: positionx can lag the finger, and the 1.5s cooldown used to
+        // leave an already-fetched Redis page in dummyResponse so the pager
+        // could not move. Append that page as soon as the visible seat is the
+        // last loaded card.
+        int visualEnd = (list != null && !list.isEmpty()) ? list.size() - 1 : -1;
+        int visualSeat = visibleFeedIndex();
+        boolean atLoadedEnd = visualEnd >= 0
+                && v.getPageCount() == list.size()
+                && (positionx == visualEnd || visualSeat == visualEnd);
+        if (atLoadedEnd && overFlipDistance > 0
+                && dummyResponse != null && !isDataParsed) {
+            showLog("onOverFlip apply held page seat=" + visualSeat
+                    + " positionx=" + positionx + " size=" + list.size());
+            convertListOfArticles(dummyResponse, -1);
+        }
 
-
-        if(v.getPageCount()==list.size() && (list.size()-1)==positionx && loadingOnOverFlip && overFlipDistance>0){
+        if(atLoadedEnd && loadingOnOverFlip && overFlipDistance>0){
             loadingOnOverFlip = false;
             // Keyword search: last page is Continue-reading hub — never invent a
             // second "no more news" sentinel on overflip.
@@ -17527,7 +17541,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             isDataParsed=false;
             dummyResponse=response;
             showLog("requestPosition::"+requestPostition);
-            requestPostition=1+requestSize;
+            // Keep the next-page trigger on a card the pager can actually land on.
+            // 1+requestSize is past the last index, so a fast fling never matched
+            // it and the held Redis page was never appended.
+            int heldN = list != null ? list.size() : 0;
+            if (heldN > 1) {
+                requestPostition = Math.max(1, Math.min(heldN - 1, Math.max(1, heldN - 3)));
+            }
             showLog("requestPosition::"+requestPostition);
             // Also grow offline pack from held next page (no wait for end-of-list apply).
             try {
@@ -17558,22 +17578,49 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
+     * Seat the finger is on. A fast fling can leave {@link #positionx} behind,
+     * or dispatch a spurious page 0, while FlipView is already on a later card.
+     */
+    private int visibleFeedIndex() {
+        int pos = Math.max(0, positionx);
+        try {
+            if (mFlipView == null || list == null || list.isEmpty()) {
+                return pos;
+            }
+            int cur = mFlipView.getCurrentPage();
+            if (cur < 0 || cur >= list.size()) {
+                return pos;
+            }
+            if (cur == 0 && pos > 1 && mFlipView.isUserDrivingFlip()) {
+                return pos;
+            }
+            return Math.max(pos, cur);
+        } catch (Exception ignored) {
+            return pos;
+        }
+    }
+
+    /**
      * Held next-page ({@code reqPos=3}) must merge when the user cannot reach a later
-     * {@code size-2} settle (1–2 card decks) or is already on/near the last cards.
+     * {@code size-2} settle (1–2 card decks), is already on/near the last cards,
+     * or is flinging through the tail so the pager has to grow before the finger
+     * hits the end.
      */
     private boolean shouldApplyHeldFeedPageImmediately() {
         if (dummyResponse == null) return false;
         if (list == null || list.isEmpty()) return true;
         int n = list.size();
         if (n <= 2) return true;
-        int pos = positionx;
+        int pos = visibleFeedIndex();
+        if (pos >= Math.max(0, n - 2)) return true;
         try {
-            if (mFlipView != null) {
-                pos = mFlipView.getCurrentPage();
+            if (mFlipView != null && mFlipView.isUserDrivingFlip()
+                    && pos >= Math.max(0, n - 6)) {
+                return true;
             }
         } catch (Exception ignored) {
         }
-        return pos >= Math.max(0, n - 2);
+        return false;
     }
 
     public void convertListOfArticles(EncreptionRequest encreptionRequest, int reqPos, boolean fromCache){
@@ -18246,12 +18293,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             // that appended unlimited hits after finalizeSearchFeedSeating.
                             int n = list.size();
                             requestPostition = Math.max(1, Math.min(n - 1, Math.max(1, n - 3)));
-                            // Prefetch thrift: only eager-hold next page for small decks
-                            // (≤8). Larger decks wait for near-end flip to avoid an
-                            // unused page-N+1 POST on every page-0 land.
+                            // Idle open stays one page ahead only for a tiny deck, so a
+                            // normal land does not POST page 2 while the user is on card 0.
+                            // A fast fling or a seat already near the end must chain the
+                            // next Redis page immediately — waiting for a later settle
+                            // left the pager short and the list would not move.
                             final boolean maybeMore = validateUserOtp.getData().size() >= 4;
+                            final int seatNow = visibleFeedIndex();
+                            final boolean userNearEnd = seatNow >= Math.max(0, n - 4);
+                            final boolean flingNearEnd = isNewsUserDrivingFlip()
+                                    && seatNow >= Math.max(0, n - 12);
                             if (maybeMore
-                                    && n <= 8
+                                    && (n <= 8 || userNearEnd || flingNearEnd)
                                     && !isApiRequested
                                     && dummyResponse == null
                                     && isDeviceOnline()) {
@@ -19721,10 +19774,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         // Apply held next page whenever we are on/near the last cards (or tiny list).
         // Exact == size-2 used to miss when the user jumped past that seat.
+        // visibleFeedIndex covers a fast fling whose positionx is still behind.
+        final int pagingSeat = visibleFeedIndex();
         if (dummyResponse != null
                 && list != null
                 && !list.isEmpty()
                 && (list.size() <= 2
+                        || pagingSeat >= Math.max(0, list.size() - 2)
                         || positionx >= Math.max(0, list.size() - 2))) {
             showLog("request at position:: convertListOfArticles held");
             convertListOfArticles(dummyResponse, -1);
@@ -19739,11 +19795,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
                         || activeSearchPostId > 0L
                         || activeSearchSingleOnly);
+        final int seatAfterHold = visibleFeedIndex();
         if (searchBlocksPaging) {
             showLog("ANYNEWS_SEARCH near-end paging suppressed");
             isApiRequested = false;
             dummyResponse = null;
-        } else if (positionx == requestPostition
+        } else if ((positionx == requestPostition || seatAfterHold == requestPostition)
                 && dummyResponse == null
                 && !isApiRequested
                 && feedNotExhausted) {
@@ -19758,7 +19815,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && !isApiRequested
                 && dummyResponse == null
                 && isDeviceOnline()
-                && positionx >= Math.max(0, list.size() - 2)
+                && (seatAfterHold >= Math.max(0, list.size() - 2)
+                        || positionx >= Math.max(0, list.size() - 2))
                 && feedNotExhausted) {
             // News / Special / Video: near end of loaded list — prefetch next page.
             // Keyword multi may still page via positionx==requestPostition above.
