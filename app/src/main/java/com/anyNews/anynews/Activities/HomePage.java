@@ -378,6 +378,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private TextView tvMagazineShareFooter;
     /** Guards footer rebalance so center + / WhatsApp updates cannot recurse. */
     private int footerRebalanceDepth;
+    /**
+     * Online Reload empties the list before page 0 returns. While this is set,
+     * do not hide the middle footer column — {@code MenuItem.setVisible} rebuilds
+     * the Material bar (LIFO item pool) and the Reload view is rebound as Profile.
+     */
+    private boolean footerCenterSlotFrozenForReload = false;
+    /**
+     * Footer item under the finger at ACTION_DOWN. 0 when the gesture did not
+     * start on a tab. A Profile click whose down-hit was Reload is a recycled
+     * touch target, not a real Profile tap.
+     */
+    private int footerGestureDownItemId = 0;
+    /** Middle column already has the empty Share/WhatsApp spacer icon and title. */
+    private boolean centerFooterSpacerPrepared = false;
     // Admin-controlled bottom-footer cricket tab (APK 3.40.79+). Shown only when
     // the admin enables it AND there is an active match; hidden otherwise so the
     // footer is exactly as before. Opens the same Match Center as the mini player.
@@ -8554,6 +8568,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * The reporter "+" is not a footer control on this build.
      */
     private void updateCenterFab() {
+        if (footerCenterSlotFrozenForReload) {
+            // Empty list during Reload is not "hide WhatsApp". Leaving the slot
+            // up avoids a menu rebuild under a still-down finger (opens Profile).
+            boolean keepFrozen = isDeviceOnline() && (list == null || list.isEmpty());
+            if (keepFrozen) {
+                return;
+            }
+            footerCenterSlotFrozenForReload = false;
+        }
         if (visibleFlipIsInviteOrAdShell()) {
             repairVisibleShareTargetIfInviteShell();
         }
@@ -9139,10 +9162,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (slot == null) {
             return;
         }
-        slot.setIcon(new ColorDrawable(Color.TRANSPARENT));
-        slot.setTitle("");
-        slot.setVisible(true);
-        slot.setEnabled(true);
+        // setIcon / setTitle / setVisible always notify the menu. setVisible(true)
+        // when the slot was hidden rebuilds every item view. Skip when the spacer
+        // is already in place so Reload does not rebuild the bar.
+        CharSequence title = slot.getTitle();
+        boolean titleEmpty = title == null || title.length() == 0;
+        if (centerFooterSpacerPrepared && titleEmpty && slot.isVisible() && slot.isEnabled()) {
+            return;
+        }
+        if (!centerFooterSpacerPrepared) {
+            slot.setIcon(new ColorDrawable(Color.TRANSPARENT));
+        }
+        if (!titleEmpty) {
+            slot.setTitle("");
+        }
+        if (!slot.isVisible()) {
+            slot.setVisible(true);
+        }
+        if (!slot.isEnabled()) {
+            slot.setEnabled(true);
+        }
+        centerFooterSpacerPrepared = slot.isVisible() && slot.isEnabled();
     }
 
     /**
@@ -11740,9 +11780,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 hideCenterPlusOverlays();
                 shareSlot = false;
             }
+            // Reload's empty list must not hide this column. setVisible rebuilds
+            // the bar and the next Reload tap is delivered to Profile.
+            if (footerCenterSlotFrozenForReload && online
+                    && (list == null || list.isEmpty())) {
+                shareSlot = centerSlot != null && centerSlot.isVisible() && !showCalendar;
+            }
             if (shareSlot) {
                 prepareMagazineShareCenterSlot(centerSlot);
             } else {
+                centerFooterSpacerPrepared = false;
                 setFooterMenuItemVisible(centerSlot, showCalendar);
             }
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_status), showVideos);
@@ -15858,6 +15905,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             return;
         }
+        // Hold the middle column across the empty-list gap. Hiding it rebuilds
+        // the footer and a fast second tap is delivered to Profile.
+        footerCenterSlotFrozenForReload = true;
         // Online: full page-0 reset then network inlist (same as cold soft restart).
         prepareFreshPage0FeedCursors();
         try {
@@ -18609,6 +18659,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            footerGestureDownItemId = 0;
+            if (bottomNavigationView != null
+                    && isRawTouchInsideView(bottomNavigationView, ev.getRawX(), ev.getRawY())) {
+                footerGestureDownItemId = footerItemIdAt(ev.getRawX(), ev.getRawY());
+            }
+        }
         // Special / nested magazine galleries: horizontal page-turn must not land on the
         // footer as a Profile / tab click, and must not race system-back edge.
         boolean guardGallerySwipe = (isSpecialFeedMode()
@@ -18664,6 +18721,32 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             SpecialGalleryFlipHelper.clearNestedGalleryDriving();
             return true;
         }
+    }
+
+    /** Menu id of the visible footer item that contains this screen point, or 0. */
+    private int footerItemIdAt(float rawX, float rawY) {
+        try {
+            if (bottomNavigationView == null) {
+                return 0;
+            }
+            View menuChild = bottomNavigationView.getChildAt(0);
+            if (!(menuChild instanceof ViewGroup)) {
+                return 0;
+            }
+            ViewGroup menu = (ViewGroup) menuChild;
+            for (int i = 0; i < menu.getChildCount(); i++) {
+                View child = menu.getChildAt(i);
+                if (!(child instanceof BottomNavigationItemView)
+                        || child.getVisibility() != View.VISIBLE
+                        || !isRawTouchInsideView(child, rawX, rawY)) {
+                    continue;
+                }
+                MenuItem data = ((BottomNavigationItemView) child).getItemData();
+                return data != null ? data.getItemId() : 0;
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
     }
 
     private static boolean isRawTouchInsideView(@Nullable View v, float rawX, float rawY) {
@@ -21370,6 +21453,19 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     if (suppressFooterClickFromGallerySwipe
                             || SpecialGalleryFlipHelper.isNestedGalleryDriving()) {
                         showLog("navigation_profile ignored — gallery swipe");
+                        return false;
+                    }
+                    // Reload's view is the first one released into Material's item pool.
+                    // A bar rebuild rebinds that same view as Profile before ACTION_UP,
+                    // so a fast Reload tap arrives here. Honor the finger-down item.
+                    if (footerGestureDownItemId != 0
+                            && footerGestureDownItemId != R.id.navigation_profile) {
+                        showLog("navigation_profile ignored — down item="
+                                + footerGestureDownItemId);
+                        if (footerGestureDownItemId == R.id.navigation_home
+                                && ProfileHubConfigHelper.isFooterShowReload(HomePage.this)) {
+                            performFeedReload();
+                        }
                         return false;
                     }
                     // Keep the selected tab painted under Profile. Tearing down Calendar,
