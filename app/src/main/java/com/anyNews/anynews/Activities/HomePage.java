@@ -817,7 +817,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * drops this list and starts that language at card 0.
      */
     private int boundFeedLanguageId = 0;
-    /** Chooser returns inside this window stay on the card the user was reading. 
+    /** Chooser returns inside this window stay on the card the user was reading. */
     private static final long SHARE_SHEET_RETURN_IGNORE_MS = 5000L;
     private LifecycleObserver processBackgroundObserver;
     int positionx=0,requestPostition=1;
