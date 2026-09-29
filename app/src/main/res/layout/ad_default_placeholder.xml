@@ -27,13 +27,4 @@
         android:textSize="@dimen/_14sdp"
         android:textStyle="bold" />
 
-    <ImageView
-        android:id="@+id/imageViewWhatsapp"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:layout_marginBottom="@dimen/_30sdp"
-        android:contentDescription="@string/share_anynews_with_your_friends" />
-
 </RelativeLayout>

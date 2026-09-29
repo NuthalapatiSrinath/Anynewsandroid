@@ -7379,45 +7379,60 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         ImageView imageViewShare=convertView.findViewById(R.id.imageViewShare);
         ImageView imageViewWhatsapp=convertView.findViewById(R.id.imageViewWhatsapp);
-        if (imageViewShare == null || imageViewWhatsapp == null) {
+        if (imageViewShare == null && imageViewWhatsapp == null) {
             return;
         }
-        final String shareText =
-                "Hey check out my app at: https://play.google.com/store/apps/details?id="
-                        + BuildConfig.APPLICATION_ID;
-        imageViewShare.setImageResource(R.drawable.ic_app_share_socail);
-        imageViewWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
-        imageViewShare.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                try {
-                    Intent sendIntent = new Intent(Intent.ACTION_SEND);
-                    sendIntent.setType("text/plain");
-                    sendIntent.putExtra(Intent.EXTRA_TEXT, shareText);
-                    context.startActivity(Intent.createChooser(sendIntent, "Share AnyNews"));
-                } catch (Exception e) {
-                    showLog("share_app system share: " + e.getMessage());
+        final String shareText = shareAppWithFriendsText();
+        if (imageViewShare != null) {
+            imageViewShare.setImageResource(R.drawable.ic_app_share_socail);
+            imageViewShare.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    try {
+                        Intent sendIntent = new Intent(Intent.ACTION_SEND);
+                        sendIntent.setType("text/plain");
+                        sendIntent.putExtra(Intent.EXTRA_TEXT, shareText);
+                        context.startActivity(Intent.createChooser(sendIntent, "Share AnyNews"));
+                    } catch (Exception e) {
+                        showLog("share_app system share: " + e.getMessage());
+                    }
                 }
-            }
-        });
-        imageViewWhatsapp.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent sendIntent = new Intent();
-                sendIntent.setAction(Intent.ACTION_SEND);
-                sendIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                if(appInstalledOrNot("com.whatsapp")){
-                    sendIntent.setPackage("com.whatsapp");
-                    sendIntent.putExtra(Intent.EXTRA_TEXT, shareText);
-                    sendIntent.setType("text/plain");
-                    context.startActivity(sendIntent);
-                }else{
-                    Toast.makeText(context, "App is not installed", Toast.LENGTH_SHORT).show();
+            });
+        }
+        // Default ad plate no longer draws this glyph. The footer icon does that
+        // job. share_app_layout still has the control and uses the same send.
+        if (imageViewWhatsapp != null) {
+            imageViewWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
+            imageViewWhatsapp.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    shareAppWithFriendsOnWhatsApp();
                 }
+            });
+        }
+    }
 
+    /**
+     * "Share AnyNews with your friends" via WhatsApp. Same send as the old
+     * icon on the default ad screen. Does not write an article share count.
+     */
+    public void shareAppWithFriendsOnWhatsApp() {
+        Intent sendIntent = new Intent();
+        sendIntent.setAction(Intent.ACTION_SEND);
+        sendIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if(appInstalledOrNot("com.whatsapp")){
+            sendIntent.setPackage("com.whatsapp");
+            sendIntent.putExtra(Intent.EXTRA_TEXT, shareAppWithFriendsText());
+            sendIntent.setType("text/plain");
+            context.startActivity(sendIntent);
+        }else{
+            Toast.makeText(context, "App is not installed", Toast.LENGTH_SHORT).show();
+        }
+    }
 
-            }
-        });
+    private String shareAppWithFriendsText() {
+        return "Hey check out my app at: https://play.google.com/store/apps/details?id="
+                + BuildConfig.APPLICATION_ID;
     }
 
     public void showMagazineShareOptions(View convertView,int from){

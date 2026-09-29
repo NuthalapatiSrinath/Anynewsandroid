@@ -8530,20 +8530,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Middle column between Special and Daily Updates.
      * Magazines / special galleries: blinking Share.
-     * Every other article: a steady WhatsApp icon. It does not pulse.
+     * Every other card, including ads: a steady WhatsApp icon. It does not pulse
+     * and it does not hide when an ad scrolls in. Hiding that slot rebuilt the
+     * Material bar and moved the Special pulse onto the wrong tab.
      * The reporter "+" is not a footer control on this build.
      */
     private void updateCenterFab() {
         if (visibleFlipIsInviteOrAdShell()) {
-            hideFooterWhatsapp();
-            hideMagazineShareFooter();
-            hideCenterPlusOverlays();
             repairVisibleShareTargetIfInviteShell();
-            // Hiding the middle slot rebuilds the bar. The pooled Special view
-            // lands on Daily Updates and keeps the orange pulse — clear it.
-            hideSpecialBlinkForQuietCard();
-            showLog("updateCenterFab hide share footer (invite/ad shell visible)");
-            return;
         }
         boolean showShare = shouldShowMagazineFooterShare();
         int idx = getVisiblePostIndex();
@@ -8568,6 +8562,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         hideMagazineShareFooter();
         if (shouldShowFooterWhatsapp()) {
             applyFooterWhatsapp();
+            if (isVisibleFooterQuietCard()) {
+                hideSpecialBlinkForQuietCard();
+            }
             Log.i(MAGAZINE_GLOW_TAG, "MODE=WHATSAPP_FOOTER postType=[" + type + "]");
             showLog("updateCenterFab footer WhatsApp");
             return;
@@ -8612,9 +8609,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Ads, invite, and ratings cards keep the middle slot empty. They must not
-     * pulse Special or Daily Updates. The orange blink stays on center Share,
-     * and only while a magazine or special card is the visible card.
+     * Ads, invite, and ratings cards must not pulse Special or Daily Updates.
+     * The footer WhatsApp icon stays in the middle slot on these cards.
+     * The orange blink stays on center Share, and only while a magazine is visible.
      */
     private boolean isVisibleFooterQuietCard() {
         if (visibleFlipIsInviteOrAdShell()) {
@@ -8907,37 +8904,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * WhatsApp between Special and Daily Updates for every article that is not
-     * a magazine / special gallery. Same share action as the Play Store footer
-     * WhatsApp ({@link #shareCurrentPostViaWhatsAppFooter()}). No blink.
+     * Steady WhatsApp between Special and Daily Updates on every card that is
+     * not a magazine. Ads keep this icon so scrolling does not rebuild the bar.
+     * No blink and no count. Offline stays News-only. The likes-row admin
+     * toggle does not hide this icon.
      */
     private boolean shouldShowFooterWhatsapp() {
         try {
-            if (!isDeviceOnline() || visibleFlipIsInviteOrAdShell()) {
-                return false;
-            }
-            if (shouldShowMagazineFooterShare()) {
+            if (!isDeviceOnline() || shouldShowMagazineFooterShare()) {
                 return false;
             }
             int idx = getVisiblePostIndex();
-            if (list == null || idx < 0 || idx >= list.size()) {
+            if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
                 return false;
             }
-            ModelClass.Datum item = list.get(idx);
-            if (item == null || ReadArticleStore.isSyntheticFeedSlot(item)
-                    || ReadArticleStore.isShareFeedSlot(item)) {
-                return false;
-            }
-            String type = item.getPostType();
-            if (type == null) {
-                return false;
-            }
-            type = type.trim();
-            return !type.equalsIgnoreCase("ad")
-                    && !type.equalsIgnoreCase("web_ads")
-                    && !type.equalsIgnoreCase("web")
-                    && !type.equalsIgnoreCase("ratings")
-                    && !type.equalsIgnoreCase("share_app");
+            return true;
         } catch (Exception e) {
             return false;
         }
@@ -8959,9 +8940,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private boolean wantsCenterFooterActionSlot() {
         if (!isDeviceOnline() || isFooterCalendarTabWanted()) {
-            return false;
-        }
-        if (visibleFlipIsInviteOrAdShell()) {
             return false;
         }
         if (shouldShowMagazineFooterShare()) {
@@ -9002,8 +8980,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         FooterStyleHelper.applyFooterWhatsappIcon(this, imageVIewShareWhatsapp);
         imageVIewShareWhatsapp.setEnabled(true);
         imageVIewShareWhatsapp.setClickable(true);
-        imageVIewShareWhatsapp.setOnClickListener(v ->
-                onArticleWhatsappClicked(getVisiblePostIndex()));
+        imageVIewShareWhatsapp.setOnClickListener(v -> onFooterCenterWhatsappClicked());
         if (home_page_navigation != null) {
             int last = home_page_navigation.getChildCount() - 1;
             if (last < 0 || home_page_navigation.getChildAt(last) != imageVIewShareWhatsapp) {
@@ -9076,6 +9053,50 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             shareCurrentPostViaWhatsAppFooter();
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Footer WhatsApp. An ad uses the default ad screen's "share app with your
+     * friends" WhatsApp send. A news post keeps the article share, which counts
+     * only after WhatsApp returns RESULT_OK.
+     */
+    private void onFooterCenterWhatsappClicked() {
+        if (footerWhatsappSharesTheApp()) {
+            if (adapter != null) {
+                adapter.shareAppWithFriendsOnWhatsApp();
+            }
+            return;
+        }
+        onArticleWhatsappClicked(getVisiblePostIndex());
+    }
+
+    /**
+     * The drawn card is an ad or the share-the-app invite, so the footer
+     * WhatsApp must not take the article-share path.
+     */
+    private boolean footerWhatsappSharesTheApp() {
+        if (visibleFlipIsInviteOrAdShell()) {
+            return true;
+        }
+        try {
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum item = list.get(idx);
+            if (item == null) {
+                return false;
+            }
+            if (ReadArticleStore.isAdFeedSlot(item)
+                    || ReadArticleStore.isShareFeedSlot(item)
+                    || ReadArticleStore.isRatingsFeedSlot(item)) {
+                return true;
+            }
+            String type = item.getPostType();
+            return type != null && type.trim().equalsIgnoreCase("web");
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -21171,7 +21192,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                         return false;
                     }
                     if (isFooterWhatsappShowing()) {
-                        onArticleWhatsappClicked(getVisiblePostIndex());
+                        onFooterCenterWhatsappClicked();
                         return false;
                     }
                     if (!ProfileHubConfigHelper.isFooterShowCalendar(HomePage.this)
