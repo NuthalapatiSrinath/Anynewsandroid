@@ -61,26 +61,6 @@ public final class FeedPositionKeepConfig {
      */
     public static void noteLeftForeground(
             @Nullable Context context, int flipIndex, long postId) {
-        int languageId = 0;
-        if (context != null) {
-            try {
-                languageId = SharedPrefsData.getInt(
-                        context.getApplicationContext(),
-                        Constants.LanguageID,
-                        Constants.PREF_NAME);
-            } catch (Exception ignored) {
-            }
-        }
-        noteLeftForeground(context, flipIndex, postId, languageId);
-    }
-
-    /**
-     * Same as {@link #noteLeftForeground(Context, int, long)} but the language
-     * is the feed on screen, not a pref that a language tap may already have
-     * changed.
-     */
-    public static void noteLeftForeground(
-            @Nullable Context context, int flipIndex, long postId, int languageId) {
         if (context == null) {
             return;
         }
@@ -93,7 +73,6 @@ public final class FeedPositionKeepConfig {
                             String.valueOf(System.currentTimeMillis()))
                     .putInt(Constants.FEED_POSITION_INDEX, Math.max(0, flipIndex))
                     .putString(Constants.FEED_POSITION_POST_ID, String.valueOf(postId))
-                    .putInt(Constants.FEED_POSITION_LANGUAGE_ID, Math.max(0, languageId))
                     .commit();
         } catch (Exception ignored) {
         }
@@ -110,42 +89,7 @@ public final class FeedPositionKeepConfig {
         }
         long windowMs = getMinutes(context) * 60_000L;
         long elapsed = System.currentTimeMillis() - leftAt;
-        if (elapsed < 0L || elapsed >= windowMs) {
-            return false;
-        }
-        // Share-return keeps the card only for the language that was on screen.
-        // A leftover seat from language A must not open language B.
-        int savedLang = savedLanguageId(context);
-        if (savedLang > 0) {
-            int current = 0;
-            try {
-                current = SharedPrefsData.getInt(
-                        context.getApplicationContext(),
-                        Constants.LanguageID,
-                        Constants.PREF_NAME);
-            } catch (Exception ignored) {
-            }
-            if (current > 0 && current != savedLang) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public static int savedLanguageId(@Nullable Context context) {
-        if (context == null) {
-            return 0;
-        }
-        try {
-            return Math.max(
-                    0,
-                    SharedPrefsData.getInt(
-                            context.getApplicationContext(),
-                            Constants.FEED_POSITION_LANGUAGE_ID,
-                            Constants.PREF_NAME));
-        } catch (Exception ignored) {
-            return 0;
-        }
+        return elapsed >= 0L && elapsed < windowMs;
     }
 
     public static int savedIndex(@Nullable Context context) {
@@ -194,7 +138,6 @@ public final class FeedPositionKeepConfig {
                     .putString(Constants.FEED_POSITION_LEFT_AT, "0")
                     .putInt(Constants.FEED_POSITION_INDEX, 0)
                     .putString(Constants.FEED_POSITION_POST_ID, "-1")
-                    .putInt(Constants.FEED_POSITION_LANGUAGE_ID, 0)
                     .commit();
         } catch (Exception ignored) {
         }
