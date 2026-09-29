@@ -8919,26 +8919,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Daily Updates hub, Mana Zilla opened from that hub, and Flash News.
-     * The footer center glyph stays off for the whole session. The likes-row
-     * WhatsApp icon is a different control and is not affected.
-     */
-    private boolean isDailyUpdatesFooterSession() {
-        return isDailyUpdatesMode() || localFeedFromDailyUpdates || videoFeedModeActive;
-    }
-
-    /**
      * Steady WhatsApp between Special and Daily Updates on every card that is
      * not a magazine. Ads keep this icon so scrolling does not rebuild the bar.
      * No blink and no count. Offline stays News-only. The likes-row admin
-     * toggle does not hide this icon. Daily Updates sessions never show it.
+     * toggle does not hide this icon. Only the Daily Updates hub hides it.
+     * Local news and flash news opened from that hub are news and keep it.
      */
     private boolean shouldShowFooterWhatsapp() {
         try {
             if (!isDeviceOnline() || shouldShowMagazineFooterShare()) {
                 return false;
             }
-            if (isDailyUpdatesFooterSession()) {
+            if (isDailyUpdatesMode()) {
                 return false;
             }
             int idx = getVisiblePostIndex();
@@ -8963,8 +8955,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Middle column should be open for magazine Share or the footer WhatsApp.
-     * The reporter-login flag does not open a plus here. Daily Updates keeps
-     * the column reserved with the glyph hidden so the bar does not reflow.
+     * The reporter-login flag does not open a plus here. The Daily Updates hub
+     * keeps the column reserved with the glyph hidden so the bar does not reflow.
+     * Flash and local news from that hub show the WhatsApp glyph in this slot.
      */
     private boolean wantsCenterFooterActionSlot() {
         if (!isDeviceOnline() || isFooterCalendarTabWanted()) {
@@ -8973,7 +8966,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (shouldShowMagazineFooterShare()) {
             return true;
         }
-        if (isDailyUpdatesFooterSession()) {
+        if (isDailyUpdatesMode()) {
             return true;
         }
         return shouldShowFooterWhatsapp();
@@ -9770,9 +9763,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     new DailyUpdatesController.HostCallbacks() {
                         @Override
                         public void openFlashNewsFromDailyUpdates() {
-                            // Flash News = push_posts feed only (not main My Feed).
-                            // Mark flash before the hub flag drops so footer WhatsApp
-                            // cannot paint in the hand-off.
+                            // Flash News = push_posts feed. It is news: News tab and
+                            // footer WhatsApp, same as local news from this hub.
                             setFeedModeFlags(false, true);
                             hideHomeDailyUpdatesMode();
                             performFlashNewsOpen();
@@ -15535,10 +15527,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (isSpecialFeedMode()) {
                 showLog("setSelectedItemId(R.id.navigation_catagiries)");
                 bottomNavigationView.setSelectedItemId(R.id.navigation_catagiries);
-            } else if (isVideoFeedMode()) {
-                showLog("setSelectedItemId(R.id.navigation_status)");
-                bottomNavigationView.setSelectedItemId(R.id.navigation_status);
             } else if (!isCalendarMode() && !isDailyUpdatesMode()) {
+                // Flash (videoFeedModeActive) and local news from Daily Updates
+                // highlight News. Only the hub keeps the Daily Updates tab.
                 showLog("setSelectedItemId(R.id.navigation_home)");
                 bottomNavigationView.setSelectedItemId(R.id.navigation_home);
             }
@@ -16001,8 +15992,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performLocalFeedOpenFromDailyUpdates() {
         showLog("performLocalFeedOpenFromDailyUpdates");
-        // Before the hub flag drops, so this feed never paints footer WhatsApp.
-        // News stays the highlighted tab (owner: that highlight is correct).
+        // News stays highlighted. Footer WhatsApp shows, same as normal news.
+        // Only the Daily Updates hub hides that icon.
         localFeedFromDailyUpdates = true;
         hideHomeCalendarMode();
         hideHomeDailyUpdatesMode();
@@ -16076,14 +16067,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performVideoFeedOpen() {
         showLog("performVideoFeedOpen");
-        // Flash is Daily Updates content. Set this before the hub hides so the
-        // center slot does not turn into the footer WhatsApp icon.
+        // Flash is news opened from Daily Updates. Highlight News and show
+        // footer WhatsApp. Do not stay on the Daily Updates tab.
         setFeedModeFlags(false, true);
         clearSearchFeedMode();
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         hideHomeCalendarMode();
         hideHomeDailyUpdatesMode();
+        try {
+            suppressBottomNavCallbacks = true;
+            if (bottomNavigationView != null) {
+                bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            suppressBottomNavCallbacks = false;
+        }
         try {
             updateCenterFab();
         } catch (Exception ignored) {
@@ -19896,7 +19896,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             restoreDailyUpdatesDestination();
         } else if (bottomNavigationView != null
                 && bottomNavigationView.getSelectedItemId() == R.id.navigation_status
-                && !videoFeedModeActive
                 && !isCalendarMode()) {
             releaseDailyUpdatesCheckLeftByQuietCard();
         }
@@ -23357,7 +23356,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (bottomNavigationView == null || bottomNavigationView.getMenu() == null) {
             return;
         }
-        if (isDailyUpdatesMode() || isVideoFeedMode() || isCalendarMode()) {
+        if (isDailyUpdatesMode() || isCalendarMode()) {
             return;
         }
         MenuItem daily = bottomNavigationView.getMenu().findItem(R.id.navigation_status);
