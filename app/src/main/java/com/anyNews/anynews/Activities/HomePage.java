@@ -1253,11 +1253,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } else {
             clearPendingFlipRestore();
             showLog("flip restore dropped — normal open");
-            // A share sheet that died before the process backgrounded must not
-            // mark the next Home press as a share return.
-            if (!FeedPositionKeepConfig.shouldKeepPosition(this)) {
-                FeedPositionKeepConfig.clearShareDeparture(this);
-            }
         }
         // Before language-switch consume clears its flag. Does not touch night mode.
         restoreDailyUpdatesOnCreate = peekDailyUpdatesRestoreRequest(savedInstanceState);
@@ -1737,9 +1732,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } else if (!honorFlipCheckpointThisInstance
                 && !openAsSpecial
                 && !searchOpenHandledInCreate
-                && isMainFeedSession(sessionId)) {
-            // Share-return only. A theme recreate already has its own seat.
+                && isMainFeedSession(sessionId)
+                && FeedPositionKeepConfig.isAwaitingShareReturn()
+                && FeedPositionKeepConfig.shouldKeepPosition(this)) {
+            // This process left for a share and Home was recreated before
+            // they came back. A launcher or swipe-away open has no flag.
             armFeedPositionKeepForThisOpen();
+        } else if (!honorFlipCheckpointThisInstance) {
+            // Close, launcher, recents, or a new process. Not a share return.
+            skipFeedNetworkForPositionKeep = false;
+            try {
+                FeedPositionKeepConfig.clear(this);
+            } catch (Exception ignored) {
+            }
         }
         if (sessionId.equals("0") || sessionId.equals("null")) {
             if (!openAsSpecial) {
@@ -20619,6 +20624,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void onDestroy() {
+        // Swipe-away and back finish this activity. That is a close, not a
+        // share return, even if a share seat was saved a minute ago. A theme
+        // recreate also finishes; its own flip checkpoint still has the card.
+        if (isFinishing()) {
+            try {
+                FeedPositionKeepConfig.clear(this);
+            } catch (Exception ignored) {
+            }
+        }
         unregisterProcessBackgroundObserver();
         // Drop pending auto-hide callback; next show will re-arm.
         cancelHomeModeChromeAutoHide();
@@ -20878,6 +20892,18 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         if (!unstuckSpecial
                 && (incomingIntent || recentShareSheet || expectNotifSettingsOrPermReturn)) {
+            // Back from the share sheet within a few seconds: stay on that
+            // card and do not refetch. Then drop the seat so a later close
+            // cannot replay it.
+            if (recentShareSheet
+                    && FeedPositionKeepConfig.isAwaitingShareReturn()
+                    && FeedPositionKeepConfig.shouldKeepPosition(this)) {
+                restoreKeptFeedSeatIfNeeded();
+                try {
+                    FeedPositionKeepConfig.clear(this);
+                } catch (Exception ignored) {
+                }
+            }
             showLog("background resume skip feed refresh intent=" + incomingIntent
                     + " shareSheet=" + recentShareSheet
                     + " notifSettings=" + expectNotifSettingsOrPermReturn);
@@ -20889,9 +20915,16 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (!unstuckSpecial && !isPlainMainNewsFeed()) {
             return;
         }
-        if (!unstuckSpecial && FeedPositionKeepConfig.shouldKeepPosition(this)) {
-            showLog("background resume keep feed position (within admin minutes)");
+        if (!unstuckSpecial
+                && FeedPositionKeepConfig.isAwaitingShareReturn()
+                && FeedPositionKeepConfig.shouldKeepPosition(this)) {
+            showLog("background resume keep feed position (share, within admin minutes)");
             restoreKeptFeedSeatIfNeeded();
+            // One return only. A later close must not replay this card.
+            try {
+                FeedPositionKeepConfig.clear(this);
+            } catch (Exception ignored) {
+            }
             return;
         }
         try {
@@ -20915,17 +20948,22 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /**
-     * Activity was created again inside the keep window (process or activity
-     * restart after share). Paint the feed already on disk and seat the same
-     * card. Push and inbound share links do not call this.
+     * Home was recreated in the same process that left for a share, still
+     * inside the admin window. Paint the feed already on disk and seat that
+     * card. A new process (close, launcher) does not call this.
      */
     private void armFeedPositionKeepForThisOpen() {
         skipFeedNetworkForPositionKeep = false;
-        if (!FeedPositionKeepConfig.shouldKeepPosition(this)) {
+        if (!FeedPositionKeepConfig.isAwaitingShareReturn()
+                || !FeedPositionKeepConfig.shouldKeepPosition(this)) {
             return;
         }
         int idx = FeedPositionKeepConfig.savedIndex(this);
         long pid = FeedPositionKeepConfig.savedPostId(this);
+        try {
+            FeedPositionKeepConfig.clear(this);
+        } catch (Exception ignored) {
+        }
         if (idx > 0 || pid > 0) {
             pendingRestoreFlipIndex = idx;
             pendingRestorePostId = pid;
@@ -20981,41 +21019,21 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 try {
                     // Language change finishes this Home. Do not save its scrolled
                     // seat over the reset — that seat was reapplied on the way back.
-                    if (isFinishing() || isDestroyed()) {
-                        return;
-                    }
-                    if (SharedPrefsData.getBool(
+                    boolean languageSwitch = SharedPrefsData.getBool(
                             HomePage.this,
                             Constants.LANGUAGE_SWITCH_RESET_FLIP,
-                            Constants.PREF_NAME)) {
-                        return;
-                    }
+                            Constants.PREF_NAME);
                     boolean fromShare = shareDepartureAwaitingBackground
                             || FeedPositionKeepConfig.consumeShareDeparture(HomePage.this);
                     shareDepartureAwaitingBackground = false;
-                    if (!fromShare) {
-                        // Launcher / Home / recents. Drop yesterday's index so the
-                        // next open stays on the newest card, including a magazine.
+                    // Closing, or leaving without a share, drops the seat. The
+                    // card was already recorded when the share started; do not
+                    // write a new one here or a later open jumps to it.
+                    if (!fromShare || isFinishing() || languageSwitch) {
                         FeedPositionKeepConfig.clear(HomePage.this);
                         return;
                     }
-                    // Prefer the seat we already tracked. A stopped FlipView can
-                    // report page 0 and would otherwise forget the shared card.
-                    int flipIndex = Math.max(0, positionx);
-                    if (mFlipView != null) {
-                        int cur = mFlipView.getCurrentPage();
-                        if (cur > flipIndex) {
-                            flipIndex = cur;
-                        }
-                    }
-                    long postId = resolvePostIdForFlipIndex(flipIndex);
-                    int seatLang = boundFeedLanguageId;
-                    if (seatLang <= 0) {
-                        seatLang = SharedPrefsData.getInt(
-                                HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
-                    }
-                    FeedPositionKeepConfig.noteLeftForeground(
-                            HomePage.this, flipIndex, postId, seatLang, true);
+                    FeedPositionKeepConfig.confirmShareBackground(HomePage.this);
                 } catch (Exception ignored) {
                 }
             }
@@ -21171,7 +21189,15 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         shareSheetStartedElapsed = SystemClock.elapsedRealtime();
         shareDepartureAwaitingBackground = true;
         try {
-            FeedPositionKeepConfig.noteShareDeparture(HomePage.this);
+            int flipIndex = resolveCurrentFlipIndexForSave();
+            long postId = resolvePostIdForFlipIndex(flipIndex);
+            int seatLang = boundFeedLanguageId;
+            if (seatLang <= 0) {
+                seatLang = SharedPrefsData.getInt(
+                        HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
+            }
+            FeedPositionKeepConfig.noteShareStarted(
+                    HomePage.this, flipIndex, postId, seatLang);
         } catch (Exception ignored) {
         }
     }
@@ -21224,7 +21250,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (shareDepartureAwaitingBackground) {
             shareDepartureAwaitingBackground = false;
             try {
-                FeedPositionKeepConfig.clearShareDeparture(this);
+                // Sheet closed without leaving the app. Drop the seat so the
+                // next Home press is a normal open.
+                FeedPositionKeepConfig.clear(this);
             } catch (Exception ignored) {
             }
         }
