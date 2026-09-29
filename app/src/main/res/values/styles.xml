@@ -394,6 +394,19 @@
         <item name="android:windowContentOverlay">@null</item>
     </style>
 
+    <!-- Opaque window with a transparent background so a direct WhatsApp send
+         is allowed on OEMs that block launches from Theme.Translucent.
+         No screenOrientation: Android 8 crashes that combination. -->
+    <style name="DirectShareResultTheme" parent="@android:style/Theme.NoTitleBar">
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+    </style>
+
     <style name="AppThemeSplashOpeningBanner_post" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/splash_banner_theme_color</item>
         <item name="android:background">@color/splash_banner_theme_color</item>

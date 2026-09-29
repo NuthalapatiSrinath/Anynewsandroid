@@ -36,6 +36,15 @@
         <!-- Explicit apps you know in advance about: -->
         <package android:name="com.anyNews.anynews"/>
         <package android:name="com.whatsapp"/>
+        <package android:name="com.whatsapp.w4b"/>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="video/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
         <!-- Camera / gallery visibility (Android 11+ package visibility; Vivo often needs these) -->
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
@@ -606,9 +615,8 @@
             android:name=".Utils.DirectShareResultActivity"
             android:exported="false"
             android:excludeFromRecents="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
-            android:screenOrientation="portrait" />
+            android:theme="@style/DirectShareResultTheme"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

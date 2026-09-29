@@ -7,6 +7,7 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
@@ -14,6 +15,7 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.webkit.MimeTypeMap;
 import android.widget.Toast;
@@ -58,6 +60,13 @@ public class VideoShareHelper {
 
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder().build();
     private static final ConcurrentHashMap<String, Object> DOWNLOAD_LOCKS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Boolean> STAMP_RUNNING = new ConcurrentHashMap<>();
+    /** How long a share will wait for a logo that is already being stamped. */
+    private static final long HALF_STAMP_WAIT_MS = 700L;
+    private static final String[] WHATSAPP_PACKAGES = {
+            "com.whatsapp",
+            "com.whatsapp.w4b"
+    };
     private static ProgressDialog progressDialog;
     private static volatile Thread downloadThread;
 
@@ -134,7 +143,7 @@ public class VideoShareHelper {
         downloadThread = new Thread(() -> {
             try {
                 BrandedFile branded = resolveHalfVideoFile(context, candidates, logoKey,
-                        context.getString(R.string.video_status_downloading), mainHandler, true);
+                        context.getString(R.string.video_status_downloading), mainHandler, true, true);
                 if (branded == null || branded.file == null) {
                     mainHandler.post(() -> {
                         dismissProgress();
@@ -189,21 +198,18 @@ public class VideoShareHelper {
         final String logoKey = candidates[0];
 
         if (halfArticleLogo) {
-            File branded = HalfVideoLogoWatermark.peek(context, logoKey);
-            if (branded != null) {
-                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", branded);
-                launchShareIntent(context, activity, uri, "video/mp4", title, description,
-                        shareLink, mode, listener);
-                if (listener != null) {
-                    listener.onShareStarted();
-                }
+            // Branded file if the stamp already finished; otherwise the local
+            // video right now. Do not wait on a stamp that is still running.
+            if (launchReadyHalfShare(context, activity, candidates, logoKey, title, description,
+                    shareLink, mode, listener)) {
                 return;
             }
         } else {
             // Instant path: any local/cache hit — skip worker thread + dialog.
             PreparedShare ready = tryResolveReadyShare(context, candidates);
             if (ready != null) {
-                launchShareIntent(context, activity, ready.uri, ready.mimeType, title, description,
+                launchShareIntent(context, activity, ready.uri,
+                        videoShareMime(ready.file, ready.mimeType), title, description,
                         shareLink, mode, listener);
                 if (listener != null) {
                     listener.onShareStarted();
@@ -218,19 +224,23 @@ public class VideoShareHelper {
                 String mime;
                 if (halfArticleLogo) {
                     BrandedFile branded = resolveHalfVideoFile(context, candidates, logoKey,
-                            statusMessage, mainHandler, true);
-                    if (branded == null || branded.file == null) {
+                            statusMessage, mainHandler, true, false);
+                    if (branded == null || branded.file == null || branded.file.length() <= 0) {
+                        if (Thread.currentThread().isInterrupted()) {
+                            throw new InterruptedException();
+                        }
                         mainHandler.post(() -> {
                             dismissProgress();
+                            Toast.makeText(context, "Unable to prepare video for sharing", Toast.LENGTH_SHORT).show();
                             if (listener != null) {
                                 listener.onShareStarted();
                             }
                         });
                         return;
                     }
-                    shareUri = FileProvider.getUriForFile(context,
-                            context.getPackageName() + ".provider", branded.file);
-                    mime = branded.branded ? "video/mp4" : resolveMimeType(branded.file, branded.file.getName());
+                    shareUri = uriForShareFile(context, branded.file);
+                    mime = branded.branded ? "video/mp4"
+                            : videoShareMime(branded.file, resolveMimeType(branded.file, branded.file.getName()));
                 } else {
                     PreparedShare prepared = null;
                     for (String candidate : candidates) {
@@ -239,9 +249,13 @@ public class VideoShareHelper {
                             break;
                         }
                     }
-                    if (prepared == null) {
+                    if (prepared == null || prepared.uri == null) {
+                        if (Thread.currentThread().isInterrupted()) {
+                            throw new InterruptedException();
+                        }
                         mainHandler.post(() -> {
                             dismissProgress();
+                            Toast.makeText(context, "Unable to prepare video for sharing", Toast.LENGTH_SHORT).show();
                             if (listener != null) {
                                 listener.onShareStarted();
                             }
@@ -249,7 +263,7 @@ public class VideoShareHelper {
                         return;
                     }
                     shareUri = prepared.uri;
-                    mime = prepared.mimeType;
+                    mime = videoShareMime(prepared.file, prepared.mimeType);
                 }
                 final Uri doneUri = shareUri;
                 final String doneMime = mime;
@@ -313,13 +327,13 @@ public class VideoShareHelper {
             File localFile = resolveLocalFile(sourceUrl, parsed, scheme);
             if (localFile != null && localFile.exists() && localFile.length() > 0) {
                 localFile.setReadable(true, false);
-                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", localFile);
+                Uri uri = uriForShareFile(context, localFile);
                 return new PreparedShare(uri, resolveMimeType(localFile, sourceUrl), localFile);
             }
             File cachedFile = getCacheFile(context, sourceUrl);
             if (cachedFile.exists() && cachedFile.length() > 0) {
                 cachedFile.setReadable(true, false);
-                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
+                Uri uri = uriForShareFile(context, cachedFile);
                 return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
             }
         } catch (Exception ignored) {
@@ -387,7 +401,7 @@ public class VideoShareHelper {
         new Thread(() -> {
             try {
                 resolveHalfVideoFile(appContext, candidates, logoKey, null,
-                        new Handler(Looper.getMainLooper()), false);
+                        new Handler(Looper.getMainLooper()), false, true);
             } catch (Exception ignored) {
                 // Share and download retry without a logo-status message.
             }
@@ -409,10 +423,14 @@ public class VideoShareHelper {
     /**
      * Local raw file, then the cached logo composite. Watermarking does not
      * show a progress dialog or any “adding logo” status.
+     *
+     * @param blockForLogo download/prefetch wait for the stamp. Share does not:
+     *                     a slow or stuck stamp must not hold the send.
      */
     private static BrandedFile resolveHalfVideoFile(Context context, String[] candidates, String logoKey,
                                                      String downloadMessage,
-                                                     Handler mainHandler, boolean allowProgress) throws Exception {
+                                                     Handler mainHandler, boolean allowProgress,
+                                                     boolean blockForLogo) throws Exception {
         PreparedShare prepared = null;
         for (String candidate : candidates) {
             prepared = prepareShareableVideo(context, candidate, downloadMessage, mainHandler, allowProgress);
@@ -430,6 +448,15 @@ public class VideoShareHelper {
         if (source == null || !source.exists() || source.length() <= 0) {
             return new BrandedFile(null, false,
                     "Original video kept because the file could not be read.");
+        }
+        if (!blockForLogo) {
+            ensureHalfStamp(context, source, logoKey);
+            File quick = awaitBranded(context, logoKey, HALF_STAMP_WAIT_MS);
+            if (quick != null) {
+                return new BrandedFile(quick, true, null);
+            }
+            return new BrandedFile(source, false,
+                    "Original video kept because the ANYNEWS logo could not be added.");
         }
         HalfVideoLogoWatermark.Outcome outcome = HalfVideoLogoWatermark.apply(context, source, logoKey);
         if (outcome.branded && outcome.file != null) {
@@ -557,7 +584,7 @@ public class VideoShareHelper {
         File localFile = resolveLocalFile(sourceUrl, parsed, scheme);
         if (localFile != null && localFile.exists() && localFile.length() > 0) {
             localFile.setReadable(true, false);
-            Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", localFile);
+            Uri uri = uriForShareFile(context, localFile);
             return new PreparedShare(uri, resolveMimeType(localFile, sourceUrl), localFile);
         }
 
@@ -566,8 +593,13 @@ public class VideoShareHelper {
         // Cache hit — share immediately, no progress UI
         if (cachedFile.exists() && cachedFile.length() > 0) {
             cachedFile.setReadable(true, false);
-            Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
+            Uri uri = uriForShareFile(context, cachedFile);
             return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
+        }
+
+        // Show Sharing… before waiting on a prefetch download, or the tap looks dead.
+        if (allowProgress && statusMessage != null && mainHandler != null) {
+            mainHandler.post(() -> showProgress(context, statusMessage));
         }
 
         Object lock = DOWNLOAD_LOCKS.computeIfAbsent(cacheKey(sourceUrl), key -> new Object());
@@ -575,11 +607,11 @@ public class VideoShareHelper {
             // Another thread may have finished while we waited
             if (cachedFile.exists() && cachedFile.length() > 0) {
                 cachedFile.setReadable(true, false);
-                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
+                Uri uri = uriForShareFile(context, cachedFile);
                 return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
             }
 
-            if (allowProgress && statusMessage != null) {
+            if (allowProgress && statusMessage != null && mainHandler != null) {
                 mainHandler.post(() -> showProgress(context, statusMessage));
             }
 
@@ -593,8 +625,11 @@ public class VideoShareHelper {
             }
         }
 
+        if (!cachedFile.exists() || cachedFile.length() <= 0) {
+            return null;
+        }
         cachedFile.setReadable(true, false);
-        Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", cachedFile);
+        Uri uri = uriForShareFile(context, cachedFile);
         return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
     }
 
@@ -723,15 +758,182 @@ public class VideoShareHelper {
         launchShareIntent(context, activity, uri, mimeType, title, null, shareLink, mode, null);
     }
 
+    /**
+     * Opens a half-video that is already on disk. A finished stamp is preferred.
+     * A stamp that is still running does not delay the send; the original file
+     * goes out and the stamp keeps going for the next tap.
+     *
+     * @return true when a share intent was started
+     */
+    private static boolean launchReadyHalfShare(Context context, Activity activity, String[] candidates,
+                                                String logoKey, String title, String description,
+                                                String shareLink, ShareMode mode,
+                                                OnShareCompleteListener listener) {
+        try {
+            File branded = HalfVideoLogoWatermark.peek(context, logoKey);
+            if (branded != null && branded.length() > 0) {
+                launchShareIntent(context, activity, uriForShareFile(context, branded), "video/mp4",
+                        title, description, shareLink, mode, listener);
+                if (listener != null) {
+                    listener.onShareStarted();
+                }
+                return true;
+            }
+            PreparedShare ready = tryResolveReadyShare(context, candidates);
+            if (ready == null || ready.uri == null) {
+                return false;
+            }
+            if (ready.file != null && ready.file.length() > 0) {
+                ensureHalfStamp(context, ready.file, logoKey);
+                File justStamped = HalfVideoLogoWatermark.peek(context, logoKey);
+                if (justStamped != null && justStamped.length() > 0) {
+                    launchShareIntent(context, activity, uriForShareFile(context, justStamped),
+                            "video/mp4", title, description, shareLink, mode, listener);
+                } else {
+                    launchShareIntent(context, activity, ready.uri,
+                            videoShareMime(ready.file, ready.mimeType), title, description,
+                            shareLink, mode, listener);
+                }
+            } else {
+                launchShareIntent(context, activity, ready.uri,
+                        videoShareMime(null, ready.mimeType), title, description,
+                        shareLink, mode, listener);
+            }
+            if (listener != null) {
+                listener.onShareStarted();
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /** Starts a stamp if one is not already running. Never blocks the caller. */
+    private static void ensureHalfStamp(Context context, File source, String logoKey) {
+        if (context == null || source == null || !source.exists() || source.length() <= 0
+                || logoKey == null || logoKey.isEmpty()) {
+            return;
+        }
+        if (HalfVideoLogoWatermark.peek(context, logoKey) != null) {
+            return;
+        }
+        if (STAMP_RUNNING.putIfAbsent(logoKey, Boolean.TRUE) != null) {
+            return;
+        }
+        final Context app = context.getApplicationContext();
+        new Thread(() -> {
+            try {
+                HalfVideoLogoWatermark.apply(app, source, logoKey);
+            } catch (Exception ignored) {
+                // The share already left with the original file.
+            } finally {
+                STAMP_RUNNING.remove(logoKey);
+            }
+        }, "half-video-stamp").start();
+    }
+
+    private static File awaitBranded(Context context, String logoKey, long budgetMs)
+            throws InterruptedException {
+        long deadline = SystemClock.elapsedRealtime() + Math.max(0L, budgetMs);
+        while (true) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new InterruptedException();
+            }
+            File branded = HalfVideoLogoWatermark.peek(context, logoKey);
+            if (branded != null && branded.length() > 0) {
+                return branded;
+            }
+            long left = deadline - SystemClock.elapsedRealtime();
+            if (left <= 0L) {
+                return null;
+            }
+            Thread.sleep(Math.min(40L, left));
+        }
+    }
+
+    /**
+     * FileProvider URI. If this device rejects the external-cache path, copy
+     * into internal cache (always in provider_paths) and share that.
+     */
+    private static Uri uriForShareFile(Context context, File file) throws Exception {
+        String authority = context.getPackageName() + ".provider";
+        try {
+            return FileProvider.getUriForFile(context, authority, file);
+        } catch (IllegalArgumentException first) {
+            File safe = new File(context.getCacheDir(),
+                    "share_safe_" + Integer.toHexString(file.getAbsolutePath().hashCode()) + ".mp4");
+            copyShareFile(file, safe);
+            safe.setReadable(true, false);
+            return FileProvider.getUriForFile(context, authority, safe);
+        }
+    }
+
+    private static void copyShareFile(File source, File dest) throws Exception {
+        File parent = dest.getParentFile();
+        if (parent != null) {
+            //noinspection ResultOfMethodCallIgnored
+            parent.mkdirs();
+        }
+        try (InputStream in = new FileInputStream(source);
+             OutputStream out = new BufferedOutputStream(new FileOutputStream(dest))) {
+            byte[] buffer = new byte[1 << 16];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            out.flush();
+        }
+        if (!dest.exists() || dest.length() <= 0) {
+            throw new java.io.IOException("share copy empty");
+        }
+    }
+
+    /** Never hand WhatsApp image/jpeg for a video file. Sniff the container. */
+    private static String videoShareMime(File file, String declared) {
+        String sniffed = sniffContainerMime(file);
+        if (sniffed != null) {
+            return sniffed;
+        }
+        if (declared != null && declared.startsWith("video/")) {
+            return declared;
+        }
+        return "video/*";
+    }
+
+    private static String sniffContainerMime(File file) {
+        if (file == null || !file.exists() || file.length() < 12) {
+            return null;
+        }
+        try (InputStream in = new FileInputStream(file)) {
+            byte[] header = new byte[12];
+            int n = in.read(header);
+            if (n >= 8 && header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p') {
+                return "video/mp4";
+            }
+            if (n >= 4 && (header[0] & 0xFF) == 0x1A && (header[1] & 0xFF) == 0x45
+                    && (header[2] & 0xFF) == 0xDF && (header[3] & 0xFF) == 0xA3) {
+                return "video/webm";
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     private static void launchShareIntent(Context context, Activity activity, Uri uri,
                                             String mimeType, String title, String description,
                                             String shareLink, ShareMode mode,
                                             OnShareCompleteListener listener) {
+        if (uri == null) {
+            Toast.makeText(context, "Unable to share video", Toast.LENGTH_SHORT).show();
+            return;
+        }
         try {
             String shareMessage = buildShareMessage(title, description, shareLink);
+            String shareMime = videoShareMime(null, mimeType);
 
             Intent intent = new Intent(Intent.ACTION_SEND);
-            intent.setType(mimeType != null ? mimeType : "video/*");
+            intent.setType(shareMime);
             intent.putExtra(Intent.EXTRA_STREAM, uri);
             if (!shareMessage.isEmpty()) {
                 intent.putExtra(Intent.EXTRA_TEXT, shareMessage);
@@ -741,54 +943,121 @@ public class VideoShareHelper {
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.setClipData(ClipData.newUri(context.getContentResolver(), "shared_video", uri));
 
+            Runnable onConfirmed = () -> {
+                if (listener != null) {
+                    listener.onShareConfirmed();
+                }
+            };
+            Context launchCtx = activity != null ? activity : context;
+
             if (mode == ShareMode.WHATSAPP_CHAT || mode == ShareMode.WHATSAPP_STATUS) {
-                if (!isAppInstalled(context, "com.whatsapp")) {
-                    Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show();
+                String pkg = resolveWhatsAppPackage(context, shareMime);
+                if (pkg == null && !"video/*".equals(shareMime)) {
+                    pkg = resolveWhatsAppPackage(context, "video/*");
+                    if (pkg != null) {
+                        intent.setType("video/*");
+                    }
+                }
+                if (pkg != null) {
+                    intent.setPackage(pkg);
+                    if (mode == ShareMode.WHATSAPP_STATUS) {
+                        intent.putExtra("jid", "status@broadcast");
+                    }
+                    // Count only when WhatsApp returns RESULT_OK after Send.
+                    grantRead(context, activity, uri, pkg);
+                    ShareOutboundHelper.launchChooserOnTargetChosen(
+                            launchCtx, intent, "Share Video", onConfirmed);
                     return;
                 }
-                intent.setPackage("com.whatsapp");
-                if (mode == ShareMode.WHATSAPP_STATUS) {
-                    intent.putExtra("jid", "status@broadcast");
-                }
-                // Skip scanning all share targets — grant WhatsApp only.
-                // Count only when WhatsApp returns RESULT_OK after Send.
-                context.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                if (activity != null) {
-                    activity.grantUriPermission("com.whatsapp", uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                }
-                Context launchCtx = activity != null ? activity : context;
-                ShareOutboundHelper.launchChooserOnTargetChosen(
-                        launchCtx,
-                        intent,
-                        "Share Video",
-                        () -> {
-                            if (listener != null) {
-                                listener.onShareConfirmed();
-                            }
-                        });
-                return;
+                // No enabled WhatsApp or Business that can take the video.
+                // The system sheet still lets the tap reach some other app.
+                intent.setPackage(null);
+                intent.setType("video/*");
             }
 
-            List<ResolveInfo> resInfoList = context.getPackageManager()
-                    .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
-            for (ResolveInfo resolveInfo : resInfoList) {
-                String packageName = resolveInfo.activityInfo.packageName;
-                context.grantUriPermission(packageName, uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            }
-            Context launchCtx = activity != null ? activity : context;
+            grantReadToResolvedTargets(context, intent, uri);
             ShareOutboundHelper.launchChooserOnTargetChosen(
-                    launchCtx,
-                    intent,
-                    "Share Video",
-                    () -> {
-                        if (listener != null) {
-                            listener.onShareConfirmed();
-                        }
-                    });
+                    launchCtx, intent, "Share Video", onConfirmed);
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(context, "Unable to share video", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * Enabled WhatsApp or WhatsApp Business that actually exports a SEND
+     * activity for this mime. A disabled stub of {@code com.whatsapp} is skipped
+     * so the tap is not aimed at a dead component.
+     */
+    private static String resolveWhatsAppPackage(Context context, String mimeType) {
+        if (context == null) {
+            return null;
+        }
+        PackageManager pm = context.getPackageManager();
+        String type = mimeType != null ? mimeType : "video/*";
+        for (String pkg : WHATSAPP_PACKAGES) {
+            if (!isPackageEnabled(pm, pkg)) {
+                continue;
+            }
+            Intent probe = new Intent(Intent.ACTION_SEND);
+            probe.setType(type);
+            probe.setPackage(pkg);
+            try {
+                if (pm.resolveActivity(probe, 0) != null) {
+                    return pkg;
+                }
+                List<ResolveInfo> handlers = pm.queryIntentActivities(probe, 0);
+                if (handlers != null && !handlers.isEmpty()) {
+                    return pkg;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static boolean isPackageEnabled(PackageManager pm, String packageName) {
+        try {
+            ApplicationInfo info = pm.getApplicationInfo(packageName, 0);
+            if (!info.enabled) {
+                return false;
+            }
+            return (info.flags & ApplicationInfo.FLAG_SUSPENDED) == 0;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
+    private static void grantRead(Context context, Activity activity, Uri uri, String packageName) {
+        if (packageName == null || uri == null) {
+            return;
+        }
+        try {
+            context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception ignored) {
+        }
+        if (activity != null) {
+            try {
+                activity.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static void grantReadToResolvedTargets(Context context, Intent intent, Uri uri) {
+        try {
+            List<ResolveInfo> resInfoList = context.getPackageManager()
+                    .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+            if (resInfoList == null) {
+                return;
+            }
+            for (ResolveInfo resolveInfo : resInfoList) {
+                if (resolveInfo.activityInfo == null) {
+                    continue;
+                }
+                grantRead(context, null, uri, resolveInfo.activityInfo.packageName);
+            }
+        } catch (Exception ignored) {
         }
     }
 

@@ -71,6 +71,7 @@ import android.util.SparseBooleanArray;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15187,6 +15188,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void shareVideoDirect(int position, VideoShareHelper.ShareMode mode) {
+        if (shareLaunchInFlight) {
+            Toast.makeText(context, R.string.video_status_sharing, Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (!tryAcquireShareLaunch()) {
             return;
         }
@@ -15329,8 +15334,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (sheetActionTaken[0]) {
                 return;
             }
-            sheetActionTaken[0] = true;
-            bottomSheet.dismiss();
             VideoShareAction action;
             int viewId = actionView.getId();
             if (viewId == R.id.option_whatsapp_status) {
@@ -15338,6 +15341,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             } else if (viewId == R.id.option_whatsapp_chat) {
                 // Admin action_url (if set) replaces Send-to-Contact.
                 if (FullVideoShareCardHelper.openActionUrlIfPresent(context)) {
+                    sheetActionTaken[0] = true;
+                    bottomSheet.dismiss();
                     return;
                 }
                 action = VideoShareAction.WHATSAPP_CHAT;
@@ -15348,19 +15353,30 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             } else {
                 return;
             }
+            sheetActionTaken[0] = true;
+            bottomSheet.dismiss();
             executeVideoShare(position, layout, convertView, action);
         };
 
-        if (whatsappStatusOption != null && whatsappStatusOption.getVisibility() == View.VISIBLE) {
-            whatsappStatusOption.setOnClickListener(dismissAndShare);
-        }
-        if (whatsappChatOption != null) {
-            whatsappChatOption.setOnClickListener(dismissAndShare);
-        }
-        if (shareArticleOption != null && shareArticleOption.getVisibility() == View.VISIBLE) {
-            shareArticleOption.setOnClickListener(dismissAndShare);
-        }
-        sheetView.findViewById(R.id.option_other_apps).setOnClickListener(dismissAndShare);
+        bindVideoShareOption(whatsappStatusOption, dismissAndShare);
+        bindVideoShareOption(whatsappChatOption, dismissAndShare);
+        bindVideoShareOption(shareArticleOption, dismissAndShare);
+        bindVideoShareOption(sheetView.findViewById(R.id.option_other_apps), dismissAndShare);
+
+        bottomSheet.setOnShowListener(dialog -> {
+            try {
+                FrameLayout sheet = bottomSheet.findViewById(
+                        com.google.android.material.R.id.design_bottom_sheet);
+                if (sheet != null) {
+                    com.google.android.material.bottomsheet.BottomSheetBehavior<FrameLayout> behavior =
+                            com.google.android.material.bottomsheet.BottomSheetBehavior.from(sheet);
+                    behavior.setSkipCollapsed(true);
+                    behavior.setState(
+                            com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED);
+                }
+            } catch (Exception ignored) {
+            }
+        });
 
         // Show the sheet first — style / prefetch after paint so Share feels instant.
         bottomSheet.show();
@@ -15376,6 +15392,30 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     VideoShareHelper.prefetchVideo(context, resolveVideoShareUrl(position));
                 }
             }
+        });
+    }
+
+    /**
+     * BottomSheetBehavior treats a slightly noisy tap as a drag and cancels the
+     * click. Ask every parent not to intercept so Send Video and Other apps
+     * receive the tap on phones with a jumpy touch panel.
+     */
+    private void bindVideoShareOption(View option, View.OnClickListener listener) {
+        if (option == null || option.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        option.setClickable(true);
+        option.setFocusable(true);
+        option.setOnClickListener(listener);
+        option.setOnTouchListener((v, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                ViewParent parent = v.getParent();
+                while (parent != null) {
+                    parent.requestDisallowInterceptTouchEvent(true);
+                    parent = parent.getParent();
+                }
+            }
+            return false;
         });
     }
 
