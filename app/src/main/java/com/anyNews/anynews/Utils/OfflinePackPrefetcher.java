@@ -97,6 +97,8 @@ public final class OfflinePackPrefetcher {
     private long packLastPostId;
     private long packActualSkip;
     private boolean cursorsReady;
+    /** Bumped on {@link #resetSession()} so an in-flight page cannot land later. */
+    private int sessionGeneration;
     private int extraPagesFetched;
     private int flipCountSinceBind;
     private long lastPrefetchAtMs;
@@ -116,6 +118,7 @@ public final class OfflinePackPrefetcher {
     }
 
     public void resetSession() {
+        sessionGeneration++;
         cancelPending();
         inFlight.set(false);
         cursorsReady = false;
@@ -255,6 +258,9 @@ public final class OfflinePackPrefetcher {
         final long reqSkip = packSkip;
         final long reqLast = packLastPostId;
         final long reqActual = packActualSkip;
+        final int genAtFire = sessionGeneration;
+        final int langAtFire = SharedPrefsData.getInt(
+                app, Constants.LanguageID, Constants.PREF_NAME);
         JsonObject body;
         try {
             body = buildArticlesRequest(app, h, reqSkip, reqLast, reqActual);
@@ -285,6 +291,16 @@ public final class OfflinePackPrefetcher {
                     public void onResponse(
                             Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
                         try {
+                            if (genAtFire != sessionGeneration) {
+                                return;
+                            }
+                            int langNow = SharedPrefsData.getInt(
+                                    app, Constants.LanguageID, Constants.PREF_NAME);
+                            if (langAtFire > 0 && langNow > 0 && langAtFire != langNow) {
+                                Logone.v(TAG, "prefetch dropped lang enq="
+                                        + langAtFire + " now=" + langNow);
+                                return;
+                            }
                             if (response != null && response.body() != null) {
                                 EncreptionRequest enc = response.body();
                                 ModelClass model = parseModel(enc);

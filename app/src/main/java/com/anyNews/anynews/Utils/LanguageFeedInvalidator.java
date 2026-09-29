@@ -72,12 +72,23 @@ public final class LanguageFeedInvalidator {
         } catch (Exception ignored) {
         }
         try {
+            // Share-return seat is not a language change. Drop the pager index
+            // so coming back to this language cannot resume the old card.
+            FeedPositionKeepConfig.clear(app);
+        } catch (Exception ignored) {
+        }
+        try {
             OpenPathCache.clearFeed(app);
             OpenPathCache.forceNextFeedNetwork(app);
         } catch (Exception ignored) {
         }
         try {
             OfflineFeedStore.clearMain(app);
+        } catch (Exception ignored) {
+        }
+        try {
+            // Singleton still holds the previous language's skip / page cursor.
+            OfflinePackPrefetcher.get().resetSession();
         } catch (Exception ignored) {
         }
         try {

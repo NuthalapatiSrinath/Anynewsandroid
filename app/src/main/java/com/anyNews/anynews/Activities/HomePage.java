@@ -809,6 +809,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * call List_All_Articles. Explicit Reload clears it.
      */
     private boolean skipFeedNetworkForPositionKeep = false;
+    /**
+     * This Home was opened because the user changed language. The previous
+     * language's pager index and loaded pages must not be applied. Cleared
+     * after the new language's first page is seated at card 0, so a later
+     * share-return on this same screen can still keep its card.
+     */
+    private boolean languageSwitchFeedReset = false;
+    /**
+     * Language of the articles currently in {@link #list}. 0 until the first
+     * paint. A later resume with a different {@link Constants#LanguageID}
+     * drops this list and starts that language at card 0.
+     */
+    private int boundFeedLanguageId = 0;
     /** Chooser returns inside this window stay on the card the user was reading. */
     private static final long SHARE_SHEET_RETURN_IGNORE_MS = 5000L;
     private LifecycleObserver processBackgroundObserver;
@@ -1294,6 +1307,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         my_feed_text = findViewById(R.id.my_feed_text);
 
         mFlipView = findViewById(R.id.flip_view);
+        if (languageSwitchFeedReset && mFlipView != null) {
+            // First paint of the new language stays on card 0. Released after
+            // that page is seated so later flips are not snapped back.
+            mFlipView.resetSeatForNewFeed();
+            mFlipView.beginForcedPage0Seat();
+        }
         homeCalendarHost = findViewById(R.id.home_calendar_host);
         homeDailyUpdatesHost = findViewById(R.id.home_daily_updates_host);
         setupHomeCalendarTtdToggle();
@@ -1684,6 +1703,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
             clearPendingFlipRestore();
+        } else if (languageSwitchFeedReset) {
+            skipFeedNetworkForPositionKeep = false;
+            showLog("feed position keep skipped — language change");
         } else if (!openAsSpecial && !searchOpenHandledInCreate && isMainFeedSession(sessionId)) {
             armFeedPositionKeepForThisOpen();
         }
@@ -16872,6 +16894,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                // A Home that language-change already finished must not write its
+                // scrolled pages back onto disk once that language is selected again.
+                if (isFinishing() || isDestroyed()) {
+                    isApiRequested = false;
+                    return;
+                }
                 int languageNow = SharedPrefsData.getInt(
                         getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
                 if (languageAtEnqueue > 0 && languageNow > 0
@@ -17517,6 +17545,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     public void convertListOfArticles(EncreptionRequest encreptionRequest, int reqPos, boolean fromCache, boolean replacePage0){
+        if (isFinishing() || isDestroyed()) {
+            isApiRequested = false;
+            return;
+        }
         no_article_message = FEED_LOADING_MESSAGE;
         showLog("reqPos:::::"+reqPos);
         showLog("isFromLocalArticles:::::"+isFromLocalArticles);
@@ -18303,7 +18335,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 }
                                 adapter.setData(list);
                             }
-                            if (!fromCache && !searchFeedActive
+                            try {
+                                int paintedLang = SharedPrefsData.getInt(
+                                        HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
+                                if (paintedLang > 0 && list != null && !list.isEmpty()) {
+                                    boundFeedLanguageId = paintedLang;
+                                }
+                            } catch (Exception ignored) {
+                            }
+                            if (languageSwitchFeedReset) {
+                                // New language's first page only. Do not jump to the
+                                // card they had open the last time they used it.
+                                finishLanguageSwitchSeatAtFirstCard();
+                            } else if (!fromCache && !searchFeedActive
                                     && resolvePendingDeepLinkPostId() <= 0) {
                                 maybeRestoreFlipPositionAfterArticlesLoad();
                             } else if (resolvePendingDeepLinkPostId() > 0) {
@@ -20287,15 +20331,56 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (!reset && !otherLanguageSeat) {
             return;
         }
+        languageSwitchFeedReset = true;
+        boundFeedLanguageId = 0;
         try {
             SharedPrefsData.putBoolImmediate(
                     this, Constants.LANGUAGE_SWITCH_RESET_FLIP, false, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
+        // The keep-position seat is the previous language's card. Clear it
+        // again here in case a dying Home rewrote it after the invalidator.
+        try {
+            FeedPositionKeepConfig.clear(this);
+        } catch (Exception ignored) {
+        }
+        try {
+            OfflinePackPrefetcher.get().resetSession();
+        } catch (Exception ignored) {
+        }
+        try {
+            hasSavedOnlineNewsSession = false;
+            savedOnlineNewsList.clear();
+        } catch (Exception ignored) {
+        }
         clearPendingFlipRestore();
         positionx = 0;
+        last_post_id = 0;
+        skip = 0;
+        actual_skip = 0;
+        dummyResponse = null;
         showLog("language switch: open at first article reset=" + reset
                 + " checkpointLang=" + checkpointLang + " current=" + currentLang);
+    }
+
+    /**
+     * First page of the language we just switched to is on screen. Later
+     * share-return on this activity may keep its card. This open must not.
+     */
+    private void finishLanguageSwitchSeatAtFirstCard() {
+        if (!languageSwitchFeedReset) {
+            return;
+        }
+        languageSwitchFeedReset = false;
+        clearPendingFlipRestore();
+        positionx = 0;
+        try {
+            if (mFlipView != null) {
+                mFlipView.releaseForcedPage0Seat();
+            }
+        } catch (Exception ignored) {
+        }
+        showLog("language switch: seated at first card");
     }
 
     private int resolveCurrentFlipIndexForSave() {
@@ -20667,6 +20752,30 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             pendingBackgroundRefreshCheck = false;
             return;
         }
+        // Same Home still holding language A's scrolled pages after the user
+        // picked another language (or came back to A). Start that language
+        // at card 0. Share-return does not change LanguageID, so it stays.
+        if (boundFeedLanguageId > 0) {
+            int langNow = 0;
+            try {
+                langNow = SharedPrefsData.getInt(
+                        this, Constants.LanguageID, Constants.PREF_NAME);
+            } catch (Exception ignored) {
+            }
+            if (langNow > 0 && langNow != boundFeedLanguageId) {
+                pendingBackgroundRefreshCheck = false;
+                showLog("language changed under this Home "
+                        + boundFeedLanguageId + " → " + langNow
+                        + " — first card");
+                boundFeedLanguageId = 0;
+                try {
+                    performFeedReload();
+                } catch (Exception e) {
+                    showLog("language change reload failed: " + e.getMessage());
+                }
+                return;
+            }
+        }
         if (!fromProcessBackground && !unstuckSpecialOnNews) {
             pendingBackgroundRefreshCheck = false;
             return;
@@ -20831,6 +20940,17 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 // In-app activities keep the process started, so this does not run.
                 appEnteredBackground = true;
                 try {
+                    // Language change finishes this Home. Do not save its scrolled
+                    // seat over the reset — that seat was reapplied on the way back.
+                    if (isFinishing() || isDestroyed()) {
+                        return;
+                    }
+                    if (SharedPrefsData.getBool(
+                            HomePage.this,
+                            Constants.LANGUAGE_SWITCH_RESET_FLIP,
+                            Constants.PREF_NAME)) {
+                        return;
+                    }
                     // Prefer the seat we already tracked. A stopped FlipView can
                     // report page 0 and would otherwise forget the shared card.
                     int flipIndex = Math.max(0, positionx);
@@ -20841,8 +20961,13 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                         }
                     }
                     long postId = resolvePostIdForFlipIndex(flipIndex);
+                    int seatLang = boundFeedLanguageId;
+                    if (seatLang <= 0) {
+                        seatLang = SharedPrefsData.getInt(
+                                HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
+                    }
                     FeedPositionKeepConfig.noteLeftForeground(
-                            HomePage.this, flipIndex, postId);
+                            HomePage.this, flipIndex, postId, seatLang);
                 } catch (Exception ignored) {
                 }
             }
