@@ -2319,6 +2319,9 @@ public class StartingActivity extends AppCompatActivity {
                         SharePublicBaseHelper.saveFromServer(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getSharePublicBaseUrl());
+                        com.anyNews.anynews.Utils.HalfVideoShareLogo.saveFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getHalfVideoShareLogoUrl());
                         if (startActivityReqModel.getData().getPollSurveyColors() != null) {
                             PollOptionStyleHelper.save(
                                     getApplicationContext(),

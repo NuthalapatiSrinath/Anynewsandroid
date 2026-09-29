@@ -110,9 +110,6 @@
     <string name="share_other_apps_subtitle">Share via any installed app</string>
     <string name="video_status_sharing">Sharing…</string>
     <string name="video_status_downloading">Downloading…</string>
-    <string name="half_video_adding_logo">Adding ANYNEWS logo…</string>
-    <string name="half_video_logo_fallback_share">Could not add the ANYNEWS logo. Shared the original video instead.</string>
-    <string name="half_video_logo_fallback_download">Could not add the ANYNEWS logo. Saved the original video instead.</string>
     <string name="full_video_option_dialog_title">AnyNews</string>
     <string name="full_video_option_dialog_message">Please Select an Option</string>
     <string name="full_video_option_download">Download Video</string>

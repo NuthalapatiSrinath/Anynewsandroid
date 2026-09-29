@@ -791,6 +791,13 @@ public class Constants {
      * e.g. https://share.anynews.co.in
      */
     public static String SHARE_PUBLIC_BASE_URL = "share_public_base_url";
+    /**
+     * Admin half-video share logo URL from splash / feed poll.
+     * Empty or missing → bundled {@code app_share_logo}.
+     */
+    public static String HALF_VIDEO_SHARE_LOGO_URL = "half_video_share_logo_url";
+    /** URL whose image file is already on disk. Empty → use the bundled logo. */
+    public static String HALF_VIDEO_SHARE_LOGO_READY = "half_video_share_logo_ready";
     public static String PROFILE_CACHE = "reporter_profile_cache_json";
     /** Last active key for {@link ReporterProfileCache} (draft+phone/email scoped). */
     public static String PROFILE_CACHE_KEY = "reporter_profile_cache_key";

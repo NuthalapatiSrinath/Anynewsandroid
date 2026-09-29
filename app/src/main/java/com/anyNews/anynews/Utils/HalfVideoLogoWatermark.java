@@ -40,9 +40,11 @@ import java.security.MessageDigest;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Stamps {@code R.drawable.app_share_logo} (the same mark as the normal-news
- * share strip) onto a half-article video file. In-app playback is untouched;
- * only the file produced for download or share is encoded.
+ * Stamps the share logo onto a half-article video file. The default artwork is
+ * {@code R.drawable.app_share_logo}. An admin upload
+ * ({@link HalfVideoShareLogo}) replaces it when that image is already cached.
+ * In-app playback is untouched; only the file produced for download or share
+ * is encoded.
  *
  * <p>The logo sits in the bottom-left of the frame the viewer sees, about 16%
  * of the short side, with a small margin. Container rotation is preserved so
@@ -155,7 +157,11 @@ public final class HalfVideoLogoWatermark {
         File folder = new File(dir, "half_video_wm");
         //noinspection ResultOfMethodCallIgnored
         folder.mkdirs();
-        return new File(folder, CACHE_PREFIX + cacheKey(videoKey) + ".mp4");
+        String token = HalfVideoShareLogo.cacheToken(context);
+        String name = "builtin".equals(token)
+                ? CACHE_PREFIX + cacheKey(videoKey) + ".mp4"
+                : "halfwm_v2_" + token + "_" + cacheKey(videoKey) + ".mp4";
+        return new File(folder, name);
     }
 
     private static String cacheKey(String videoKey) {
@@ -585,8 +591,33 @@ public final class HalfVideoLogoWatermark {
         return Math.max(12, margin);
     }
 
+    private static Bitmap decodeConfiguredLogo(Context context) {
+        File file = HalfVideoShareLogo.readyFile(context);
+        if (file == null) {
+            return null;
+        }
+        try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+            int sample = 1;
+            int max = Math.max(bounds.outWidth, bounds.outHeight);
+            while (max / sample > 1024 && sample < 16) {
+                sample *= 2;
+            }
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = sample;
+            return BitmapFactory.decodeFile(file.getAbsolutePath(), opts);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     private static Bitmap loadLogo(Context context, int frameW, int frameH, int rotation) {
-        Bitmap raw = BitmapFactory.decodeResource(context.getResources(), R.drawable.app_share_logo);
+        Bitmap raw = decodeConfiguredLogo(context);
+        if (raw == null) {
+            raw = BitmapFactory.decodeResource(context.getResources(), R.drawable.app_share_logo);
+        }
         if (raw == null) {
             throw new IllegalStateException("app_share_logo missing");
         }

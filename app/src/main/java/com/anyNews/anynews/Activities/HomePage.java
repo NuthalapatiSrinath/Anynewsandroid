@@ -17310,6 +17310,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getPn_thumb_size_dp(),
                             encreptionRequest.getPn_title_size_sp()
                     );
+                    com.anyNews.anynews.Utils.HalfVideoShareLogo.saveFromServer(
+                            HomePage.this,
+                            encreptionRequest.getHalf_video_share_logo_url());
                     // Performance → Ad every N / prefetch / concurrency / flush / format /
                     // destroy on flip-away (fresh fill on return). Must land BEFORE unread-strip
                     // rebalance so client cadence matches server seats.

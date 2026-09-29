@@ -513,6 +513,11 @@ public class EncreptionRequest {
     @Expose
     private String pn_large_icon_url;
 
+    /** Admin half-video share logo. Null if the server omitted it. Empty = built-in logo. */
+    @SerializedName("half_video_share_logo_url")
+    @Expose
+    private String half_video_share_logo_url;
+
     @SerializedName("push_include_logo_default")
     @Expose
     private Boolean push_include_logo_default;
@@ -1030,6 +1035,14 @@ public class EncreptionRequest {
 
     public void setPn_large_icon_url(String pn_large_icon_url) {
         this.pn_large_icon_url = pn_large_icon_url;
+    }
+
+    public String getHalf_video_share_logo_url() {
+        return half_video_share_logo_url;
+    }
+
+    public void setHalf_video_share_logo_url(String half_video_share_logo_url) {
+        this.half_video_share_logo_url = half_video_share_logo_url;
     }
 
     public Boolean getPush_include_logo_default() {

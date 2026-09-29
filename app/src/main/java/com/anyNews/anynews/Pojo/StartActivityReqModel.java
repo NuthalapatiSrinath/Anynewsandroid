@@ -439,6 +439,14 @@ public class StartActivityReqModel implements Serializable {
         private String sharePublicBaseUrl;
 
         /**
+         * Admin half-video share logo (Configuration → share domain).
+         * Null on old servers → keep cache. Empty → bundled app_share_logo.
+         */
+        @SerializedName("half_video_share_logo_url")
+        @Expose
+        private String halfVideoShareLogoUrl;
+
+        /**
          * Offline News pack max articles (admin; default 24, range 8–50).
          * Null on old servers → Android keeps cached / default 24.
          */
@@ -1196,6 +1204,11 @@ public class StartActivityReqModel implements Serializable {
         /** Null / empty → old server; caller keeps cached fallback. */
         public String getSharePublicBaseUrl() {
             return sharePublicBaseUrl;
+        }
+
+        /** Null → old server omitted the field; empty → built-in share logo. */
+        public String getHalfVideoShareLogoUrl() {
+            return halfVideoShareLogoUrl;
         }
 
         /** Null → old server; caller keeps cached / default 24. */

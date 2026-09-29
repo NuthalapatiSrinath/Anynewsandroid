@@ -113,9 +113,9 @@ public class VideoShareHelper {
     }
 
     /**
-     * Saves a half-article video into Downloads with the ANYNEWS logo.
-     * If the logo cannot be added, the original file is still saved and a toast
-     * says that fallback was used.
+     * Saves a half-article video into Downloads with the share logo.
+     * If the logo cannot be added, the original file is still saved.
+     * No logo-status dialog or toast is shown.
      */
     public static void saveHalfArticleVideo(Context context, Activity activity, String primaryUrl,
                                              String alternateUrl, String displayName) {
@@ -134,8 +134,7 @@ public class VideoShareHelper {
         downloadThread = new Thread(() -> {
             try {
                 BrandedFile branded = resolveHalfVideoFile(context, candidates, logoKey,
-                        context.getString(R.string.video_status_downloading),
-                        context.getString(R.string.half_video_adding_logo), mainHandler, true);
+                        context.getString(R.string.video_status_downloading), mainHandler, true);
                 if (branded == null || branded.file == null) {
                     mainHandler.post(() -> {
                         dismissProgress();
@@ -155,15 +154,9 @@ public class VideoShareHelper {
                     savedName = (dot > 0 ? savedName.substring(0, dot) : savedName) + ".mp4";
                 }
                 Uri saved = exportToDownloads(context.getApplicationContext(), branded.file, savedName);
-                final String toastFallback = branded.fallback;
                 final String finalName = savedName;
                 mainHandler.post(() -> {
                     dismissProgress();
-                    if (toastFallback != null) {
-                        Toast.makeText(context,
-                                context.getString(R.string.half_video_logo_fallback_download),
-                                Toast.LENGTH_LONG).show();
-                    }
                     VideoDownloadConfirmHelper.showSavedVideo(context, saved, finalName);
                 });
             } catch (InterruptedException e) {
@@ -223,11 +216,9 @@ public class VideoShareHelper {
             try {
                 Uri shareUri;
                 String mime;
-                String fallback = null;
                 if (halfArticleLogo) {
                     BrandedFile branded = resolveHalfVideoFile(context, candidates, logoKey,
-                            statusMessage, context.getString(R.string.half_video_adding_logo),
-                            mainHandler, true);
+                            statusMessage, mainHandler, true);
                     if (branded == null || branded.file == null) {
                         mainHandler.post(() -> {
                             dismissProgress();
@@ -240,7 +231,6 @@ public class VideoShareHelper {
                     shareUri = FileProvider.getUriForFile(context,
                             context.getPackageName() + ".provider", branded.file);
                     mime = branded.branded ? "video/mp4" : resolveMimeType(branded.file, branded.file.getName());
-                    fallback = branded.fallback;
                 } else {
                     PreparedShare prepared = null;
                     for (String candidate : candidates) {
@@ -263,14 +253,8 @@ public class VideoShareHelper {
                 }
                 final Uri doneUri = shareUri;
                 final String doneMime = mime;
-                final String doneFallback = fallback;
                 mainHandler.post(() -> {
                     dismissProgress();
-                    if (doneFallback != null) {
-                        Toast.makeText(context,
-                                context.getString(R.string.half_video_logo_fallback_share),
-                                Toast.LENGTH_LONG).show();
-                    }
                     launchShareIntent(context, activity, doneUri, doneMime, title, description,
                             shareLink, mode, listener);
                     if (listener != null) {
@@ -402,10 +386,10 @@ public class VideoShareHelper {
         }
         new Thread(() -> {
             try {
-                resolveHalfVideoFile(appContext, candidates, logoKey, null, null,
+                resolveHalfVideoFile(appContext, candidates, logoKey, null,
                         new Handler(Looper.getMainLooper()), false);
             } catch (Exception ignored) {
-                // Share and download retry with a visible fallback.
+                // Share and download retry without a logo-status message.
             }
         }, "half-video-prefetch").start();
     }
@@ -423,11 +407,11 @@ public class VideoShareHelper {
     }
 
     /**
-     * Local raw file, then the cached logo composite. {@code fallback} is set
-     * when the outgoing file is the original.
+     * Local raw file, then the cached logo composite. Watermarking does not
+     * show a progress dialog or any “adding logo” status.
      */
     private static BrandedFile resolveHalfVideoFile(Context context, String[] candidates, String logoKey,
-                                                     String downloadMessage, String logoMessage,
+                                                     String downloadMessage,
                                                      Handler mainHandler, boolean allowProgress) throws Exception {
         PreparedShare prepared = null;
         for (String candidate : candidates) {
@@ -446,15 +430,6 @@ public class VideoShareHelper {
         if (source == null || !source.exists() || source.length() <= 0) {
             return new BrandedFile(null, false,
                     "Original video kept because the file could not be read.");
-        }
-        if (allowProgress && logoMessage != null) {
-            mainHandler.post(() -> {
-                if (progressDialog != null && progressDialog.isShowing()) {
-                    progressDialog.setMessage(logoMessage);
-                } else {
-                    showProgress(context, logoMessage);
-                }
-            });
         }
         HalfVideoLogoWatermark.Outcome outcome = HalfVideoLogoWatermark.apply(context, source, logoKey);
         if (outcome.branded && outcome.file != null) {
