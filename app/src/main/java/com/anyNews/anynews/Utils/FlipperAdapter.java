@@ -2903,18 +2903,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         ViewGroup parent = (ViewGroup) shareSlot.getParent();
         View slot = parent.findViewById(R.id.half_whatsapp);
-        if (!isActionRowWhatsappEnabled(context)) {
-            if (slot != null) {
-                slot.setVisibility(View.GONE);
-            }
-            return;
-        }
         if (slot == null) {
             slot = LayoutInflater.from(context).inflate(
                     R.layout.item_half_whatsapp_action, parent, false);
             parent.addView(slot, parent.indexOfChild(shareSlot));
         }
-        slot.setVisibility(View.VISIBLE);
+        // Half switch only. Keep the count bound while hidden so a later ON
+        // does not paint a blank chip, and so hiding does not zero the total.
+        slot.setVisibility(ActionRowWhatsappConfig.isHalfEnabled(context)
+                ? View.VISIBLE : View.GONE);
         ImageView icon = slot.findViewById(R.id.half_whatsapp_icon);
         if (icon != null) {
             icon.setImageResource(R.drawable.ic_whatsapp_original1);
@@ -4842,27 +4839,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
-    /** Likes-row and full-post right-side WhatsApp. Default ON. Not the footer icon. */
+    /**
+     * Legacy single switch. New cards use {@link ActionRowWhatsappConfig}.
+     * Default ON. Not the footer icon.
+     */
     public static boolean isActionRowWhatsappEnabled(Context context) {
-        if (context == null) {
-            return true;
-        }
-        try {
-            return SharedPrefsData.getBool(
-                    context,
-                    Constants.ACTION_ROW_WHATSAPP_ENABLED,
-                    Constants.PREF_NAME,
-                    true);
-        } catch (Exception e) {
-            return true;
-        }
+        return ActionRowWhatsappConfig.isLegacyEnabled(context);
     }
 
     /**
-     * Hides or shows the WhatsApp icon and its count together: every half-row
-     * chip and every full-image / full-video right-side button under {@code convertView}.
-     * FlipView keeps previous, current, and next pages, and those pages reuse the
-     * same ids, so one {@code findViewById} would leave the open card showing.
+     * Half likes-row chip follows the half switch. Full-image / full-video
+     * side button follows the full switch. FlipView keeps previous, current,
+     * and next pages, and those pages reuse the same ids, so one
+     * {@code findViewById} would leave the open card showing.
      * Footer WhatsApp ({@code imageVIewShareWhatsapp}) is a different id and stays.
      *
      * @return true if any icon's visibility changed
@@ -4871,9 +4860,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (convertView == null) {
             return false;
         }
-        int vis = isActionRowWhatsappEnabled(context) ? View.VISIBLE : View.GONE;
-        boolean changed = setVisibilityDeep(convertView, R.id.half_whatsapp, vis);
-        changed |= setVisibilityDeep(convertView, R.id.full_image_whatsapp, vis);
+        int halfVis = ActionRowWhatsappConfig.isHalfEnabled(context)
+                ? View.VISIBLE : View.GONE;
+        int fullVis = ActionRowWhatsappConfig.isFullEnabled(context)
+                ? View.VISIBLE : View.GONE;
+        boolean changed = setVisibilityDeep(convertView, R.id.half_whatsapp, halfVis);
+        changed |= setVisibilityDeep(convertView, R.id.full_image_whatsapp, fullVis);
         return changed;
     }
 

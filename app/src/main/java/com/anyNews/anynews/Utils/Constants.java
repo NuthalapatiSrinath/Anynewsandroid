@@ -364,6 +364,12 @@ public class Constants {
     /** Post id saved with {@link #FEED_POSITION_LEFT_AT}. */
     public static String FEED_POSITION_POST_ID = "feed_position_post_id";
     /**
+     * Language that owned {@link #FEED_POSITION_INDEX}. A different
+     * {@link #LanguageID} must not resume that card. 0 = seat written before
+     * this field existed (share-return still valid until the next save).
+     */
+    public static String FEED_POSITION_LANGUAGE_ID = "feed_position_language_id";
+    /**
      * Main News FlipView content-tap mode: classic | reader | hybrid (splash/session).
      * Default hybrid.
      */
@@ -582,11 +588,15 @@ public class Constants {
      */
     public static String FOOTER_WHATSAPP_ICON_SIZE_DP = "footer_whatsapp_icon_size_dp";
     /**
-     * Likes / comments / share row WhatsApp, icon and count together.
-     * Also the full-image / full-video right-side WhatsApp. Default ON.
-     * Not the footer icon.
+     * Legacy likes-row / side WhatsApp switch. Old installs read only this.
+     * New installs use the half and full flags and fall back here when a
+     * split flag has never been stored. Default ON. Not the footer icon.
      */
     public static String ACTION_ROW_WHATSAPP_ENABLED = "action_row_whatsapp_enabled";
+    /** Half videos and half articles: likes-row WhatsApp icon and count. */
+    public static String ACTION_ROW_WHATSAPP_HALF_ENABLED = "action_row_whatsapp_half_enabled";
+    /** Full posts that use the side WhatsApp icon and count. */
+    public static String ACTION_ROW_WHATSAPP_FULL_ENABLED = "action_row_whatsapp_full_enabled";
     // Home bottom-nav slot visibility (admin Root_Settings; defaults true except categories).
     public static String FOOTER_SHOW_RELOAD = "footer_show_reload";
     public static String FOOTER_SHOW_SPECIAL = "footer_show_special";

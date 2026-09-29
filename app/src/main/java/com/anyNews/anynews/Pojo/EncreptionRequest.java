@@ -450,12 +450,22 @@ public class EncreptionRequest {
     private Integer footer_whatsapp_icon_size_dp;
 
     /**
-     * Likes-row WhatsApp icon and count. Null when the poll omits the field.
+     * Legacy likes-row / side WhatsApp. Null when the poll omits the field.
      * Not the footer icon.
      */
     @SerializedName("action_row_whatsapp_enabled")
     @Expose
     private Boolean action_row_whatsapp_enabled;
+
+    /** Half videos and half articles. Null when the poll omits the field. */
+    @SerializedName("action_row_whatsapp_half_enabled")
+    @Expose
+    private Boolean action_row_whatsapp_half_enabled;
+
+    /** Full posts that use the side WhatsApp icon. Null when omitted. */
+    @SerializedName("action_row_whatsapp_full_enabled")
+    @Expose
+    private Boolean action_row_whatsapp_full_enabled;
 
     @SerializedName("like_circle_size_dp")
     @Expose
@@ -906,6 +916,22 @@ public class EncreptionRequest {
 
     public Boolean getAction_row_whatsapp_enabled() {
         return action_row_whatsapp_enabled;
+    }
+
+    public Boolean getAction_row_whatsapp_half_enabled() {
+        return action_row_whatsapp_half_enabled;
+    }
+
+    public boolean hasAction_row_whatsapp_half_enabled() {
+        return action_row_whatsapp_half_enabled != null;
+    }
+
+    public Boolean getAction_row_whatsapp_full_enabled() {
+        return action_row_whatsapp_full_enabled;
+    }
+
+    public boolean hasAction_row_whatsapp_full_enabled() {
+        return action_row_whatsapp_full_enabled != null;
     }
 
     public void setMagazine_share_icon_size_dp(Integer magazine_share_icon_size_dp) {

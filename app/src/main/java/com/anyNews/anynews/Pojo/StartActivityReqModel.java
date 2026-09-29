@@ -894,12 +894,22 @@ public class StartActivityReqModel implements Serializable {
         private Integer footerWhatsappIconSizeDp;
 
         /**
-         * Likes-row and full-post right-side WhatsApp (icon and count).
-         * Null = old server / keep cache. Default ON.
+         * Legacy likes-row / side WhatsApp. Null = old server / keep cache.
+         * New clients prefer the half/full flags. Default ON.
          */
         @SerializedName("action_row_whatsapp_enabled")
         @Expose
         private Boolean actionRowWhatsappEnabled;
+
+        /** Half videos and half articles. Null = omitted — follow the legacy flag. */
+        @SerializedName("action_row_whatsapp_half_enabled")
+        @Expose
+        private Boolean actionRowWhatsappHalfEnabled;
+
+        /** Full posts that use the side WhatsApp icon. Null = omitted — follow legacy. */
+        @SerializedName("action_row_whatsapp_full_enabled")
+        @Expose
+        private Boolean actionRowWhatsappFullEnabled;
 
         // Home bottom-nav slot visibility (null = old server / keep cache). Defaults true.
         @SerializedName("footer_show_reload")
@@ -1558,6 +1568,22 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getActionRowWhatsappEnabled() {
             return actionRowWhatsappEnabled;
+        }
+
+        public Boolean getActionRowWhatsappHalfEnabled() {
+            return actionRowWhatsappHalfEnabled;
+        }
+
+        public boolean hasActionRowWhatsappHalfEnabled() {
+            return actionRowWhatsappHalfEnabled != null;
+        }
+
+        public Boolean getActionRowWhatsappFullEnabled() {
+            return actionRowWhatsappFullEnabled;
+        }
+
+        public boolean hasActionRowWhatsappFullEnabled() {
+            return actionRowWhatsappFullEnabled != null;
         }
 
         public Boolean getFooterShowReload() {

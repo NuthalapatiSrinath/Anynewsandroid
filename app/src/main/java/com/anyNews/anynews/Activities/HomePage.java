@@ -17408,7 +17408,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     applyFullSideActionGapConfig(encreptionRequest.getFull_side_action_gap_dp());
                     applyMagazineShareIconConfig(encreptionRequest.getMagazine_share_icon_size_dp());
                     applyFooterWhatsappIconConfig(encreptionRequest.getFooter_whatsapp_icon_size_dp());
-                    applyActionRowWhatsappConfig(encreptionRequest.getAction_row_whatsapp_enabled());
+                    if (encreptionRequest.getAction_row_whatsapp_enabled() != null
+                            || encreptionRequest.hasAction_row_whatsapp_half_enabled()
+                            || encreptionRequest.hasAction_row_whatsapp_full_enabled()) {
+                        applyActionRowWhatsappConfig(
+                                encreptionRequest.getAction_row_whatsapp_enabled(),
+                                encreptionRequest.hasAction_row_whatsapp_full_enabled()
+                                        ? encreptionRequest.getAction_row_whatsapp_full_enabled()
+                                        : null,
+                                encreptionRequest.hasAction_row_whatsapp_half_enabled()
+                                        ? encreptionRequest.getAction_row_whatsapp_half_enabled()
+                                        : null);
+                    }
                     applySearchIconConfig(
                             encreptionRequest.getSearch_icon_on_engagement(),
                             encreptionRequest.getSearch_icon_on_toggle(),
@@ -19210,23 +19221,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Likes-row and full-post right-side WhatsApp (icon and count together).
-     * Null leaves the saved value. Default ON. Does not hide the footer icon.
+     * Half likes-row WhatsApp and full-post side WhatsApp, separately.
+     * Null fields leave the saved value. A legacy-only payload copies that
+     * flag onto both. Default ON. Does not hide the footer icon.
      */
-    private void applyActionRowWhatsappConfig(Boolean enabled) {
+    private void applyActionRowWhatsappConfig(Boolean legacy, Boolean full, Boolean half) {
         try {
-            if (enabled == null) {
+            if (legacy == null && full == null && half == null) {
                 return;
             }
-            boolean prev = FlipperAdapter.isActionRowWhatsappEnabled(this);
-            if (prev == enabled) {
+            boolean prevHalf = com.anyNews.anynews.Utils.ActionRowWhatsappConfig.isHalfEnabled(this);
+            boolean prevFull = com.anyNews.anynews.Utils.ActionRowWhatsappConfig.isFullEnabled(this);
+            com.anyNews.anynews.Utils.ActionRowWhatsappConfig.saveFromServer(
+                    HomePage.this, legacy, full, half);
+            if (prevHalf == com.anyNews.anynews.Utils.ActionRowWhatsappConfig.isHalfEnabled(this)
+                    && prevFull == com.anyNews.anynews.Utils.ActionRowWhatsappConfig.isFullEnabled(this)) {
                 return;
             }
-            SharedPrefsData.putBool(
-                    HomePage.this,
-                    Constants.ACTION_ROW_WHATSAPP_ENABLED,
-                    enabled,
-                    Constants.PREF_NAME);
             if (mFlipView != null) {
                 final FlipView flipView = mFlipView;
                 flipView.post(new Runnable() {

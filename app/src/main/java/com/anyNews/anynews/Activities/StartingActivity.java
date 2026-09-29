@@ -2130,12 +2130,18 @@ public class StartingActivity extends AppCompatActivity {
                                     Constants.PREF_NAME
                             );
                         }
-                        if (startActivityReqModel.getData().getActionRowWhatsappEnabled() != null) {
-                            SharedPrefsData.putBool(
+                        if (startActivityReqModel.getData().getActionRowWhatsappEnabled() != null
+                                || startActivityReqModel.getData().hasActionRowWhatsappHalfEnabled()
+                                || startActivityReqModel.getData().hasActionRowWhatsappFullEnabled()) {
+                            com.anyNews.anynews.Utils.ActionRowWhatsappConfig.saveFromServer(
                                     getApplicationContext(),
-                                    Constants.ACTION_ROW_WHATSAPP_ENABLED,
                                     startActivityReqModel.getData().getActionRowWhatsappEnabled(),
-                                    Constants.PREF_NAME
+                                    startActivityReqModel.getData().hasActionRowWhatsappFullEnabled()
+                                            ? startActivityReqModel.getData().getActionRowWhatsappFullEnabled()
+                                            : null,
+                                    startActivityReqModel.getData().hasActionRowWhatsappHalfEnabled()
+                                            ? startActivityReqModel.getData().getActionRowWhatsappHalfEnabled()
+                                            : null
                             );
                         }
 
