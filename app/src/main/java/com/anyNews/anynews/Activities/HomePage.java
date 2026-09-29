@@ -574,8 +574,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Deferred footer/News|Read + FLAG_SECURE — after first landed paint (no mid-flip resize). */
     private Runnable flipChromeSecureRunnable;
     private MessageQueue.IdleHandler flipTrackingIdleHandler;
-    /** Video-tab autoplay: delay before smoothFlipTo next after STATE_ENDED. */
-    private static final long VIDEO_AUTOPLAY_CHAIN_DELAY_MS = 520L;
     /** After settle paint, start current video if autoplay ON. */
     private static final long VIDEO_AUTOPLAY_START_DELAY_MS = 320L;
     private Runnable videoAutoplayChainRunnable;
@@ -6671,58 +6669,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * FlipperAdapter: settings/admin autoplay — current video finished.
-     * Smooth-flip to next after a short delay so the user can perceive end → next.
-     * No wrap at last item. Works in Main / Local / Special / Flash / Video feeds.
+     * A finished full or half video stays on this card. Autoplay still starts
+     * playback when the card is shown; ending does not flip to the next story.
      */
     @Override
     public void onVideoAutoplayEndedRequestNext(int endedPosition) {
-        if (isFinishing() || isDestroyed()) {
-            return;
-        }
-        if (list == null || endedPosition < 0 || endedPosition >= list.size()
-                || list.get(endedPosition) == null) {
-            return;
-        }
-        if (!FlipperAdapter.shouldAutoplayPostType(
-                this, list.get(endedPosition).getPostType())) {
-            return;
-        }
-        final int next = endedPosition + 1;
-        if (next >= list.size()) {
-            showLog("video autoplay chain stop at last item pos=" + endedPosition);
-            return;
-        }
         cancelVideoAutoplayChain();
-        videoAutoplayChainRunnable = () -> {
-            videoAutoplayChainRunnable = null;
-            if (isFinishing() || isDestroyed()) {
-                return;
-            }
-            // User already left this page (manual flip) — do not force another jump.
-            if (positionx != endedPosition) {
-                return;
-            }
-            if (mFlipView == null || mFlipView.mIsFlipping) {
-                return;
-            }
-            if (list == null || endedPosition < 0 || endedPosition >= list.size()
-                    || list.get(endedPosition) == null
-                    || !FlipperAdapter.shouldAutoplayPostType(
-                            this, list.get(endedPosition).getPostType())) {
-                return;
-            }
-            try {
-                if (next < 0 || next >= mFlipView.getPageCount()) {
-                    return;
-                }
-                showLog("video autoplay chain smoothFlipTo " + next);
-                mFlipView.smoothFlipTo(next);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        };
-        flipSettleHandler.postDelayed(videoAutoplayChainRunnable, VIDEO_AUTOPLAY_CHAIN_DELAY_MS);
     }
 
     private void cancelVideoAutoplayChain() {

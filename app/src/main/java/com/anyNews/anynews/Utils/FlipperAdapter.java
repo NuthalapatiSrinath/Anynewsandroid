@@ -334,9 +334,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * flip settle clears this via {@link #clearUserPausedVideoAutoplay()}.
      */
     private boolean userPausedVideoAutoplay = false;
-    /** Guards double flip-next requests from multiple ended listeners. */
-    private int lastAutoplayEndedNotifyPos = -1;
-    private long lastAutoplayEndedNotifyAtMs = 0L;
     static String videoURL;
     public static boolean fullscreen=false;
     public View customConvertView;
@@ -5441,8 +5438,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
          */
         void openFlashNewsFromFeedChip();
         /**
-         * Feed video autoplay: current video finished at {@code position}.
-         * HomePage should smooth-flip to next (no wrap) after a short delay.
+         * Feed video finished at {@code position}. Must not advance the pager.
+         * Autoplay only starts playback when that card is shown.
          */
         void onVideoAutoplayEndedRequestNext(int position);
     }
@@ -14228,33 +14225,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
-     * Notify HomePage to chain to the next flip page when a video ends under autoplay rules.
+     * Full and half videos stay on this card when playback ends.
+     * Does not ask HomePage to flip, and does not restart the player.
      */
     private void notifyVideoEndedForAutoplay(int position) {
-        if (context == null || list == null || position < 0 || position >= list.size()
-                || list.get(position) == null) {
-            return;
-        }
-        if (!shouldAutoplayPostType(context, list.get(position).getPostType())) {
-            return;
-        }
-        if (userPausedVideoAutoplay) {
-            return;
-        }
-        // Debounce duplicate ended events from stacked listeners.
-        long now = System.currentTimeMillis();
-        if (position == lastAutoplayEndedNotifyPos && (now - lastAutoplayEndedNotifyAtMs) < 800L) {
-            return;
-        }
-        lastAutoplayEndedNotifyPos = position;
-        lastAutoplayEndedNotifyAtMs = now;
-        try {
-            if (callbacks != null) {
-                callbacks.onVideoAutoplayEndedRequestNext(position);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
     /**
@@ -14323,7 +14297,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
-    /** Extra YouTube ended listener for Video-tab autoplay chain. */
+    /** YouTube ended: stay on this card. Does not flip to the next story. */
     private void attachYoutubeEndedAutoplayListener(
             com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer youTubePlayer,
             int position) {
