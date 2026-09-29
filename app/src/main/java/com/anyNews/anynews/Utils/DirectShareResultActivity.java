@@ -37,6 +37,8 @@ public final class DirectShareResultActivity extends Activity {
     private static final int REQ_TARGET = 0x5753;
     /** If WhatsApp never pauses us, the start was swallowed. */
     private static final long TARGET_APPEAR_MS = 1500L;
+    /** Faster than a person can open WhatsApp and press back. A result this soon is a bounce. */
+    private static final long BOUNCE_MS = 700L;
 
     private static int nextGen;
     @Nullable
@@ -46,6 +48,9 @@ public final class DirectShareResultActivity extends Activity {
     private boolean launched;
     private boolean sawPause;
     private boolean handedOff;
+    /** System sheet is up; finish only after it has covered us and the user returns. */
+    private boolean chooserArmed;
+    private boolean chooserPaused;
     private long startedAt;
     @Nullable
     private Intent sendIntent;
@@ -100,6 +105,27 @@ public final class DirectShareResultActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (chooserArmed && chooserPaused) {
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
+        // Back on screen with no result. A very fast return means the packaged
+        // target never stayed up (open the system sheet). A longer visit is the
+        // user leaving WhatsApp; do not open a second sheet and do not count.
+        if (launched && !handedOff && sawPause && sendIntent != null
+                && startedAt > 0L && !chooserArmed) {
+            long elapsed = SystemClock.elapsedRealtime() - startedAt;
+            if (elapsed < BOUNCE_MS) {
+                openChooserFallback();
+            } else {
+                handedOff = true;
+                takeIf(gen);
+                finish();
+                overridePendingTransition(0, 0);
+            }
+            return;
+        }
         if (isFinishing() || launched || sendIntent == null) {
             return;
         }
@@ -116,6 +142,9 @@ public final class DirectShareResultActivity extends Activity {
     protected void onPause() {
         super.onPause();
         sawPause = true;
+        if (chooserArmed) {
+            chooserPaused = true;
+        }
     }
 
     @Override
@@ -128,10 +157,12 @@ public final class DirectShareResultActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         if (requestCode == REQ_TARGET && !handedOff) {
-            boolean neverShown = !sawPause
-                    && startedAt > 0L
-                    && (SystemClock.elapsedRealtime() - startedAt) < 500L;
-            if (resultCode != RESULT_OK && neverShown) {
+            long elapsed = startedAt > 0L
+                    ? SystemClock.elapsedRealtime() - startedAt
+                    : Long.MAX_VALUE;
+            // Some phones pause us before the target is dropped, so a pause is
+            // not proof the user saw WhatsApp. A non-OK result this fast is a bounce.
+            if (resultCode != RESULT_OK && elapsed < BOUNCE_MS) {
                 openChooserFallback();
                 return;
             }
@@ -188,18 +219,30 @@ public final class DirectShareResultActivity extends Activity {
         bare.setPackage(null);
         bare.setComponent(null);
         bare.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        try {
-            ShareOutboundHelper.launchChooserOnTargetChosen(this, bare, "Share Video", null);
-        } catch (Exception e) {
-            Toast.makeText(this, "Unable to share video", Toast.LENGTH_SHORT).show();
-        }
-        // Finish on the next turn. Finishing in the same call drops the chooser
-        // on some phones, which looks like the tap did nothing.
+        final Intent chooserIntent = bare;
+        // After the result/resume traversal. Starting and finishing in this call
+        // drops the sheet on some phones, and the tap looks like it did nothing.
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (!isFinishing()) {
+            if (isFinishing()) {
+                return;
+            }
+            try {
+                ShareOutboundHelper.launchChooserOnTargetChosen(
+                        this, chooserIntent, "Share Video", null);
+                chooserArmed = true;
+            } catch (Exception e) {
+                Toast.makeText(this, "Unable to share video", Toast.LENGTH_SHORT).show();
                 finish();
                 overridePendingTransition(0, 0);
+                return;
             }
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (chooserArmed && !chooserPaused && !isFinishing()) {
+                    Toast.makeText(this, "Unable to share video", Toast.LENGTH_SHORT).show();
+                    finish();
+                    overridePendingTransition(0, 0);
+                }
+            }, TARGET_APPEAR_MS);
         });
     }
 
@@ -241,6 +284,10 @@ public final class DirectShareResultActivity extends Activity {
             return null;
         }
         try {
+            Bundle extras = host.getExtras();
+            if (extras != null) {
+                extras.setClassLoader(Intent.class.getClassLoader());
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 return host.getParcelableExtra(EXTRA_SEND, Intent.class);
             }

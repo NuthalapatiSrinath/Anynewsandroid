@@ -15192,9 +15192,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             Toast.makeText(context, R.string.video_status_sharing, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (!tryAcquireShareLaunch()) {
-            return;
-        }
+        // Do not use the 900ms screenshot cooldown. That path returns with no
+        // toast after the sheet is already gone, so a real second tap does nothing.
+        shareLaunchInFlight = true;
+        lastShareLaunchAtMs = SystemClock.elapsedRealtime();
         try {
             ModelClass.Datum item = list.get(position);
             String videoUrl = resolveVideoShareUrl(position);
@@ -15352,6 +15353,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 action = VideoShareAction.OTHER_APPS;
             } else {
                 return;
+            }
+            if (action == VideoShareAction.WHATSAPP_CHAT
+                    || action == VideoShareAction.WHATSAPP_STATUS
+                    || action == VideoShareAction.OTHER_APPS) {
+                if (!canShareVideoFile(position)) {
+                    Toast.makeText(context, "Video file is not available to share", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (shareLaunchInFlight) {
+                    Toast.makeText(context, R.string.video_status_sharing, Toast.LENGTH_SHORT).show();
+                    return;
+                }
             }
             sheetActionTaken[0] = true;
             bottomSheet.dismiss();
