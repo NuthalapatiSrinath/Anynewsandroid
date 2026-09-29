@@ -314,12 +314,6 @@ public class StartingActivity extends AppCompatActivity {
                     .apply();
         } catch (Exception ignored) {
         }
-        // Launcher / cold start is not a return from share. Drop any seat
-        // left from the last time the app went to the background.
-        try {
-            FeedPositionKeepConfig.clear(this);
-        } catch (Exception ignored) {
-        }
 
         OBJECT = "" + intent.getStringExtra("OBJECT");
         TITLE_REWARDS = "" +intent.getStringExtra("TITLE_REWARDS");
