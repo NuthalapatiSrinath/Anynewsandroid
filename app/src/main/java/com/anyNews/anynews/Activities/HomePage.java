@@ -28,6 +28,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
+import android.transition.TransitionManager;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
@@ -77,6 +78,7 @@ import android.view.WindowManager;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
+import android.animation.LayoutTransition;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -219,6 +221,9 @@ import com.anyNews.anynews.flipview.OverFlipMode;
 import com.anyNews.anynews.fragments.CommentsBottomSheetDialog;
 import com.anyNews.anynews.interfaces.CallShareListener;
 import com.anyNews.anynews.interfaces.SharePostToWhatsApp;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+
 import com.facebook.ads.Ad;
 import com.facebook.ads.AdError;
 import com.facebook.ads.NativeAdBase;
@@ -385,6 +390,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * the Material bar (LIFO item pool) and the Reload view is rebound as Profile.
      */
     private boolean footerCenterSlotFrozenForReload = false;
+    /**
+     * Local or flash news just opened from Daily Updates. The feed list is empty
+     * until page 0 returns. Keep footer WhatsApp up across that gap so the middle
+     * column is not removed and put back (that blinks, and {@code setVisible}
+     * rebuilds the bar).
+     */
+    private boolean newsFooterWhatsappHeld = false;
+    /** Page-0 wipe happened while {@link #newsFooterWhatsappHeld} was set. */
+    private boolean newsFooterSawEmptyDuringHold = false;
+    /** Material's BottomNavigationMenuView selection transition (TextScale), 115ms. */
+    private static final long FOOTER_SELECTION_ANIM_MS = 115L;
+    private int footerLayoutTransitionSuspendDepth;
+    @Nullable private LayoutTransition footerLayoutTransitionSaved;
     /**
      * Footer item under the finger at ACTION_DOWN. 0 when the gesture did not
      * start on a tab. A Profile click whose down-hit was Reload is a recycled
@@ -8588,6 +8606,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             footerCenterSlotFrozenForReload = false;
         }
+        if (newsFooterWhatsappHeld) {
+            if (list == null || list.isEmpty()) {
+                newsFooterSawEmptyDuringHold = true;
+            } else if (newsFooterSawEmptyDuringHold && !isDailyUpdatesMode()) {
+                newsFooterWhatsappHeld = false;
+                newsFooterSawEmptyDuringHold = false;
+            }
+        }
         if (visibleFlipIsInviteOrAdShell()) {
             repairVisibleShareTargetIfInviteShell();
         }
@@ -8960,15 +8986,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * not a magazine. Ads keep this icon so scrolling does not rebuild the bar.
      * No blink and no count. Offline stays News-only. The likes-row admin
      * toggle does not hide this icon. Only the Daily Updates hub hides it.
-     * Local news and flash news opened from that hub are news and keep it.
+     * Local news and flash news opened from that hub are news and keep it,
+     * including the empty moment before page 0 returns.
      */
     private boolean shouldShowFooterWhatsapp() {
         try {
             if (!isDeviceOnline() || shouldShowMagazineFooterShare()) {
                 return false;
             }
-            if (isDailyUpdatesMode()) {
+            if (isDailyUpdatesMode() || isCalendarMode()) {
                 return false;
+            }
+            if (newsFooterWhatsappHeld) {
+                return true;
             }
             int idx = getVisiblePostIndex();
             if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
@@ -8993,17 +9023,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Middle column should be open for magazine Share or the footer WhatsApp.
      * The reporter-login flag does not open a plus here. The Daily Updates hub
-     * keeps the column reserved with the glyph hidden so the bar does not reflow.
-     * Flash and local news from that hub show the WhatsApp glyph in this slot.
+     * does not keep an empty column — that was the gap between Special and
+     * Daily Updates. Flash and local news from that hub open this slot for real
+     * and draw the WhatsApp glyph on it.
      */
     private boolean wantsCenterFooterActionSlot() {
-        if (!isDeviceOnline() || isFooterCalendarTabWanted()) {
+        if (!isDeviceOnline() || isFooterCalendarTabWanted() || isDailyUpdatesMode()) {
             return false;
         }
         if (shouldShowMagazineFooterShare()) {
-            return true;
-        }
-        if (isDailyUpdatesMode()) {
             return true;
         }
         return shouldShowFooterWhatsapp();
@@ -9036,7 +9064,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (!alreadyShowing) {
             imageVIewShareWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
             imageVIewShareWhatsapp.clearColorFilter();
-            imageVIewShareWhatsapp.setVisibility(View.VISIBLE);
+            runWithoutFooterLayoutTransition(() ->
+                    imageVIewShareWhatsapp.setVisibility(View.VISIBLE));
         }
         FooterStyleHelper.applyFooterWhatsappIcon(this, imageVIewShareWhatsapp);
         imageVIewShareWhatsapp.setEnabled(true);
@@ -9062,7 +9091,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         imageVIewShareWhatsapp.setAlpha(1f);
         imageVIewShareWhatsapp.setScaleX(1f);
         imageVIewShareWhatsapp.setScaleY(1f);
-        imageVIewShareWhatsapp.setVisibility(View.GONE);
+        runWithoutFooterLayoutTransition(() ->
+                imageVIewShareWhatsapp.setVisibility(View.GONE));
         imageVIewShareWhatsapp.setTranslationX(0f);
     }
 
@@ -9190,18 +9220,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (centerFooterSpacerPrepared && titleEmpty && slot.isVisible() && slot.isEnabled()) {
             return;
         }
-        if (!centerFooterSpacerPrepared) {
-            slot.setIcon(new ColorDrawable(Color.TRANSPARENT));
-        }
-        if (!titleEmpty) {
-            slot.setTitle("");
-        }
-        if (!slot.isVisible()) {
-            slot.setVisible(true);
-        }
-        if (!slot.isEnabled()) {
-            slot.setEnabled(true);
-        }
+        // setVisible(true) is a structure change: Material rebuilds every item
+        // view from a LIFO pool. Suspend that, then paint the existing views.
+        runWithFooterMenuUpdatesSuspended(() -> {
+            if (!centerFooterSpacerPrepared) {
+                slot.setIcon(new ColorDrawable(Color.TRANSPARENT));
+            }
+            if (!titleEmpty) {
+                slot.setTitle("");
+            }
+            if (!slot.isVisible()) {
+                slot.setVisible(true);
+            }
+            if (!slot.isEnabled()) {
+                slot.setEnabled(true);
+            }
+        });
+        refreshFooterItemViewsWithoutRebuild();
         centerFooterSpacerPrepared = slot.isVisible() && slot.isEnabled();
     }
 
@@ -9847,7 +9882,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         // Hub flag before flash/local flags drop, so footer WhatsApp stays off.
+        // Four real tabs: the middle column is removed, not left as an empty gap.
+        newsFooterWhatsappHeld = false;
+        newsFooterSawEmptyDuringHold = false;
         dailyUpdatesModeActive = true;
+        armSnapFooterMotion();
         bumpHomeModeChromeAutoHideOnInteraction();
         closeCenterPlusMenu(true);
         hideHomeCalendarMode();
@@ -9911,6 +9950,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             updateCenterFab();
         } catch (Exception ignored) {
         }
+        scheduleRestoreFooterMotion();
     }
 
     private void setupHomeCalendarTtdToggle() {
@@ -11860,10 +11900,224 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void setFooterMenuItemVisible(@Nullable MenuItem item, boolean visible) {
-        if (item != null) {
-            item.setVisible(visible);
-            item.setEnabled(visible);
+        if (item == null) {
+            return;
         }
+        if (item.getItemId() == R.id.navigation_stricker) {
+            setCenterFooterSlotVisibleWithoutRebuild(item, visible);
+            return;
+        }
+        item.setVisible(visible);
+        item.setEnabled(visible);
+    }
+
+    /**
+     * News highlighted and footer WhatsApp showing, in one frame. Cancels
+     * Material's selection transition so the orange check does not travel from
+     * Daily Updates to News, and does not rebuild item views.
+     */
+    private void showNewsFooterFromDailyUpdatesHub() {
+        newsFooterWhatsappHeld = true;
+        armSnapFooterMotion();
+        selectFooterTabWithoutMotion(R.id.navigation_home);
+        try {
+            updateCenterFab();
+        } catch (Exception ignored) {
+        }
+        scheduleRestoreFooterMotion();
+    }
+
+    private void selectFooterTabWithoutMotion(int itemId) {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        endFooterSelectionTransition();
+        if (bottomNavigationView.getSelectedItemId() == itemId) {
+            return;
+        }
+        final boolean prev = suppressBottomNavCallbacks;
+        suppressBottomNavCallbacks = true;
+        try {
+            bottomNavigationView.setSelectedItemId(itemId);
+        } catch (Exception ignored) {
+        } finally {
+            suppressBottomNavCallbacks = prev;
+        }
+        endFooterSelectionTransition();
+    }
+
+    /** Drop a pending 115ms footer selection / reflow transition before it draws. */
+    private void endFooterSelectionTransition() {
+        try {
+            if (bottomNavigationView == null) {
+                return;
+            }
+            View menuChild = bottomNavigationView.getChildAt(0);
+            if (menuChild instanceof ViewGroup) {
+                TransitionManager.endTransitions((ViewGroup) menuChild);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * The hub tap calls {@code setChecked} after this method returns, which is
+     * when Material clones the selection transition. Duration must still be 0
+     * at that moment. Restore it on the next loop turn, after that clone.
+     */
+    private void armSnapFooterMotion() {
+        setFooterSelectionAnimDuration(0L);
+        endFooterSelectionTransition();
+    }
+
+    private void scheduleRestoreFooterMotion() {
+        if (bottomNavigationView == null) {
+            setFooterSelectionAnimDuration(FOOTER_SELECTION_ANIM_MS);
+            return;
+        }
+        final View nav = bottomNavigationView;
+        nav.getViewTreeObserver().addOnPreDrawListener(
+                new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override
+                    public boolean onPreDraw() {
+                        android.view.ViewTreeObserver obs = nav.getViewTreeObserver();
+                        if (obs.isAlive()) {
+                            obs.removeOnPreDrawListener(this);
+                        }
+                        endFooterSelectionTransition();
+                        setFooterSelectionAnimDuration(FOOTER_SELECTION_ANIM_MS);
+                        return true;
+                    }
+                });
+    }
+
+    private void setFooterSelectionAnimDuration(long durationMs) {
+        try {
+            if (bottomNavigationView == null) {
+                return;
+            }
+            View menuChild = bottomNavigationView.getChildAt(0);
+            if (menuChild == null) {
+                return;
+            }
+            Field setField = menuChild.getClass().getDeclaredField("set");
+            setField.setAccessible(true);
+            Object transition = setField.get(menuChild);
+            if (transition instanceof android.transition.Transition) {
+                ((android.transition.Transition) transition).setDuration(durationMs);
+            }
+        } catch (Exception e) {
+            showLog("footer selection anim: " + e.getMessage());
+        }
+    }
+
+    private void runWithoutFooterLayoutTransition(Runnable action) {
+        ViewGroup host = home_page_navigation instanceof ViewGroup
+                ? (ViewGroup) home_page_navigation : null;
+        boolean outer = footerLayoutTransitionSuspendDepth == 0;
+        if (outer && host != null) {
+            footerLayoutTransitionSaved = host.getLayoutTransition();
+            host.setLayoutTransition(null);
+        }
+        footerLayoutTransitionSuspendDepth++;
+        try {
+            action.run();
+        } finally {
+            footerLayoutTransitionSuspendDepth--;
+            if (outer && host != null) {
+                host.setLayoutTransition(footerLayoutTransitionSaved);
+                footerLayoutTransitionSaved = null;
+            }
+        }
+    }
+
+    private void runWithFooterMenuUpdatesSuspended(Runnable action) {
+        Object presenter = footerNavPresenter();
+        boolean suspended = false;
+        if (presenter != null) {
+            try {
+                Method suspend = presenter.getClass().getMethod(
+                        "setUpdateSuspended", boolean.class);
+                suspend.invoke(presenter, true);
+                suspended = true;
+            } catch (Exception e) {
+                showLog("footer suspend: " + e.getMessage());
+            }
+        }
+        try {
+            action.run();
+        } finally {
+            if (suspended && presenter != null) {
+                try {
+                    Method suspend = presenter.getClass().getMethod(
+                            "setUpdateSuspended", boolean.class);
+                    suspend.invoke(presenter, false);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    @Nullable
+    private Object footerNavPresenter() {
+        try {
+            if (bottomNavigationView == null) {
+                return null;
+            }
+            Field field = bottomNavigationView.getClass().getDeclaredField("presenter");
+            field.setAccessible(true);
+            return field.get(bottomNavigationView);
+        } catch (Exception e) {
+            showLog("footer presenter: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Re-bind icons and visibility on the views already in the bar.
+     * {@code updateMenuView} does not recycle them. {@code buildMenuView} does.
+     */
+    private void refreshFooterItemViewsWithoutRebuild() {
+        try {
+            if (bottomNavigationView == null) {
+                return;
+            }
+            View menuChild = bottomNavigationView.getChildAt(0);
+            if (!(menuChild instanceof BottomNavigationMenuView)) {
+                return;
+            }
+            endFooterSelectionTransition();
+            ((BottomNavigationMenuView) menuChild).updateMenuView();
+            endFooterSelectionTransition();
+            menuChild.requestLayout();
+        } catch (Exception e) {
+            showLog("refreshFooterItemViewsWithoutRebuild: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Show or hide the middle column without a menu structure change.
+     * {@code MenuItem.setVisible} calls {@code buildMenuView}: the bar flashes,
+     * a hidden item still occupies a fifth of the width for a frame (the hole),
+     * and the Reload view can be rebound as Profile.
+     * The menu flag still updates so measure divides the bar by the visible tabs.
+     */
+    private void setCenterFooterSlotVisibleWithoutRebuild(@Nullable MenuItem item, boolean visible) {
+        if (item == null || bottomNavigationView == null) {
+            return;
+        }
+        if (item.isVisible() == visible && item.isEnabled() == visible) {
+            return;
+        }
+        runWithFooterMenuUpdatesSuspended(() -> {
+            if (item.isVisible() != visible) {
+                item.setVisible(visible);
+            }
+            if (item.isEnabled() != visible) {
+                item.setEnabled(visible);
+            }
+        });
+        refreshFooterItemViewsWithoutRebuild();
     }
 
     /**
@@ -15565,10 +15819,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showLog("setSelectedItemId(R.id.navigation_catagiries)");
                 bottomNavigationView.setSelectedItemId(R.id.navigation_catagiries);
             } else if (!isCalendarMode() && !isDailyUpdatesMode()) {
-                // Flash (videoFeedModeActive) and local news from Daily Updates
-                // highlight News. Only the hub keeps the Daily Updates tab.
+                // Flash and local news from Daily Updates highlight News. Snap the
+                // check — do not let Material slide it across the bar.
                 showLog("setSelectedItemId(R.id.navigation_home)");
-                bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+                selectFooterTabWithoutMotion(R.id.navigation_home);
             }
         } catch (Exception ignored) {
         } finally {
@@ -16034,15 +16288,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         localFeedFromDailyUpdates = true;
         hideHomeCalendarMode();
         hideHomeDailyUpdatesMode();
-        try {
-            suppressBottomNavCallbacks = true;
-            if (bottomNavigationView != null) {
-                bottomNavigationView.setSelectedItemId(R.id.navigation_home);
-            }
-        } catch (Exception ignored) {
-        } finally {
-            suppressBottomNavCallbacks = false;
-        }
+        showNewsFooterFromDailyUpdatesHub();
         try {
             bookmarksModeSelected = false;
             applyHomeModeContentVisibility();
@@ -16112,19 +16358,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         hideLocalFeedChrome();
         hideHomeCalendarMode();
         hideHomeDailyUpdatesMode();
-        try {
-            suppressBottomNavCallbacks = true;
-            if (bottomNavigationView != null) {
-                bottomNavigationView.setSelectedItemId(R.id.navigation_home);
-            }
-        } catch (Exception ignored) {
-        } finally {
-            suppressBottomNavCallbacks = false;
-        }
-        try {
-            updateCenterFab();
-        } catch (Exception ignored) {
-        }
+        showNewsFooterFromDailyUpdatesHub();
         try {
             bookmarksModeSelected = false;
             applyHomeModeContentVisibility();
@@ -22244,6 +22478,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
      * Callbacks stay suppressed so this does not reload the feed.
      */
     private void leaveDailyUpdatesForShareOpen() {
+        boolean hubWasChecked = false;
+        try {
+            hubWasChecked = bottomNavigationView != null
+                    && bottomNavigationView.getSelectedItemId() == R.id.navigation_status;
+        } catch (Exception ignored) {
+        }
         try {
             hideHomeCalendarMode();
             hideHomeDailyUpdatesMode();
@@ -22257,14 +22497,11 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         } catch (Exception ignored) {
         }
         try {
-            if (bottomNavigationView != null
+            if (hubWasChecked) {
+                showNewsFooterFromDailyUpdatesHub();
+            } else if (bottomNavigationView != null
                     && bottomNavigationView.getSelectedItemId() != R.id.navigation_home) {
-                suppressBottomNavCallbacks = true;
-                try {
-                    bottomNavigationView.setSelectedItemId(R.id.navigation_home);
-                } finally {
-                    suppressBottomNavCallbacks = false;
-                }
+                selectFooterTabWithoutMotion(R.id.navigation_home);
             }
         } catch (Exception ignored) {
         }
@@ -23476,8 +23713,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             return;
         }
         try {
-            suppressBottomNavCallbacks = true;
-            bottomNavigationView.setSelectedItemId(R.id.navigation_home);
+            selectFooterTabWithoutMotion(R.id.navigation_home);
         } catch (Exception ignored) {
         } finally {
             suppressBottomNavCallbacks = false;

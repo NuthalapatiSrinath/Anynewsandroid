@@ -83,3 +83,15 @@
 # IMA (interactive media ads)
 -keep class com.google.ads.interactivemedia.** { *; }
 -dontwarn com.google.ads.interactivemedia.**
+
+# Footer: hide the Daily Updates center slot without MenuItem.setVisible rebuilding
+# the bar. These members are reached by reflection so the item views stay put.
+-keepclassmembers class com.google.android.material.bottomnavigation.BottomNavigationView {
+    private com.google.android.material.bottomnavigation.BottomNavigationPresenter presenter;
+}
+-keepclassmembers class com.google.android.material.bottomnavigation.BottomNavigationPresenter {
+    public void setUpdateSuspended(boolean);
+}
+-keepclassmembers class com.google.android.material.bottomnavigation.BottomNavigationMenuView {
+    private android.transition.TransitionSet set;
+}

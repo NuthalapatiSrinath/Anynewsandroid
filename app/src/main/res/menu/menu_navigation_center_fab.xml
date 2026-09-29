@@ -5,11 +5,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context=".Activities.HomePage">
 
-    <!-- Order L→R when the center share slot is hidden:
+    <!-- Order L→R on the Daily Updates hub (center slot hidden, four real tabs):
          News | Special | Daily Updates | Profile.
-         navigation_stricker sits between Special and Daily Updates so magazine /
-         special galleries can open an empty middle column (blinking Share) without
-         covering the Special tab. Panchangam stays product-hidden
+         News, ads, and magazines show navigation_stricker between Special and
+         Daily Updates: WhatsApp, or an empty column under blinking Share.
+         Panchangam stays product-hidden
          (ProfileHubConfigHelper.isFooterShowCalendar) — open from Daily Updates. -->
     <item
         android:checked="true"
