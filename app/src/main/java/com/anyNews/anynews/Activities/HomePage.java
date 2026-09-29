@@ -8945,14 +8945,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
+     * Daily Updates hub, Mana Zilla opened from that hub, and Flash News.
+     * The footer center glyph stays off for the whole session. The likes-row
+     * WhatsApp icon is a different control and is not affected.
+     */
+    private boolean isDailyUpdatesFooterSession() {
+        return isDailyUpdatesMode() || localFeedFromDailyUpdates || videoFeedModeActive;
+    }
+
+    /**
      * Steady WhatsApp between Special and Daily Updates on every card that is
      * not a magazine. Ads keep this icon so scrolling does not rebuild the bar.
      * No blink and no count. Offline stays News-only. The likes-row admin
-     * toggle does not hide this icon.
+     * toggle does not hide this icon. Daily Updates sessions never show it.
      */
     private boolean shouldShowFooterWhatsapp() {
         try {
             if (!isDeviceOnline() || shouldShowMagazineFooterShare()) {
+                return false;
+            }
+            if (isDailyUpdatesFooterSession()) {
                 return false;
             }
             int idx = getVisiblePostIndex();
@@ -8977,13 +8989,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Middle column should be open for magazine Share or the footer WhatsApp.
-     * The reporter-login flag does not open a plus here.
+     * The reporter-login flag does not open a plus here. Daily Updates keeps
+     * the column reserved with the glyph hidden so the bar does not reflow.
      */
     private boolean wantsCenterFooterActionSlot() {
         if (!isDeviceOnline() || isFooterCalendarTabWanted()) {
             return false;
         }
         if (shouldShowMagazineFooterShare()) {
+            return true;
+        }
+        if (isDailyUpdatesFooterSession()) {
             return true;
         }
         return shouldShowFooterWhatsapp();
@@ -9781,6 +9797,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         @Override
                         public void openFlashNewsFromDailyUpdates() {
                             // Flash News = push_posts feed only (not main My Feed).
+                            // Mark flash before the hub flag drops so footer WhatsApp
+                            // cannot paint in the hand-off.
+                            setFeedModeFlags(false, true);
                             hideHomeDailyUpdatesMode();
                             performFlashNewsOpen();
                         }
@@ -9824,12 +9843,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             // Reuse videos admin flag for Daily Updates slot visibility (same menu id).
             return;
         }
+        // Hub flag before flash/local flags drop, so footer WhatsApp stays off.
+        dailyUpdatesModeActive = true;
         bumpHomeModeChromeAutoHideOnInteraction();
         closeCenterPlusMenu(true);
         hideHomeCalendarMode();
         softMergeOnNextPage0 = false;
         setFeedModeFlags(false, false);
-        dailyUpdatesModeActive = true;
         persistDailyUpdatesDestination(true);
         feedModeEpoch++;
         clearPendingFlipRestore();
@@ -9883,6 +9903,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (homeDailyUpdatesHost != null) {
             homeDailyUpdatesHost.post(this::keepDailyUpdatesCovered);
             homeDailyUpdatesHost.postDelayed(this::keepDailyUpdatesCovered, 250L);
+        }
+        try {
+            updateCenterFab();
+        } catch (Exception ignored) {
         }
     }
 
@@ -11728,7 +11752,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 applyFooterSlotVisibility();
                 forceFooterItemViewsMatchMenuVisibility();
             }
-            if (isCenterFooterActionSlotOpen()) {
+            if (isCenterFooterActionSlotOpen() || wantsCenterFooterActionSlot()) {
                 MenuItem slot = bottomNavigationView != null && bottomNavigationView.getMenu() != null
                         ? bottomNavigationView.getMenu().findItem(R.id.navigation_stricker)
                         : null;
@@ -16003,9 +16027,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performLocalFeedOpenFromDailyUpdates() {
         showLog("performLocalFeedOpenFromDailyUpdates");
+        // Before the hub flag drops, so this feed never paints footer WhatsApp.
+        // News stays the highlighted tab (owner: that highlight is correct).
+        localFeedFromDailyUpdates = true;
         hideHomeCalendarMode();
         hideHomeDailyUpdatesMode();
-        localFeedFromDailyUpdates = true;
         try {
             suppressBottomNavCallbacks = true;
             if (bottomNavigationView != null) {
@@ -16041,6 +16067,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             prepareLocalFeedPage0(true);
             showLocalFeedChrome(true);
             inlist(-1);
+            updateCenterFab();
             writeButtonClick("User", type_firebase_button, current_time_firebase,
                     draft_id_firebase, device_id_firebase, button_name_local);
         } catch (Exception e) {
@@ -16075,11 +16102,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performVideoFeedOpen() {
         showLog("performVideoFeedOpen");
+        // Flash is Daily Updates content. Set this before the hub hides so the
+        // center slot does not turn into the footer WhatsApp icon.
+        setFeedModeFlags(false, true);
         clearSearchFeedMode();
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         hideHomeCalendarMode();
         hideHomeDailyUpdatesMode();
+        try {
+            updateCenterFab();
+        } catch (Exception ignored) {
+        }
         try {
             bookmarksModeSelected = false;
             applyHomeModeContentVisibility();
