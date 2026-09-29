@@ -463,6 +463,14 @@ public class StartActivityReqModel implements Serializable {
         private Integer homeModeChromeAutoHideSeconds;
 
         /**
+         * Minutes to keep the news card after the app goes to the background.
+         * Default 15. Null on old servers → Android default. Not the splash TTL.
+         */
+        @SerializedName("feed_position_keep_minutes")
+        @Expose
+        private Integer feedPositionKeepMinutes;
+
+        /**
          * Main News FlipView tap mode: classic | reader | hybrid (default hybrid).
          * Null on old servers → Android keeps cached / default hybrid.
          */
@@ -1219,6 +1227,11 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; caller keeps cached / default 3. */
         public Integer getHomeModeChromeAutoHideSeconds() {
             return homeModeChromeAutoHideSeconds;
+        }
+
+        /** Null → old server; caller keeps cached / default 15 minutes. */
+        public Integer getFeedPositionKeepMinutes() {
+            return feedPositionKeepMinutes;
         }
 
         /** Null → old server; caller keeps cached / default hybrid. */

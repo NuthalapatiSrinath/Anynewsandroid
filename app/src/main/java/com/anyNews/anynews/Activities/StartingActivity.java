@@ -55,6 +55,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketMiniPlayerPositionHelper;
 import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
 import com.anyNews.anynews.Utils.OfflineFeedStore;
+import com.anyNews.anynews.Utils.FeedPositionKeepConfig;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.NewsTapModeConfig;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
@@ -2607,6 +2608,9 @@ public class StartingActivity extends AppCompatActivity {
                                 getApplicationContext(),
                                 startActivityReqModel.getData()
                                         .getHomeModeChromeAutoHideSeconds());
+                        FeedPositionKeepConfig.saveMinutesFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getFeedPositionKeepMinutes());
                         // Main News FlipView tap modes (default hybrid).
                         NewsTapModeConfig.saveFromServer(
                                 getApplicationContext(),

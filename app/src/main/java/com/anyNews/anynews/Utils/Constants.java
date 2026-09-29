@@ -353,6 +353,17 @@ public class Constants {
     public static String HOME_MODE_CHROME_AUTO_HIDE_SECONDS =
             "home_mode_chrome_auto_hide_seconds";
     /**
+     * Minutes to keep the news card after the app goes to the background
+     * (splash / session). Default 15. Not the splash-skip timer.
+     */
+    public static String FEED_POSITION_KEEP_MINUTES = "feed_position_keep_minutes";
+    /** Wall-clock millis when the process last left the foreground. */
+    public static String FEED_POSITION_LEFT_AT = "feed_position_left_at";
+    /** Flip index saved with {@link #FEED_POSITION_LEFT_AT}. */
+    public static String FEED_POSITION_INDEX = "feed_position_index";
+    /** Post id saved with {@link #FEED_POSITION_LEFT_AT}. */
+    public static String FEED_POSITION_POST_ID = "feed_position_post_id";
+    /**
      * Main News FlipView content-tap mode: classic | reader | hybrid (splash/session).
      * Default hybrid.
      */

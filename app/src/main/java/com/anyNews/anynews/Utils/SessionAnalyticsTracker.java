@@ -796,6 +796,15 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
+                    if (resBody.has("feed_position_keep_minutes")
+                            && !resBody.get("feed_position_keep_minutes").isJsonNull()) {
+                        try {
+                            FeedPositionKeepConfig.saveMinutesFromServer(
+                                    context,
+                                    resBody.get("feed_position_keep_minutes").getAsInt());
+                        } catch (Exception ignored) {
+                        }
+                    }
                     try {
                         String tapMode = null;
                         Integer halfPct = null;

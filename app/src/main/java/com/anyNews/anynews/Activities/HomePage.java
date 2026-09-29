@@ -161,6 +161,7 @@ import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.FeedExoSurfaceHost;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Utils.FeedPositionKeepConfig;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.ShareOutboundHelper;
@@ -772,6 +773,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private boolean suppressFeedRefreshForShareSheet = false;
     private long shareSheetStartedElapsed = 0L;
+    /**
+     * This open is a return inside the admin keep-position window (activity
+     * was recreated). {@link #ShowNews_Data_Values} paints cache and does not
+     * call List_All_Articles. Explicit Reload clears it.
+     */
+    private boolean skipFeedNetworkForPositionKeep = false;
     /** Chooser returns inside this window stay on the card the user was reading. */
     private static final long SHARE_SHEET_RETURN_IGNORE_MS = 5000L;
     private LifecycleObserver processBackgroundObserver;
@@ -1638,6 +1645,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Special must never inherit main-feed skip/cursor or flip-restore mid-state.
         if (openAsSpecial) {
             prepareSpecialFeedFromTop();
+        }
+        if (pushOwnsSeating || SHARE_ID > 0) {
+            // Push and inbound share links keep today's first-card seating.
+            skipFeedNetworkForPositionKeep = false;
+            try {
+                FeedPositionKeepConfig.clear(this);
+            } catch (Exception ignored) {
+            }
+            clearPendingFlipRestore();
+        } else if (!openAsSpecial && !searchOpenHandledInCreate && isMainFeedSession(sessionId)) {
+            armFeedPositionKeepForThisOpen();
         }
         if (sessionId.equals("0") || sessionId.equals("null")) {
             if (!openAsSpecial) {
@@ -15767,6 +15785,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performFeedReload() {
         showLog("performFeedReload initialCall=" + initialCall);
+        skipFeedNetworkForPositionKeep = false;
+        try {
+            FeedPositionKeepConfig.clear(this);
+        } catch (Exception ignored) {
+        }
         clearSearchFeedMode();
         // Drop mid-watch video position before the feed rebuilds. Same article often
         // comes back first; without this the shared Exo player reattaches and resumes.
@@ -16432,6 +16455,54 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             } catch (Exception ignored) {
             }
+        }
+
+        // Share / background return inside the admin window: the list is already
+        // painted from memory or disk. Do not call List_All_Articles for that.
+        // Explicit Reload sets forceUserRefresh and clears this flag first.
+        if (skipFeedNetworkForPositionKeep
+                && isFirstPage
+                && !forceUserRefresh
+                && !stickyPushOrShare
+                && !searchMode
+                && category_id != -1
+                && !localFeedFromDailyUpdates) {
+            skipFeedNetworkForPositionKeep = false;
+            if (!paintedFromDisk) {
+                try {
+                    EncreptionRequest stale = OpenPathCache.loadFeedForOffline(
+                            this, category_id, OpenPathCache.FEED_MODE_MAIN);
+                    if (stale != null) {
+                        showLog("feed position keep: paint saved feed cache");
+                        convertListOfArticles(stale, reqPos, true);
+                        paintedFromDisk = list != null && !list.isEmpty();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (paintedFromDisk || (list != null && !list.isEmpty())) {
+                showLog("feed position keep: skip List_All_Articles");
+                try {
+                    hideHomeFeedLoadingReveal(true);
+                    if (layout_with_data != null) {
+                        layout_with_data.setVisibility(View.VISIBLE);
+                    }
+                    if (mFlipView != null) {
+                        mFlipView.setVisibility(View.VISIBLE);
+                    }
+                    if (txtNoData != null) {
+                        txtNoData.setVisibility(View.GONE);
+                    }
+                } catch (Exception ignored) {
+                }
+                isApiRequested = false;
+                try {
+                    maybeRestoreFlipPositionAfterArticlesLoad();
+                } catch (Exception ignored) {
+                }
+                return;
+            }
+            showLog("feed position keep: no saved feed, loading as usual");
         }
 
         // Reload / special / sticky always network. After warm disk paint, ALWAYS
@@ -20246,8 +20317,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     /**
      * Home / recents → process not visible. {@link ProcessLifecycleOwner} ON_STOP
      * is what sets {@link #appEnteredBackground} (not onPause). On the way back,
-     * reload My Feed at the first article unless this open is a new push/share
-     * (or another feed-changing intent) or a share sheet we just launched.
+     * keep the same card when the user has been away less than the admin
+     * minutes. After that window, reload My Feed at the first article unless
+     * this open is a new push (or another feed-changing intent).
      */
     @Override
     protected void onStart() {
@@ -20296,9 +20368,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /**
-     * Plain return from background reloads My Feed at the first article.
-     * A push that arrived in this resume (history or shade, including a local
-     * article) is seated instead. Magazine share and a share-sheet return stay put.
+     * Plain return from background reloads My Feed at the first article only
+     * after the admin keep-position window. Inside that window the card already
+     * on screen stays, with no feed refetch. A push that arrived in this resume
+     * is seated instead and does not restore the card they shared from.
      */
     private void runDeferredBackgroundFeedRefresh() {
         pendingBackgroundRefreshCheck = false;
@@ -20317,6 +20390,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             return;
         }
         if (isPositivePostId(arrivedPush) || resolvePendingDeepLinkPostId() > 0) {
+            // Push / inbound link keeps today's seating. Do not restore the card
+            // they had open before they left.
+            try {
+                FeedPositionKeepConfig.clear(this);
+            } catch (Exception ignored) {
+            }
             if (resolvePendingDeepLinkPostId() <= 0 && isPositivePostId(arrivedPush)) {
                 try {
                     Intent seat = getIntent();
@@ -20349,12 +20428,77 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (!unstuckSpecial && !isPlainMainNewsFeed()) {
             return;
         }
+        if (!unstuckSpecial && FeedPositionKeepConfig.shouldKeepPosition(this)) {
+            showLog("background resume keep feed position (within admin minutes)");
+            restoreKeptFeedSeatIfNeeded();
+            return;
+        }
         try {
             showLog("background resume → performFeedReload (first article)");
             performFeedReload();
         } catch (Exception e) {
             showLog("background feed refresh failed: " + e.getMessage());
         }
+    }
+
+    /** Session extra is main My Feed (0 / missing), not a category open. */
+    private static boolean isMainFeedSession(@Nullable String sessionId) {
+        if (sessionId == null || sessionId.equals("0") || sessionId.equals("null")) {
+            return true;
+        }
+        try {
+            return Integer.parseInt(sessionId.trim()) == 0;
+        } catch (NumberFormatException e) {
+            return true;
+        }
+    }
+
+    /**
+     * Activity was created again inside the keep window (process or activity
+     * restart after share). Paint the feed already on disk and seat the same
+     * card. Push and inbound share links do not call this.
+     */
+    private void armFeedPositionKeepForThisOpen() {
+        skipFeedNetworkForPositionKeep = false;
+        if (!FeedPositionKeepConfig.shouldKeepPosition(this)) {
+            return;
+        }
+        int idx = FeedPositionKeepConfig.savedIndex(this);
+        long pid = FeedPositionKeepConfig.savedPostId(this);
+        if (idx > 0 || pid > 0) {
+            pendingRestoreFlipIndex = idx;
+            pendingRestorePostId = pid;
+            pendingFlipRestore = true;
+        }
+        skipFeedNetworkForPositionKeep = true;
+        showLog("feed position keep armed index=" + idx + " postId=" + pid);
+    }
+
+    /**
+     * The activity is still alive, so the list is already in memory. If a
+     * recreate or a reset moved the pager to card 0, put it back. No network.
+     */
+    private void restoreKeptFeedSeatIfNeeded() {
+        if (list == null || list.isEmpty() || mFlipView == null || adapter == null) {
+            return;
+        }
+        int saved = FeedPositionKeepConfig.savedIndex(this);
+        long pid = FeedPositionKeepConfig.savedPostId(this);
+        if (saved <= 0 && pid <= 0) {
+            return;
+        }
+        int cur = -1;
+        try {
+            cur = mFlipView.getCurrentPage();
+        } catch (Exception ignored) {
+        }
+        if (saved >= 0 && cur == saved) {
+            return;
+        }
+        pendingRestoreFlipIndex = saved;
+        pendingRestorePostId = pid;
+        pendingFlipRestore = true;
+        maybeRestoreFlipPositionAfterArticlesLoad();
     }
 
     @Override
@@ -20373,6 +20517,21 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 // Whole process left the foreground (Home, recents, another app).
                 // In-app activities keep the process started, so this does not run.
                 appEnteredBackground = true;
+                try {
+                    // Prefer the seat we already tracked. A stopped FlipView can
+                    // report page 0 and would otherwise forget the shared card.
+                    int flipIndex = Math.max(0, positionx);
+                    if (mFlipView != null) {
+                        int cur = mFlipView.getCurrentPage();
+                        if (cur > flipIndex) {
+                            flipIndex = cur;
+                        }
+                    }
+                    long postId = resolvePostIdForFlipIndex(flipIndex);
+                    FeedPositionKeepConfig.noteLeftForeground(
+                            HomePage.this, flipIndex, postId);
+                } catch (Exception ignored) {
+                }
             }
         };
         try {
