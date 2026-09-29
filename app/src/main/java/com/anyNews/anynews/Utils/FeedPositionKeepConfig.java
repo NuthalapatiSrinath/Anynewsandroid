@@ -6,13 +6,13 @@ import android.text.TextUtils;
 import androidx.annotation.Nullable;
 
 /**
- * How long to keep the news-card the user was on after the app leaves the
- * foreground (share to WhatsApp, Home, recents).
+ * How long to keep the news card after the user leaves to share (WhatsApp).
  *
  * <p>The minutes value is cached from splash / session
  * ({@code feed_position_keep_minutes}). The check itself is a local timestamp
- * written when the process goes to the background. Coming back inside the
- * window must not call the server.
+ * written when the process goes to the background during a share. Coming back
+ * inside the window must not call the server. A normal open (launcher, Home,
+ * recents) does not keep the card — new posts stay at the top.
  *
  * <p>Missing / old server → {@link #DEFAULT_MINUTES} (15). This is not
  * {@link OpenPathCache#SPLASH_TTL_MS}.
@@ -77,10 +77,24 @@ public final class FeedPositionKeepConfig {
     /**
      * Same as {@link #noteLeftForeground(Context, int, long)} but the language
      * is the feed on screen, not a pref that a language tap may already have
-     * changed.
+     * changed. {@code fromShare} is false for a Home / recents departure.
      */
     public static void noteLeftForeground(
             @Nullable Context context, int flipIndex, long postId, int languageId) {
+        noteLeftForeground(context, flipIndex, postId, languageId, false);
+    }
+
+    /**
+     * @param fromShare true only when this background is a share sheet. A later
+     *                  open keeps the card only for that case, and only inside
+     *                  the admin window.
+     */
+    public static void noteLeftForeground(
+            @Nullable Context context,
+            int flipIndex,
+            long postId,
+            int languageId,
+            boolean fromShare) {
         if (context == null) {
             return;
         }
@@ -94,14 +108,61 @@ public final class FeedPositionKeepConfig {
                     .putInt(Constants.FEED_POSITION_INDEX, Math.max(0, flipIndex))
                     .putString(Constants.FEED_POSITION_POST_ID, String.valueOf(postId))
                     .putInt(Constants.FEED_POSITION_LANGUAGE_ID, Math.max(0, languageId))
+                    .putBoolean(Constants.FEED_POSITION_FROM_SHARE, fromShare)
+                    .putBoolean(Constants.FEED_POSITION_SHARE_DEPARTURE, false)
                     .commit();
         } catch (Exception ignored) {
         }
     }
 
-    /** True when the user left recently enough that the same card should stay. */
+    /** Call when the share sheet is launched, before the process backgrounds. */
+    public static void noteShareDeparture(@Nullable Context context) {
+        if (context == null) {
+            return;
+        }
+        try {
+            context.getApplicationContext()
+                    .getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(Constants.FEED_POSITION_SHARE_DEPARTURE, true)
+                    .commit();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * True once, when a share sheet was opened and the process then left the
+     * foreground. A dismissed sheet never reaches this.
+     */
+    public static boolean consumeShareDeparture(@Nullable Context context) {
+        if (context == null || !isShareDeparturePending(context)) {
+            return false;
+        }
+        clearShareDeparture(context);
+        return true;
+    }
+
+    /** Sheet dismissed without leaving the app. Does not clear a saved seat. */
+    public static void clearShareDeparture(@Nullable Context context) {
+        if (context == null) {
+            return;
+        }
+        try {
+            context.getApplicationContext()
+                    .getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(Constants.FEED_POSITION_SHARE_DEPARTURE, false)
+                    .commit();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** True when the user left to share recently enough that the same card should stay. */
     public static boolean shouldKeepPosition(@Nullable Context context) {
         if (context == null) {
+            return false;
+        }
+        if (!savedFromShare(context)) {
             return false;
         }
         long leftAt = readLeftAt(context);
@@ -195,8 +256,36 @@ public final class FeedPositionKeepConfig {
                     .putInt(Constants.FEED_POSITION_INDEX, 0)
                     .putString(Constants.FEED_POSITION_POST_ID, "-1")
                     .putInt(Constants.FEED_POSITION_LANGUAGE_ID, 0)
+                    .putBoolean(Constants.FEED_POSITION_FROM_SHARE, false)
+                    .putBoolean(Constants.FEED_POSITION_SHARE_DEPARTURE, false)
                     .commit();
         } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean savedFromShare(@Nullable Context context) {
+        if (context == null) {
+            return false;
+        }
+        try {
+            return context.getApplicationContext()
+                    .getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
+                    .getBoolean(Constants.FEED_POSITION_FROM_SHARE, false);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isShareDeparturePending(@Nullable Context context) {
+        if (context == null) {
+            return false;
+        }
+        try {
+            return context.getApplicationContext()
+                    .getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
+                    .getBoolean(Constants.FEED_POSITION_SHARE_DEPARTURE, false);
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
