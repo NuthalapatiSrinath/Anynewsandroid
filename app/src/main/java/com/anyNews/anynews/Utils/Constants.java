@@ -370,6 +370,16 @@ public class Constants {
      */
     public static String FEED_POSITION_LANGUAGE_ID = "feed_position_language_id";
     /**
+     * True only when {@link #FEED_POSITION_INDEX} was saved because the user
+     * left to share. A normal Home / launcher open must not resume that seat.
+     */
+    public static String FEED_POSITION_FROM_SHARE = "feed_position_from_share";
+    /**
+     * Share sheet was opened. Consumed when the process actually backgrounds.
+     * A dismissed sheet clears this so the next Home press is a normal open.
+     */
+    public static String FEED_POSITION_SHARE_DEPARTURE = "feed_position_share_departure";
+    /**
      * Main News FlipView content-tap mode: classic | reader | hybrid (splash/session).
      * Default hybrid.
      */

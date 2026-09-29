@@ -161,6 +161,7 @@ import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.FeedExoSurfaceHost;
 import com.anyNews.anynews.Utils.EngagementCountHelper;
+import com.anyNews.anynews.Utils.DirectShareResultActivity;
 import com.anyNews.anynews.Utils.FeedPositionKeepConfig;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
@@ -786,6 +787,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean suppressFeedRefreshForShareSheet = false;
     private long shareSheetStartedElapsed = 0L;
     /**
+     * Share sheet was launched and the process has not backgrounded yet.
+     * Cleared if the sheet is dismissed without leaving the app.
+     */
+    private boolean shareDepartureAwaitingBackground = false;
+    /**
+     * Same-process recreate (night mode). Process death resets this, so a
+     * later open does not replay the saved flip index.
+     */
+    private static boolean sKeepFlipSeatAcrossRecreate = false;
+    /** This instance may apply the flip checkpoint. Normal opens must not. */
+    private boolean honorFlipCheckpointThisInstance = false;
+    /**
      * This open is a return inside the admin keep-position window (activity
      * was recreated). {@link #ShowNews_Data_Values} paints cache and does not
      * call List_All_Articles. Explicit Reload clears it.
@@ -1212,7 +1225,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         appliedNightUiMask =
                 getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         pendingNightModeRecreate = false;
-        readPendingFlipRestoreState(savedInstanceState);
+        // Night-mode recreate is the same process. A launcher open or a
+        // process-death restore must not replay yesterday's article after the
+        // new feed has already painted card 0.
+        honorFlipCheckpointThisInstance = sKeepFlipSeatAcrossRecreate;
+        sKeepFlipSeatAcrossRecreate = false;
+        if (honorFlipCheckpointThisInstance) {
+            readPendingFlipRestoreState(savedInstanceState);
+        } else {
+            clearPendingFlipRestore();
+            showLog("flip restore dropped — normal open");
+            // A share sheet that died before the process backgrounded must not
+            // mark the next Home press as a share return.
+            if (!FeedPositionKeepConfig.shouldKeepPosition(this)) {
+                FeedPositionKeepConfig.clearShareDeparture(this);
+            }
+        }
         // Before language-switch consume clears its flag. Does not touch night mode.
         restoreDailyUpdatesOnCreate = peekDailyUpdatesRestoreRequest(savedInstanceState);
         // Language switch: do not re-seat the previous language's flip index.
@@ -1688,7 +1716,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } else if (languageSwitchFeedReset) {
             skipFeedNetworkForPositionKeep = false;
             showLog("feed position keep skipped — language change");
-        } else if (!openAsSpecial && !searchOpenHandledInCreate && isMainFeedSession(sessionId)) {
+        } else if (!honorFlipCheckpointThisInstance
+                && !openAsSpecial
+                && !searchOpenHandledInCreate
+                && isMainFeedSession(sessionId)) {
+            // Share-return only. A theme recreate already has its own seat.
             armFeedPositionKeepForThisOpen();
         }
         if (sessionId.equals("0") || sessionId.equals("null")) {
@@ -19866,6 +19898,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         boolean languageSwitchReset = SharedPrefsData.getBool(
                 this, Constants.LANGUAGE_SWITCH_RESET_FLIP, Constants.PREF_NAME);
         if (isFinishing() || languageSwitchReset) {
+            sKeepFlipSeatAcrossRecreate = false;
             outState.putInt(STATE_FLIP_INDEX, 0);
             outState.putLong(STATE_FLIP_POST_ID, -1L);
             outState.putBoolean(STATE_DAILY_UPDATES_OPEN, false);
@@ -19873,6 +19906,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             showLog("onSaveInstanceState skip flip checkpoint finishing="
                     + isFinishing() + " languageSwitch=" + languageSwitchReset);
             return;
+        }
+        if (isChangingConfigurations()) {
+            sKeepFlipSeatAcrossRecreate = true;
         }
         int flipIndex = resolveCurrentFlipIndexForSave();
         long postId = resolvePostIdForFlipIndex(flipIndex);
@@ -19899,8 +19935,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && !isCalendarMode()) {
             releaseDailyUpdatesCheckLeftByQuietCard();
         }
-        // onCreate already reads flip state. Do not re-arm a news seat over the hub.
-        if (!pendingFlipRestore && !isDailyUpdatesMode()) {
+        // onCreate already reads flip state. Do not re-arm a news seat over the hub,
+        // and do not re-apply yesterday's card on a normal open.
+        if (honorFlipCheckpointThisInstance
+                && !pendingFlipRestore
+                && !isDailyUpdatesMode()) {
             readPendingFlipRestoreState(savedInstanceState);
         }
     }
@@ -20465,6 +20504,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             persistDailyUpdatesDestination(dailyUpdatesModeActive);
         } catch (Exception ignored) {
         }
+        sKeepFlipSeatAcrossRecreate = true;
         com.anyNews.anynews.Utils.NightModeHelper.recreateWithFade(this);
     }
 
@@ -20480,10 +20520,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
 
     /**
      * Home / recents → process not visible. {@link ProcessLifecycleOwner} ON_STOP
-     * is what sets {@link #appEnteredBackground} (not onPause). On the way back,
-     * keep the same card when the user has been away less than the admin
-     * minutes. After that window, reload My Feed at the first article unless
-     * this open is a new push (or another feed-changing intent).
+     * is what sets {@link #appEnteredBackground} (not onPause). A normal return
+     * reloads My Feed at the first card. Coming back from a share inside the
+     * admin window keeps that card. A new push still seats the pushed post.
      */
     @Override
     protected void onStart() {
@@ -20556,10 +20595,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /**
-     * Plain return from background reloads My Feed at the first article only
-     * after the admin keep-position window. Inside that window the card already
-     * on screen stays, with no feed refetch. A push that arrived in this resume
-     * is seated instead and does not restore the card they shared from.
+     * A normal return reloads My Feed at the first card. A share return inside
+     * the admin window keeps the card already on screen, with no feed refetch.
+     * A push that arrived in this resume is seated instead and does not restore
+     * the card they shared from.
      */
     private void runDeferredBackgroundFeedRefresh() {
         pendingBackgroundRefreshCheck = false;
@@ -20717,6 +20756,15 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                             Constants.PREF_NAME)) {
                         return;
                     }
+                    boolean fromShare = shareDepartureAwaitingBackground
+                            || FeedPositionKeepConfig.consumeShareDeparture(HomePage.this);
+                    shareDepartureAwaitingBackground = false;
+                    if (!fromShare) {
+                        // Launcher / Home / recents. Drop yesterday's index so the
+                        // next open stays on the newest card, including a magazine.
+                        FeedPositionKeepConfig.clear(HomePage.this);
+                        return;
+                    }
                     // Prefer the seat we already tracked. A stopped FlipView can
                     // report page 0 and would otherwise forget the shared card.
                     int flipIndex = Math.max(0, positionx);
@@ -20733,7 +20781,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                                 HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
                     }
                     FeedPositionKeepConfig.noteLeftForeground(
-                            HomePage.this, flipIndex, postId, seatLang);
+                            HomePage.this, flipIndex, postId, seatLang, true);
                 } catch (Exception ignored) {
                 }
             }
@@ -20882,11 +20930,31 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     private void noteShareSheetDeparture(@Nullable Intent intent) {
-        if (!isShareSheetIntent(intent)) {
+        if (!isShareDepartureIntent(intent)) {
             return;
         }
         suppressFeedRefreshForShareSheet = true;
         shareSheetStartedElapsed = SystemClock.elapsedRealtime();
+        shareDepartureAwaitingBackground = true;
+        try {
+            FeedPositionKeepConfig.noteShareDeparture(HomePage.this);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Chooser, ACTION_SEND, or the WhatsApp trampoline. Direct WhatsApp does not
+     * leave Home with ACTION_SEND — it opens {@link DirectShareResultActivity}.
+     */
+    private static boolean isShareDepartureIntent(@Nullable Intent intent) {
+        if (isShareSheetIntent(intent)) {
+            return true;
+        }
+        if (intent == null || intent.getComponent() == null) {
+            return false;
+        }
+        return DirectShareResultActivity.class.getName()
+                .equals(intent.getComponent().getClassName());
     }
 
     private static boolean isShareSheetIntent(@Nullable Intent intent) {
@@ -20917,6 +20985,15 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     public void onResume() {
         super.onResume();
         homeActivityResumed = true;
+        // Chooser dismissed without the process stopping. Do not treat the next
+        // Home press as a share return.
+        if (shareDepartureAwaitingBackground) {
+            shareDepartureAwaitingBackground = false;
+            try {
+                FeedPositionKeepConfig.clearShareDeparture(this);
+            } catch (Exception ignored) {
+            }
+        }
         // Pause-only onNewIntent (shade over a started activity) has no onStart.
         // A background return posts the reload; keep the latch until that check
         // so a history tap is not replaced by the first article.
