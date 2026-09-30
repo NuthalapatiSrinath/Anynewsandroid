@@ -927,8 +927,9 @@ public class StartingActivity extends AppCompatActivity {
     }
 
     /**
-     * Alphanumeric {@code https://share*.anynews.co.in/{code}} segment, or null
-     * when this URI is already a numeric /p/{id} (or not a share host).
+     * Alphanumeric share code from {@code https://share*.anynews.co.in/{code}}
+     * or {@code /p/{code}}, or null when this URI is already a numeric /p/{id}
+     * (or not a share host).
      */
     @Nullable
     private String shareShortCodeFromUri(@Nullable Uri data) {
@@ -939,12 +940,26 @@ public class StartingActivity extends AppCompatActivity {
         if (path == null || path.isEmpty() || "/".equals(path)) {
             return null;
         }
-        String code = path.startsWith("/") ? path.substring(1) : path;
-        int slash = code.indexOf('/');
+        String rest = path.startsWith("/") ? path.substring(1) : path;
+        String code;
+        int slash = rest.indexOf('/');
         if (slash >= 0) {
-            code = code.substring(0, slash);
+            String head = rest.substring(0, slash);
+            String tail = rest.substring(slash + 1);
+            int tailSlash = tail.indexOf('/');
+            if (tailSlash >= 0) {
+                tail = tail.substring(0, tailSlash);
+            }
+            // /p/{shortCode} and /post/{shortCode} — not only /{shortCode}.
+            if ("p".equals(head) || "post".equals(head)) {
+                code = tail;
+            } else {
+                code = head;
+            }
+        } else {
+            code = rest;
         }
-        if (code.isEmpty() || "p".equals(code) || code.matches("\\d+")) {
+        if (code.isEmpty() || "p".equals(code) || "post".equals(code) || code.matches("\\d+")) {
             return null;
         }
         if (!code.matches("[A-Za-z0-9]{5,12}")) {
