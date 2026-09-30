@@ -2078,10 +2078,7 @@ public class newProfileDetails extends AppCompatActivity {
         if (textViewLanguageNameUser != null) {
             textViewLanguageNameUser.setText(resolveCurrentLanguageDisplay());
         }
-        TextView langLabel = findViewById(R.id.profile_language_label);
-        if (langLabel != null) {
-            langLabel.setText(resolveChooseLanguage());
-        }
+        hideProfileChoiceCaption(R.id.profile_language_label);
         if (textViewFollowingUser != null) {
             textViewFollowingUser.setText(" " + packString(
                     languageModelResponse != null && languageModelResponse.getData() != null
@@ -2202,19 +2199,19 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     /**
-     * Profile "Choose language" caption. English pack values (Malayalam / Odia
-     * still store "Select Language") are ignored in favour of the LanguageID text.
+     * Language and location rows show only the selected name. Caption views stay
+     * gone in every language. Pack keys {@code select language} and
+     * {@code select location} are not written onto those views.
      */
-    private String resolveChooseLanguage() {
-        LanguageModelResponse.Data d =
-                languageModelResponse != null ? languageModelResponse.getData() : null;
-        return nativeChoiceLabel(
-                d != null ? d.getSelectLanguage() : null,
-                ProfileHubLabels.selectLanguage(this));
+    private void hideProfileChoiceCaption(int viewId) {
+        TextView caption = findViewById(viewId);
+        if (caption != null) {
+            caption.setVisibility(View.GONE);
+        }
     }
 
     /**
-     * Profile "Choose location" caption and empty-location placeholder.
+     * Empty-location placeholder on the place-name line.
      * Pack key {@code select location}; missing or English values use LanguageID text.
      */
     private String resolveChooseLocation() {
@@ -2270,10 +2267,7 @@ public class newProfileDetails extends AppCompatActivity {
         setHubLabel(R.id.profile_advertise_label, ProfileHubLabels.advertiseOnAnyNews(this));
         setHubLabel(R.id.profile_birthday_label, ProfileHubLabels.birthdaySpecial(this));
 
-        TextView locationCaption = findViewById(R.id.profile_location_label);
-        if (locationCaption != null) {
-            locationCaption.setText(resolveChooseLocation());
-        }
+        hideProfileChoiceCaption(R.id.profile_location_label);
 
         setHubLabel(R.id.profile_settings_row_label,
                 packString(d != null ? d.getSettings() : null, ProfileHubLabels.settings(this)));

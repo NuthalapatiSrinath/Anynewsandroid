@@ -11,7 +11,8 @@ import com.anyNews.anynews.R;
  * (same pattern as {@link ProfilePhotoLabels} / {@link HomeOfflineModeLabels}).
  *
  * <p>Layout {@code @string/…} defaults stay English for inflation; Profile rebinds
- * Guest / login prompt / Status Videos / location caption from these helpers.
+ * Guest / login prompt / Status Videos from these helpers. Language and location
+ * rows show the selected name only; their caption views stay gone.
  */
 public final class ProfileHubLabels {
 
@@ -118,7 +119,7 @@ public final class ProfileHubLabels {
         }
     }
 
-    /** Caption above the district name on the location row. */
+    /** Placeholder on the location value when no place is selected yet. */
     public static String selectedLocation(@Nullable Context context) {
         switch (languageId(context)) {
             case 1: return "നിങ്ങളുടെ സ്ഥലം തിരഞ്ഞെടുക്കുക";
@@ -203,20 +204,6 @@ public final class ProfileHubLabels {
             case 5: return "ಲೇಖನಗಳು";
             case 6: return "ପ୍ରବନ୍ଧ";
             default: return "Articles";
-        }
-    }
-
-    /** Caption for the language row. */
-    public static String selectLanguage(@Nullable Context context) {
-        switch (languageId(context)) {
-            case 1: return "ഭാഷ തിരഞ്ഞെടുക്കുക";
-            case 2: return "भाषा चुनें";
-            case 3: return "భాష ఎంచుకోండి";
-            case 4: return "மொழியைத் தேர்ந்தெடுக்கவும்";
-            case 5: return "ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ";
-            case 6: return "ଭାଷା ବାଛନ୍ତୁ";
-            default:
-                return str(context, R.string.profile_choose_language, "Choose Language");
         }
     }
 
