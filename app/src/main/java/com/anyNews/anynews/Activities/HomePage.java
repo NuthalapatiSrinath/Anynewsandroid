@@ -1009,6 +1009,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private ImageView specialTabBulbOverlay;
     private Animator specialTabBulbAnimator;
     private int specialTabBulbSetupRetryCount;
+    /** One posted re-anchor after a footer rebuild. Avoids a label refresh. */
+    private boolean specialPulseReanchorPosted;
     FloatingActionButton floatingActionButtonHome;
 
     //Survey
@@ -11961,8 +11963,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             setCenterFooterSlotVisibleWithoutRebuild(item, visible);
             return;
         }
+        boolean wasVisible = item.isVisible();
         item.setVisible(visible);
         item.setEnabled(visible);
+        // setVisible(true/false) is a structure change. Material 1.1 rebuilds
+        // every item from a LIFO pool, so the Special pulse view becomes
+        // Daily Updates. Re-bind after that rebuild. Do not refresh labels.
+        if (wasVisible != visible) {
+            postReanchorSpecialTabPulse();
+        }
     }
 
     /**
@@ -12215,6 +12224,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         });
         forceFooterItemViewsMatchMenuVisibility();
         endFooterSelectionTransition();
+        // Suspend skips buildMenuView only while the presenter accepts it.
+        // If the pool still rebuilds, the Special pulse is on Daily Updates
+        // until this runs. A no-op when the pulse is already on Special.
+        postReanchorSpecialTabPulse();
     }
 
     /**
@@ -23409,7 +23422,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 && specialTabBulbOverlay.getParent() != null
                 && !isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
             detachMisplacedSpecialOverlay();
-            clearFooterItemIconPulse(R.id.navigation_status);
+            stripSpecialPulseFromOtherFooterItems();
         }
 
         if (specialTabBulbOverlay != null) {
@@ -23584,42 +23597,47 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
             return;
         }
-        ensureSpecialMenuIconAlwaysVisible();
-        if (specialTabBulbOverlay != null
-                && !isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
-            detachMisplacedSpecialOverlay();
-            clearFooterItemIconPulse(R.id.navigation_status);
-        }
+        // Do not setIcon / setTitle here. That notifies the menu and refreshes
+        // every footer label. The pulse is only the overlay on Special's view.
+        bindSpecialPulseOverlayToSpecialItem();
+        stripSpecialPulseFromOtherFooterItems();
         View blinkTarget = null;
         if (specialTabBulbOverlay != null
                 && specialTabBulbOverlay.getParent() != null
-                && specialTabBulbOverlay.isAttachedToWindow()
                 && isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
             specialTabBulbOverlay.setVisibility(View.VISIBLE);
             blinkTarget = specialTabBulbOverlay;
-        } else {
-            BottomNavigationItemView itemView = findSpecialTabItemView();
-            if (itemView != null) {
-                blinkTarget = itemView.findViewById(
-                        com.google.android.material.R.id.navigation_bar_item_icon_view);
-            }
         }
         if (blinkTarget == null
                 || !isViewInsideFooterItem(blinkTarget, R.id.navigation_catagiries)) {
-            clearFooterItemIconPulse(R.id.navigation_status);
+            stripSpecialPulseFromOtherFooterItems();
             return;
         }
-        stopSpecialTabBlinkAnimation();
+        if (specialTabBulbAnimator != null) {
+            specialTabBulbAnimator.cancel();
+            specialTabBulbAnimator = null;
+        }
         blinkTarget.setVisibility(View.VISIBLE);
         if (blinkTarget instanceof ImageView) {
             ((ImageView) blinkTarget).setColorFilter(
                     ContextCompat.getColor(this, R.color.brand_orange), PorterDuff.Mode.SRC_ATOP);
         }
-        ObjectAnimator animator = ObjectAnimator.ofFloat(blinkTarget, View.ALPHA, 1f, 0.4f);
+        final View pulseTarget = blinkTarget;
+        ObjectAnimator animator = ObjectAnimator.ofFloat(pulseTarget, View.ALPHA, 1f, 0.4f);
         animator.setDuration(700);
         animator.setRepeatCount(ValueAnimator.INFINITE);
         animator.setRepeatMode(ValueAnimator.REVERSE);
         animator.setInterpolator(new AccelerateDecelerateInterpolator());
+        animator.addUpdateListener(animation -> {
+            if (pulseTarget != specialTabBulbOverlay
+                    || !isViewInsideFooterItem(pulseTarget, R.id.navigation_catagiries)) {
+                animation.cancel();
+                if (specialTabBulbAnimator == animation) {
+                    specialTabBulbAnimator = null;
+                }
+                postReanchorSpecialTabPulse();
+            }
+        });
         specialTabBulbAnimator = animator;
         animator.start();
     }
@@ -23649,8 +23667,8 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         // Re-apply ColorStateList so selected Special/Profile stay brand orange.
         applyFooterTabIconTints();
-        // Pooled item views move the orange filter onto the lightning icon.
-        clearFooterItemIconPulse(R.id.navigation_status);
+        // Pooled item views move the orange filter onto Daily Updates.
+        stripSpecialPulseFromOtherFooterItems();
     }
 
     /**
@@ -23668,7 +23686,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             specialTabBulbOverlay.clearColorFilter();
             specialTabBulbOverlay.setAlpha(1f);
         }
-        clearFooterItemIconPulse(R.id.navigation_status);
+        stripSpecialPulseFromOtherFooterItems();
         clearFooterItemIconPulse(R.id.navigation_catagiries);
         releaseDailyUpdatesCheckLeftByQuietCard();
     }
@@ -23703,6 +23721,224 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             ((ViewGroup) specialTabBulbOverlay.getParent()).removeView(specialTabBulbOverlay);
         }
         specialTabBulbOverlay = null;
+    }
+
+    /**
+     * After a footer rebuild, put the Special pulse back on Special only.
+     * Does not call {@code setIcon}, {@code setTitle}, or {@code updateMenuView},
+     * so the four labels are not redrawn.
+     */
+    private void postReanchorSpecialTabPulse() {
+        if (bottomNavigationView == null || specialPulseReanchorPosted) {
+            return;
+        }
+        specialPulseReanchorPosted = true;
+        bottomNavigationView.post(() -> {
+            specialPulseReanchorPosted = false;
+            reanchorSpecialTabPulse();
+        });
+    }
+
+    private void reanchorSpecialTabPulse() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        if (isVisibleFooterQuietCard()) {
+            hideSpecialBlinkForQuietCard();
+            return;
+        }
+        if (isMagazineShareFooterShowing()) {
+            stopSpecialTabBlinkAnimation();
+            return;
+        }
+        View pulseTarget = specialPulseAnimatorTarget();
+        boolean pulseOnSpecial = pulseTarget != null
+                && isViewInsideFooterItem(pulseTarget, R.id.navigation_catagiries)
+                && specialTabBulbAnimator != null
+                && specialTabBulbAnimator.isRunning();
+        if (!pulseOnSpecial && specialTabBulbAnimator != null) {
+            specialTabBulbAnimator.cancel();
+            specialTabBulbAnimator = null;
+        }
+        if (specialTabBulbOverlay != null
+                && !isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
+            detachMisplacedSpecialOverlay();
+        }
+        stripSpecialPulseFromOtherFooterItems();
+        if (!isFooterSpecialTabAllowed() || specialTabViewedThisSession) {
+            if (specialTabBulbAnimator != null) {
+                specialTabBulbAnimator.cancel();
+                specialTabBulbAnimator = null;
+            }
+            if (specialTabBulbOverlay != null) {
+                specialTabBulbOverlay.clearColorFilter();
+                specialTabBulbOverlay.setAlpha(1f);
+                specialTabBulbOverlay.setVisibility(View.GONE);
+            }
+            return;
+        }
+        if (pulseOnSpecial
+                && specialTabBulbOverlay != null
+                && isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
+            return;
+        }
+        startSpecialTabBlinkAnimation();
+    }
+
+    @Nullable
+    private View specialPulseAnimatorTarget() {
+        if (!(specialTabBulbAnimator instanceof ObjectAnimator)) {
+            return null;
+        }
+        Object target = ((ObjectAnimator) specialTabBulbAnimator).getTarget();
+        return target instanceof View ? (View) target : null;
+    }
+
+    /**
+     * Overlay only, on the item whose menu id is Special. A recycled item view
+     * keeps this child, which is how the lightning landed on Daily Updates.
+     */
+    private void bindSpecialPulseOverlayToSpecialItem() {
+        if (bottomNavigationView == null || !isFooterSpecialTabAllowed()) {
+            return;
+        }
+        if (specialTabBulbOverlay != null
+                && specialTabBulbOverlay.getParent() != null
+                && !isViewInsideFooterItem(specialTabBulbOverlay, R.id.navigation_catagiries)) {
+            detachMisplacedSpecialOverlay();
+        }
+        BottomNavigationItemView itemView = findSpecialTabItemView();
+        if (itemView == null) {
+            return;
+        }
+        if (specialTabBulbOverlay != null && specialTabBulbOverlay.getParent() == itemView) {
+            specialTabBulbOverlay.setVisibility(View.VISIBLE);
+            return;
+        }
+        View existingOverlay = itemView.findViewById(R.id.special_tab_bulb_overlay);
+        if (existingOverlay instanceof ImageView) {
+            specialTabBulbOverlay = (ImageView) existingOverlay;
+        } else {
+            LayoutInflater.from(this).inflate(R.layout.badge_layout, itemView, true);
+            specialTabBulbOverlay = itemView.findViewById(R.id.special_tab_bulb_overlay);
+        }
+        if (specialTabBulbOverlay == null) {
+            return;
+        }
+        specialTabBulbOverlay.setImageResource(R.drawable.ic_footer_special);
+        specialTabBulbOverlay.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        specialTabBulbOverlay.setAlpha(1f);
+        specialTabBulbOverlay.setVisibility(View.VISIBLE);
+        specialTabBulbOverlay.bringToFront();
+    }
+
+    /**
+     * Clear the Special lightning and its alpha pulse from News, Daily Updates,
+     * Profile, and the WhatsApp slot. Leaves the Special item and magazine Share
+     * alone. Icon restore is on the ImageView only, so labels are not refreshed.
+     */
+    private void stripSpecialPulseFromOtherFooterItems() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        View menuChild = bottomNavigationView.getChildAt(0);
+        if (!(menuChild instanceof BottomNavigationMenuView)) {
+            return;
+        }
+        BottomNavigationMenuView menuView = (BottomNavigationMenuView) menuChild;
+        for (int i = 0; i < menuView.getChildCount(); i++) {
+            View child = menuView.getChildAt(i);
+            if (!(child instanceof BottomNavigationItemView)) {
+                continue;
+            }
+            BottomNavigationItemView itemView = (BottomNavigationItemView) child;
+            MenuItem data = itemView.getItemData();
+            if (data == null || data.getItemId() == R.id.navigation_catagiries) {
+                continue;
+            }
+            cancelSpecialPulseIfInside(itemView);
+            removeSpecialOverlays(itemView);
+            View icon = itemView.findViewById(
+                    com.google.android.material.R.id.navigation_bar_item_icon_view);
+            if (icon != null) {
+                icon.clearAnimation();
+                icon.setAlpha(1f);
+                if (icon instanceof ImageView) {
+                    ImageView iv = (ImageView) icon;
+                    iv.clearColorFilter();
+                    int iconRes = footerIconResForItem(data.getItemId());
+                    if (iconRes != 0) {
+                        iv.setImageResource(iconRes);
+                        ColorStateList tint = bottomNavigationView.getItemIconTintList();
+                        if (tint != null) {
+                            androidx.core.widget.ImageViewCompat.setImageTintList(iv, tint);
+                        }
+                    }
+                }
+            }
+            if (itemView.isSelected() && !data.isChecked()) {
+                itemView.setSelected(false);
+            }
+        }
+        if (imageVIewShareWhatsapp != null) {
+            imageVIewShareWhatsapp.clearAnimation();
+            imageVIewShareWhatsapp.animate().cancel();
+            imageVIewShareWhatsapp.setAlpha(1f);
+        }
+    }
+
+    private void cancelSpecialPulseIfInside(@Nullable View item) {
+        View target = specialPulseAnimatorTarget();
+        if (target == null || item == null || specialTabBulbAnimator == null) {
+            return;
+        }
+        View current = target;
+        while (current != null) {
+            if (current == item) {
+                specialTabBulbAnimator.cancel();
+                specialTabBulbAnimator = null;
+                return;
+            }
+            if (!(current.getParent() instanceof View)) {
+                return;
+            }
+            current = (View) current.getParent();
+        }
+    }
+
+    private void removeSpecialOverlays(@Nullable ViewGroup item) {
+        if (item == null) {
+            return;
+        }
+        for (int i = item.getChildCount() - 1; i >= 0; i--) {
+            View child = item.getChildAt(i);
+            if (child.getId() != R.id.special_tab_bulb_overlay) {
+                continue;
+            }
+            child.clearAnimation();
+            child.setAlpha(1f);
+            if (child instanceof ImageView) {
+                ((ImageView) child).clearColorFilter();
+            }
+            item.removeViewAt(i);
+            if (child == specialTabBulbOverlay) {
+                specialTabBulbOverlay = null;
+            }
+        }
+    }
+
+    /** Menu glyph for a non-Special tab. 0 leaves the current drawable (WhatsApp slot). */
+    private static int footerIconResForItem(int itemId) {
+        if (itemId == R.id.navigation_home) {
+            return R.drawable.refresh_icon;
+        }
+        if (itemId == R.id.navigation_status) {
+            return R.drawable.ic_footer_daily_updates;
+        }
+        if (itemId == R.id.navigation_profile) {
+            return R.drawable.ic_nav_profile;
+        }
+        return 0;
     }
 
     /** Stop an orange pulse left on a footer icon after the bar is rebuilt. */

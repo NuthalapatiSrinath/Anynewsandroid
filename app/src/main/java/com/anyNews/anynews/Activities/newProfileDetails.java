@@ -2078,7 +2078,7 @@ public class newProfileDetails extends AppCompatActivity {
         if (textViewLanguageNameUser != null) {
             textViewLanguageNameUser.setText(resolveCurrentLanguageDisplay());
         }
-        hideProfileChoiceCaption(R.id.profile_language_label);
+        showEnglishProfileChoiceCaptions();
         if (textViewFollowingUser != null) {
             textViewFollowingUser.setText(" " + packString(
                     languageModelResponse != null && languageModelResponse.getData() != null
@@ -2190,6 +2190,7 @@ public class newProfileDetails extends AppCompatActivity {
         bindBirthdaySpecialNewBadge();
         bindReporterShortcutLabels();
         applyProfileFooterTabLabels();
+        showEnglishProfileChoiceCaptions();
     }
 
     /** Pack string only when translator LanguageID matches; else LanguageID fallback. */
@@ -2199,15 +2200,22 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     /**
-     * Language and location rows show only the selected name. Caption views stay
-     * gone in every language. Pack keys {@code select language} and
-     * {@code select location} are not written onto those views.
+     * Captions stay English on every language. The pack keys {@code select language}
+     * and {@code select location} are not written onto these views. The name under
+     * each caption stays in the selected language.
      */
-    private void hideProfileChoiceCaption(int viewId) {
+    private void showEnglishProfileChoiceCaptions() {
+        showEnglishProfileCaption(R.id.profile_language_label, R.string.profile_choose_language);
+        showEnglishProfileCaption(R.id.profile_location_label, R.string.profile_selected_location);
+    }
+
+    private void showEnglishProfileCaption(int viewId, int stringId) {
         TextView caption = findViewById(viewId);
-        if (caption != null) {
-            caption.setVisibility(View.GONE);
+        if (caption == null) {
+            return;
         }
+        caption.setText(getString(stringId));
+        caption.setVisibility(View.VISIBLE);
     }
 
     /**
@@ -2267,7 +2275,7 @@ public class newProfileDetails extends AppCompatActivity {
         setHubLabel(R.id.profile_advertise_label, ProfileHubLabels.advertiseOnAnyNews(this));
         setHubLabel(R.id.profile_birthday_label, ProfileHubLabels.birthdaySpecial(this));
 
-        hideProfileChoiceCaption(R.id.profile_location_label);
+        showEnglishProfileChoiceCaptions();
 
         setHubLabel(R.id.profile_settings_row_label,
                 packString(d != null ? d.getSettings() : null, ProfileHubLabels.settings(this)));

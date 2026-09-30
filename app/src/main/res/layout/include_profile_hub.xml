@@ -59,14 +59,15 @@
                     android:ellipsize="end"
                     android:includeFontPadding="false"
                     android:maxLines="1"
+                    android:text="@string/profile_choose_language"
                     android:textColor="@color/profile_way2_label"
-                    android:textSize="11sp"
-                    android:visibility="gone" />
+                    android:textSize="11sp" />
 
                 <TextView
                     android:id="@+id/textViewLanguageNameUser"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
                     android:ellipsize="end"
                     android:includeFontPadding="false"
                     android:maxLines="1"
@@ -128,14 +129,15 @@
                     android:ellipsize="end"
                     android:includeFontPadding="false"
                     android:maxLines="1"
+                    android:text="@string/profile_selected_location"
                     android:textColor="@color/profile_way2_label"
-                    android:textSize="11sp"
-                    android:visibility="gone" />
+                    android:textSize="11sp" />
 
                 <TextView
                     android:id="@+id/profile_location_value"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
                     android:ellipsize="end"
                     android:includeFontPadding="false"
                     android:maxLines="1"
