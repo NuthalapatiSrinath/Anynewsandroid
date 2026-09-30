@@ -1009,8 +1009,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private ImageView specialTabBulbOverlay;
     private Animator specialTabBulbAnimator;
     private int specialTabBulbSetupRetryCount;
-    /** One posted re-anchor after a footer rebuild. Avoids a label refresh. */
-    private boolean specialPulseReanchorPosted;
+    /** True while the pulse is being lifted off a view that Material may pool. */
+    private boolean specialPulseSuppressReanchor;
+    /** Stops the blink listener from starting another pulse while re-anchor runs. */
+    private boolean specialPulseReanchorGuard;
     FloatingActionButton floatingActionButtonHome;
 
     //Survey
@@ -11991,13 +11993,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         boolean wasVisible = item.isVisible();
+        // Pool release happens inside setVisible. The overlay must already be
+        // gone, or the next acquire draws it on Daily Updates for a frame.
+        if (wasVisible != visible) {
+            liftSpecialPulseBeforeFooterRebind();
+        }
         item.setVisible(visible);
         item.setEnabled(visible);
-        // setVisible(true/false) is a structure change. Material 1.1 rebuilds
-        // every item from a LIFO pool, so the Special pulse view becomes
-        // Daily Updates. Re-bind after that rebuild. Do not refresh labels.
         if (wasVisible != visible) {
-            postReanchorSpecialTabPulse();
+            reanchorSpecialTabPulse();
         }
     }
 
@@ -12081,6 +12085,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             obs.removeOnPreDrawListener(this);
                         }
                         try {
+                            // Click already returned. setChecked may have pooled the
+                            // Special view onto Daily Updates. Fix that before draw.
+                            reanchorSpecialTabPulse();
                             paintFooterSelectionWithoutRebuild();
                             endFooterSelectionTransition();
                         } finally {
@@ -12240,6 +12247,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (item.isVisible() == visible && item.isEnabled() == visible && viewMatches) {
             return;
         }
+        boolean structureChange = item.isVisible() != visible;
+        if (structureChange) {
+            liftSpecialPulseBeforeFooterRebind();
+        }
         endFooterSelectionTransition();
         runWithFooterMenuUpdatesSuspended(() -> {
             if (item.isVisible() != visible) {
@@ -12251,10 +12262,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         });
         forceFooterItemViewsMatchMenuVisibility();
         endFooterSelectionTransition();
-        // Suspend skips buildMenuView only while the presenter accepts it.
-        // If the pool still rebuilds, the Special pulse is on Daily Updates
-        // until this runs. A no-op when the pulse is already on Special.
-        postReanchorSpecialTabPulse();
+        if (structureChange) {
+            reanchorSpecialTabPulse();
+        }
     }
 
     /**
@@ -23821,14 +23831,36 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         animator.setRepeatMode(ValueAnimator.REVERSE);
         animator.setInterpolator(new AccelerateDecelerateInterpolator());
         animator.addUpdateListener(animation -> {
-            if (pulseTarget != specialTabBulbOverlay
-                    || !isViewInsideFooterItem(pulseTarget, R.id.navigation_catagiries)) {
-                animation.cancel();
-                if (specialTabBulbAnimator == animation) {
-                    specialTabBulbAnimator = null;
-                }
-                postReanchorSpecialTabPulse();
+            if (specialPulseSuppressReanchor || specialPulseReanchorGuard) {
+                return;
             }
+            if (pulseTarget == specialTabBulbOverlay
+                    && isViewInsideFooterItem(pulseTarget, R.id.navigation_catagiries)) {
+                return;
+            }
+            // Animation runs before draw. Drop the lightning here so this frame
+            // cannot paint it on Daily Updates. A posted clear is one frame late.
+            animation.cancel();
+            if (specialTabBulbAnimator == animation) {
+                specialTabBulbAnimator = null;
+            }
+            if (pulseTarget != null
+                    && !isViewInsideFooterItem(pulseTarget, R.id.navigation_catagiries)) {
+                pulseTarget.setVisibility(View.GONE);
+                pulseTarget.clearAnimation();
+                pulseTarget.setAlpha(1f);
+                if (pulseTarget instanceof ImageView) {
+                    ((ImageView) pulseTarget).clearColorFilter();
+                }
+                clearCheckedHighlightIfMenuDisagrees(pulseTarget);
+                if (pulseTarget.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) pulseTarget.getParent()).removeView(pulseTarget);
+                }
+                if (specialTabBulbOverlay == pulseTarget) {
+                    specialTabBulbOverlay = null;
+                }
+            }
+            reanchorSpecialTabPulse();
         });
         specialTabBulbAnimator = animator;
         animator.start();
@@ -23916,22 +23948,75 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /**
-     * After a footer rebuild, put the Special pulse back on Special only.
-     * Does not call {@code setIcon}, {@code setTitle}, or {@code updateMenuView},
-     * so the four labels are not redrawn.
+     * Take the Special lightning off its item view before {@code setVisible}
+     * can {@code buildMenuView}. The pool is last-in, so that view is the next
+     * Daily Updates item. Clearing after the rebuild draws the blink there once.
      */
-    private void postReanchorSpecialTabPulse() {
-        if (bottomNavigationView == null || specialPulseReanchorPosted) {
-            return;
+    private void liftSpecialPulseBeforeFooterRebind() {
+        specialPulseSuppressReanchor = true;
+        try {
+            if (specialTabBulbAnimator != null) {
+                Animator running = specialTabBulbAnimator;
+                specialTabBulbAnimator = null;
+                running.cancel();
+            }
+            if (specialTabBulbOverlay != null) {
+                ImageView overlay = specialTabBulbOverlay;
+                specialTabBulbOverlay = null;
+                overlay.clearAnimation();
+                overlay.animate().cancel();
+                overlay.clearColorFilter();
+                overlay.setAlpha(1f);
+                overlay.setVisibility(View.GONE);
+                clearCheckedHighlightIfMenuDisagrees(overlay);
+                if (overlay.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) overlay.getParent()).removeView(overlay);
+                }
+            }
+        } finally {
+            specialPulseSuppressReanchor = false;
         }
-        specialPulseReanchorPosted = true;
-        bottomNavigationView.post(() -> {
-            specialPulseReanchorPosted = false;
-            reanchorSpecialTabPulse();
-        });
     }
 
+    /** Checked orange belongs to the menu item, not to a view the pool just reused. */
+    private void clearCheckedHighlightIfMenuDisagrees(@Nullable View start) {
+        View current = start;
+        while (current != null) {
+            if (current instanceof BottomNavigationItemView) {
+                BottomNavigationItemView itemView = (BottomNavigationItemView) current;
+                MenuItem data = itemView.getItemData();
+                if (data != null && itemView.isSelected() && !data.isChecked()) {
+                    itemView.setChecked(false);
+                }
+                return;
+            }
+            if (!(current.getParent() instanceof View)) {
+                return;
+            }
+            current = (View) current.getParent();
+        }
+    }
+
+    /**
+     * Put the Special pulse back on Special only.
+     * Does not call {@code setIcon}, {@code setTitle}, or {@code updateMenuView},
+     * so the four labels are not redrawn. Runs before the next draw.
+     */
     private void reanchorSpecialTabPulse() {
+        if (bottomNavigationView == null
+                || specialPulseSuppressReanchor
+                || specialPulseReanchorGuard) {
+            return;
+        }
+        specialPulseReanchorGuard = true;
+        try {
+            reanchorSpecialTabPulseBody();
+        } finally {
+            specialPulseReanchorGuard = false;
+        }
+    }
+
+    private void reanchorSpecialTabPulseBody() {
         if (bottomNavigationView == null) {
             return;
         }
