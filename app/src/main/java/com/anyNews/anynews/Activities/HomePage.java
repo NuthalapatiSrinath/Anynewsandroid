@@ -1208,17 +1208,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private static final int ONLINE_NEWS_ALL_READ_SKIP_CAP = 200;
     /**
-     * Consecutive List_All_Articles pages whose post ids were already on screen.
-     * Stops the auto-walk so a repeating offset cannot hammer the server.
-     * Not a skip number — a new forward pull may try again after the cap.
+     * Cursor triple we already refused to request again. A non-empty page whose
+     * ids are already on screen keeps walking while skip, actual_skip, or
+     * last_post_id moves. The same triple must not be requested in a loop.
      */
-    private static final int ONLINE_NEWS_ZERO_GROWTH_PAGE_CAP = 40;
-    private int onlineNewsZeroGrowthStreak = 0;
-    private boolean onlineNewsZeroGrowthCapLogged = false;
-    /** True after the zero-growth cap until a later finger-down pull clears it. */
-    private boolean zeroGrowthResumeArmed = false;
-    /** Gesture generation that hit the cap. The same hold must not clear it. */
-    private int zeroGrowthCapGesture = -1;
+    private boolean feedSameCursorStallLatched = false;
+    private long feedStallSkip = Long.MIN_VALUE;
+    private long feedStallActualSkip = Long.MIN_VALUE;
+    private long feedStallLastPostId = Long.MIN_VALUE;
     /**
      * Last known ad shell from main feed (codes / ad_req_position). Used to re-place
      * ads after merges when strip/filter left only one/few slots.
@@ -7062,21 +7059,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && list != null
                 && !list.isEmpty()
                 && v.getPageCount() == list.size();
-        if (forwardPastEnd && zeroGrowthResumeArmed) {
-            int gesture = -1;
-            try {
-                gesture = v.getFlipGestureGeneration();
-            } catch (Exception ignored) {
-            }
-            // Same hold that hit the cap must not immediately walk another 40.
-            // A later finger-down (new generation) may try again.
-            if (gesture != zeroGrowthCapGesture) {
-                onlineNewsZeroGrowthStreak = 0;
-                onlineNewsZeroGrowthCapLogged = false;
-                zeroGrowthResumeArmed = false;
-                Log.i("FeedFlip", "zero-growth cap cleared by forward pull");
-            }
-        }
         // A page the server already returned must be appended even inside the
         // overflip cooldown. Waiting out that cooldown left the last card stuck
         // while Redis still had rows.
@@ -14566,12 +14548,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         final boolean hasPaintables = list != null
                 && ReadArticleStore.countPaintableArticles(list) > 0;
+        // Half posts stripped from Special are not an empty server page.
+        // Keep asking for the next skip. A truly empty payload still ends.
+        final boolean filteredKeepWalking = reason.startsWith("special");
         // Soft-empty (no cards yet): allow auto-page; with cards: always prefer continue
         // over premature end card until consecutive-empty cap.
-        if (onlineNewsAllReadSkipStreak >= ONLINE_NEWS_ALL_READ_SKIP_CAP) {
+        if (!filteredKeepWalking
+                && onlineNewsAllReadSkipStreak >= ONLINE_NEWS_ALL_READ_SKIP_CAP) {
             showLog("empty page cap reached (" + reason + ") — true EOF");
             return false;
         }
+        final long skipBeforeEmpty = skip;
+        final long actualBeforeEmpty = actual_skip;
+        final long lastBeforeEmpty = last_post_id;
         if (validateUserOtp.getLastPostId() != null) {
             last_post_id = validateUserOtp.getLastPostId();
         }
@@ -14581,13 +14570,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (validateUserOtp.getActualSkip() != null) {
             actual_skip = validateUserOtp.getActualSkip();
         }
+        final boolean emptyCursorAdvanced = skip != skipBeforeEmpty
+                || actual_skip != actualBeforeEmpty
+                || last_post_id != lastBeforeEmpty;
+        // Same skip / actual_skip / last_post_id must not be requested again.
+        if (!emptyCursorAdvanced || feedCursorRequestIsStalled()) {
+            noteFeedCursorDidNotAdvance();
+            isApiRequested = false;
+            initialCall = true;
+            return true;
+        }
         requestSize = list != null ? list.size() : 0;
         if (requestSize > 0) {
             requestPostition = Math.max(0, Math.min(requestSize - 1, Math.max(1, requestSize - 3)));
         } else {
             requestPostition = 1;
         }
-        onlineNewsAllReadSkipStreak++;
+        if (!filteredKeepWalking) {
+            onlineNewsAllReadSkipStreak++;
+        }
         no_article_message = FEED_LOADING_MESSAGE;
         stripFeedEndSentinelQuietly();
         showLog("empty/filtered page continue (" + reason + ") streak="
@@ -14672,35 +14673,40 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return false;
     }
 
-    private void resetOnlineNewsZeroGrowthWalk() {
-        onlineNewsZeroGrowthStreak = 0;
-        onlineNewsZeroGrowthCapLogged = false;
-        zeroGrowthResumeArmed = false;
-        zeroGrowthCapGesture = -1;
+    private void resetFeedPagingStall() {
+        feedSameCursorStallLatched = false;
+        feedStallSkip = Long.MIN_VALUE;
+        feedStallActualSkip = Long.MIN_VALUE;
+        feedStallLastPostId = Long.MIN_VALUE;
     }
 
-    private void noteZeroGrowthCap() {
-        zeroGrowthResumeArmed = true;
-        try {
-            zeroGrowthCapGesture = mFlipView != null
-                    ? mFlipView.getFlipGestureGeneration() : -1;
-        } catch (Exception ignored) {
-            zeroGrowthCapGesture = -1;
+    private boolean feedCursorRequestIsStalled() {
+        return feedSameCursorStallLatched
+                && feedStallSkip == skip
+                && feedStallActualSkip == actual_skip
+                && feedStallLastPostId == last_post_id;
+    }
+
+    /** One FeedFlip line per stuck cursor. Does not insert an end card. */
+    private void noteFeedCursorDidNotAdvance() {
+        if (feedCursorRequestIsStalled()) {
+            return;
         }
-        if (!onlineNewsZeroGrowthCapLogged) {
-            onlineNewsZeroGrowthCapLogged = true;
-            Log.i("FeedFlip", "zero-growth cap hit streak=" + onlineNewsZeroGrowthStreak
-                    + " skip=" + skip
-                    + " — stop auto walk until next forward pull");
-        }
+        feedSameCursorStallLatched = true;
+        feedStallSkip = skip;
+        feedStallActualSkip = actual_skip;
+        feedStallLastPostId = last_post_id;
+        Log.i("FeedFlip", "duplicate page cursor did not advance skip=" + skip
+                + " actual_skip=" + actual_skip
+                + " last_post_id=" + last_post_id
+                + " — not requesting again");
     }
 
     /**
      * A non-empty page whose post ids are already on screen is not the end of
-     * the feed. Skip was already taken from this response. Request that next
-     * skip until a page grows the deck, the server returns an empty payload,
-     * or {@link #ONLINE_NEWS_ZERO_GROWTH_PAGE_CAP} consecutive zero-growth
-     * pages have been seen.
+     * the feed. The response cursor is already stored. Ask for that next page
+     * while skip, actual_skip, or last_post_id moved. If none of them moved,
+     * do not request this same cursor again.
      *
      * @return true when this page was consumed here (caller must not also prefetch it)
      */
@@ -14711,31 +14717,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (!isDeviceOnline()) {
             return false;
         }
-        if (onlineNewsZeroGrowthStreak >= ONLINE_NEWS_ZERO_GROWTH_PAGE_CAP) {
-            noteZeroGrowthCap();
-            return true;
-        }
-        onlineNewsZeroGrowthStreak++;
-        Log.i("FeedFlip", "skip duplicate feed page streak=" + onlineNewsZeroGrowthStreak
-                + " skip=" + skip
-                + " actual_skip=" + actual_skip
-                + " last_post_id=" + last_post_id
-                + " list=" + (list != null ? list.size() : -1)
-                + " cursorAdvanced=" + cursorAdvanced);
-        if (!cursorAdvanced) {
-            Log.i("FeedFlip", "duplicate page cursor did not advance skip=" + skip
-                    + " — not requesting again");
-            zeroGrowthResumeArmed = true;
-            try {
-                zeroGrowthCapGesture = mFlipView != null
-                        ? mFlipView.getFlipGestureGeneration() : -1;
-            } catch (Exception ignored) {
-                zeroGrowthCapGesture = -1;
-            }
-            return true;
-        }
-        if (onlineNewsZeroGrowthStreak >= ONLINE_NEWS_ZERO_GROWTH_PAGE_CAP) {
-            noteZeroGrowthCap();
+        if (!cursorAdvanced || feedCursorRequestIsStalled()) {
+            noteFeedCursorDidNotAdvance();
             return true;
         }
         final long skipForRequest = skip;
@@ -14765,6 +14748,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (skip != skipForRequest
                         || actual_skip != actualForRequest
                         || last_post_id != lastForRequest) {
+                    return;
+                }
+                if (feedCursorRequestIsStalled()) {
+                    isApiRequested = false;
                     return;
                 }
                 isApiRequested = true;
@@ -16011,6 +15998,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         dummyResponse = null; // drop prefetched/held next page from prior feed
         // Fresh feed mode page-0: reset soft-empty skip streak (shared News/Special/Video cap).
         onlineNewsAllReadSkipStreak = 0;
+        resetFeedPagingStall();
         no_article_message = FEED_LOADING_MESSAGE;
         // Sync-clear FlipView adapter data BEFORE nulling HomePage.adapter (prior bug:
         // adapter=null skipped setData clear, so FlipView kept News half posts).
@@ -16970,6 +16958,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (isOnlineReadFlipMode() && !searchModeEarly) {
             showLog("ShowNews_Data_Values skipped — online Read (local only) reqPos="
                     + reqPos);
+            isApiRequested = false;
+            return;
+        }
+
+        // Same skip + actual_skip + last_post_id already refused. Do not loop it.
+        if (reqPos == 3 && feedCursorRequestIsStalled()) {
             isApiRequested = false;
             return;
         }
@@ -18535,7 +18529,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         final boolean addedNewArticle = paginationAppend
                                 && hasNewPaintablePostId(list, articleIdsBeforeAppend);
                         if (page0Replace || addedNewArticle) {
-                            resetOnlineNewsZeroGrowthWalk();
+                            resetFeedPagingStall();
                         }
                         // Always take cursors from this payload — including disk cache —
                         // so warm reopen / skip-network can keep scrolling past page 0.
@@ -18732,8 +18726,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 } else if (list != null && !list.isEmpty()) {
                                     finalizeSearchFeedSeating(false);
                                 }
-                            } else if (!fromCache && listSizeBeforeAppend > 0 && listSizeBeforeAppend < list.size()) {
+                            } else if (!fromCache && listSizeBeforeAppend > 0
+                                    && list != null && list.size() > listSizeBeforeAppend) {
                                 adapter.appendData(list, listSizeBeforeAppend);
+                            } else if (duplicatePageNoGrowth) {
+                                // Ids already on screen, or Special half posts stripped.
+                                // Leave the visible card where it is and keep the cursor walk.
                             } else {
                                 // Share/push must be the card that binds, not the ad
                                 // that rebalance left in front of it, and not the
