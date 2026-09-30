@@ -11,6 +11,9 @@ public class LanguageModelResponse {
         @SerializedName("select language")
         @Expose
         private String selectLanguage;
+        @SerializedName("select location")
+        @Expose
+        private String selectLocation;
         @SerializedName("select state")
         @Expose
         private String selectState;
@@ -370,6 +373,14 @@ public class LanguageModelResponse {
 
         public void setSelectLanguage(String selectLanguage) {
             this.selectLanguage = selectLanguage;
+        }
+
+        public String getSelectLocation() {
+            return selectLocation;
+        }
+
+        public void setSelectLocation(String selectLocation) {
+            this.selectLocation = selectLocation;
         }
 
         public String getSelectState() {

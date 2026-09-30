@@ -145,6 +145,37 @@ public final class TranslatorPackHelper {
     }
 
     /**
+     * True when {@code value} contains the Indic script for the selected language.
+     * Language ids outside 1–6 (English chrome) accept any non-empty string.
+     * Used so an English pack value cannot replace Choose language / Choose location.
+     */
+    public static boolean hasExpectedScript(@Nullable Context context, @Nullable String value) {
+        if (!notEmpty(value)) return false;
+        int[] range = scriptRange(selectedLanguageId(context));
+        if (range == null) return true;
+        String s = value;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c >= range[0] && c <= range[1]) return true;
+        }
+        return false;
+    }
+
+    /** Inclusive Unicode block for LanguageID 1–6, or null when Latin is expected. */
+    @Nullable
+    private static int[] scriptRange(int languageId) {
+        switch (languageId) {
+            case 1: return new int[]{0x0D00, 0x0D7F};
+            case 2: return new int[]{0x0900, 0x097F};
+            case 3: return new int[]{0x0C00, 0x0C7F};
+            case 4: return new int[]{0x0B80, 0x0BFF};
+            case 5: return new int[]{0x0C80, 0x0CFF};
+            case 6: return new int[]{0x0B00, 0x0B7F};
+            default: return null;
+        }
+    }
+
+    /**
      * If pack LanguageID mismatches selected language, force {@code get_static_data} refresh.
      *
      * @return true when a network refresh was started

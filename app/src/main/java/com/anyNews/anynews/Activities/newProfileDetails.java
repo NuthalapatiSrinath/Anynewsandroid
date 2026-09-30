@@ -2080,7 +2080,7 @@ public class newProfileDetails extends AppCompatActivity {
         }
         TextView langLabel = findViewById(R.id.profile_language_label);
         if (langLabel != null) {
-            langLabel.setText(ProfileHubLabels.selectLanguage(this));
+            langLabel.setText(resolveChooseLanguage());
         }
         if (textViewFollowingUser != null) {
             textViewFollowingUser.setText(" " + packString(
@@ -2202,6 +2202,39 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     /**
+     * Profile "Choose language" caption. English pack values (Malayalam / Odia
+     * still store "Select Language") are ignored in favour of the LanguageID text.
+     */
+    private String resolveChooseLanguage() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        return nativeChoiceLabel(
+                d != null ? d.getSelectLanguage() : null,
+                ProfileHubLabels.selectLanguage(this));
+    }
+
+    /**
+     * Profile "Choose location" caption and empty-location placeholder.
+     * Pack key {@code select location}; missing or English values use LanguageID text.
+     */
+    private String resolveChooseLocation() {
+        LanguageModelResponse.Data d =
+                languageModelResponse != null ? languageModelResponse.getData() : null;
+        return nativeChoiceLabel(
+                d != null ? d.getSelectLocation() : null,
+                ProfileHubLabels.selectedLocation(this));
+    }
+
+    /** Pack text only when it is in the selected language's script. */
+    private String nativeChoiceLabel(@Nullable String packValue, @Nullable String fallback) {
+        if (TranslatorPackHelper.packMatchesLanguage(this)
+                && TranslatorPackHelper.hasExpectedScript(this, packValue)) {
+            return packValue.trim();
+        }
+        return fallback != null ? fallback : "";
+    }
+
+    /**
      * Profile hub / Way2 menu labels from SessionPreferences translator JSON
      * ({@link Allsharedpreference#Translator} → {@link LanguageModelResponse}), with
      * LanguageID helpers when the pack is missing or mismatched (Hindi leftovers on Telugu).
@@ -2239,7 +2272,7 @@ public class newProfileDetails extends AppCompatActivity {
 
         TextView locationCaption = findViewById(R.id.profile_location_label);
         if (locationCaption != null) {
-            locationCaption.setText(ProfileHubLabels.selectedLocation(this));
+            locationCaption.setText(resolveChooseLocation());
         }
 
         setHubLabel(R.id.profile_settings_row_label,
@@ -2351,7 +2384,7 @@ public class newProfileDetails extends AppCompatActivity {
             }
         }
         if (dist == null || dist.isEmpty()) {
-            locationValue.setText(ProfileHubLabels.selectedLocation(this));
+            locationValue.setText(resolveChooseLocation());
             locationValue.setTextColor(ContextCompat.getColor(this, R.color.profile_way2_value));
             return;
         }
