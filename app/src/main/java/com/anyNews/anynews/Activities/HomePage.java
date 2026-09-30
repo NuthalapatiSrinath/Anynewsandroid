@@ -810,6 +810,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private boolean shareDepartureAwaitingBackground = false;
     /**
+     * Dismissed chooser: drop the share seat. Cancelled in {@link #onPause()}
+     * so WhatsApp's trampoline, which resumes Home for a moment, does not.
+     */
+    private final Runnable clearUnconfirmedShareSeat = new Runnable() {
+        @Override
+        public void run() {
+            if (isFinishing() || isDestroyed() || !homeActivityResumed) {
+                return;
+            }
+            if (FeedPositionKeepConfig.isAwaitingShareReturn()) {
+                return;
+            }
+            shareDepartureAwaitingBackground = false;
+            try {
+                FeedPositionKeepConfig.clear(HomePage.this);
+            } catch (Exception ignored) {
+            }
+        }
+    };
+    /**
      * Same-process recreate (night mode). Process death resets this, so a
      * later open does not replay the saved flip index.
      */
@@ -822,19 +842,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * call List_All_Articles. Explicit Reload clears it.
      */
     private boolean skipFeedNetworkForPositionKeep = false;
-    /**
-     * This Home was opened because the user changed language. The previous
-     * language's pager index and loaded pages must not be applied. Cleared
-     * after the new language's first page is seated at card 0, so a later
-     * share-return on this same screen can still keep its card.
-     */
-    private boolean languageSwitchFeedReset = false;
-    /**
-     * Language of the articles currently in {@link #list}. 0 until the first
-     * paint. A later resume with a different {@link Constants#LanguageID}
-     * drops this list and starts that language at card 0.
-     */
-    private int boundFeedLanguageId = 0;
     /** Chooser returns inside this window stay on the card the user was reading. */
     private static final long SHARE_SHEET_RETURN_IGNORE_MS = 5000L;
     private LifecycleObserver processBackgroundObserver;
@@ -1330,12 +1337,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         my_feed_text = findViewById(R.id.my_feed_text);
 
         mFlipView = findViewById(R.id.flip_view);
-        if (languageSwitchFeedReset && mFlipView != null) {
-            // First paint of the new language stays on card 0. Released after
-            // that page is seated so later flips are not snapped back.
-            mFlipView.resetSeatForNewFeed();
-            mFlipView.beginForcedPage0Seat();
-        }
         homeCalendarHost = findViewById(R.id.home_calendar_host);
         homeDailyUpdatesHost = findViewById(R.id.home_daily_updates_host);
         setupHomeCalendarTtdToggle();
@@ -1726,20 +1727,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
             clearPendingFlipRestore();
-        } else if (languageSwitchFeedReset) {
-            skipFeedNetworkForPositionKeep = false;
-            showLog("feed position keep skipped — language change");
-        } else if (!honorFlipCheckpointThisInstance
-                && !openAsSpecial
-                && !searchOpenHandledInCreate
-                && isMainFeedSession(sessionId)
-                && FeedPositionKeepConfig.isAwaitingShareReturn()
-                && FeedPositionKeepConfig.shouldKeepPosition(this)) {
-            // This process left for a share and Home was recreated before
-            // they came back. A launcher or swipe-away open has no flag.
-            armFeedPositionKeepForThisOpen();
         } else if (!honorFlipCheckpointThisInstance) {
-            // Close, launcher, recents, or a new process. Not a share return.
+            // Launcher, swipe-away, or a new screen. Latest feed, card 0.
+            // Coming back from a share keeps the living screen; it does not
+            // start here, and it must not replay a saved pager index.
             skipFeedNetworkForPositionKeep = false;
             try {
                 FeedPositionKeepConfig.clear(this);
@@ -16931,12 +16922,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
-                // A Home that language-change already finished must not write its
-                // scrolled pages back onto disk once that language is selected again.
-                if (isFinishing() || isDestroyed()) {
-                    isApiRequested = false;
-                    return;
-                }
                 int languageNow = SharedPrefsData.getInt(
                         getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
                 if (languageAtEnqueue > 0 && languageNow > 0
@@ -17582,10 +17567,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     public void convertListOfArticles(EncreptionRequest encreptionRequest, int reqPos, boolean fromCache, boolean replacePage0){
-        if (isFinishing() || isDestroyed()) {
-            isApiRequested = false;
-            return;
-        }
         no_article_message = FEED_LOADING_MESSAGE;
         showLog("reqPos:::::"+reqPos);
         showLog("isFromLocalArticles:::::"+isFromLocalArticles);
@@ -18372,19 +18353,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 }
                                 adapter.setData(list);
                             }
-                            try {
-                                int paintedLang = SharedPrefsData.getInt(
-                                        HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
-                                if (paintedLang > 0 && list != null && !list.isEmpty()) {
-                                    boundFeedLanguageId = paintedLang;
-                                }
-                            } catch (Exception ignored) {
-                            }
-                            if (languageSwitchFeedReset) {
-                                // New language's first page only. Do not jump to the
-                                // card they had open the last time they used it.
-                                finishLanguageSwitchSeatAtFirstCard();
-                            } else if (!fromCache && !searchFeedActive
+                            if (!fromCache && !searchFeedActive
                                     && resolvePendingDeepLinkPostId() <= 0) {
                                 maybeRestoreFlipPositionAfterArticlesLoad();
                             } else if (resolvePendingDeepLinkPostId() > 0) {
@@ -20375,56 +20344,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (!reset && !otherLanguageSeat) {
             return;
         }
-        languageSwitchFeedReset = true;
-        boundFeedLanguageId = 0;
         try {
             SharedPrefsData.putBoolImmediate(
                     this, Constants.LANGUAGE_SWITCH_RESET_FLIP, false, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
-        // The keep-position seat is the previous language's card. Clear it
-        // again here in case a dying Home rewrote it after the invalidator.
-        try {
-            FeedPositionKeepConfig.clear(this);
-        } catch (Exception ignored) {
-        }
-        try {
-            OfflinePackPrefetcher.get().resetSession();
-        } catch (Exception ignored) {
-        }
-        try {
-            hasSavedOnlineNewsSession = false;
-            savedOnlineNewsList.clear();
-        } catch (Exception ignored) {
-        }
         clearPendingFlipRestore();
         positionx = 0;
-        last_post_id = 0;
-        skip = 0;
-        actual_skip = 0;
-        dummyResponse = null;
         showLog("language switch: open at first article reset=" + reset
                 + " checkpointLang=" + checkpointLang + " current=" + currentLang);
-    }
-
-    /**
-     * First page of the language we just switched to is on screen. Later
-     * share-return on this activity may keep its card. This open must not.
-     */
-    private void finishLanguageSwitchSeatAtFirstCard() {
-        if (!languageSwitchFeedReset) {
-            return;
-        }
-        languageSwitchFeedReset = false;
-        clearPendingFlipRestore();
-        positionx = 0;
-        try {
-            if (mFlipView != null) {
-                mFlipView.releaseForcedPage0Seat();
-            }
-        } catch (Exception ignored) {
-        }
-        showLog("language switch: seated at first card");
     }
 
     private int resolveCurrentFlipIndexForSave() {
@@ -20805,30 +20733,6 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             pendingBackgroundRefreshCheck = false;
             return;
         }
-        // Same Home still holding language A's scrolled pages after the user
-        // picked another language (or came back to A). Start that language
-        // at card 0. Share-return does not change LanguageID, so it stays.
-        if (boundFeedLanguageId > 0) {
-            int langNow = 0;
-            try {
-                langNow = SharedPrefsData.getInt(
-                        this, Constants.LanguageID, Constants.PREF_NAME);
-            } catch (Exception ignored) {
-            }
-            if (langNow > 0 && langNow != boundFeedLanguageId) {
-                pendingBackgroundRefreshCheck = false;
-                showLog("language changed under this Home "
-                        + boundFeedLanguageId + " → " + langNow
-                        + " — first card");
-                boundFeedLanguageId = 0;
-                try {
-                    performFeedReload();
-                } catch (Exception e) {
-                    showLog("language change reload failed: " + e.getMessage());
-                }
-                return;
-            }
-        }
         if (!fromProcessBackground && !unstuckSpecialOnNews) {
             pendingBackgroundRefreshCheck = false;
             return;
@@ -20935,47 +20839,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
     }
 
-    /** Session extra is main My Feed (0 / missing), not a category open. */
-    private static boolean isMainFeedSession(@Nullable String sessionId) {
-        if (sessionId == null || sessionId.equals("0") || sessionId.equals("null")) {
-            return true;
-        }
-        try {
-            return Integer.parseInt(sessionId.trim()) == 0;
-        } catch (NumberFormatException e) {
-            return true;
-        }
-    }
-
-    /**
-     * Home was recreated in the same process that left for a share, still
-     * inside the admin window. Paint the feed already on disk and seat that
-     * card. A new process (close, launcher) does not call this.
-     */
-    private void armFeedPositionKeepForThisOpen() {
-        skipFeedNetworkForPositionKeep = false;
-        if (!FeedPositionKeepConfig.isAwaitingShareReturn()
-                || !FeedPositionKeepConfig.shouldKeepPosition(this)) {
-            return;
-        }
-        int idx = FeedPositionKeepConfig.savedIndex(this);
-        long pid = FeedPositionKeepConfig.savedPostId(this);
-        try {
-            FeedPositionKeepConfig.clear(this);
-        } catch (Exception ignored) {
-        }
-        if (idx > 0 || pid > 0) {
-            pendingRestoreFlipIndex = idx;
-            pendingRestorePostId = pid;
-            pendingFlipRestore = true;
-        }
-        skipFeedNetworkForPositionKeep = true;
-        showLog("feed position keep armed index=" + idx + " postId=" + pid);
-    }
-
     /**
      * The activity is still alive, so the list is already in memory. If a
-     * recreate or a reset moved the pager to card 0, put it back. No network.
+     * reset moved the pager to card 0, put it back. No network, and no new
+     * page request.
      */
     private void restoreKeptFeedSeatIfNeeded() {
         if (list == null || list.isEmpty() || mFlipView == null || adapter == null) {
@@ -21188,14 +21055,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         suppressFeedRefreshForShareSheet = true;
         shareSheetStartedElapsed = SystemClock.elapsedRealtime();
         shareDepartureAwaitingBackground = true;
+        backgroundRefreshHandler.removeCallbacks(clearUnconfirmedShareSeat);
         try {
             int flipIndex = resolveCurrentFlipIndexForSave();
             long postId = resolvePostIdForFlipIndex(flipIndex);
-            int seatLang = boundFeedLanguageId;
-            if (seatLang <= 0) {
-                seatLang = SharedPrefsData.getInt(
-                        HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
-            }
+            int seatLang = SharedPrefsData.getInt(
+                    HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
             FeedPositionKeepConfig.noteShareStarted(
                     HomePage.this, flipIndex, postId, seatLang);
         } catch (Exception ignored) {
@@ -21245,16 +21110,12 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     public void onResume() {
         super.onResume();
         homeActivityResumed = true;
-        // Chooser dismissed without the process stopping. Do not treat the next
-        // Home press as a share return.
+        // A dismissed sheet resumes and stays. WhatsApp's trampoline resumes
+        // Home and then pauses it again. Wait, and cancel that wait in onPause,
+        // so the share seat is not wiped on the way to WhatsApp.
         if (shareDepartureAwaitingBackground) {
-            shareDepartureAwaitingBackground = false;
-            try {
-                // Sheet closed without leaving the app. Drop the seat so the
-                // next Home press is a normal open.
-                FeedPositionKeepConfig.clear(this);
-            } catch (Exception ignored) {
-            }
+            backgroundRefreshHandler.removeCallbacks(clearUnconfirmedShareSeat);
+            backgroundRefreshHandler.postDelayed(clearUnconfirmedShareSeat, 800L);
         }
         // Pause-only onNewIntent (shade over a started activity) has no onStart.
         // A background return posts the reload; keep the latch until that check
@@ -21672,6 +21533,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     @Override
     public void onPause() {
         homeActivityResumed = false;
+        backgroundRefreshHandler.removeCallbacks(clearUnconfirmedShareSeat);
         // System toasts outlive the activity and sit on top of the next app.
         dismissOfflineSavedNewsToast();
         stopGreetingSlotPoll();
