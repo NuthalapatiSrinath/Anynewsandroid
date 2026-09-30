@@ -324,35 +324,28 @@ public final class ArticleTtsHelper {
             if (key.equals(appliedVoiceKey) && voicesPreloaded) {
                 return;
             }
-            Locale locale;
-            if (!TextUtils.isEmpty(localeTag)) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    locale = Locale.forLanguageTag(localeTag.replace('_', '-'));
-                } else {
-                    String[] parts = localeTag.replace('-', '_').split("_");
-                    locale =
-                            parts.length >= 2
-                                    ? new Locale(parts[0], parts[1])
-                                    : new Locale(parts[0]);
-                }
-            } else {
-                locale = localeForAppLanguage(app);
-            }
-            int langResult = tts.setLanguage(locale);
-            if (langResult == TextToSpeech.LANG_MISSING_DATA
-                    || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts.setLanguage(Locale.getDefault());
-            }
+            Locale appLocale = localeForAppLanguage(app);
+            Locale configured =
+                    TextUtils.isEmpty(localeTag) ? null : localeFromTag(localeTag);
+            // Admin may save one voice (often te-IN). Use it only when it is the
+            // reader's language. Hindi/Kannada must not inherit the Telugu voice,
+            // or ASCII numbers are spoken in Telugu while the script stays Hindi.
+            Locale locale =
+                    configured != null && sameLanguage(configured, appLocale)
+                            ? configured
+                            : appLocale;
+            applyEngineLanguage(locale);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 Set<Voice> voices = tts.getVoices();
                 voicesPreloaded = voices != null;
                 if (voices != null && !voices.isEmpty()) {
                     Voice best = null;
-                    // 1) Exact / substring name match from admin (browser voice name).
+                    // 1) Exact / substring name match from admin (browser voice name),
+                    // only when that voice is the same language we just selected.
                     if (!TextUtils.isEmpty(voiceWanted)) {
                         String needle = voiceWanted.toLowerCase(Locale.US);
                         for (Voice v : voices) {
-                            if (v == null) continue;
+                            if (v == null || !voiceMatchesLanguage(v, locale)) continue;
                             String name =
                                     v.getName() == null
                                             ? ""
@@ -457,23 +450,55 @@ public final class ArticleTtsHelper {
         return 0;
     }
 
+    /**
+     * Speak digits in the selected language. If that locale has no voice data,
+     * try the language alone, then the device locale only when it is the same
+     * language. Never substitute Telugu ({@code te-IN} / a Telugu device default).
+     */
+    private static void applyEngineLanguage(@NonNull Locale locale) {
+        if (tts == null) return;
+        if (isLanguageSet(tts.setLanguage(locale))) return;
+        String lang = locale.getLanguage();
+        if (!TextUtils.isEmpty(lang) && !TextUtils.isEmpty(locale.getCountry())) {
+            if (isLanguageSet(tts.setLanguage(new Locale(lang)))) return;
+        }
+        Locale device = Locale.getDefault();
+        if (sameLanguage(device, locale)) {
+            tts.setLanguage(device);
+        }
+    }
+
+    private static boolean isLanguageSet(int result) {
+        return result != TextToSpeech.LANG_MISSING_DATA
+                && result != TextToSpeech.LANG_NOT_SUPPORTED;
+    }
+
+    @NonNull
+    private static Locale localeFromTag(@NonNull String localeTag) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return Locale.forLanguageTag(localeTag.replace('_', '-'));
+        }
+        String[] parts = localeTag.replace('-', '_').split("_");
+        if (parts.length >= 2 && !TextUtils.isEmpty(parts[0])) {
+            return new Locale(parts[0], parts[1]);
+        }
+        return new Locale(parts.length > 0 && !TextUtils.isEmpty(parts[0]) ? parts[0] : "en");
+    }
+
+    private static boolean sameLanguage(@Nullable Locale a, @Nullable Locale b) {
+        if (a == null || b == null) return false;
+        String al = a.getLanguage();
+        String bl = b.getLanguage();
+        return !TextUtils.isEmpty(al) && al.equalsIgnoreCase(bl);
+    }
+
+    private static boolean voiceMatchesLanguage(@NonNull Voice voice, @NonNull Locale wanted) {
+        return voice.getLocale() != null && sameLanguage(voice.getLocale(), wanted);
+    }
+
     @NonNull
     private static Locale localeForAppLanguage(@Nullable Context context) {
-        int langId = 0;
-        try {
-            if (context != null) {
-                langId =
-                        SharedPrefsData.getInt(
-                                context.getApplicationContext(),
-                                Constants.LanguageID,
-                                Constants.PREF_NAME);
-            }
-        } catch (Exception ignored) {
-        }
-        // FlipperAdapter: 1=English, 4=Tamil, else Telugu path.
-        if (langId == 1) return new Locale("en", "IN");
-        if (langId == 4) return new Locale("ta", "IN");
-        return new Locale("te", "IN");
+        return TtsLanguageLocales.forLanguageId(languageId(context));
     }
 
     private static void stopSpeaking(boolean resetUi) {
