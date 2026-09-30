@@ -1206,6 +1206,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private static final int ONLINE_NEWS_ALL_READ_SKIP_CAP = 200;
     /**
+     * Consecutive List_All_Articles pages whose post ids were already on screen.
+     * Stops the auto-walk so a repeating offset cannot hammer the server.
+     * Not a skip number — a new forward pull may try again after the cap.
+     */
+    private static final int ONLINE_NEWS_ZERO_GROWTH_PAGE_CAP = 40;
+    private int onlineNewsZeroGrowthStreak = 0;
+    private boolean onlineNewsZeroGrowthCapLogged = false;
+    /** True after the zero-growth cap until a later finger-down pull clears it. */
+    private boolean zeroGrowthResumeArmed = false;
+    /** Gesture generation that hit the cap. The same hold must not clear it. */
+    private int zeroGrowthCapGesture = -1;
+    /**
      * Last known ad shell from main feed (codes / ad_req_position). Used to re-place
      * ads after merges when strip/filter left only one/few slots.
      */
@@ -7048,6 +7060,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && list != null
                 && !list.isEmpty()
                 && v.getPageCount() == list.size();
+        if (forwardPastEnd && zeroGrowthResumeArmed) {
+            int gesture = -1;
+            try {
+                gesture = v.getFlipGestureGeneration();
+            } catch (Exception ignored) {
+            }
+            // Same hold that hit the cap must not immediately walk another 40.
+            // A later finger-down (new generation) may try again.
+            if (gesture != zeroGrowthCapGesture) {
+                onlineNewsZeroGrowthStreak = 0;
+                onlineNewsZeroGrowthCapLogged = false;
+                zeroGrowthResumeArmed = false;
+                Log.i("FeedFlip", "zero-growth cap cleared by forward pull");
+            }
+        }
         // A page the server already returned must be appended even inside the
         // overflip cooldown. Waiting out that cooldown left the last card stuck
         // while Redis still had rows.
@@ -14596,6 +14623,147 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return true;
     }
 
+    /** Post ids of real cards. Ads, invite, share, and ratings are not articles. */
+    private java.util.HashSet<Long> paintablePostIds(
+            @Nullable java.util.List<ModelClass.Datum> items) {
+        java.util.HashSet<Long> ids = new java.util.HashSet<>();
+        if (items == null) {
+            return ids;
+        }
+        for (ModelClass.Datum d : items) {
+            if (d == null || ReadArticleStore.isSyntheticFeedSlot(d)) {
+                continue;
+            }
+            if (d.getPostId() == null || d.getPostId() <= 0) {
+                continue;
+            }
+            ids.add(d.getPostId());
+        }
+        return ids;
+    }
+
+    private boolean hasNewPaintablePostId(
+            @Nullable java.util.List<ModelClass.Datum> items,
+            @Nullable java.util.HashSet<Long> before) {
+        if (items == null) {
+            return false;
+        }
+        for (ModelClass.Datum d : items) {
+            if (d == null || ReadArticleStore.isSyntheticFeedSlot(d)) {
+                continue;
+            }
+            if (d.getPostId() == null || d.getPostId() <= 0) {
+                continue;
+            }
+            if (before == null || !before.contains(d.getPostId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void resetOnlineNewsZeroGrowthWalk() {
+        onlineNewsZeroGrowthStreak = 0;
+        onlineNewsZeroGrowthCapLogged = false;
+        zeroGrowthResumeArmed = false;
+        zeroGrowthCapGesture = -1;
+    }
+
+    private void noteZeroGrowthCap() {
+        zeroGrowthResumeArmed = true;
+        try {
+            zeroGrowthCapGesture = mFlipView != null
+                    ? mFlipView.getFlipGestureGeneration() : -1;
+        } catch (Exception ignored) {
+            zeroGrowthCapGesture = -1;
+        }
+        if (!onlineNewsZeroGrowthCapLogged) {
+            onlineNewsZeroGrowthCapLogged = true;
+            Log.i("FeedFlip", "zero-growth cap hit streak=" + onlineNewsZeroGrowthStreak
+                    + " skip=" + skip
+                    + " — stop auto walk until next forward pull");
+        }
+    }
+
+    /**
+     * A non-empty page whose post ids are already on screen is not the end of
+     * the feed. Skip was already taken from this response. Request that next
+     * skip until a page grows the deck, the server returns an empty payload,
+     * or {@link #ONLINE_NEWS_ZERO_GROWTH_PAGE_CAP} consecutive zero-growth
+     * pages have been seen.
+     *
+     * @return true when this page was consumed here (caller must not also prefetch it)
+     */
+    private boolean consumeDuplicateFeedPage(boolean cursorAdvanced) {
+        if (searchFeedActive || bookmarksModeSelected || !canPageActiveOnlineFlipFeed()) {
+            return false;
+        }
+        if (!isDeviceOnline()) {
+            return false;
+        }
+        if (onlineNewsZeroGrowthStreak >= ONLINE_NEWS_ZERO_GROWTH_PAGE_CAP) {
+            noteZeroGrowthCap();
+            return true;
+        }
+        onlineNewsZeroGrowthStreak++;
+        Log.i("FeedFlip", "skip duplicate feed page streak=" + onlineNewsZeroGrowthStreak
+                + " skip=" + skip
+                + " actual_skip=" + actual_skip
+                + " last_post_id=" + last_post_id
+                + " list=" + (list != null ? list.size() : -1)
+                + " cursorAdvanced=" + cursorAdvanced);
+        if (!cursorAdvanced) {
+            Log.i("FeedFlip", "duplicate page cursor did not advance skip=" + skip
+                    + " — not requesting again");
+            zeroGrowthResumeArmed = true;
+            try {
+                zeroGrowthCapGesture = mFlipView != null
+                        ? mFlipView.getFlipGestureGeneration() : -1;
+            } catch (Exception ignored) {
+                zeroGrowthCapGesture = -1;
+            }
+            return true;
+        }
+        if (onlineNewsZeroGrowthStreak >= ONLINE_NEWS_ZERO_GROWTH_PAGE_CAP) {
+            noteZeroGrowthCap();
+            return true;
+        }
+        final long skipForRequest = skip;
+        final long actualForRequest = actual_skip;
+        final long lastForRequest = last_post_id;
+        final boolean videoFlag = isVideoFeedMode();
+        final boolean specialFlag = isSpecialFeedMode();
+        isApiRequested = false;
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                if (isFinishing() || isDestroyed()) {
+                    return;
+                }
+                if (!canPageActiveOnlineFlipFeed() || bookmarksModeSelected || searchFeedActive) {
+                    return;
+                }
+                if (!isDeviceOnline()) {
+                    return;
+                }
+                if (videoFlag != isVideoFeedMode() || specialFlag != isSpecialFeedMode()) {
+                    return;
+                }
+                if (dummyResponse != null || isApiRequested) {
+                    return;
+                }
+                if (skip != skipForRequest
+                        || actual_skip != actualForRequest
+                        || last_post_id != lastForRequest) {
+                    return;
+                }
+                isApiRequested = true;
+                ShowNews_Data_Values(category_id, 3);
+            }
+        });
+        return true;
+    }
+
     /**
      * Append (or re-seat) the FlipView end card and optionally flip onto it.
      * Search: end card is the Continue-reading hub (never "no more news").
@@ -18238,6 +18406,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         // Page-0 (open / reload / special / disk paint / first-page network): replace.
                         // Later pages incl. held merge with reqPos=-1: append unique (never clear).
                         // Do NOT use reqPos < 0 as replace — that wrongly wiped the feed on held apply.
+                        final java.util.HashSet<Long> articleIdsBeforeAppend = paintablePostIds(list);
                         final boolean page0Replace = fromCache || replacePage0 || list.isEmpty();
                         if (page0Replace) {
                             // Clear then append-unique so a single page-0 payload that
@@ -18350,8 +18519,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             }
                         }
                         requestSize=list.size();
+                        // Ads and invite slots are not new articles. A page that only
+                        // repeats post ids already on screen must not end the feed.
+                        final boolean paginationAppend = !page0Replace && listSizeBeforeAppend > 0;
+                        final boolean addedNewArticle = paginationAppend
+                                && hasNewPaintablePostId(list, articleIdsBeforeAppend);
+                        if (page0Replace || addedNewArticle) {
+                            resetOnlineNewsZeroGrowthWalk();
+                        }
                         // Always take cursors from this payload — including disk cache —
                         // so warm reopen / skip-network can keep scrolling past page 0.
+                        final long skipBeforePage = skip;
+                        final long actualSkipBeforePage = actual_skip;
+                        final long lastPostBeforePage = last_post_id;
                         if (validateUserOtp.getLastPostId() != null) {
                             last_post_id = validateUserOtp.getLastPostId();
                         }
@@ -18361,6 +18541,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if (validateUserOtp.getActualSkip() != null) {
                             actual_skip = validateUserOtp.getActualSkip();
                         }
+                        final boolean feedCursorAdvanced = skip != skipBeforePage
+                                || actual_skip != actualSkipBeforePage
+                                || last_post_id != lastPostBeforePage;
+                        // Skip is already the next page's cursor. Walk that skip when
+                        // this payload added no new post id. Do not also prefetch it below.
+                        final boolean duplicatePageNoGrowth = paginationAppend
+                                && !addedNewArticle
+                                && !searchFeedActive;
+                        final boolean walkedDuplicates = duplicatePageNoGrowth
+                                && consumeDuplicateFeedPage(feedCursorAdvanced);
                         // Any non-empty live page proves the archive is not exhausted.
                         if (!fromCache && list != null
                                 && ReadArticleStore.countPaintableArticles(list) > 0) {
@@ -18383,7 +18573,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             // Post anyway; the runnable bails if a newer request started.
                             // Only while the finger is moving — an idle Flash open must
                             // not walk the whole archive. A non-empty page is not the end.
-                            if (fingerMoving
+                            if (!walkedDuplicates
+                                    && fingerMoving
                                     && pageHadArticles
                                     && dummyResponse == null
                                     && isDeviceOnline()) {
@@ -18424,7 +18615,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 fingerMoving = isNewsUserDrivingFlip();
                             } catch (Exception ignored) {
                             }
-                            if (fingerMoving
+                            if (!walkedDuplicates
+                                    && fingerMoving
                                     && pageHadArticles
                                     && dummyResponse == null
                                     && isDeviceOnline()) {
