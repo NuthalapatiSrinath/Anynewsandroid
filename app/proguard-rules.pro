@@ -93,5 +93,7 @@
     public void setUpdateSuspended(boolean);
 }
 -keepclassmembers class com.google.android.material.bottomnavigation.BottomNavigationMenuView {
-    private android.transition.TransitionSet set;
+    private androidx.transition.TransitionSet set;
+    private int selectedItemId;
+    private int selectedItemPosition;
 }

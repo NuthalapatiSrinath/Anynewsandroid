@@ -28,7 +28,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
-import android.transition.TransitionManager;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
@@ -384,6 +383,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private TextView tvMagazineShareFooter;
     /** Guards footer rebalance so center + / WhatsApp updates cannot recurse. */
     private int footerRebalanceDepth;
+    /**
+     * Presenter updates held across a Daily Updates footer change so the tap's
+     * {@code setChecked} cannot call {@code updateMenuView} and redraw every label.
+     */
+    private int footerMenuSuspendCount;
     /**
      * Online Reload empties the list before page 0 returns. While this is set,
      * do not hide the middle footer column — {@code MenuItem.setVisible} rebuilds
@@ -9254,7 +9258,49 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (footerRebalanceDepth > 0) {
             return;
         }
+        // News, Special, ads, and magazines keep this column open, so they never
+        // reach here. Daily Updates is the toggle. Profile hides that same item
+        // by painting the view that is already in the bar. A full rebalance
+        // calls FooterStyleHelper on every label and that is the blink.
+        if (footerTabsBesidesCenterAlreadyMatch()) {
+            runWithoutFooterLayoutTransition(() -> {
+                setCenterFooterSlotVisibleWithoutRebuild(slot, wantSpacer);
+                if (wantSpacer) {
+                    hideShareCenterSlotChrome();
+                }
+            });
+            repositionCenterFabForVisibleTabs();
+            return;
+        }
         rebalanceFooterTabs();
+    }
+
+    /**
+     * True when News, Special, Daily Updates, and Profile already match the
+     * admin flags. The middle column can then open or close on its own.
+     */
+    private boolean footerTabsBesidesCenterAlreadyMatch() {
+        if (bottomNavigationView == null || bottomNavigationView.getMenu() == null) {
+            return false;
+        }
+        try {
+            android.view.Menu menu = bottomNavigationView.getMenu();
+            boolean online = isDeviceOnline();
+            return footerMenuItemMatches(menu.findItem(R.id.navigation_home),
+                    ProfileHubConfigHelper.isFooterShowReload(this))
+                    && footerMenuItemMatches(menu.findItem(R.id.navigation_catagiries),
+                    online && ProfileHubConfigHelper.isFooterShowSpecial(this))
+                    && footerMenuItemMatches(menu.findItem(R.id.navigation_status),
+                    online && ProfileHubConfigHelper.isFooterShowVideos(this))
+                    && footerMenuItemMatches(menu.findItem(R.id.navigation_profile),
+                    online && ProfileHubConfigHelper.isFooterShowProfile(this));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean footerMenuItemMatches(@Nullable MenuItem item, boolean wantVisible) {
+        return item != null && item.isVisible() == wantVisible && item.isEnabled() == wantVisible;
     }
 
     /** Hide the spacer item's own icon and label; the Share overlay is the control. */
@@ -9937,6 +9983,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             homeDailyUpdatesHost.post(this::keepDailyUpdatesCovered);
             homeDailyUpdatesHost.postDelayed(this::keepDailyUpdatesCovered, 250L);
         }
+        // Hold through the tap's setChecked, which runs after this method returns.
+        // That call would otherwise redraw every footer label.
+        suspendFooterMenuUpdates();
         try {
             updateCenterFab();
         } catch (Exception ignored) {
@@ -11910,6 +11959,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void showNewsFooterFromDailyUpdatesHub() {
         newsFooterWhatsappHeld = true;
         armSnapFooterMotion();
+        suspendFooterMenuUpdates();
         selectFooterTabWithoutMotion(R.id.navigation_home);
         try {
             updateCenterFab();
@@ -11937,7 +11987,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         endFooterSelectionTransition();
     }
 
-    /** Drop a pending 115ms footer selection / reflow transition before it draws. */
+    /**
+     * Drop a pending footer selection / reflow transition before it draws.
+     * Material 1.1 uses {@code androidx.transition}, not {@code android.transition}.
+     * The platform call does not cancel the TextScale that redraws every label.
+     */
     private void endFooterSelectionTransition() {
         try {
             if (bottomNavigationView == null) {
@@ -11945,7 +11999,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             View menuChild = bottomNavigationView.getChildAt(0);
             if (menuChild instanceof ViewGroup) {
-                TransitionManager.endTransitions((ViewGroup) menuChild);
+                androidx.transition.TransitionManager.endTransitions((ViewGroup) menuChild);
             }
         } catch (Exception ignored) {
         }
@@ -11963,6 +12017,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private void scheduleRestoreFooterMotion() {
         if (bottomNavigationView == null) {
+            resumeFooterMenuUpdates();
             setFooterSelectionAnimDuration(FOOTER_SELECTION_ANIM_MS);
             return;
         }
@@ -11975,8 +12030,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if (obs.isAlive()) {
                             obs.removeOnPreDrawListener(this);
                         }
-                        endFooterSelectionTransition();
-                        setFooterSelectionAnimDuration(FOOTER_SELECTION_ANIM_MS);
+                        try {
+                            paintFooterSelectionWithoutRebuild();
+                            endFooterSelectionTransition();
+                        } finally {
+                            resumeFooterMenuUpdates();
+                            setFooterSelectionAnimDuration(FOOTER_SELECTION_ANIM_MS);
+                        }
                         return true;
                     }
                 });
@@ -11994,8 +12054,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             Field setField = menuChild.getClass().getDeclaredField("set");
             setField.setAccessible(true);
             Object transition = setField.get(menuChild);
-            if (transition instanceof android.transition.Transition) {
-                ((android.transition.Transition) transition).setDuration(durationMs);
+            if (transition instanceof androidx.transition.Transition) {
+                ((androidx.transition.Transition) transition).setDuration(durationMs);
             }
         } catch (Exception e) {
             showLog("footer selection anim: " + e.getMessage());
@@ -12023,29 +12083,50 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void runWithFooterMenuUpdatesSuspended(Runnable action) {
-        Object presenter = footerNavPresenter();
-        boolean suspended = false;
-        if (presenter != null) {
+        suspendFooterMenuUpdates();
+        try {
+            action.run();
+        } finally {
+            resumeFooterMenuUpdates();
+        }
+    }
+
+    /** Block {@code buildMenuView} / {@code updateMenuView} until {@link #resumeFooterMenuUpdates}. */
+    private void suspendFooterMenuUpdates() {
+        if (footerMenuSuspendCount == 0) {
+            Object presenter = footerNavPresenter();
+            if (presenter == null) {
+                return;
+            }
             try {
                 Method suspend = presenter.getClass().getMethod(
                         "setUpdateSuspended", boolean.class);
                 suspend.invoke(presenter, true);
-                suspended = true;
             } catch (Exception e) {
                 showLog("footer suspend: " + e.getMessage());
+                return;
             }
         }
+        footerMenuSuspendCount++;
+    }
+
+    private void resumeFooterMenuUpdates() {
+        if (footerMenuSuspendCount <= 0) {
+            return;
+        }
+        footerMenuSuspendCount--;
+        if (footerMenuSuspendCount > 0) {
+            return;
+        }
+        Object presenter = footerNavPresenter();
+        if (presenter == null) {
+            return;
+        }
         try {
-            action.run();
-        } finally {
-            if (suspended && presenter != null) {
-                try {
-                    Method suspend = presenter.getClass().getMethod(
-                            "setUpdateSuspended", boolean.class);
-                    suspend.invoke(presenter, false);
-                } catch (Exception ignored) {
-                }
-            }
+            Method suspend = presenter.getClass().getMethod(
+                    "setUpdateSuspended", boolean.class);
+            suspend.invoke(presenter, false);
+        } catch (Exception ignored) {
         }
     }
 
@@ -12087,19 +12168,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Show or hide the middle column without a menu structure change.
-     * {@code MenuItem.setVisible} calls {@code buildMenuView}: the bar flashes,
-     * a hidden item still occupies a fifth of the width for a frame (the hole),
-     * and the Reload view can be rebound as Profile.
-     * The menu flag still updates so measure divides the bar by the visible tabs.
+     * Show or hide the middle column the way Profile does.
+     * Profile paints the existing item view gone and lets measure divide the
+     * bar by the visible tabs. It does not call {@code updateMenuView}.
+     * That call runs {@code initialize} on every item, which sets each title
+     * again and starts the TextScale that flashes all four names.
+     * The menu flag still has to change so measure does not leave a fifth-wide
+     * hole. The presenter is held so {@code setVisible} does not
+     * {@code buildMenuView} (that recycle is the blink, and it has sent a
+     * Reload tap to Profile).
      */
     private void setCenterFooterSlotVisibleWithoutRebuild(@Nullable MenuItem item, boolean visible) {
         if (item == null || bottomNavigationView == null) {
             return;
         }
-        if (item.isVisible() == visible && item.isEnabled() == visible) {
+        View slotView = findFooterMenuItemView(R.id.navigation_stricker);
+        boolean viewMatches = slotView == null
+                || (visible
+                ? slotView.getVisibility() == View.VISIBLE
+                : slotView.getVisibility() != View.VISIBLE);
+        if (item.isVisible() == visible && item.isEnabled() == visible && viewMatches) {
             return;
         }
+        endFooterSelectionTransition();
         runWithFooterMenuUpdatesSuspended(() -> {
             if (item.isVisible() != visible) {
                 item.setVisible(visible);
@@ -12108,7 +12199,60 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 item.setEnabled(visible);
             }
         });
-        refreshFooterItemViewsWithoutRebuild();
+        forceFooterItemViewsMatchMenuVisibility();
+        endFooterSelectionTransition();
+    }
+
+    /**
+     * Move the orange check onto the menu's checked item without
+     * {@code updateMenuView}. Only the tab that gained the check and the tab
+     * that lost it are repainted. The other names stay as they are.
+     */
+    private void paintFooterSelectionWithoutRebuild() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        try {
+            View menuChild = bottomNavigationView.getChildAt(0);
+            if (!(menuChild instanceof BottomNavigationMenuView)) {
+                return;
+            }
+            BottomNavigationMenuView menuView = (BottomNavigationMenuView) menuChild;
+            int checkedId = 0;
+            int checkedPosition = 0;
+            for (int i = 0; i < menuView.getChildCount(); i++) {
+                View child = menuView.getChildAt(i);
+                if (!(child instanceof BottomNavigationItemView)) {
+                    continue;
+                }
+                BottomNavigationItemView itemView = (BottomNavigationItemView) child;
+                MenuItem data = itemView.getItemData();
+                if (data == null) {
+                    continue;
+                }
+                boolean wantChecked = data.isChecked();
+                if (wantChecked) {
+                    checkedId = data.getItemId();
+                    checkedPosition = i;
+                }
+                if (itemView.isSelected() != wantChecked) {
+                    itemView.setChecked(wantChecked);
+                }
+            }
+            // updateMenuView is what normally stores this. Reselect uses it.
+            // Skipping that call must not leave the previous tab as the selection.
+            try {
+                Field idField = menuView.getClass().getDeclaredField("selectedItemId");
+                idField.setAccessible(true);
+                idField.setInt(menuView, checkedId);
+                Field positionField = menuView.getClass().getDeclaredField("selectedItemPosition");
+                positionField.setAccessible(true);
+                positionField.setInt(menuView, checkedPosition);
+            } catch (Exception ignored) {
+            }
+        } catch (Exception e) {
+            showLog("paintFooterSelectionWithoutRebuild: " + e.getMessage());
+        }
     }
 
     /**
