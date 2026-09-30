@@ -46,7 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * In-app playback is untouched; only the file produced for download or share
  * is encoded.
  *
- * <p>The logo sits in the bottom-left of the frame the viewer sees, about 16%
+ * <p>The logo sits in the top-right of the frame the viewer sees, about 16%
  * of the short side, with a small margin. Container rotation is preserved so
  * the picture stays the same and the mark stays upright.
  *
@@ -55,7 +55,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class HalfVideoLogoWatermark {
 
     private static final String TAG = "HalfVideoLogo";
-    private static final String CACHE_PREFIX = "halfwm_v1_";
+    /** v3 places the mark top-right. Older cache files stay bottom-left and are not reused. */
+    private static final String CACHE_PREFIX = "halfwm_v3_";
     private static final ConcurrentHashMap<String, Object> LOCKS = new ConcurrentHashMap<>();
 
     private static final int EGL_RECORDABLE_ANDROID = 0x3142;
@@ -158,9 +159,7 @@ public final class HalfVideoLogoWatermark {
         //noinspection ResultOfMethodCallIgnored
         folder.mkdirs();
         String token = HalfVideoShareLogo.cacheToken(context);
-        String name = "builtin".equals(token)
-                ? CACHE_PREFIX + cacheKey(videoKey) + ".mp4"
-                : "halfwm_v2_" + token + "_" + cacheKey(videoKey) + ".mp4";
+        String name = CACHE_PREFIX + token + "_" + cacheKey(videoKey) + ".mp4";
         return new File(folder, name);
     }
 
@@ -550,7 +549,7 @@ public final class HalfVideoLogoWatermark {
     }
 
     /**
-     * Bottom-left of the frame the viewer sees, in stored-frame pixels
+     * Top-right of the frame the viewer sees, in stored-frame pixels
      * (origin top-left, y down). The player applies {@code rotation} clockwise.
      */
     static int[] logoTopLeft(int frameW, int frameH, int rotation, int logoW, int logoH, int margin) {
@@ -558,23 +557,23 @@ public final class HalfVideoLogoWatermark {
         int y;
         switch (rotation) {
             case 90:
-                // Visual bottom-left is the stored bottom-right.
-                x = frameW - margin - logoW;
-                y = frameH - margin - logoH;
+                // Visual top-right is the stored top-left.
+                x = margin;
+                y = margin;
                 break;
             case 180:
-                // Visual bottom-left is the stored top-right.
-                x = frameW - margin - logoW;
-                y = margin;
-                break;
-            case 270:
-                // Visual bottom-left is the stored top-left.
-                x = margin;
-                y = margin;
-                break;
-            default:
+                // Visual top-right is the stored bottom-left.
                 x = margin;
                 y = frameH - margin - logoH;
+                break;
+            case 270:
+                // Visual top-right is the stored bottom-right.
+                x = frameW - margin - logoW;
+                y = frameH - margin - logoH;
+                break;
+            default:
+                x = frameW - margin - logoW;
+                y = margin;
                 break;
         }
         if (x < 0) {
