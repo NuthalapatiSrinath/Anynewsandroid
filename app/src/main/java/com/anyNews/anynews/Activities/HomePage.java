@@ -7039,9 +7039,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("onOverFlip::positionx:"+ positionx);
         showLog("onOverFlip::positionx:"+((list.size()-1)==positionx));
 
+        // Forward pull past the last loaded card. A fast fling often leaves
+        // positionx behind the finger, so do not require it to equal the last index.
+        final boolean forwardPastEnd = overFlipDistance > 0
+                && !overFlippingPrevious
+                && list != null
+                && !list.isEmpty()
+                && v.getPageCount() == list.size();
+        // A page the server already returned must be appended even inside the
+        // overflip cooldown. Waiting out that cooldown left the last card stuck
+        // while Redis still had rows.
+        if (forwardPastEnd && dummyResponse != null && !isDataParsed) {
+            showLog("onOverFlip apply held page positionx=" + positionx
+                    + " size=" + list.size());
+            convertListOfArticles(dummyResponse, -1);
+        }
 
-
-        if(v.getPageCount()==list.size() && (list.size()-1)==positionx && loadingOnOverFlip && overFlipDistance>0){
+        if(forwardPastEnd && loadingOnOverFlip){
             loadingOnOverFlip = false;
             // Keyword search: last page is Continue-reading hub — never invent a
             // second "no more news" sentinel on overflip.
@@ -17656,9 +17670,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             isDataParsed=false;
             dummyResponse=response;
             showLog("requestPosition::"+requestPostition);
-            requestPostition=1+requestSize;
-            showLog("requestPosition::"+requestPostition);
-            // Also grow offline pack from held next page (no wait for end-of-list apply).
+            // Do not park the next ask at 1+requestSize. That index is past the
+            // last card, so the finger can never land on it. The append below
+            // seats requestPostition on a real card and advances skip by the
+            // page the server just returned.
+            // Also grow offline pack from this page (no wait for a later seat).
             try {
                 if (!SharedPrefsData.getBool(
                         HomePage.this, Constants.isUnreadPostsSelected, Constants.PREF_NAME)
@@ -17670,16 +17686,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             } catch (Exception ignored) {
             }
-            // Tiny decks / already near end: apply now. Leaving isApiRequested=true with a
-            // held dummy (and never reaching a distinct size-2 seat) froze Video/News flips.
-            if (shouldApplyHeldFeedPageImmediately()) {
-                showLog("held page apply immediately pos=" + positionx
-                        + " size=" + (list != null ? list.size() : -1));
-                convertListOfArticles(dummyResponse, -1);
-            } else {
-                isApiRequested = false;
-                showLog("held page deferred until near-end flip");
-            }
+            // Append as soon as the page is back, including during a fast fling.
+            // Holding it until the finger sat on one of the last two cards let
+            // the scroll stop while this response still had articles.
+            showLog("pagination page apply on arrival pos=" + positionx
+                    + " size=" + (list != null ? list.size() : -1));
+            convertListOfArticles(dummyResponse, -1);
             return;
         }
         EncreptionRequest body = (response != null) ? response.body() : null;
@@ -17687,22 +17699,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Held next-page ({@code reqPos=3}) must merge when the user cannot reach a later
-     * {@code size-2} settle (1–2 card decks) or is already on/near the last cards.
+     * Seat used to decide the next page. A fast fling can leave {@link #positionx}
+     * behind, or report page 0, while FlipView is already further down the list.
      */
-    private boolean shouldApplyHeldFeedPageImmediately() {
-        if (dummyResponse == null) return false;
-        if (list == null || list.isEmpty()) return true;
-        int n = list.size();
-        if (n <= 2) return true;
-        int pos = positionx;
+    private int feedPagingSeat() {
+        int pos = Math.max(0, positionx);
         try {
-            if (mFlipView != null) {
-                pos = mFlipView.getCurrentPage();
+            if (mFlipView == null || list == null || list.isEmpty()) {
+                return pos;
             }
+            int cur = mFlipView.getCurrentPage();
+            if (cur < 0 || cur >= list.size()) {
+                return pos;
+            }
+            if (cur == 0 && pos > 1 && mFlipView.isUserDrivingFlip()) {
+                return pos;
+            }
+            return Math.max(pos, cur);
         } catch (Exception ignored) {
+            return pos;
         }
-        return pos >= Math.max(0, n - 2);
     }
 
     public void convertListOfArticles(EncreptionRequest encreptionRequest, int reqPos, boolean fromCache){
@@ -17735,7 +17751,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showLog("showReporterLogin (stored early):" + showReporterLogin);
             }
             isDataParsed=false;
-            requestPostition=1+requestSize;
             convertListOfArticles(encreptionRequest, -1, fromCache, false);
             return;
         }
@@ -18344,8 +18359,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             int n = list.size();
                             // Prefetch sooner than main News (n-3) — load at ~index 2.
                             requestPostition = Math.max(1, Math.min(n - 1, 2));
-                            final boolean maybeMore = validateUserOtp.getData().size() >= 4;
-                            if (maybeMore && !isApiRequested && dummyResponse == null && isDeviceOnline()) {
+                            final boolean pageHadArticles = validateUserOtp.getData() != null
+                                    && validateUserOtp.getData().size() > 0;
+                            boolean fingerMoving = false;
+                            try {
+                                fingerMoving = isNewsUserDrivingFlip();
+                            } catch (Exception ignored) {
+                            }
+                            // isApiRequested is still true until this parse returns.
+                            // Post anyway; the runnable bails if a newer request started.
+                            // Only while the finger is moving — an idle Flash open must
+                            // not walk the whole archive. A non-empty page is not the end.
+                            if (fingerMoving
+                                    && pageHadArticles
+                                    && dummyResponse == null
+                                    && isDeviceOnline()) {
                                 final int prefetchAt = requestPostition;
                                 showLog("Flash feed prefetch at pos=" + prefetchAt
                                         + " list=" + n + " skip=" + skip);
@@ -18371,13 +18399,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             // that appended unlimited hits after finalizeSearchFeedSeating.
                             int n = list.size();
                             requestPostition = Math.max(1, Math.min(n - 1, Math.max(1, n - 3)));
-                            // Prefetch thrift: only eager-hold next page for small decks
-                            // (≤8). Larger decks wait for near-end flip to avoid an
-                            // unused page-N+1 POST on every page-0 land.
-                            final boolean maybeMore = validateUserOtp.getData().size() >= 4;
-                            if (maybeMore
-                                    && n <= 8
-                                    && !isApiRequested
+                            // Sitting on card 0 must not pull the next page. A fast fling
+                            // must ask for the next skip as soon as this page had articles.
+                            // Waiting for a later settle is what stopped the list on the last card.
+                            // isApiRequested is still true until this parse returns; the
+                            // runnable bails if a newer request has already started.
+                            final boolean pageHadArticles = validateUserOtp.getData() != null
+                                    && validateUserOtp.getData().size() > 0;
+                            boolean fingerMoving = false;
+                            try {
+                                fingerMoving = isNewsUserDrivingFlip();
+                            } catch (Exception ignored) {
+                            }
+                            if (fingerMoving
+                                    && pageHadArticles
                                     && dummyResponse == null
                                     && isDeviceOnline()) {
                                 final int prefetchAt = requestPostition;
@@ -19832,17 +19867,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 return;
             }
         }
-        // Apply held next page whenever we are on/near the last cards (or tiny list).
-        // Exact == size-2 used to miss when the user jumped past that seat.
-        if (dummyResponse != null
-                && list != null
-                && !list.isEmpty()
-                && (list.size() <= 2
-                        || positionx >= Math.max(0, list.size() - 2))) {
-            showLog("request at position:: convertListOfArticles held");
+        // Append a page already in hand even if the finger skipped the last
+        // two cards. An empty payload still ends inside the merge.
+        if (dummyResponse != null) {
+            showLog("request at position:: convertListOfArticles held seat="
+                    + feedPagingSeat());
             convertListOfArticles(dummyResponse, -1);
         }
 
+        final int pagingSeat = feedPagingSeat();
         final boolean feedNotExhausted = !isOnlinePageableFeedTrulyExhausted()
                 && !(isFeedExhaustedMessage()
                         && (!canPageActiveOnlineFlipFeed() || bookmarksModeSelected));
@@ -19852,11 +19885,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
                         || activeSearchPostId > 0L
                         || activeSearchSingleOnly);
+        final boolean askAgainInList = list != null
+                && requestPostition >= 0
+                && requestPostition < list.size();
         if (searchBlocksPaging) {
             showLog("ANYNEWS_SEARCH near-end paging suppressed");
             isApiRequested = false;
             dummyResponse = null;
-        } else if (positionx == requestPostition
+        } else if (askAgainInList
+                && (positionx == requestPostition || pagingSeat == requestPostition)
                 && dummyResponse == null
                 && !isApiRequested
                 && feedNotExhausted) {
@@ -19871,7 +19908,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && !isApiRequested
                 && dummyResponse == null
                 && isDeviceOnline()
-                && positionx >= Math.max(0, list.size() - 2)
+                && (pagingSeat >= Math.max(0, list.size() - 3)
+                        || positionx >= Math.max(0, list.size() - 3))
                 && feedNotExhausted) {
             // News / Special / Video: near end of loaded list — prefetch next page.
             // Keyword multi may still page via positionx==requestPostition above.
@@ -19990,6 +20028,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // GONE↔VISIBLE on home_page_navigation resizes FlipView (layout_weight) and
         // reads as top edges "falling twice" — especially around ad before/after pages.
         final boolean driving = mFlipView != null && mFlipView.isUserDrivingFlip();
+        // Ask for the next skip while the finger is still moving. Settle-only
+        // paging let a fast fling pass the ask-again card and stop on the last one.
+        if (driving && list != null && !list.isEmpty()
+                && position >= Math.max(0, list.size() - 3)) {
+            final FlipView flipForPage = view;
+            flipForPage.post(() -> {
+                try {
+                    maybePrefetchOnlineNewsIfNearEnd();
+                } catch (Exception ignored) {
+                }
+            });
+        }
         deferFlipChromeUntilSettle = driving
                 || leftAdShell
                 || enteredAdShell
@@ -22896,17 +22946,11 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (isApiRequested || dummyResponse != null) return;
         if (onlineNewsAllReadSkipStreak >= ONLINE_NEWS_ALL_READ_SKIP_CAP) return;
         int n = list.size();
-        int pos = positionx;
-        try {
-            if (mFlipView != null) {
-                pos = mFlipView.getCurrentPage();
-            }
-        } catch (Exception ignored) {
-        }
-        boolean nearEnd = pos >= Math.max(0, n - 2);
-        // Only auto-page when near the end (or Video near end). No unread densify.
-        boolean videoNearEnd = isVideoFeedMode() && nearEnd;
-        if (!nearEnd && !videoNearEnd) return;
+        int pos = feedPagingSeat();
+        // Same tail as requestPostition (n-3). A full page (n=10, eight articles
+        // plus ads) is not the end — keep a few cards of runway while the finger moves.
+        boolean nearEnd = pos >= Math.max(0, n - 3);
+        if (!nearEnd) return;
         showLog((isVideoFeedMode() ? "video feed" : isSpecialFeedMode() ? "special"
                 : "online News")
                 + " prefetch nearEnd=" + nearEnd
