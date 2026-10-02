@@ -1481,7 +1481,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         boolean openSpecialSoon = false;
         try {
-            if (getIntent() != null && getIntent().hasExtra("from")) {
+            if (getIntent() != null && getIntent().hasExtra("from")
+                    && !isPushOpenIntent(getIntent())) {
                 String from = getIntent().getStringExtra("from");
                 openSpecialSoon = from != null && from.equalsIgnoreCase("special");
             }
@@ -1683,7 +1684,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         boolean openAsSpecial = false;
         if (getIntent().hasExtra("from")) {
             showLog("isUnreadPostsSelected set to true #7");
-            if (getIntent().getStringExtra("from").equalsIgnoreCase("special")) {
+            // A push owns this open. from=special must not request the Special deck.
+            if (!pushOwnsSeating
+                    && getIntent().getStringExtra("from").equalsIgnoreCase("special")) {
                 showLog("isUnreadPostsSelected set to true #8");
                 setFeedModeFlags(true, false);
                 openAsSpecial = true;
@@ -2186,30 +2189,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             clearSearchFeedMode();
         } catch (Exception ignored) {
         }
-        boolean seatOpenedPostOnSpecial = false;
         try {
-            ModelClass.Datum known = findRealListedPost(pushId);
-            boolean specialWasShowing = explicitSpecialOpen || specialFeedModeActive
-                    || (bottomNavigationView != null
-                    && bottomNavigationView.getSelectedItemId() == R.id.navigation_catagiries);
-            // Only a full/special card already on the Special deck stays there.
-            // A normal news push (or an id we have not seen) must leave Special.
-            seatOpenedPostOnSpecial = specialWasShowing
-                    && known != null
-                    && isFullOrSpecialPostType(known.getPostType());
+            // A push is an open, not a return from the share sheet.
+            FeedPositionKeepConfig.clear(this);
         } catch (Exception ignored) {
         }
         try {
             bookmarksModeSelected = false;
-            if (seatOpenedPostOnSpecial) {
-                explicitSpecialOpen = true;
-                setFeedModeFlags(true, false);
-            } else {
-                // explicitSpecialOpen is checked before the mode flag. Leaving it
-                // set would request special_posts and pin this news card into Special.
-                explicitSpecialOpen = false;
-                setFeedModeFlags(false, false);
-            }
+            // explicitSpecialOpen is checked before the mode flag. Leaving it
+            // set would request special_posts. A full_image / full_video /
+            // gallery / magazine push is still the main news feed.
+            explicitSpecialOpen = false;
+            setFeedModeFlags(false, false);
             applyHomeModeContentVisibility();
             refreshHomeModeToggleUi();
         } catch (Exception ignored) {
@@ -2219,21 +2210,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         try {
-            // Same surface as a cold open: main My Feed, not the category /
-            // Local / calendar deck the user happened to be on.
+            // Same surface as a cold open: main My Feed, not Daily Updates,
+            // Special, Local, or the calendar deck the user happened to be on.
             localFeedFromDailyUpdates = false;
             hideLocalFeedChrome();
             hideHomeCalendarMode();
-            boolean leftDailyUpdates = isDailyUpdatesMode();
+            restoreDailyUpdatesOnCreate = false;
             hideHomeDailyUpdatesMode();
-            if (seatOpenedPostOnSpecial) {
-                selectFooterTabWithoutMotion(R.id.navigation_catagiries);
-            } else if (leftDailyUpdates) {
-                showNewsFooterFromDailyUpdatesHub();
-            } else {
-                // Special was the last tab. The card about to paint is News.
-                selectFooterTabWithoutMotion(R.id.navigation_home);
-            }
+            showNewsFooterFromDailyUpdatesHub();
             category_id = 0;
             softMergeOnNextPage0 = false;
             positionx = 0;
@@ -2399,29 +2383,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         deepLinkShareRescueAttempted = false;
         shareInviteRepairAttempts = 0;
         capturePendingShareGalleryPage(intent, shareId);
-        boolean seatOpenedPostOnSpecial = false;
+        // Captured before Daily Updates / Special are cleared. A magazine
+        // already in the main news feed stays on that list so Share can blink
+        // on the visible card. Special and Daily Updates are not that list.
+        final boolean onMainNews = isPlainMainNewsFeed();
         try {
-            ModelClass.Datum known = findRealListedPost(shareId);
-            boolean specialWasShowing = explicitSpecialOpen || specialFeedModeActive
-                    || (bottomNavigationView != null
-                    && bottomNavigationView.getSelectedItemId() == R.id.navigation_catagiries);
-            seatOpenedPostOnSpecial = specialWasShowing
-                    && known != null
-                    && isFullOrSpecialPostType(known.getPostType());
+            FeedPositionKeepConfig.clear(this);
         } catch (Exception ignored) {
         }
-        // Share open paints News unless this card is already a full post on Special.
-        // Daily Updates must not stay the lit footer tab.
-        if (seatOpenedPostOnSpecial) {
-            try {
-                hideHomeCalendarMode();
-                hideHomeDailyUpdatesMode();
-            } catch (Exception ignored) {
-            }
-        } else {
-            explicitSpecialOpen = false;
-            leaveDailyUpdatesForShareOpen();
-        }
+        // Inbound share opens on News. A full/special card does not keep Special.
+        explicitSpecialOpen = false;
+        restoreDailyUpdatesOnCreate = false;
+        leaveDailyUpdatesForShareOpen();
         // Drop an in-flight plain page-0 (background "first article" refresh)
         // so it cannot replace this share target after we seat it.
         feedModeEpoch++;
@@ -2431,17 +2404,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         // Leave Read / Special / Flash so News land + share_post_id pin can run.
-        // A full post already on the Special deck stays on Special.
         try {
             bookmarksModeSelected = false;
-            if (seatOpenedPostOnSpecial) {
-                explicitSpecialOpen = true;
-                setFeedModeFlags(true, false);
-                selectFooterTabWithoutMotion(R.id.navigation_catagiries);
-            } else {
-                explicitSpecialOpen = false;
-                setFeedModeFlags(false, false);
-            }
+            explicitSpecialOpen = false;
+            setFeedModeFlags(false, false);
             applyHomeModeContentVisibility();
             refreshHomeModeToggleUi();
         } catch (Exception ignored) {
@@ -2451,7 +2417,31 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         try {
-            if (indexOfRealDeepLinkTarget(list, shareId) >= 0) {
+            if (!onMainNews) {
+                // The list on screen is Special, Daily Updates, or another
+                // surface. Pinning here would keep that deck. Load main News.
+                try {
+                    clearSearchFeedMode();
+                } catch (Exception ignored) {
+                }
+                localFeedFromDailyUpdates = false;
+                hideLocalFeedChrome();
+                category_id = 0;
+                softMergeOnNextPage0 = false;
+                positionx = 0;
+                lastSettledFlipIndex = -1;
+                last_post_id = 0;
+                skip = 0;
+                actual_skip = 0;
+                isApiRequested = true;
+                isDataParsed = true;
+                dummyResponse = null;
+                try {
+                    OpenPathCache.forceNextFeedNetwork(this);
+                } catch (Exception ignored) {
+                }
+                ShowNews_Data_Values(0, 0);
+            } else if (indexOfRealDeepLinkTarget(list, shareId) >= 0) {
                 maybeLandDeepLinkPostOnNews(false);
             } else if (!scheduleDeepLinkShareRescue(shareId)) {
                 // Force a page-0 refresh with share sticky so List_All_Articles pins it.
@@ -22681,33 +22671,37 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /**
-     * Footer follows the opened card. A half-news layout ({@code normal_video}
-     * / {@code normal_image}: player, body, reporter row) is News, even if
-     * Special was the last tab. A full/special card keeps Special only when
-     * this page is not the main mix — lighting Special over half-news cards
-     * is the bug in the Modi screenshot.
+     * Push and inbound share land on News. {@code full_image}, {@code full_video},
+     * gallery, and magazine do not leave Special selected, and Daily Updates
+     * must not stay over the feed. Magazine Share blink is the center control
+     * on a visible magazine card; it does not use this tab.
      */
     private void alignFooterWithOpenedPost(@Nullable ModelClass.Datum opened) {
-        if (opened == null || bottomNavigationView == null) {
+        if (bottomNavigationView == null) {
             return;
         }
-        String type = opened.getPostType();
-        boolean half = isHalfNewsPostType(type);
-        boolean full = isFullOrSpecialPostType(type);
-        boolean newsMix = half || listContainsHalfNews(list);
-        if (newsMix || !full) {
-            boolean specialLit = explicitSpecialOpen || specialFeedModeActive
-                    || bottomNavigationView.getSelectedItemId() == R.id.navigation_catagiries;
-            if (specialLit) {
-                explicitSpecialOpen = false;
-                setFeedModeFlags(false, false);
-                selectFooterTabWithoutMotion(R.id.navigation_home);
+        // opened post type does not choose the tab.
+        explicitSpecialOpen = false;
+        if (specialFeedModeActive || videoFeedModeActive) {
+            setFeedModeFlags(false, false);
+        }
+        boolean hub = isDailyUpdatesMode() || restoreDailyUpdatesOnCreate;
+        try {
+            hub = hub || bottomNavigationView.getSelectedItemId() == R.id.navigation_status;
+        } catch (Exception ignored) {
+        }
+        if (hub) {
+            restoreDailyUpdatesOnCreate = false;
+            try {
+                hideHomeCalendarMode();
+                hideHomeDailyUpdatesMode();
+            } catch (Exception ignored) {
             }
+            showNewsFooterFromDailyUpdatesHub();
             return;
         }
-        if (isSpecialFeedMode()
-                || bottomNavigationView.getSelectedItemId() == R.id.navigation_catagiries) {
-            selectFooterTabWithoutMotion(R.id.navigation_catagiries);
+        if (bottomNavigationView.getSelectedItemId() != R.id.navigation_home) {
+            selectFooterTabWithoutMotion(R.id.navigation_home);
         }
     }
 
