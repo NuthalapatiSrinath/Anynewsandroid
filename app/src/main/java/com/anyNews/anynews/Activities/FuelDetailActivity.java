@@ -30,8 +30,10 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Ui.FuelHistoryChartView;
+import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.FuelLabels;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
+import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 
@@ -40,7 +42,8 @@ import org.json.JSONObject;
 
 /**
  * Fuel prices detail — splash {@code root_settings.fuel}.
- * State / city pickers refresh hero + city table from cached {@code by_state}.
+ * State / city pickers refresh hero + city table from stored {@code places}
+ * (or legacy {@code by_state} when that array is absent). No third-party call.
  * Promo copy is derived from today-vs-yesterday deltas (not static admin strings).
  * Chart uses real yesterday→today points only (source has no 7-day series).
  */
@@ -69,7 +72,8 @@ public class FuelDetailActivity extends AppCompatActivity {
         clipHero();
         JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
         if (root == null) root = new JSONObject();
-        selectedStateKey = resolveStateKey(root);
+        selectedStateKey = resolveInitialStateKey(root);
+        selectedCity = resolveInitialCity(root, selectedStateKey);
         activeFuel = overlayState(root, selectedStateKey);
         bindUi(activeFuel);
         wireClicks();
@@ -479,7 +483,7 @@ public class FuelDetailActivity extends AppCompatActivity {
         stateFilter.setFocusable(true);
     }
 
-    /** States in splash {@code by_state} (or root) that have real petrol+diesel prices. */
+    /** States in stored {@code places} (legacy: splash {@code by_state}). */
     private int countStatesWithData() {
         return statesWithData().size();
     }
@@ -488,6 +492,7 @@ public class FuelDetailActivity extends AppCompatActivity {
     private java.util.List<String[]> statesWithData() {
         JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
         if (root == null) root = new JSONObject();
+        if (hasPlaces(root)) return statesFromPlaces(root);
         JSONObject byState = root.optJSONObject("by_state");
         if (byState == null) byState = new JSONObject();
 
@@ -559,11 +564,7 @@ public class FuelDetailActivity extends AppCompatActivity {
             row.addView(name);
 
             TextView meta = new TextView(this);
-            double p = 0;
-            if (snap != null) p = LocalUpdatesConfigHelper.optNumber(snap, "petrol_price", 0);
-            if (!(p > 0) && key.equals(resolveStateKey(root))) {
-                p = LocalUpdatesConfigHelper.optNumber(root, "petrol_price", 0);
-            }
+            double p = priceForState(root, key, snap);
             meta.setText(p > 0 ? ("₹" + LocalUpdatesConfigHelper.formatMoney2(p)) : "");
             meta.setTextColor(0xFF94A3B8);
             meta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
@@ -685,6 +686,7 @@ public class FuelDetailActivity extends AppCompatActivity {
      */
     @NonNull
     private JSONObject overlayState(@NonNull JSONObject root, @NonNull String key) {
+        if (hasPlaces(root)) return overlayFromPlaces(root, key);
         try {
             JSONObject out = new JSONObject(root.toString());
             JSONObject byState = root.optJSONObject("by_state");
@@ -719,6 +721,179 @@ public class FuelDetailActivity extends AppCompatActivity {
 
     private static void copyIfPresent(JSONObject from, JSONObject to, String key) throws Exception {
         if (from.has(key) && !from.isNull(key)) to.put(key, from.get(key));
+    }
+
+    private boolean hasPlaces(@Nullable JSONObject root) {
+        JSONArray places = root != null ? root.optJSONArray("places") : null;
+        return places != null && places.length() > 0;
+    }
+
+    @NonNull
+    private JSONArray placesOf(@Nullable JSONObject root) {
+        if (root == null) return new JSONArray();
+        JSONArray places = root.optJSONArray("places");
+        return places != null ? places : new JSONArray();
+    }
+
+    @NonNull
+    private String resolveInitialStateKey(@NonNull JSONObject root) {
+        if (!hasPlaces(root)) return resolveStateKey(root);
+        int stateId = SharedPrefsData.getInt(this, Constants.StateID, Constants.PREF_NAME);
+        if (stateId > 0) {
+            JSONArray places = placesOf(root);
+            for (int i = 0; i < places.length(); i++) {
+                JSONObject row = places.optJSONObject(i);
+                if (row == null || row.optInt("state_id", 0) != stateId) continue;
+                String key = row.optString("state_key", "");
+                if (!key.isEmpty()) return key;
+            }
+        }
+        return resolveStateKey(root);
+    }
+
+    @Nullable
+    private String resolveInitialCity(@NonNull JSONObject root, @NonNull String stateKey) {
+        if (!hasPlaces(root)) return null;
+        int distId = SharedPrefsData.getInt(this, Constants.Selected_Distric_Id, Constants.PREF_NAME);
+        String nameA = SharedPrefsData.getString(this, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
+        String nameB = SharedPrefsData.getString(this, Constants.Selected_Distric_Name, Constants.PREF_NAME);
+        JSONArray places = placesOf(root);
+        String byName = null;
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null) continue;
+            if (!stateKey.equals(row.optString("state_key", ""))) continue;
+            String city = displayCity(row);
+            String cityEn = row.optString("city_en", "");
+            if (distId > 0 && row.optInt("district_id", 0) == distId && !city.isEmpty()) {
+                return city;
+            }
+            if (namesMatch(nameA, city, cityEn) || namesMatch(nameB, city, cityEn)) {
+                byName = city;
+            }
+        }
+        return byName;
+    }
+
+    @NonNull
+    private java.util.List<String[]> statesFromPlaces(@NonNull JSONObject root) {
+        java.util.LinkedHashMap<String, String> labels = new java.util.LinkedHashMap<>();
+        JSONArray places = placesOf(root);
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null) continue;
+            if (!(row.optDouble("petrol", 0) > 0) || !(row.optDouble("diesel", 0) > 0)) continue;
+            String key = row.optString("state_key", "");
+            if (key.isEmpty() || labels.containsKey(key)) continue;
+            String label = row.optString("state_native", "");
+            if (label.isEmpty()) label = row.optString("state", key);
+            if (KEY_TG.equals(key)) label = FuelLabels.stateTelangana(this);
+            else if (KEY_AP.equals(key)) label = FuelLabels.stateAndhra(this);
+            labels.put(key, label);
+        }
+        java.util.List<String[]> out = new java.util.ArrayList<>();
+        if (labels.containsKey(KEY_TG)) {
+            out.add(new String[]{KEY_TG, labels.remove(KEY_TG)});
+        }
+        if (labels.containsKey(KEY_AP)) {
+            out.add(new String[]{KEY_AP, labels.remove(KEY_AP)});
+        }
+        java.util.List<String> rest = new java.util.ArrayList<>(labels.keySet());
+        rest.sort((a, b) -> String.valueOf(labels.get(a)).compareToIgnoreCase(String.valueOf(labels.get(b))));
+        for (String key : rest) out.add(new String[]{key, labels.get(key)});
+        return out;
+    }
+
+    private double priceForState(@NonNull JSONObject root, @NonNull String key, @Nullable JSONObject snap) {
+        if (hasPlaces(root)) {
+            double first = 0;
+            double hyd = 0;
+            JSONArray places = placesOf(root);
+            for (int i = 0; i < places.length(); i++) {
+                JSONObject row = places.optJSONObject(i);
+                if (row == null || !key.equals(row.optString("state_key", ""))) continue;
+                double petrol = row.optDouble("petrol", 0);
+                if (!(petrol > 0)) continue;
+                if (!(first > 0)) first = petrol;
+                if ("hyderabad".equalsIgnoreCase(row.optString("city_en", ""))) hyd = petrol;
+            }
+            if (hyd > 0) return hyd;
+            if (first > 0) return first;
+        }
+        double p = snap != null ? LocalUpdatesConfigHelper.optNumber(snap, "petrol_price", 0) : 0;
+        if (!(p > 0) && key.equals(resolveStateKey(root))) {
+            p = LocalUpdatesConfigHelper.optNumber(root, "petrol_price", 0);
+        }
+        return p;
+    }
+
+    @NonNull
+    private JSONObject overlayFromPlaces(@NonNull JSONObject root, @NonNull String key) {
+        try {
+            JSONObject out = new JSONObject(root.toString());
+            JSONArray cities = new JSONArray();
+            JSONObject hero = null;
+            String stateLabel = "";
+            JSONArray places = placesOf(root);
+            for (int i = 0; i < places.length(); i++) {
+                JSONObject row = places.optJSONObject(i);
+                if (row == null || !key.equals(row.optString("state_key", ""))) continue;
+                double petrol = row.optDouble("petrol", 0);
+                double diesel = row.optDouble("diesel", 0);
+                if (!(petrol > 0) || !(diesel > 0)) continue;
+                String city = displayCity(row);
+                if (city.isEmpty()) continue;
+                JSONObject cityRow = new JSONObject();
+                cityRow.put("city", city);
+                cityRow.put("city_en", row.optString("city_en", city));
+                cityRow.put("petrol", petrol);
+                cityRow.put("diesel", diesel);
+                cityRow.put("change", row.optDouble("change", 0));
+                if (row.optInt("district_id", 0) > 0) cityRow.put("district_id", row.optInt("district_id"));
+                cities.put(cityRow);
+                if (stateLabel.isEmpty()) {
+                    stateLabel = row.optString("state_native", "");
+                    if (stateLabel.isEmpty()) stateLabel = row.optString("state", "");
+                }
+                boolean picked = !TextUtils.isEmpty(selectedCity) && selectedCity.equals(city);
+                boolean hyd = "hyderabad".equalsIgnoreCase(row.optString("city_en", ""));
+                if (hero == null || picked || (hyd && TextUtils.isEmpty(selectedCity))) {
+                    hero = cityRow;
+                }
+            }
+            if (KEY_TG.equals(key)) stateLabel = FuelLabels.stateTelangana(this);
+            else if (KEY_AP.equals(key)) stateLabel = FuelLabels.stateAndhra(this);
+            if (!stateLabel.isEmpty()) {
+                out.put("location_name", stateLabel);
+                out.put("location_region", stateLabel);
+                out.put("state_filter", stateLabel);
+            }
+            out.put("cities", cities);
+            out.put("state_key", key);
+            if (hero != null) {
+                out.put("petrol_price", hero.optDouble("petrol"));
+                out.put("diesel_price", hero.optDouble("diesel"));
+                out.put("petrol_change", hero.optDouble("change", 0));
+                out.put("diesel_change", hero.optDouble("change", 0));
+            }
+            return out;
+        } catch (Exception e) {
+            return root;
+        }
+    }
+
+    @NonNull
+    private static String displayCity(@NonNull JSONObject row) {
+        String city = row.optString("city", "");
+        if (!city.isEmpty()) return city;
+        return row.optString("city_en", "");
+    }
+
+    private static boolean namesMatch(@Nullable String pref, @NonNull String city, @NonNull String cityEn) {
+        if (pref == null) return false;
+        String n = pref.trim();
+        if (n.isEmpty()) return false;
+        return n.equalsIgnoreCase(city) || n.equalsIgnoreCase(cityEn);
     }
 
     @NonNull
