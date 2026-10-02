@@ -427,6 +427,10 @@ public interface APIService {
     @POST("app/{version}/reporter_applicant_create_post")
     Call<JsonObject> reporter_applicant_create_post(@Path("version") String version, @Body JsonObject body);
 
+    /** Fuel screen — Redis dataset and per-district history. Does not scrape upstream. */
+    @GET("app/{version}/fuel_dataset")
+    Call<JsonObject> fuelDataset(@Path("version") String version);
+
     /** Stock Market — Yahoo via server Redis/memory cache. section=indices|watchlist|quote|search */
     @GET("app/{version}/stock_market")
     Call<JsonObject> stockMarket(

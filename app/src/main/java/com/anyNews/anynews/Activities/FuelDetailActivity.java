@@ -74,6 +74,9 @@ public class FuelDetailActivity extends AppCompatActivity {
         if (root == null) root = new JSONObject();
         selectedStateKey = resolveInitialStateKey(root);
         selectedCity = resolveInitialCity(root, selectedStateKey);
+        if (TextUtils.isEmpty(selectedCity)) {
+            selectedCity = firstCityInState(root, selectedStateKey);
+        }
         activeFuel = overlayState(root, selectedStateKey);
         bindUi(activeFuel);
         wireClicks();
@@ -83,6 +86,7 @@ public class FuelDetailActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
         openRef = new WeakReference<>(this);
+        refreshFromRedis();
     }
 
     @Override
@@ -221,11 +225,18 @@ public class FuelDetailActivity extends AppCompatActivity {
         }
         setText(R.id.fuel_history_title, histTitle);
 
-        String histNote = LocalUpdatesConfigHelper.optString(f, "history_note", "");
-        if (TextUtils.isEmpty(histNote) || FuelLabels.looksLikeTeluguChrome(histNote)) {
+        JSONArray districtHistory = historyForSelectedDistrict(f);
+        String histNote;
+        if (districtHistory.length() < 2) {
+            histNote = FuelLabels.historySingleNote(this);
+        } else {
             histNote = FuelLabels.historyNote(this);
         }
         setText(R.id.fuel_history_note, histNote);
+        String districtLabel = TextUtils.isEmpty(selectedCity)
+                ? FuelLabels.pickCity(this)
+                : (selectedCity + " ▾");
+        setText(R.id.fuel_district_filter, districtLabel);
 
         bindPromoFromDeltas(petrolCh, dieselCh);
         String promoCta = LocalUpdatesConfigHelper.optString(f, "promo_cta", "");
@@ -253,61 +264,32 @@ public class FuelDetailActivity extends AppCompatActivity {
 
         FuelHistoryChartView chart = findViewById(R.id.fuel_history_chart);
         if (chart != null) {
-            chart.setHistory(honestHistory(f, petrol, diesel, petrolCh, dieselCh));
+            // One stored snapshot is not a line. Never invent yesterday from today's price.
+            chart.setHistory(districtHistory.length() >= 2 ? districtHistory : new JSONArray());
         }
     }
 
-    /** Prefer stored ≤3-point series; else rebuild from today ± day-change (never invent mid-week). */
+    /** Real hourly points for the district the user is looking at. */
     @NonNull
-    private JSONArray honestHistory(@NonNull JSONObject f, double petrol, double diesel,
-                                    double petrolCh, double dieselCh) {
-        JSONArray stored = LocalUpdatesConfigHelper.optArray(f, "history_7day");
-        String kind = LocalUpdatesConfigHelper.optString(f, "history_kind", "");
-        boolean useStored = stored.length() > 0 && stored.length() <= 3
-                && !"estimated".equalsIgnoreCase(kind)
-                && !f.optBoolean("history_is_estimated", false);
-        if (useStored && !isFlatFakeWeek(stored)) {
-            return stored;
+    private JSONArray historyForSelectedDistrict(@NonNull JSONObject f) {
+        if (TextUtils.isEmpty(selectedCity)) return new JSONArray();
+        JSONArray places = placesOf(f);
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null) continue;
+            if (!selectedStateKey.equals(row.optString("state_key", ""))) continue;
+            String city = displayCity(row);
+            String cityEn = row.optString("city_en", "");
+            if (!selectedCity.equals(city) && !selectedCity.equalsIgnoreCase(cityEn)) continue;
+            JSONArray history = row.optJSONArray("history");
+            return history != null ? history : new JSONArray();
         }
-        return buildTodayVsYesterday(petrol, diesel, petrolCh, dieselCh);
-    }
-
-    private static boolean isFlatFakeWeek(@NonNull JSONArray history) {
-        if (history.length() < 4) return false;
-        // Legacy 7-day invention / flat mock → reject
-        return true;
-    }
-
-    @NonNull
-    private static JSONArray buildTodayVsYesterday(double petrol, double diesel,
-                                                   double petrolCh, double dieselCh) {
-        JSONArray out = new JSONArray();
-        if (!(petrol > 0) || !(diesel > 0)) return out;
-        try {
-            java.util.Calendar cal = java.util.Calendar.getInstance();
-            String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-            cal.add(java.util.Calendar.DAY_OF_YEAR, -1);
-            double prevP = petrol - petrolCh;
-            double prevD = diesel - dieselCh;
-            if (prevP > 0 && prevD > 0) {
-                JSONObject y = new JSONObject();
-                y.put("date_label", months[cal.get(java.util.Calendar.MONTH)]
-                        + " " + cal.get(java.util.Calendar.DAY_OF_MONTH));
-                y.put("petrol", Math.round(prevP * 100.0) / 100.0);
-                y.put("diesel", Math.round(prevD * 100.0) / 100.0);
-                out.put(y);
-            }
-            cal.add(java.util.Calendar.DAY_OF_YEAR, 1);
-            JSONObject t = new JSONObject();
-            t.put("date_label", months[cal.get(java.util.Calendar.MONTH)]
-                    + " " + cal.get(java.util.Calendar.DAY_OF_MONTH));
-            t.put("petrol", Math.round(petrol * 100.0) / 100.0);
-            t.put("diesel", Math.round(diesel * 100.0) / 100.0);
-            out.put(t);
-        } catch (Exception ignored) {
+        JSONObject cityRow = findCity(f, selectedCity);
+        if (cityRow != null) {
+            JSONArray history = cityRow.optJSONArray("history");
+            if (history != null) return history;
         }
-        return out;
+        return new JSONArray();
     }
 
     private void bindPromoFromDeltas(double petrolCh, double dieselCh) {
@@ -465,6 +447,8 @@ public class FuelDetailActivity extends AppCompatActivity {
         View.OnClickListener openCities = v -> showCityPicker();
         View promoCta = findViewById(R.id.fuel_promo_cta);
         if (promoCta != null) promoCta.setOnClickListener(openCities);
+        View districtFilter = findViewById(R.id.fuel_district_filter);
+        if (districtFilter != null) districtFilter.setOnClickListener(openCities);
     }
 
     /** Hide state chip / chevron when only one splash state has real prices. */
@@ -676,7 +660,10 @@ public class FuelDetailActivity extends AppCompatActivity {
         JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
         if (root == null) root = new JSONObject();
         selectedStateKey = key;
-        selectedCity = null;
+        selectedCity = resolveInitialCity(root, key);
+        if (TextUtils.isEmpty(selectedCity)) {
+            selectedCity = firstCityInState(root, key);
+        }
         activeFuel = overlayState(root, key);
         bindUi(activeFuel);
     }
@@ -849,6 +836,8 @@ public class FuelDetailActivity extends AppCompatActivity {
                 cityRow.put("petrol", petrol);
                 cityRow.put("diesel", diesel);
                 cityRow.put("change", row.optDouble("change", 0));
+                cityRow.put("diesel_change", row.optDouble("diesel_change", row.optDouble("change", 0)));
+                if (row.has("history")) cityRow.put("history", row.get("history"));
                 if (row.optInt("district_id", 0) > 0) cityRow.put("district_id", row.optInt("district_id"));
                 cities.put(cityRow);
                 if (stateLabel.isEmpty()) {
@@ -856,8 +845,7 @@ public class FuelDetailActivity extends AppCompatActivity {
                     if (stateLabel.isEmpty()) stateLabel = row.optString("state", "");
                 }
                 boolean picked = !TextUtils.isEmpty(selectedCity) && selectedCity.equals(city);
-                boolean hyd = "hyderabad".equalsIgnoreCase(row.optString("city_en", ""));
-                if (hero == null || picked || (hyd && TextUtils.isEmpty(selectedCity))) {
+                if (picked || hero == null) {
                     hero = cityRow;
                 }
             }
@@ -880,6 +868,100 @@ public class FuelDetailActivity extends AppCompatActivity {
         } catch (Exception e) {
             return root;
         }
+    }
+
+    @Nullable
+    private String firstCityInState(@NonNull JSONObject root, @NonNull String stateKey) {
+        JSONArray places = placesOf(root);
+        String first = null;
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null || !stateKey.equals(row.optString("state_key", ""))) continue;
+            if (!(row.optDouble("petrol", 0) > 0) || !(row.optDouble("diesel", 0) > 0)) continue;
+            String city = displayCity(row);
+            if (city.isEmpty()) continue;
+            if (first == null || city.compareToIgnoreCase(first) < 0) first = city;
+        }
+        return first;
+    }
+
+    /**
+     * Redis pack only. Apply when the hourly snapshot is newer, or when this
+     * phone is still missing per-district history for the same snapshot.
+     */
+    private void refreshFromRedis() {
+        try {
+            com.anyNews.anynews.Services.APIService api =
+                    com.anyNews.anynews.Services.RestApiClient.getClient()
+                            .create(com.anyNews.anynews.Services.APIService.class);
+            api.fuelDataset("v3").enqueue(new retrofit2.Callback<com.google.gson.JsonObject>() {
+                @Override
+                public void onResponse(
+                        @NonNull retrofit2.Call<com.google.gson.JsonObject> call,
+                        @NonNull retrofit2.Response<com.google.gson.JsonObject> response) {
+                    if (isFinishing() || response.body() == null) return;
+                    applyRedisPack(response.body().toString());
+                }
+
+                @Override
+                public void onFailure(
+                        @NonNull retrofit2.Call<com.google.gson.JsonObject> call,
+                        @NonNull Throwable t) {
+                    /* keep the splash / feed pack */
+                }
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void applyRedisPack(@NonNull String raw) {
+        try {
+            JSONObject body = new JSONObject(raw);
+            JSONArray places = body.optJSONArray("places");
+            if (places == null || places.length() == 0) return;
+            String remoteAt = body.optString("fetched_at", "");
+            JSONObject local = LocalUpdatesConfigHelper.fuelJson(this);
+            if (local == null) local = new JSONObject();
+            String localAt = local.optString("fetched_at", "");
+            // Older Redis snapshot must not replace a newer pack already on the phone.
+            if (!remoteAt.isEmpty() && !localAt.isEmpty() && remoteAt.compareTo(localAt) < 0) return;
+            if (remoteAt.isEmpty() && !localAt.isEmpty()) return;
+            JSONObject next = new JSONObject(local.toString());
+            next.put("places", places);
+            if (!remoteAt.isEmpty()) next.put("fetched_at", remoteAt);
+            if (body.has("cache_date")) next.put("cache_date", body.optString("cache_date", ""));
+            LocalUpdatesConfigHelper.saveFuelFromSplash(this, next);
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
+                if (root == null) return;
+                if (TextUtils.isEmpty(selectedCity)
+                        || !cityExistsInState(root, selectedStateKey, selectedCity)) {
+                    selectedCity = resolveInitialCity(root, selectedStateKey);
+                    if (TextUtils.isEmpty(selectedCity)) {
+                        selectedCity = firstCityInState(root, selectedStateKey);
+                    }
+                }
+                activeFuel = overlayState(root, selectedStateKey);
+                bindUi(activeFuel);
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean cityExistsInState(
+            @NonNull JSONObject root, @NonNull String stateKey, @NonNull String cityName) {
+        JSONArray places = root.optJSONArray("places");
+        if (places == null) return false;
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null || !stateKey.equals(row.optString("state_key", ""))) continue;
+            if (cityName.equals(displayCity(row))
+                    || cityName.equalsIgnoreCase(row.optString("city_en", ""))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @NonNull

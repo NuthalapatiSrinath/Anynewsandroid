@@ -703,6 +703,8 @@ public class Constants {
     public static String DU_PANCHANGAM_ENABLED = "du_panchangam_enabled";
     /** Rashi Phalalu Daily Updates card (splash daily_updates.rashi_enabled). */
     public static String DU_RASHI_ENABLED = "du_rashi_enabled";
+    /** Cricket / Crex Daily Updates card (splash daily_updates.cricket_enabled). Default ON. */
+    public static String DU_CRICKET_ENABLED = "du_cricket_enabled";
     public static String DU_MANA_ZILLA_ENABLED = "du_mana_zilla_enabled";
     public static String DU_FLASH_NEWS_ENABLED = "du_flash_news_enabled";
     /** Stock Market row kill switch (splash daily_updates.stock_enabled). */
@@ -725,6 +727,7 @@ public class Constants {
     public static String DU_TTD_LANGUAGE_IDS = "du_ttd_language_ids";
     public static String DU_JOBS_LANGUAGE_IDS = "du_jobs_language_ids";
     public static String DU_PANCHANGAM_LANGUAGE_IDS = "du_panchangam_language_ids";
+    public static String DU_CRICKET_LANGUAGE_IDS = "du_cricket_language_ids";
     public static String DU_RASHI_LANGUAGE_IDS = "du_rashi_language_ids";
     public static String DU_FLASH_NEWS_LANGUAGE_IDS = "du_flash_news_language_ids";
     public static String DU_STOCK_LANGUAGE_IDS = "du_stock_language_ids";
@@ -763,6 +766,7 @@ public class Constants {
     public static String DU_JOBS_CONTENT_START_DP = "du_jobs_content_start_dp";
     public static String DU_PANCHANGAM_CONTENT_START_DP = "du_panchangam_content_start_dp";
     public static String DU_RASHI_CONTENT_START_DP = "du_rashi_content_start_dp";
+    public static String DU_CRICKET_CONTENT_START_DP = "du_cricket_content_start_dp";
     public static String DU_STOCK_CONTENT_START_DP = "du_stock_content_start_dp";
 
     // Flash chrome

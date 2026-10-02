@@ -28,6 +28,13 @@ public final class LocalUpdatesConfigHelper {
         try {
             JSONObject o = toJsonObject(raw);
             if (o == null) return;
+            JSONObject existing = fuelJson(context);
+            if (existing != null && isOlderFuelSnapshot(o, existing)) {
+                return;
+            }
+            if (existing != null) {
+                copyFuelHistoryIfMissing(existing, o);
+            }
             // Normalize alias keys → petrol_price / diesel_price before persist.
             double petrol = resolveFuelPrice(o, true);
             double diesel = resolveFuelPrice(o, false);
@@ -43,6 +50,47 @@ public final class LocalUpdatesConfigHelper {
             SharedPrefsData.putBool(app, Constants.FUEL_CONFIG_SET, true, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
+    }
+
+    /** ISO timestamps compare in order. Missing times are not treated as stale. */
+    private static boolean isOlderFuelSnapshot(@NonNull JSONObject incoming, @NonNull JSONObject existing) {
+        String inAt = incoming.optString("fetched_at", "");
+        String exAt = existing.optString("fetched_at", "");
+        if (inAt.isEmpty() || exAt.isEmpty()) return false;
+        return inAt.compareTo(exAt) < 0;
+    }
+
+    /** Keep real per-district points when a feed pack has prices but no history. */
+    private static void copyFuelHistoryIfMissing(@NonNull JSONObject from, @NonNull JSONObject to)
+            throws Exception {
+        JSONArray src = from.optJSONArray("places");
+        JSONArray dst = to.optJSONArray("places");
+        if (src == null || dst == null) return;
+        java.util.HashMap<String, JSONArray> history = new java.util.HashMap<>();
+        for (int i = 0; i < src.length(); i++) {
+            JSONObject row = src.optJSONObject(i);
+            if (row == null) continue;
+            JSONArray points = row.optJSONArray("history");
+            if (points == null || points.length() == 0) continue;
+            history.put(fuelPlaceKey(row), points);
+        }
+        if (history.isEmpty()) return;
+        for (int i = 0; i < dst.length(); i++) {
+            JSONObject row = dst.optJSONObject(i);
+            if (row == null) continue;
+            JSONArray points = row.optJSONArray("history");
+            if (points != null && points.length() > 0) continue;
+            JSONArray kept = history.get(fuelPlaceKey(row));
+            if (kept != null) row.put("history", kept);
+        }
+    }
+
+    @NonNull
+    private static String fuelPlaceKey(@NonNull JSONObject row) {
+        String state = row.optString("state_key", "").trim().toLowerCase(java.util.Locale.US);
+        String city = row.optString("city_en", "");
+        if (city.isEmpty()) city = row.optString("city", "");
+        return state + "|" + city.trim().toLowerCase(java.util.Locale.US);
     }
 
     public static void saveGoldFromSplash(@Nullable Context context, @Nullable Object raw) {

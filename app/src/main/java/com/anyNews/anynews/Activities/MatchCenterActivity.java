@@ -60,6 +60,8 @@ import retrofit2.Response;
 public class MatchCenterActivity extends AppCompatActivity {
 
     public static final String EXTRA_MATCH = "extra_active_match";
+    /** Set only when Daily Updates opened this page. Other entry points do not poll. */
+    public static final String EXTRA_FROM_DAILY_UPDATES = "extra_from_daily_updates";
 
     // Detail + header both refresh on this cadence while the screen is open.
     // Reads are served from Redis score snapshot (not Mongo every poll).
@@ -88,20 +90,30 @@ public class MatchCenterActivity extends AppCompatActivity {
     private int oversVisibleCount = OVERS_PAGE_SIZE;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    /** True only between onResume and onPause of a Daily Updates open. */
+    private boolean scorePageVisible = false;
     private final Runnable detailPoll = new Runnable() {
         @Override
         public void run() {
+            if (!scorePageVisible || isFinishing()) return;
+            refresh();
             long ms = detailPollIntervalMs();
             if (ms <= 0) {
-                // Wait for splash/session cadence — no invented client floor.
-                handler.postDelayed(this, 1500L);
+                // Cadence not cached yet. Recheck without a second score request.
+                handler.postDelayed(this::scheduleOnly, 1500L);
                 return;
             }
-            // Header active_match only when mini poll is allowed; detail always
-            // while viewing Match Center (user-initiated, not Home background).
-            refresh();
-            fetchDetail();
             handler.postDelayed(this, ms);
+        }
+
+        private void scheduleOnly() {
+            if (!scorePageVisible || isFinishing()) return;
+            long ms = detailPollIntervalMs();
+            if (ms <= 0) {
+                handler.postDelayed(this::scheduleOnly, 1500L);
+                return;
+            }
+            handler.post(detailPoll);
         }
     };
 
@@ -124,8 +136,10 @@ public class MatchCenterActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Match Center is reachable from mini or footer cricket tab.
-        if (!com.anyNews.anynews.Utils.CricketSurfaceConfigHelper.isAnyCricketSurfaceEnabled(this)) {
+        boolean fromDailyUpdates = getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_FROM_DAILY_UPDATES, false);
+        if (!fromDailyUpdates
+                || !com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketEnabled(this)) {
             finish();
             return;
         }
@@ -168,26 +182,25 @@ public class MatchCenterActivity extends AppCompatActivity {
             moveTabIndicator(currentTab, false);
         });
 
-        refresh();
-        fetchDetail();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // Hard-stop if admin turned both cricket surfaces off while user was elsewhere.
-        if (!com.anyNews.anynews.Utils.CricketSurfaceConfigHelper.isAnyCricketSurfaceEnabled(this)) {
+        if (!com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketEnabled(this)) {
             finish();
             return;
         }
+        scorePageVisible = true;
         com.anyNews.anynews.Utils.CricketMiniPlayerManager.setGlobalIsViewing(true);
         handler.removeCallbacks(detailPoll);
-        // Start immediately; runnable waits for admin cadence if not yet cached.
+        // One score fetch now. The runnable schedules the next only after the interval.
         handler.post(detailPoll);
     }
 
     @Override
     protected void onPause() {
+        scorePageVisible = false;
         com.anyNews.anynews.Utils.CricketMiniPlayerManager.setGlobalIsViewing(false);
         handler.removeCallbacks(detailPoll);
         super.onPause();
@@ -2259,26 +2272,25 @@ public class MatchCenterActivity extends AppCompatActivity {
     // ---- Networking ---------------------------------------------------------
 
     private void refresh() {
-        // Continuous active_match only while mini master is ON (footer is display-only).
-        if (!com.anyNews.anynews.Utils.CricketSurfaceConfigHelper.isCricketPollAllowed(this)) {
-            return;
-        }
-        if (match == null || TextUtils.isEmpty(match.getMatch_id())) {
-            return;
-        }
+        if (!scorePageVisible || isFinishing()) return;
         try {
             APIService api = RestApiClient.getClient().create(APIService.class);
             api.cricketActiveMatch("v3").enqueue(new Callback<CricketActiveMatchResponse>() {
                 @Override
                 public void onResponse(@NonNull Call<CricketActiveMatchResponse> call,
                                        @NonNull Response<CricketActiveMatchResponse> response) {
-                    if (isFinishing() || response.body() == null) return;
-                    ActiveMatch fresh = response.body().getActive_match();
-                    if (fresh != null && match != null
-                            && fresh.getMatch_id().equals(match.getMatch_id())) {
-                        match = fresh;
-                        bind();
+                    if (!scorePageVisible || isFinishing() || response.body() == null) return;
+                    CricketActiveMatchResponse body = response.body();
+                    if (body.getCricket_mini_player_poll_interval_seconds() != null) {
+                        com.anyNews.anynews.Utils.CricketSurfaceConfigHelper.savePollIntervalSeconds(
+                                MatchCenterActivity.this,
+                                body.getCricket_mini_player_poll_interval_seconds());
                     }
+                    ActiveMatch fresh = body.getActive_match();
+                    if (fresh == null || TextUtils.isEmpty(fresh.getMatch_id())) return;
+                    match = fresh;
+                    bind();
+                    fetchDetail();
                 }
 
                 @Override

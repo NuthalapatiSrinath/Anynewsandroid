@@ -157,7 +157,6 @@ import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CategoriesDiskCache;
-import com.anyNews.anynews.Utils.CricketFooterLabel;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
 import com.anyNews.anynews.Utils.FeedExoSurfaceHost;
@@ -415,15 +414,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private int footerGestureDownItemId = 0;
     /** Middle column already has the empty Share/WhatsApp spacer icon and title. */
     private boolean centerFooterSpacerPrepared = false;
-    // Admin-controlled bottom-footer cricket tab (APK 3.40.79+). Shown only when
-    // the admin enables it AND there is an active match; hidden otherwise so the
-    // footer is exactly as before. Opens the same Match Center as the mini player.
-    private View layoutCricketFooterBar;
-    private View layoutCricketFooter;
-    private ImageView ivCricketFooter;
-    private TextView tvCricketFooter;
-    private ObjectAnimator cricketFooterBlinkAnimator;
-    private com.anyNews.anynews.Pojo.ActiveMatch cricketFooterActiveMatch;
     // Sticky bottom update banner (Play flexible in-app update). Soft = dismissible; force = Install only.
     private View layoutAppUpdateBanner;
     private TextView tvAppUpdateTitle;
@@ -1096,8 +1086,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public boolean initialCall=false;
     public String no_article_message="Please wait while loading ...";
 
-    // Cricket Live Mini Player — draggable floating overlay over the news feed.
-    private com.anyNews.anynews.Utils.CricketMiniPlayerManager cricketMiniPlayerManager;
 
     // Top segmented toggle: offline Offline News|Bookmarks; online main News|Read News.
     private View homeModeToggleRoot;
@@ -1330,7 +1318,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             FlipperAdapter.setFeedExoSurfaceHost(FeedExoSurfaceHost.bind(this));
         } catch (Exception ignored) {
         }
-        cricketMiniPlayerManager = new com.anyNews.anynews.Utils.CricketMiniPlayerManager(HomePage.this);
         trackingEvents=new FCMTrackingEvents(this);
         fab_article = findViewById(R.id.fab_article);
         fab_video = findViewById(R.id.fab_video);
@@ -1377,16 +1364,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Product: never flash center + / WhatsApp before footer rebalance / API.
         hideCenterPlusOverlays();
 
-        // Bottom-footer cricket tab (starts GONE; driven by the cricket poll below).
-        layoutCricketFooterBar = findViewById(R.id.layoutCricketFooterBar);
-        layoutCricketFooter = findViewById(R.id.layoutCricketFooter);
-        ivCricketFooter = findViewById(R.id.ivCricketFooter);
-        tvCricketFooter = findViewById(R.id.tvCricketFooter);
         bindAppUpdateBanner();
-        if (cricketMiniPlayerManager != null) {
-            cricketMiniPlayerManager.setPollListener(
-                    (match, footerEnabled) -> updateCricketFooterTab(match, footerEnabled));
-        }
 
 
 
@@ -3496,6 +3474,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 } else if (com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest.DU_OPEN_MANA
                         .equals(key)) {
                     performLocalFeedOpenFromDailyUpdates();
+                } else if (com.anyNews.anynews.Utils.DailyUpdatesSearchSuggest.DU_OPEN_CRICKET
+                        .equals(key)) {
+                    openCrexFromDailyUpdates();
                 } else {
                     performDailyUpdatesOpen();
                 }
@@ -3506,6 +3487,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             }
         }, 350L);
+    }
+
+    /** Daily Updates cricket card → existing Crex match page. Score polls start there. */
+    private void openCrexFromDailyUpdates() {
+        if (!com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketEnabled(this)) {
+            return;
+        }
+        try {
+            Intent intent = new Intent(this, MatchCenterActivity.class);
+            intent.putExtra(MatchCenterActivity.EXTRA_FROM_DAILY_UPDATES, true);
+            startActivity(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     /** Search end hub → Main News. */
@@ -10044,6 +10039,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             }
                             performCalendarOpen(true, true);
                         }
+
+                        @Override
+                        public void openCricketFromDailyUpdates() {
+                            openCrexFromDailyUpdates();
+                        }
                     });
         } catch (Exception e) {
             e.printStackTrace();
@@ -12849,96 +12849,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Shows / hides the bottom-footer cricket tab from the cricket poll. The tab
-     * appears ONLY when the admin enabled it AND there is a live/active match, so
-     * when the footer flag is off (default) the footer is EXACTLY as before — the
-     * bar is GONE and reserves no space. Tapping opens the SAME Match Center the
-     * mini player opens. The tab and mini player are independent surfaces.
-     */
-    private void updateCricketFooterTab(com.anyNews.anynews.Pojo.ActiveMatch match,
-                                        boolean footerEnabled) {
-        if (layoutCricketFooterBar == null) {
-            return;
-        }
-        boolean hasMatch = match != null && !TextUtils.isEmpty(match.getMatch_id());
-        if (!footerEnabled || !hasMatch) {
-            cricketFooterActiveMatch = null;
-            stopCricketFooterBlink();
-            if (layoutCricketFooterBar.getVisibility() != View.GONE) {
-                layoutCricketFooterBar.setVisibility(View.GONE);
-            }
-            if (layoutCricketFooter != null) {
-                layoutCricketFooter.setOnClickListener(null);
-                layoutCricketFooter.setClickable(false);
-            }
-            return;
-        }
-
-        cricketFooterActiveMatch = match;
-        if (tvCricketFooter != null) {
-            String label = CricketFooterLabel.forCurrentLanguage(HomePage.this);
-            tvCricketFooter.setText(label);
-            layoutCricketFooter.setContentDescription(label);
-        }
-        if (layoutCricketFooterBar.getVisibility() != View.VISIBLE) {
-            layoutCricketFooterBar.setVisibility(View.VISIBLE);
-        }
-        if (layoutCricketFooter != null) {
-            layoutCricketFooter.setClickable(true);
-            layoutCricketFooter.setOnClickListener(v -> openCricketMatchCenter());
-        }
-        startCricketFooterBlink();
-    }
-
-    /** Opens the cricket Match Center for the current footer match (same as mini player). */
-    private void openCricketMatchCenter() {
-        com.anyNews.anynews.Pojo.ActiveMatch match = cricketFooterActiveMatch;
-        if (match == null) {
-            match = com.anyNews.anynews.Utils.CricketMiniPlayerManager.getLastKnownActive();
-        }
-        if (match == null || TextUtils.isEmpty(match.getMatch_id())) {
-            return;
-        }
-        try {
-            Intent intent = new Intent(HomePage.this, MatchCenterActivity.class);
-            intent.putExtra(MatchCenterActivity.EXTRA_MATCH, match);
-            startActivity(intent);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    /** Subtle infinite alpha pulse on the cricket icon (same feel as the Share bulb). */
-    private void startCricketFooterBlink() {
-        if (ivCricketFooter == null) {
-            return;
-        }
-        if (cricketFooterBlinkAnimator != null && cricketFooterBlinkAnimator.isRunning()) {
-            return;
-        }
-        stopCricketFooterBlink();
-        ivCricketFooter.setAlpha(1f);
-        ObjectAnimator animator = ObjectAnimator.ofFloat(ivCricketFooter, View.ALPHA, 1f, 0.35f);
-        animator.setDuration(750);
-        animator.setRepeatCount(ValueAnimator.INFINITE);
-        animator.setRepeatMode(ValueAnimator.REVERSE);
-        animator.setInterpolator(new AccelerateDecelerateInterpolator());
-        cricketFooterBlinkAnimator = animator;
-        animator.start();
-    }
-
-    private void stopCricketFooterBlink() {
-        if (cricketFooterBlinkAnimator != null) {
-            cricketFooterBlinkAnimator.cancel();
-            cricketFooterBlinkAnimator = null;
-        }
-        if (ivCricketFooter != null) {
-            ivCricketFooter.clearAnimation();
-            ivCricketFooter.setAlpha(1f);
-        }
-    }
-
-    /**
      * Called from FlipperAdapter when a magazine / Special gallery page is bound.
      * Restores Play Store footer-middle blinking Share (hides floating on-post Share).
      */
@@ -13104,10 +13014,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onFlippedToAppear(FlipView v) {
         Logone.v(LOG_TAG, ""+v.getAdapter());
         showLog("onFlippedToAppear");
-        // Hide cricket mini-player for the gesture only (idempotent). Restore on settle.
-        if (cricketMiniPlayerManager != null) {
-            cricketMiniPlayerManager.setHiddenForFlipGesture(true);
-        }
         // FAB refresh is handled in OnFlipCompletedListener — avoid a second layout
         // pass 80ms after appear (stacking with settle work on low-end).
     }
@@ -13261,10 +13167,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             ArticleTtsHelper.stopIfNotCurrent(postId);
         } catch (Exception ignored) {
-        }
-        // Restore cricket mini-player after flip gesture (feature kept; only paused visually).
-        if (cricketMiniPlayerManager != null) {
-            cricketMiniPlayerManager.setHiddenForFlipGesture(false);
         }
         // Sync gate: scroller finished; settle-grace still defers AdMob.
         FlipAdWorkGate.noteFlipInteraction();
@@ -18327,20 +18229,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                     // Daily Updates + Birthday hub kill switches (live; never stub on errors).
                     applyDailyUpdatesHubPollConfig(encreptionRequest);
-                    // Cricket: seed mini/footer from feed active_match (no cricket HTTP).
-                    // Polls start only when mini master is ON and feed has an active
-                    // mini-player match. Footer alone never starts interval polls.
-                    if (cricketMiniPlayerManager != null) {
-                        boolean miniOn = com.anyNews.anynews.Utils.CricketSurfaceConfigHelper
-                                .isMiniPlayerEnabled(HomePage.this);
-                        boolean footerOn = com.anyNews.anynews.Utils.CricketSurfaceConfigHelper
-                                .isFooterTabEnabled(HomePage.this);
-                        if (miniOn || footerOn) {
-                            cricketMiniPlayerManager.update(encreptionRequest.getActive_match());
-                        } else {
-                            cricketMiniPlayerManager.update(null);
-                        }
-                    }
                     if (validateUserOtp.getData() != null) {
                         // Video News: half + full video, plus synthetic ad/ratings slots
                         // (same injection pipeline as News/Special). Strip greetings/mixed
@@ -20426,9 +20314,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         pendingFlipSettleWork = true;
         // No active flip gesture (programmatic / already settled): same staged settle path.
         if (mFlipView != null && !mFlipView.mIsFlipping) {
-            if (cricketMiniPlayerManager != null) {
-                cricketMiniPlayerManager.setHiddenForFlipGesture(false);
-            }
             schedulePostFlipSettleWork();
         }
     }
@@ -21144,7 +21029,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             playInAppUpdateHelper.unregister();
             playInAppUpdateHelper = null;
         }
-        if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onDestroy();
         try {
             FlipperAdapter.setFeedExoSurfaceHost(null);
         } catch (Exception ignored) {
@@ -21834,7 +21718,6 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             }
         } catch (Exception ignored) {
         }
-        if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onResume();
         updateSpecialTabBlinkIndicator();
         try {
             // After resume: only show if not yet consumed this process and still on first half.
@@ -22120,7 +22003,6 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             closeCenterPlusMenu(false);
         } catch (Exception ignored) {
         }
-        if (cricketMiniPlayerManager != null) cricketMiniPlayerManager.onPause();
         pauseVideo();
         try {
             // Leaving Home (incl. recents) — stop read-aloud so voice does not continue.

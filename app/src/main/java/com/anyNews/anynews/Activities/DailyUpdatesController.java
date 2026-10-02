@@ -87,6 +87,9 @@ public final class DailyUpdatesController {
 
         /** Leave Daily Updates and open Raasi Phalalu page in the calendar host. */
         void openRashiFromDailyUpdates();
+
+        /** Open the existing Crex match page. Score polling starts only there. */
+        void openCricketFromDailyUpdates();
     }
 
     @NonNull
@@ -183,6 +186,7 @@ public final class DailyUpdatesController {
         setSp(R.id.du_jobs_title, cardTitle);
         setSp(R.id.du_panchangam_title, cardTitle);
         setSp(R.id.du_rashi_title, cardTitle);
+        setSp(R.id.du_cricket_title, cardTitle);
 
         setSp(R.id.du_weather_temp, cardHero);
         setSp(R.id.du_jobs_count, cardHero);
@@ -200,6 +204,7 @@ public final class DailyUpdatesController {
         setSp(R.id.du_ttd_bullets, Math.max(8f, cardBody - 1f));
         setSp(R.id.du_jobs_label, cardBody);
         setSp(R.id.du_panchangam_copy, Math.max(8f, cardBody - 1f));
+        setSp(R.id.du_cricket_copy, Math.max(8f, cardBody - 1f));
         setSp(R.id.du_rashi_copy, Math.max(8f, cardBody - 1f));
 
         setSp(R.id.du_weather_details, cardCta);
@@ -208,6 +213,7 @@ public final class DailyUpdatesController {
         setSp(R.id.du_ttd_details, cardCta);
         setSp(R.id.du_jobs_details, cardCta);
         setSp(R.id.du_panchangam_details, cardCta);
+        setSp(R.id.du_cricket_details, cardCta);
         setSp(R.id.du_rashi_details, cardCta);
 
         setSp(R.id.du_stock_title, stockTitle);
@@ -245,6 +251,8 @@ public final class DailyUpdatesController {
                 DailyUpdatesConfigHelper.panchangamContentStartDp(host), d);
         setContentPadStart(R.id.du_rashi_content,
                 DailyUpdatesConfigHelper.rashiContentStartDp(host), d);
+        setContentPadStart(R.id.du_cricket_content,
+                DailyUpdatesConfigHelper.cricketContentStartDp(host), d);
         setContentPadStart(R.id.du_stock_content,
                 DailyUpdatesConfigHelper.stockContentStartDp(host), d);
     }
@@ -334,6 +342,9 @@ public final class DailyUpdatesController {
         setTextIfPresent(R.id.du_rashi_title, rashiCardTitle());
         setTextIfPresent(R.id.du_rashi_details, seeDetailsLabel());
         setTextIfPresent(R.id.du_rashi_copy, DailyUpdatesLabels.rashiCopy(host));
+        setTextIfPresent(R.id.du_cricket_title, cricketCardTitle());
+        setTextIfPresent(R.id.du_cricket_details, seeDetailsLabel());
+        setTextIfPresent(R.id.du_cricket_copy, DailyUpdatesLabels.cricketCopy(host));
 
         bindManaLabels();
         syncBellVisibility();
@@ -639,6 +650,7 @@ public final class DailyUpdatesController {
                 R.id.du_card_jobs,
                 R.id.du_card_panchangam,
                 R.id.du_card_rashi,
+                R.id.du_card_cricket,
         };
         for (int id : cardArtIds) {
             ImageView art = root.findViewById(id);
@@ -1030,8 +1042,9 @@ public final class DailyUpdatesController {
         View jobs = root.findViewById(R.id.du_card_jobs_wrap);
         View panchangam = root.findViewById(R.id.du_card_panchangam_wrap);
         View rashi = root.findViewById(R.id.du_card_rashi_wrap);
+        View cricket = root.findViewById(R.id.du_card_cricket_wrap);
 
-        List<View> visible = new ArrayList<>(7);
+        List<View> visible = new ArrayList<>(8);
         if (weather != null && LocalUpdatesConfigHelper.isWeatherEnabled(host)) {
             visible.add(weather);
         }
@@ -1053,8 +1066,11 @@ public final class DailyUpdatesController {
         if (rashi != null && DailyUpdatesConfigHelper.isRashiEnabled(host)) {
             visible.add(rashi);
         }
+        if (cricket != null && DailyUpdatesConfigHelper.isCricketEnabled(host)) {
+            visible.add(cricket);
+        }
 
-        View[] all = {weather, fuel, gold, ttd, jobs, panchangam, rashi};
+        View[] all = {weather, fuel, gold, ttd, jobs, panchangam, rashi, cricket};
         for (View v : all) {
             if (v == null) continue;
             v.setVisibility(View.GONE);
@@ -1111,6 +1127,7 @@ public final class DailyUpdatesController {
                 R.id.du_card_jobs_wrap,
                 R.id.du_card_panchangam_wrap,
                 R.id.du_card_rashi_wrap,
+                R.id.du_card_cricket_wrap,
                 R.id.du_mana_zilla,
                 R.id.du_flash_strip,
                 R.id.du_stock_strip
@@ -1148,6 +1165,18 @@ public final class DailyUpdatesController {
                     callbacks.openRashiFromDailyUpdates();
                 } else {
                     toast(rashiCardTitle());
+                }
+            });
+        }
+
+        View cricketCard = root.findViewById(R.id.du_card_cricket_wrap);
+        if (cricketCard != null) {
+            cricketCard.setOnClickListener(v -> {
+                if (!DailyUpdatesConfigHelper.isCricketEnabled(host)) return;
+                if (callbacks != null) {
+                    callbacks.openCricketFromDailyUpdates();
+                } else {
+                    toast(cricketCardTitle());
                 }
             });
         }
@@ -1797,6 +1826,19 @@ public final class DailyUpdatesController {
             case 5: return "ಪಂಚಾಂಗ";
             case 6: return "ପଞ୍ଚାଙ୍ଗ";
             default: return "Panchangam";
+        }
+    }
+
+    @NonNull
+    private String cricketCardTitle() {
+        switch (languageId()) {
+            case 1: return "ക്രിക്കറ്റ്";
+            case 2: return "क्रिकेट";
+            case 3: return "క్రికెట్";
+            case 4: return "கிரிக்கெட்";
+            case 5: return "ಕ್ರಿಕೆಟ್";
+            case 6: return "କ୍ରିକେଟ";
+            default: return "Cricket";
         }
     }
 

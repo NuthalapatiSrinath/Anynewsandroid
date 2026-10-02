@@ -97,6 +97,19 @@ public final class DailyUpdatesLabels {
     }
 
     @NonNull
+    public static String cricketCopy(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "തത്സമയ ക്രിക്കറ്റ്\nസ്കോർ & സ്കോർകാർഡ്";
+            case 2: return "लाइव क्रिकेट\nस्कोर और स्कोरकार्ड";
+            case 3: return "ప్రత్యక్ష క్రికెట్\nస్కోరు & స్కోర్‌కార్డ్";
+            case 4: return "நேரடி கிரிக்கெட்\nஸ்கோர் & ஸ்கோர்கார்டு";
+            case 5: return "ನೇರ ಕ್ರಿಕೆಟ್\nಸ್ಕೋರ್ & ಸ್ಕೋರ್‌ಕಾರ್ಡ್";
+            case 6: return "ପ୍ରତ୍ୟକ୍ଷ କ୍ରିକେଟ\nସ୍କୋର ଓ ସ୍କୋରକାର୍ଡ";
+            default: return "Live cricket\nscore & scorecard";
+        }
+    }
+
+    @NonNull
     public static String rashiCopy(@Nullable Context c) {
         switch (lang(c)) {
             case 1:

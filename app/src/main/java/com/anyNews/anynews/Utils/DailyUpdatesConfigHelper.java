@@ -46,6 +46,7 @@ public final class DailyUpdatesConfigHelper {
                     app, Constants.DAILY_UPDATES_CONFIG_JSON, o.toString(), Constants.PREF_NAME);
             putBool(app, Constants.DU_PANCHANGAM_ENABLED, o.optBoolean("panchangam_enabled", true));
             putBool(app, Constants.DU_RASHI_ENABLED, o.optBoolean("rashi_enabled", true));
+            putBool(app, Constants.DU_CRICKET_ENABLED, o.optBoolean("cricket_enabled", true));
             putBool(app, Constants.DU_MANA_ZILLA_ENABLED, o.optBoolean("mana_zilla_enabled", true));
             putBool(app, Constants.DU_FLASH_NEWS_ENABLED, o.optBoolean("flash_news_enabled", true));
             putBool(app, Constants.DU_STOCK_ENABLED, o.optBoolean("stock_enabled", true));
@@ -115,6 +116,9 @@ public final class DailyUpdatesConfigHelper {
             putIntClamped(app, Constants.DU_RASHI_CONTENT_START_DP,
                     migrateContentStart(splashNumber(o, "rashi_content_start_dp",
                             DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
+            putIntClamped(app, Constants.DU_CRICKET_CONTENT_START_DP,
+                    migrateContentStart(splashNumber(o, "cricket_content_start_dp",
+                            DEFAULT_CARD_CONTENT_START_DP), DEFAULT_CARD_CONTENT_START_DP), 40, 100);
             putIntClamped(app, Constants.DU_STOCK_CONTENT_START_DP,
                     migrateContentStart(splashNumber(o, "stock_content_start_dp",
                             DEFAULT_STOCK_CONTENT_START_DP), DEFAULT_STOCK_CONTENT_START_DP), 100, 180);
@@ -148,6 +152,7 @@ public final class DailyUpdatesConfigHelper {
             saveFeatureLangCsv(app, o, "jobs_language_ids", Constants.DU_JOBS_LANGUAGE_IDS);
             saveFeatureLangCsv(app, o, "panchangam_language_ids", Constants.DU_PANCHANGAM_LANGUAGE_IDS);
             saveFeatureLangCsv(app, o, "rashi_language_ids", Constants.DU_RASHI_LANGUAGE_IDS);
+            saveFeatureLangCsv(app, o, "cricket_language_ids", Constants.DU_CRICKET_LANGUAGE_IDS);
             saveFeatureLangCsv(app, o, "flash_news_language_ids", Constants.DU_FLASH_NEWS_LANGUAGE_IDS);
             saveFeatureLangCsv(app, o, "stock_language_ids", Constants.DU_STOCK_LANGUAGE_IDS);
 
@@ -321,6 +326,12 @@ public final class DailyUpdatesConfigHelper {
     public static boolean isRashiEnabled(@Nullable Context context) {
         return readBool(context, Constants.DU_RASHI_ENABLED, true)
                 && isFeatureLanguageAllowed(context, Constants.DU_RASHI_LANGUAGE_IDS);
+    }
+
+    /** Cricket card. Default ON, same as Panchangam, until admin turns a language off. */
+    public static boolean isCricketEnabled(@Nullable Context context) {
+        return readBool(context, Constants.DU_CRICKET_ENABLED, true)
+                && isFeatureLanguageAllowed(context, Constants.DU_CRICKET_LANGUAGE_IDS);
     }
 
     public static boolean isFlashNewsEnabled(@Nullable Context context) {
@@ -688,6 +699,11 @@ public final class DailyUpdatesConfigHelper {
     public static int rashiContentStartDp(@Nullable Context context) {
         return readContentStartDp(context, Constants.DU_RASHI_CONTENT_START_DP,
                 "rashi_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
+    }
+
+    public static int cricketContentStartDp(@Nullable Context context) {
+        return readContentStartDp(context, Constants.DU_CRICKET_CONTENT_START_DP,
+                "cricket_content_start_dp", DEFAULT_CARD_CONTENT_START_DP, 40, 100);
     }
 
     public static int stockContentStartDp(@Nullable Context context) {

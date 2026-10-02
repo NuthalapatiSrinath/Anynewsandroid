@@ -28,6 +28,7 @@ public final class DailyUpdatesSearchSuggest {
     public static final String EXTRA_DU_OPEN = "extra_du_open";
     public static final String DU_OPEN_PANCHANGAM = "panchangam";
     public static final String DU_OPEN_RASHI = "rashi";
+    public static final String DU_OPEN_CRICKET = "cricket";
     public static final String DU_OPEN_FLASH = "flash";
     public static final String DU_OPEN_MANA = "mana";
     public static final String DU_OPEN_HUB = "hub";
@@ -112,6 +113,9 @@ public final class DailyUpdatesSearchSuggest {
         }
         if (DailyUpdatesConfigHelper.isRashiEnabled(context)) {
             all.add(new Match(titleRashi(lang), "rashi", null, DU_OPEN_RASHI));
+        }
+        if (DailyUpdatesConfigHelper.isCricketEnabled(context)) {
+            all.add(new Match(titleCricket(lang), "cricket", null, DU_OPEN_CRICKET));
         }
         if (DailyUpdatesConfigHelper.isStockEnabled(context)) {
             all.add(new Match(
@@ -276,6 +280,19 @@ public final class DailyUpdatesSearchSuggest {
             case 5: return "ಪಂಚಾಂಗ";
             case 6: return "ପଞ୍ଚାଙ୍ଗ";
             default: return "Panchangam";
+        }
+    }
+
+    @NonNull
+    private static String titleCricket(int lang) {
+        switch (lang) {
+            case 1: return "ക്രിക്കറ്റ്";
+            case 2: return "क्रिकेट";
+            case 3: return "క్రికెట్";
+            case 4: return "கிரிக்கெட்";
+            case 5: return "ಕ್ರಿಕೆಟ್";
+            case 6: return "କ୍ରିକେଟ";
+            default: return "Cricket";
         }
     }
 

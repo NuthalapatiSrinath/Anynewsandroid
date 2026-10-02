@@ -130,6 +130,19 @@ public final class FuelLabels {
     }
 
     @NonNull
+    public static String historySingleNote(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "ഇതുവരെ ഒരു വില മാത്രം. കൂടുതൽ മണിക്കൂറുകൾ വന്ന ശേഷം ചാർട്ട് കാണിക്കും.";
+            case 2: return "अभी एक ही भाव है। और घंटे जुड़ने पर चार्ट बनेगा।";
+            case 3: return "ఇప్పటి వరకు ఒక ధర మాత్రమే. మరిన్ని గంటల తర్వాత చార్ట్ వస్తుంది.";
+            case 4: return "இதுவரை ஒரு விலை மட்டும். மேலும் மணிநேரம் சேர்ந்த பின் வரைபடம் வரும்.";
+            case 5: return "ಇಲ್ಲಿಯವರೆಗೆ ಒಂದೇ ಬೆಲೆ. ಇನ್ನಷ್ಟು ಗಂಟೆಗಳ ನಂತರ ಚಾರ್ಟ್ ಬರುತ್ತದೆ.";
+            case 6: return "ଏପର୍ଯ୍ୟନ୍ତ ଗୋଟିଏ ମୂଲ୍ୟ। ଅଧିକ ଘଣ୍ଟା ପରେ ଚାର୍ଟ ଆସିବ।";
+            default: return "Only one saved price so far. The chart appears after another hourly snapshot.";
+        }
+    }
+
+    @NonNull
     public static String historyNote(@Nullable Context c) {
         switch (lang(c)) {
             case 1:
