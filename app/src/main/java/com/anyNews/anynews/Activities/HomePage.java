@@ -2179,9 +2179,30 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             clearSearchFeedMode();
         } catch (Exception ignored) {
         }
+        boolean seatOpenedPostOnSpecial = false;
+        try {
+            ModelClass.Datum known = findRealListedPost(pushId);
+            boolean specialWasShowing = explicitSpecialOpen || specialFeedModeActive
+                    || (bottomNavigationView != null
+                    && bottomNavigationView.getSelectedItemId() == R.id.navigation_catagiries);
+            // Only a full/special card already on the Special deck stays there.
+            // A normal news push (or an id we have not seen) must leave Special.
+            seatOpenedPostOnSpecial = specialWasShowing
+                    && known != null
+                    && isFullOrSpecialPostType(known.getPostType());
+        } catch (Exception ignored) {
+        }
         try {
             bookmarksModeSelected = false;
-            setFeedModeFlags(false, false);
+            if (seatOpenedPostOnSpecial) {
+                explicitSpecialOpen = true;
+                setFeedModeFlags(true, false);
+            } else {
+                // explicitSpecialOpen is checked before the mode flag. Leaving it
+                // set would request special_posts and pin this news card into Special.
+                explicitSpecialOpen = false;
+                setFeedModeFlags(false, false);
+            }
             applyHomeModeContentVisibility();
             refreshHomeModeToggleUi();
         } catch (Exception ignored) {
@@ -2196,7 +2217,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             localFeedFromDailyUpdates = false;
             hideLocalFeedChrome();
             hideHomeCalendarMode();
+            boolean leftDailyUpdates = isDailyUpdatesMode();
             hideHomeDailyUpdatesMode();
+            if (seatOpenedPostOnSpecial) {
+                selectFooterTabWithoutMotion(R.id.navigation_catagiries);
+            } else if (leftDailyUpdates) {
+                showNewsFooterFromDailyUpdatesHub();
+            } else {
+                // Special was the last tab. The card about to paint is News.
+                selectFooterTabWithoutMotion(R.id.navigation_home);
+            }
             category_id = 0;
             softMergeOnNextPage0 = false;
             positionx = 0;
@@ -2362,8 +2392,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         deepLinkShareRescueAttempted = false;
         shareInviteRepairAttempts = 0;
         capturePendingShareGalleryPage(intent, shareId);
-        // Share open paints News. Daily Updates must not stay the lit footer tab.
-        leaveDailyUpdatesForShareOpen();
+        boolean seatOpenedPostOnSpecial = false;
+        try {
+            ModelClass.Datum known = findRealListedPost(shareId);
+            boolean specialWasShowing = explicitSpecialOpen || specialFeedModeActive
+                    || (bottomNavigationView != null
+                    && bottomNavigationView.getSelectedItemId() == R.id.navigation_catagiries);
+            seatOpenedPostOnSpecial = specialWasShowing
+                    && known != null
+                    && isFullOrSpecialPostType(known.getPostType());
+        } catch (Exception ignored) {
+        }
+        // Share open paints News unless this card is already a full post on Special.
+        // Daily Updates must not stay the lit footer tab.
+        if (seatOpenedPostOnSpecial) {
+            try {
+                hideHomeCalendarMode();
+                hideHomeDailyUpdatesMode();
+            } catch (Exception ignored) {
+            }
+        } else {
+            explicitSpecialOpen = false;
+            leaveDailyUpdatesForShareOpen();
+        }
         // Drop an in-flight plain page-0 (background "first article" refresh)
         // so it cannot replace this share target after we seat it.
         feedModeEpoch++;
@@ -2373,9 +2424,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         // Leave Read / Special / Flash so News land + share_post_id pin can run.
+        // A full post already on the Special deck stays on Special.
         try {
             bookmarksModeSelected = false;
-            setFeedModeFlags(false, false);
+            if (seatOpenedPostOnSpecial) {
+                explicitSpecialOpen = true;
+                setFeedModeFlags(true, false);
+                selectFooterTabWithoutMotion(R.id.navigation_catagiries);
+            } else {
+                explicitSpecialOpen = false;
+                setFeedModeFlags(false, false);
+            }
             applyHomeModeContentVisibility();
             refreshHomeModeToggleUi();
         } catch (Exception ignored) {
@@ -11984,6 +12043,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         item.setEnabled(visible);
         if (wasVisible != visible) {
             reanchorSpecialTabPulse();
+            keepFooterCheckOffRecycledDailyUpdates();
         }
     }
 
@@ -12246,6 +12306,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         endFooterSelectionTransition();
         if (structureChange) {
             reanchorSpecialTabPulse();
+            keepFooterCheckOffRecycledDailyUpdates();
         }
     }
 
@@ -16141,6 +16202,32 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
+     * Full-bleed and magazine cards. These are the Special deck.
+     * {@code normal_image} / {@code normal_video} are the half-news layout
+     * (player or image, body, reporter row) and are not this.
+     */
+    private static boolean isFullOrSpecialPostType(@Nullable String postType) {
+        if (postType == null) return false;
+        return "full_image".equalsIgnoreCase(postType)
+                || "full_video".equalsIgnoreCase(postType)
+                || "image_gallery".equalsIgnoreCase(postType)
+                || "magazine".equalsIgnoreCase(postType)
+                || "magazines".equalsIgnoreCase(postType);
+    }
+
+    private boolean listContainsHalfNews(
+            @Nullable java.util.List<ModelClass.Datum> items) {
+        if (items == null) return false;
+        for (int i = 0; i < items.size(); i++) {
+            ModelClass.Datum d = items.get(i);
+            if (d != null && isHalfNewsPostType(d.getPostType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Client safety filter for Special: strip {@code normal_image} / {@code normal_video}
      * even if the server errs or a main-list response races in. Mutates list in place.
      */
@@ -19386,6 +19473,56 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return 0;
     }
 
+    /**
+     * Material's item pool is last-in. A bar rebuild between ACTION_DOWN and
+     * the click rebinds that view to another menu id. The listener then sees
+     * Daily Updates for a finger that went down on Special (the same class of
+     * miss that used to deliver Reload as Profile). Ignore the rebound id.
+     * A reselect of the tab already under the finger must not navigate away.
+     *
+     * @return true when the delivered item must not run
+     */
+    private boolean ignoreReboundFooterNavigation(@NonNull MenuItem delivered) {
+        int down = footerGestureDownItemId;
+        if (down == 0 || delivered.getItemId() == down) {
+            return false;
+        }
+        showLog("footer nav ignored — rebound down=" + down
+                + " delivered=" + delivered.getItemId());
+        if (bottomNavigationView != null
+                && bottomNavigationView.getSelectedItemId() != down) {
+            if (down == R.id.navigation_home
+                    && ProfileHubConfigHelper.isFooterShowReload(this)) {
+                performFeedReload();
+            } else if (down == R.id.navigation_catagiries
+                    && ProfileHubConfigHelper.isFooterShowSpecial(this)
+                    && isDeviceOnline()) {
+                performSpecialFeedOpen();
+            }
+        } else if (down == R.id.navigation_catagiries) {
+            selectFooterTabWithoutMotion(R.id.navigation_catagiries);
+        }
+        return true;
+    }
+
+    /**
+     * {@code buildMenuView} can check Daily Updates because that view was the
+     * last Special view released into the pool. Put the check back. Does not
+     * open Daily Updates and does not run while that hub is actually showing.
+     */
+    private void keepFooterCheckOffRecycledDailyUpdates() {
+        if (bottomNavigationView == null || isDailyUpdatesMode() || isCalendarMode()) {
+            return;
+        }
+        if (bottomNavigationView.getSelectedItemId() != R.id.navigation_status) {
+            return;
+        }
+        int want = (footerGestureDownItemId == R.id.navigation_catagiries || isSpecialFeedMode())
+                ? R.id.navigation_catagiries
+                : R.id.navigation_home;
+        selectFooterTabWithoutMotion(want);
+    }
+
     private static boolean isRawTouchInsideView(@Nullable View v, float rawX, float rawY) {
         if (v == null || v.getVisibility() != View.VISIBLE) {
             return false;
@@ -22012,6 +22149,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
             if (suppressBottomNavCallbacks) {
                 return;
             }
+            if (ignoreReboundFooterNavigation(item)) {
+                return;
+            }
             // Calendar stays selected like Special. Reselecting Reload / Special
             // while create-menu is open must still dismiss X + overlay.
             if (item.getItemId() != R.id.navigation_stricker) {
@@ -22047,6 +22187,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         public boolean onNavigationItemSelected(@NonNull MenuItem item) {
             if (suppressBottomNavCallbacks) {
                 return true;
+            }
+            if (ignoreReboundFooterNavigation(item)) {
+                return false;
             }
             if (suppressFooterClickFromGallerySwipe
                     || SpecialGalleryFlipHelper.isNestedGalleryDriving()) {
@@ -22419,6 +22562,7 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 + " fromCache=" + fromCache
                 + " langStay="
                 + SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
+        alignFooterWithOpenedPost(list.get(idx));
         // Prefer sticky open over theme/config flip restore for this one shot.
         clearPendingFlipRestore();
         // Cache paint must keep SHARE_ID so the following network body still
@@ -22466,6 +22610,46 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         }
         items.add(0, keep);
         return true;
+    }
+
+    /**
+     * Footer follows the opened card. A half-news layout ({@code normal_video}
+     * / {@code normal_image}: player, body, reporter row) is News, even if
+     * Special was the last tab. A full/special card keeps Special only when
+     * this page is not the main mix — lighting Special over half-news cards
+     * is the bug in the Modi screenshot.
+     */
+    private void alignFooterWithOpenedPost(@Nullable ModelClass.Datum opened) {
+        if (opened == null || bottomNavigationView == null) {
+            return;
+        }
+        String type = opened.getPostType();
+        boolean half = isHalfNewsPostType(type);
+        boolean full = isFullOrSpecialPostType(type);
+        boolean newsMix = half || listContainsHalfNews(list);
+        if (newsMix || !full) {
+            boolean specialLit = explicitSpecialOpen || specialFeedModeActive
+                    || bottomNavigationView.getSelectedItemId() == R.id.navigation_catagiries;
+            if (specialLit) {
+                explicitSpecialOpen = false;
+                setFeedModeFlags(false, false);
+                selectFooterTabWithoutMotion(R.id.navigation_home);
+            }
+            return;
+        }
+        if (isSpecialFeedMode()
+                || bottomNavigationView.getSelectedItemId() == R.id.navigation_catagiries) {
+            selectFooterTabWithoutMotion(R.id.navigation_catagiries);
+        }
+    }
+
+    @Nullable
+    private ModelClass.Datum findRealListedPost(long postId) {
+        int idx = indexOfRealDeepLinkTarget(list, postId);
+        if (idx < 0 || list == null) {
+            return null;
+        }
+        return list.get(idx);
     }
 
     private int indexOfRealDeepLinkTarget(
