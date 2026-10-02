@@ -1716,9 +1716,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             overridePendingTransition(0, 0);
         }
         showLog("ONCREATE CALLED");
-        // Share / push seating and offline stay on the feed. Do not steal those opens.
+        // Share / push / category seating and offline stay on the feed.
+        // A category picked from Profile is News for that category. The Daily
+        // Updates hub that was open before Profile must not cover it.
+        boolean categorySessionOpen = isPositiveCategorySession(getIntent());
         if (restoreDailyUpdatesOnCreate
                 && (openAsSpecial
+                || categorySessionOpen
                 || SHARE_ID > 0
                 || pushOwnsSeating
                 || !isDeviceOnline()
@@ -1805,6 +1809,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                 }
                 showLog("inlist from oncreate 2:" + category_id + " special=" + openAsSpecial);
+                if (parsedSessionId > 0) {
+                    leavePriorSurfaceForCategoryOpen();
+                }
                 inlist(parsedSessionId);
             } else {
                 // Special always category 0 page-0; session category must not override.
@@ -3128,6 +3135,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         list = new ArrayList<>();
         dummyResponse = null;
         category_id = catId;
+        // After the list clear: Daily Updates must not stay the checked tab,
+        // and the empty gap must not hide WhatsApp (that rebuild lands the
+        // check back on Daily Updates).
+        leavePriorSurfaceForCategoryOpen();
         try {
             if (mFlipView != null) {
                 mFlipView.resetSeatForNewFeed();
@@ -3146,6 +3157,63 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception e) {
             ShowNews_Data_Values(catId, -1);
         }
+    }
+
+    /** True when this intent opens a Profile/Search category feed ({@code id > 0}). */
+    private static boolean isPositiveCategorySession(@Nullable Intent intent) {
+        if (intent == null || !intent.hasExtra("EXTRA_SESSION_ID")) {
+            return false;
+        }
+        String raw = intent.getStringExtra("EXTRA_SESSION_ID");
+        if (raw == null) {
+            return false;
+        }
+        raw = raw.trim();
+        if (raw.isEmpty() || "0".equals(raw) || "null".equalsIgnoreCase(raw)) {
+            return false;
+        }
+        try {
+            return Integer.parseInt(raw.replaceAll("[^0-9-]", "")) > 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Profile / Search category is News for that category. Daily Updates,
+     * Special, or calendar was only the previous tab. Hide that surface, light
+     * News, and keep footer WhatsApp through the empty list so a menu rebuild
+     * cannot check Daily Updates again.
+     * <p>
+     * Does not treat Daily Updates as the parent. Back from the category stays
+     * on this News feed (Panchangam opened from a Daily Updates tile still
+     * returns to that hub).
+     */
+    private void leavePriorSurfaceForCategoryOpen() {
+        localFeedFromDailyUpdates = false;
+        try {
+            hideLocalFeedChrome();
+        } catch (Exception ignored) {
+        }
+        try {
+            hideHomeCalendarMode();
+            hideHomeDailyUpdatesMode();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (mFlipView != null) {
+                mFlipView.setVisibility(View.VISIBLE);
+            }
+            if (comment_page != null) {
+                comment_page.setVisibility(View.GONE);
+            }
+            showHomeFeedLoadingReveal();
+            if (layout_with_data != null) {
+                layout_with_data.setVisibility(View.GONE);
+            }
+        } catch (Exception ignored) {
+        }
+        showNewsFooterFromDailyUpdatesHub();
     }
 
     /** Leave keyword search FlipView mode (footer / Special / Video / context back). */
