@@ -14591,10 +14591,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         final boolean contentCursorAdvanced = actual_skip != actualBeforeEmpty
                 || last_post_id != lastBeforeEmpty;
-        final boolean emptyCursorAdvanced = contentCursorAdvanced
-                || skip != skipBeforeEmpty;
         // Same skip / actual_skip / last_post_id must not be requested again.
-        if (!emptyCursorAdvanced || feedCursorRequestIsStalled()) {
+        // A stuck triple is stepped past the last card on screen below. If that
+        // step cannot move actual_skip or last_post_id, stop.
+        if (feedCursorRequestIsStalled() && !contentCursorAdvanced) {
             noteFeedCursorDidNotAdvance();
             isApiRequested = false;
             initialCall = true;
@@ -14608,22 +14608,30 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         no_article_message = FEED_LOADING_MESSAGE;
         stripFeedEndSentinelQuietly();
-        // Stripped window: ask again only while the reader is still at the end
-        // or the finger is still driving forward. A short deck is not a reason
-        // to walk skip from the first cards.
-        if (!(feedSeatWithinLastTwo() || feedFingerDrivingForwardAtEnd())) {
+        // Half-posts stripped, or a window that did not grow the deck.
+        // skip += 8 is not the Special window. Move actual_skip / last_post_id
+        // past the last card on screen, then ask again only while the buffer
+        // ahead of the finger is still short.
+        if (actual_skip <= actualBeforeEmpty) {
+            if (!advanceFeedCursorPastOnScreenTail(
+                    skipBeforeEmpty, actualBeforeEmpty, lastBeforeEmpty)) {
+                noteFeedCursorDidNotAdvance();
+                isApiRequested = false;
+                initialCall = true;
+                return true;
+            }
+        }
+        if (feedCursorRequestIsStalled() || !feedBufferIsShort()) {
             Log.i("FeedFlip", "duplicate page skipped skip=" + skip
-                    + " before=" + requestSize
-                    + " after=" + requestSize
-                    + " hold");
+                    + " actual_skip=" + actual_skip
+                    + " list=" + requestSize);
             isApiRequested = false;
             initialCall = true;
             return true;
         }
         Log.i("FeedFlip", "duplicate page skipped skip=" + skip
-                + " before=" + requestSize
-                + " after=" + requestSize
-                + " next");
+                + " actual_skip=" + actual_skip
+                + " list=" + requestSize);
         showLog("empty/filtered page continue (" + reason + ") list="
                 + requestSize
                 + " skip=" + skip
@@ -14718,47 +14726,54 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Next page while the first screen is still short, or the reader is on one
-     * of the last two cards actually loaded. A forward pull off that last card
-     * counts too. Reading the middle of a longer deck does not.
+     * Keep about one page of real cards ahead of the finger, including during a
+     * fast fling. Reading the middle of a longer deck does not request again.
      */
-    private static final int FEED_SMALL_DECK = 8;
+    private static final int FEED_AHEAD_BUFFER = 8;
     /** Set when this parse already queued the following page, so the trailing clear cannot drop it. */
     private boolean feedKeepRequestInFlight = false;
 
-    private boolean feedDeckIsSmall() {
-        return list == null || list.size() <= FEED_SMALL_DECK;
-    }
-
-    /** Visible index is one of the last two cards on screen. Empty deck counts. */
-    private boolean feedSeatWithinLastTwo() {
+    /** Paintable posts strictly after the visible seat. Stops counting at the buffer. */
+    private int feedRealCardsAhead() {
         if (list == null || list.isEmpty()) {
-            return true;
+            return 0;
         }
-        return feedPagingSeat() >= Math.max(0, list.size() - 2);
+        int seat;
+        try {
+            seat = feedPagingSeat();
+        } catch (Exception ignored) {
+            seat = Math.max(0, positionx);
+        }
+        int ahead = 0;
+        for (int i = Math.max(0, seat) + 1; i < list.size(); i++) {
+            ModelClass.Datum d = list.get(i);
+            if (d == null || ReadArticleStore.isSyntheticFeedSlot(d)) {
+                continue;
+            }
+            if (d.getPostId() == null || d.getPostId() <= 0L) {
+                continue;
+            }
+            try {
+                if (FeedEndHelper.isFeedEnd(d)) {
+                    continue;
+                }
+            } catch (Exception ignored) {
+            }
+            ahead++;
+            if (ahead >= FEED_AHEAD_BUFFER) {
+                return ahead;
+            }
+        }
+        return ahead;
     }
 
-    /** Visible seat is within the last two loaded cards, or the deck is still short. */
-    private boolean feedSeatNearLoadedEnd() {
-        if (list == null || list.isEmpty() || feedDeckIsSmall()) {
-            return true;
-        }
-        return feedPagingSeat() >= Math.max(0, list.size() - 2);
-    }
-
-    /** Finger or fling is still driving forward off the last loaded card. */
-    private boolean feedFingerDrivingForwardAtEnd() {
-        if (mFlipView == null || list == null || list.isEmpty()) {
-            return false;
-        }
-        if (!mFlipView.isUserDrivingFlip()) {
-            return false;
-        }
-        return feedPagingSeat() >= Math.max(0, list.size() - 1);
+    /** Fewer than about 8 real cards remain ahead of the current position. */
+    private boolean feedBufferIsShort() {
+        return list == null || list.isEmpty() || feedRealCardsAhead() < FEED_AHEAD_BUFFER;
     }
 
     private boolean feedShouldRequestAnotherPage() {
-        return feedDeckIsSmall() || feedSeatNearLoadedEnd() || feedFingerDrivingForwardAtEnd();
+        return feedBufferIsShort();
     }
 
     /** One FeedFlip line per stuck cursor. Does not insert an end card. */
@@ -14773,13 +14788,70 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         int n = list != null ? list.size() : 0;
         Log.i("FeedFlip", "duplicate page skipped skip=" + skip
                 + " actual_skip=" + actual_skip
-                + " last_post_id=" + last_post_id
-                + " before=" + n
-                + " after=" + n
-                + " cursor did not advance");
+                + " list=" + n);
     }
 
-    /** One in-flight List_All_Articles page. Caller already decided the reader is at the end. */
+    /**
+     * Special chooses the next window with {@code actual_skip} (news-merge index)
+     * and {@code last_post_id} (published-time ceiling). A phone that only stores
+     * {@code skip += 8} asks for the same posts again. Point the next request at
+     * cards older than the last real post already on screen.
+     *
+     * @return true when skip, actual_skip, or last_post_id moved
+     */
+    private boolean advanceFeedCursorPastOnScreenTail(
+            long skipBefore, long actualBefore, long lastBefore) {
+        long oldestPublished = 0L;
+        if (list != null) {
+            for (int i = list.size() - 1; i >= 0; i--) {
+                ModelClass.Datum d = list.get(i);
+                if (d == null || ReadArticleStore.isSyntheticFeedSlot(d)) {
+                    continue;
+                }
+                if (d.getPostId() == null || d.getPostId() <= 0L) {
+                    continue;
+                }
+                try {
+                    if (FeedEndHelper.isFeedEnd(d)) {
+                        continue;
+                    }
+                } catch (Exception ignored) {
+                }
+                Long published = d.getPublishedTime();
+                if (published != null && published > 1L) {
+                    oldestPublished = published;
+                    break;
+                }
+            }
+        }
+        long nextLast = last_post_id;
+        if (oldestPublished > 1L) {
+            long ceiling = oldestPublished - 1L;
+            if (ceiling > 0L && (nextLast <= 0L || ceiling < nextLast)) {
+                nextLast = ceiling;
+            }
+        }
+        final long actualAfterServer = actual_skip;
+        final long lastAfterServer = last_post_id;
+        long nextActual = actualAfterServer;
+        if (nextActual <= actualBefore) {
+            long stepped = actualBefore + 8L;
+            if (stepped < 8L) {
+                stepped = 8L;
+            }
+            nextActual = stepped;
+        }
+        actual_skip = nextActual;
+        last_post_id = nextLast;
+        // skip += 8 alone is not a new window. The server reads actual_skip
+        // and last_post_id for the next unseen posts.
+        if (skip == skipBefore && actual_skip == actualBefore && last_post_id == lastBefore) {
+            return false;
+        }
+        return actual_skip != actualAfterServer || last_post_id != lastAfterServer;
+    }
+
+    /** One in-flight List_All_Articles page. Caller already decided the buffer ahead is short. */
     private void queueNextOnlineFeedPage() {
         if (feedCursorRequestIsStalled() || dummyResponse != null || !isDeviceOnline()) {
             return;
@@ -18609,12 +18681,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if (validateUserOtp.getActualSkip() != null) {
                             actual_skip = validateUserOtp.getActualSkip();
                         }
-                        final boolean feedCursorAdvanced = skip != skipBeforePage
-                                || actual_skip != actualSkipBeforePage
+                        final boolean contentCursorAdvanced = actual_skip != actualSkipBeforePage
                                 || last_post_id != lastPostBeforePage;
+                        final boolean feedCursorAdvanced = contentCursorAdvanced
+                                || skip != skipBeforePage;
                         // Non-empty page that added no new article (duplicate ids,
                         // Special half-posts already stripped, or only ad slots).
-                        // Not the end of the feed. The same cursor is not asked again.
+                        // Not the end of the feed. skip += 8 alone is not a new
+                        // window — Special reads actual_skip / last_post_id.
                         final boolean duplicatePageNoGrowth = paginationAppend
                                 && !addedNewArticle
                                 && !searchFeedActive;
@@ -18625,17 +18699,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     + " before=" + listSizeBeforeAppend
                                     + " after=" + feedSizeAfter);
                         }
-                        if (!fromCache && duplicatePageNoGrowth && !feedCursorAdvanced) {
-                            noteFeedCursorDidNotAdvance();
-                        } else if (!fromCache && duplicatePageNoGrowth) {
-                            final boolean followDuplicate = feedSeatWithinLastTwo()
-                                    || feedFingerDrivingForwardAtEnd();
-                            Log.i("FeedFlip", "duplicate page skipped skip=" + skip
-                                    + " actual_skip=" + actual_skip
-                                    + " last_post_id=" + last_post_id
-                                    + " before=" + listSizeBeforeAppend
-                                    + " after=" + feedSizeAfter
-                                    + (followDuplicate ? " next" : " hold"));
+                        if (!fromCache && duplicatePageNoGrowth) {
+                            if (actual_skip <= actualSkipBeforePage
+                                    && !advanceFeedCursorPastOnScreenTail(
+                                            skipBeforePage,
+                                            actualSkipBeforePage,
+                                            lastPostBeforePage)) {
+                                noteFeedCursorDidNotAdvance();
+                            } else if (!feedCursorRequestIsStalled()) {
+                                Log.i("FeedFlip", "duplicate page skipped skip=" + skip
+                                        + " actual_skip=" + actual_skip
+                                        + " list=" + feedSizeAfter);
+                            }
                         }
                         // Any non-empty live page proves the archive is not exhausted.
                         if (!fromCache && list != null
@@ -18650,7 +18725,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             requestPostition = Math.max(1, Math.min(n - 1, 2));
                             final boolean maybeMore = validateUserOtp.getData() != null
                                     && validateUserOtp.getData().size() >= 4;
-                            if (maybeMore
+                            // Growth still prefetches immediately. A no-growth page
+                            // chains only while the buffer ahead is short.
+                            final boolean flashWantNext = maybeMore
+                                    && (!duplicatePageNoGrowth || feedBufferIsShort());
+                            if (flashWantNext
                                     && !feedCursorRequestIsStalled()
                                     && !isApiRequested
                                     && dummyResponse == null
@@ -18676,37 +18755,33 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 && !bookmarksModeSelected
                                 && list != null
                                 && !list.isEmpty()) {
-                            // News / Local / Special: load more when near end (Video sets above).
-                            // Never eager-page Search_Stories / single-article decks here —
-                            // that appended unlimited hits after finalizeSearchFeedSeating.
+                            // News / Local / Category / Special. Flash prefetches above.
+                            // Ask for the next page while fewer than ~8 real cards
+                            // remain ahead. A long deck with that buffer already
+                            // loaded does not walk skip.
                             int n = list.size();
-                            // Trigger on the first of the last two cards, not earlier.
                             requestPostition = Math.max(0, n - 2);
-                            // One next page: short deck, reader within the last two
-                            // cards, or the finger still pulling forward off the last
-                            // card. A duplicate window chains only for that reason.
-                            // The middle of a longer deck must not walk skip.
                             final boolean serverPageNonEmpty = validateUserOtp.getData() != null
                                     && !validateUserOtp.getData().isEmpty();
-                            // New cards: short deck or already near the end.
-                            // Zero new articles: only while still at the end, so a
-                            // duplicate page cannot walk skip from the first cards.
+                            final boolean noGrowthCursorReady = !duplicatePageNoGrowth
+                                    || actual_skip > actualSkipBeforePage
+                                    || last_post_id != lastPostBeforePage;
                             final boolean followDuplicate = duplicatePageNoGrowth
-                                    && (feedSeatWithinLastTwo()
-                                            || feedFingerDrivingForwardAtEnd());
+                                    && feedBufferIsShort()
+                                    && noGrowthCursorReady;
                             final boolean followGrowth = (addedNewArticle || page0Replace)
-                                    && feedShouldRequestAnotherPage();
-                            final boolean chainBecauseStillAtEnd = serverPageNonEmpty
-                                    && feedCursorAdvanced
+                                    && feedShouldRequestAnotherPage()
+                                    && feedCursorAdvanced;
+                            if (serverPageNonEmpty
                                     && !feedCursorRequestIsStalled()
-                                    && (followDuplicate || followGrowth);
-                            if (chainBecauseStillAtEnd) {
+                                    && (followDuplicate || followGrowth)) {
                                 showLog((category_id == -1 ? "local" : specialNow
                                         ? "special" : "news")
                                         + " feed next page list=" + n
                                         + " skip=" + skip
-                                        + " duplicate=" + duplicatePageNoGrowth
-                                        + " nearEnd=" + feedSeatNearLoadedEnd());
+                                        + " actual_skip=" + actual_skip
+                                        + " ahead=" + feedRealCardsAhead()
+                                        + " duplicate=" + duplicatePageNoGrowth);
                                 queueNextOnlineFeedPage();
                             }
                         } else if (searchFeedActive) {
@@ -20198,9 +20273,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 return;
             }
         }
-        // Merge a page that arrived while the reader was still moving. New cards
-        // append without waiting for another flip. Skip does not advance again
-        // until that merge decides the reader is still at the end.
+        // Append a page that arrived while the reader was still moving.
+        // New post ids become cards immediately. A prefetch does not move the
+        // card they are reading; a pull already off the last card can land on it.
         int seat = positionx;
         try {
             seat = feedPagingSeat();
@@ -20208,10 +20283,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         if (dummyResponse != null
                 && list != null
-                && !list.isEmpty()
-                && (feedDeckIsSmall()
-                        || seat >= Math.max(0, list.size() - 2)
-                        || feedFingerDrivingForwardAtEnd())) {
+                && !list.isEmpty()) {
             showLog("request at position:: convertListOfArticles held seat=" + seat);
             convertListOfArticles(dummyResponse, -1);
             try {
@@ -20229,10 +20301,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && ((activeSearchQuery != null && !activeSearchQuery.trim().isEmpty())
                         || activeSearchPostId > 0L
                         || activeSearchSingleOnly);
-        final boolean nearLoadedEnd = list != null
+        final boolean bufferShort = list != null
                 && !list.isEmpty()
-                && (seat >= Math.max(0, list.size() - 2)
-                        || feedFingerDrivingForwardAtEnd());
+                && feedBufferIsShort();
         if (searchBlocksPaging) {
             showLog("ANYNEWS_SEARCH near-end paging suppressed");
             isApiRequested = false;
@@ -20242,6 +20313,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && dummyResponse == null
                 && !isApiRequested
                 && !feedCursorRequestIsStalled()
+                && bufferShort
                 && feedNotExhausted) {
             showLog("request at position::"+requestSize);
             isApiRequested=true;
@@ -20255,14 +20327,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 && dummyResponse == null
                 && isDeviceOnline()
                 && !feedCursorRequestIsStalled()
-                && nearLoadedEnd
+                && bufferShort
                 && feedNotExhausted) {
-            // News / Special / Video: near end of loaded list — prefetch next page.
+            // News / Special / Local / Category / Flash: next page while fewer
+            // than ~8 real cards remain ahead, including after a fast fling.
             showLog((isVideoFeedMode() ? "video" : isSpecialFeedMode() ? "special"
                     : "online News")
-                    + " end-edge prefetch pos=" + seat
+                    + " buffer prefetch pos=" + seat
                     + " size=" + list.size()
-                    + " reals=" + ReadArticleStore.countRealArticles(list));
+                    + " ahead=" + feedRealCardsAhead());
             isApiRequested = true;
             ShowNews_Data_Values(category_id, 3);
         }
@@ -20398,10 +20471,37 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         pauseVideoLight();
         pendingFlipSettleWork = true;
+        // Fast fling: ask for the next page while cards are still ahead.
+        // Settle work stays on OnFlipCompleted. This request does not move the seat.
+        maybePrefetchFeedForShortBuffer();
         // No active flip gesture (programmatic / already settled): same staged settle path.
         if (mFlipView != null && !mFlipView.mIsFlipping) {
             schedulePostFlipSettleWork();
         }
+    }
+
+    /**
+     * One in-flight page when fewer than ~8 real cards remain ahead of the finger.
+     * Safe during a fling: append does not change the card being read.
+     */
+    private void maybePrefetchFeedForShortBuffer() {
+        if (searchFeedActive || bookmarksModeSelected || isOnlineReadFlipMode()) {
+            return;
+        }
+        if (!canPageActiveOnlineFlipFeed() || !isDeviceOnline()) {
+            return;
+        }
+        if (isApiRequested || dummyResponse != null || feedCursorRequestIsStalled()) {
+            return;
+        }
+        if (isOnlinePageableFeedTrulyExhausted()) {
+            return;
+        }
+        if (list == null || list.isEmpty() || !feedBufferIsShort()) {
+            return;
+        }
+        isApiRequested = true;
+        ShowNews_Data_Values(category_id, 3);
     }
 
     /**
