@@ -108,8 +108,6 @@ public class FlipView extends FrameLayout {
     private boolean mLastTouchAllowed = true;
     private int mTouchSlop;
     private boolean mIsOverFlipping;
-    /** Bumps on each finger-down so a feed walk can tell a new pull from the same hold. */
-    private int mFlipGestureGeneration;
     // keep track of pointer
     private float mLastX = -1;
     private float mLastY = -1;
@@ -417,17 +415,8 @@ public class FlipView extends FrameLayout {
         }
         mPageCount = newCount;
         rememberFlipAnchor();
-        if (newCount > oldCount
-                && extendActiveForwardEndOntoNewPages(oldCount, newCount)) {
-            // Forward pull/fling was already against the old last page. The new
-            // seat is part of this gesture. A prefetch while reading earlier
-            // cards does not enter this path.
-            updateEmptyStatus();
-            return;
-        }
         if (isUserDrivingFlip()) {
-            // Count is already live for the next settle; do not recycle mid-gesture
-            // and do not move a card the user is reading.
+            // Count is already live for the next settle; do not recycle mid-gesture.
             invalidate();
             updateEmptyStatus();
             return;
@@ -1316,7 +1305,6 @@ public class FlipView extends FrameLayout {
             case MotionEvent.ACTION_DOWN:
                 // Interrupt in-flight flip scroll, but do not treat canceling idle
                 // peakNext as "start flipping" — that blocked horizontal gallery swipes.
-                mFlipGestureGeneration++;
                 clearGestureAnchor();
                 boolean endedScroll = endScroll();
                 endPeak();
@@ -2345,122 +2333,6 @@ public class FlipView extends FrameLayout {
             return mIsFlipping || (mScroller != null && !mScroller.isFinished());
         } catch (Exception e) {
             return mIsFlipping;
-        }
-    }
-
-    /** Finger-down count. A continuous hold stays on one generation. */
-    public int getFlipGestureGeneration() {
-        return mFlipGestureGeneration;
-    }
-
-    /**
-     * Pages were appended while the user is already pulling or flinging forward
-     * off the previous last card. Spend that overflip as real distance so the
-     * finger lands on the new seat in this gesture. Does nothing when the user
-     * is reading an earlier card or the finger is up and the fling has settled.
-     *
-     * @return true when this call owned the update (caller should not also bind)
-     */
-    private boolean extendActiveForwardEndOntoNewPages(int oldCount, int newCount) {
-        if (newCount <= oldCount || oldCount < 1 || !isUserDrivingFlip()) {
-            return false;
-        }
-        final int per = Math.max(1, FLIP_DISTANCE_PER_PAGE);
-        final float oldMax = (oldCount - 1) * (float) per;
-        final int seat = mCurrentPageIndex >= 0 ? mCurrentPageIndex : bestKnownPageIndex();
-        final boolean onOldLast = seat >= oldCount - 1 || mFlipDistance >= oldMax - 1f;
-        if (!onOldLast || mFlipDistance < oldMax - 1f) {
-            return false;
-        }
-        float over = 0f;
-        try {
-            if (mOverFlipper != null) {
-                over = mOverFlipper.getTotalOverFlip();
-            }
-        } catch (Exception ignored) {
-        }
-        // Negative glow is the start edge. Never ride a backward pull onto a new card.
-        if (over < 0f) {
-            return false;
-        }
-        final boolean fingerAgainstEnd = mIsFlipping && (mIsOverFlipping || over > 0f);
-        boolean flingAgainstEnd = false;
-        if (!mIsFlipping && mScroller != null && !mScroller.isFinished()) {
-            try {
-                final int finalY = mScroller.getFinalY();
-                flingAgainstEnd = finalY >= (int) oldMax - 1
-                        && finalY >= mScroller.getStartY();
-            } catch (Exception ignored) {
-            }
-        }
-        if (!fingerAgainstEnd && !flingAgainstEnd) {
-            return false;
-        }
-        final float newMax = (newCount - 1) * (float) per;
-        if (fingerAgainstEnd) {
-            // GlowOverFlipper already discarded this pull. Put it back so the
-            // finger lands on the new seat without lifting. Any forward overflip
-            // crosses onto that seat; never skip more than one new page.
-            float advance = 0f;
-            if (over > 0f) {
-                advance = Math.min((float) per, Math.max(over, per * 0.55f));
-            }
-            final float next = Math.min(newMax, Math.max(mFlipDistance, oldMax) + advance);
-            mIsOverFlipping = false;
-            try {
-                if (mOverFlipper != null) {
-                    mOverFlipper.overFlipEnded();
-                }
-            } catch (Exception ignored) {
-            }
-            if (next > mFlipDistance + 0.5f) {
-                setFlipDistance(next);
-            } else {
-                bindOffscreenNextPage();
-            }
-            Log.i("FeedFlip", "ride forward overflip oldCount=" + oldCount
-                    + " newCount=" + newCount
-                    + " advance=" + advance);
-            invalidate();
-            return true;
-        }
-        final int firstNew = Math.min(newCount - 1, oldCount);
-        try {
-            smoothFlipTo(firstNew);
-        } catch (Exception ignored) {
-            setFlipDistance(Math.min(newMax, firstNew * (float) per));
-        }
-        Log.i("FeedFlip", "ride forward fling onto page " + firstNew
-                + " newCount=" + newCount);
-        return true;
-    }
-
-    /** Bind the page after the current seat when a grow did not move the index. */
-    private void bindOffscreenNextPage() {
-        try {
-            final int cur = bestKnownPageIndex();
-            if (cur < 0 || cur >= mPageCount - 1) {
-                return;
-            }
-            if (mNextPage.valid && mNextPage.position == cur + 1) {
-                return;
-            }
-            if (isSamePaintedArticle(cur + 1, cur)) {
-                return;
-            }
-            if (mNextPage.valid && mNextPage.v != null) {
-                try {
-                    removeView(mNextPage.v);
-                    mRecycler.addScrapView(mNextPage.v, mNextPage.position,
-                            mNextPage.viewType, mNextPage.boundItemId,
-                            mNextPage.boundGeneration);
-                } catch (Exception ignored) {
-                }
-                mNextPage.valid = false;
-            }
-            fillPageForIndex(mNextPage, cur + 1, (cur + 1) % 3);
-            addFlipChild(mNextPage.v);
-        } catch (Exception ignored) {
         }
     }
 
