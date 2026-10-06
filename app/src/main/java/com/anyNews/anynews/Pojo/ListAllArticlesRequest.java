@@ -168,6 +168,23 @@ public class ListAllArticlesRequest implements Serializable {
         this.exclude_post_ids = exclude_post_ids;
     }
 
+    /**
+     * Post ids already on the Special deck. The server walks the Redis news
+     * window past these and returns the next specials. A rank cursor alone
+     * repeats the same ids when the list shifts.
+     */
+    @SerializedName("seen_ids")
+    @Expose
+    private java.util.List<Long> seen_ids;
+
+    public java.util.List<Long> getSeen_ids() {
+        return seen_ids;
+    }
+
+    public void setSeen_ids(java.util.List<Long> seen_ids) {
+        this.seen_ids = seen_ids;
+    }
+
     public String getApp_version_name() {
         return app_version_name;
     }

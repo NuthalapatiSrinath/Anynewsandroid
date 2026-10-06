@@ -16786,6 +16786,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     + " skip=" + skip);
         }
 
+        attachSpecialResumeCursor(requestModel);
+
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
         encrpt_data = encrypt(jsonString);
@@ -17622,8 +17624,55 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    private void addUniqueArticles(java.util.List<ModelClass.Datum> newData) {
-        if (newData == null) return;
+    /**
+     * Special load-more: the Redis rank ({@code actual_skip}) shifts when new
+     * posts are published, so the same ids come back and {@link #addUniqueArticles}
+     * replaces them in place. Send the ids already on screen, and the oldest
+     * card's publish time, so the next page is posts after that card.
+     */
+    private void attachSpecialResumeCursor(ListAllArticlesRequest requestModel) {
+        if (requestModel == null || !requestModel.isSpecial_posts()) return;
+        if (!isSpecialFeedMode()) return;
+        if (skip <= 0 && actual_skip <= 0) return;
+        if (list == null || list.isEmpty()) return;
+        java.util.ArrayList<Long> seen = new java.util.ArrayList<>();
+        long anchorId = 0L;
+        long anchorTime = 0L;
+        for (int i = 0; i < list.size(); i++) {
+            ModelClass.Datum d = list.get(i);
+            if (!isCollapsibleArticle(d)) continue;
+            long id = d.getPostId();
+            seen.add(id);
+            anchorId = id;
+            Long published = d.getPublishedTime();
+            if (published != null && published > 0L) {
+                anchorTime = published;
+            }
+        }
+        if (seen.size() > 400) {
+            seen = new java.util.ArrayList<>(seen.subList(seen.size() - 400, seen.size()));
+        }
+        if (!seen.isEmpty()) {
+            requestModel.setSeen_ids(seen);
+        }
+        // Server reads last_post_id as a publish-time ceiling. A post id here
+        // would hide every row. Only a millisecond timestamp is safe.
+        if (anchorTime >= 1_000_000_000_000L) {
+            requestModel.setLastPostId(anchorTime);
+        }
+        String line = "special request skip=" + skip
+                + " actual_skip=" + actual_skip
+                + " afterPost=" + anchorId
+                + " afterTime=" + anchorTime
+                + " seen=" + seen.size()
+                + " list=" + list.size();
+        android.util.Log.i("FeedFlip", line);
+        showLog("FeedFlip " + line);
+    }
+
+    /** @return how many rows were appended (replacements do not grow the deck). */
+    private int addUniqueArticles(java.util.List<ModelClass.Datum> newData) {
+        if (newData == null) return 0;
         // Index of first occurrence so soft-reconcile / soft-merge can replace
         // the payload for an existing post_id without appending a twin card.
         java.util.HashMap<String, Integer> existingIndex = new java.util.HashMap<>();
@@ -17633,21 +17682,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 existingIndex.put(key, i);
             }
         }
+        int added = 0;
+        int replaced = 0;
         for (ModelClass.Datum d : newData) {
             if (d == null) continue;
             if (d.getPostId() == null) {
                 list.add(d);
+                added++;
                 continue;
             }
             String key = articleDedupKey(d);
             if (key == null) {
                 list.add(d);
+                added++;
                 continue;
             }
             Integer idx = existingIndex.get(key);
             if (idx == null) {
                 existingIndex.put(key, list.size());
                 list.add(d);
+                added++;
             } else {
                 // Refresh in place so an admin edit lands, but never append a twin page.
                 // Keep the pin index on the refreshed row so collapse still treats it as sticky.
@@ -17657,10 +17711,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     d.setStickyPosition(kept.getStickyPosition());
                 }
                 list.set(idx, d);
+                replaced++;
                 showLog("DEDUP replaced post key=" + key + " at=" + idx);
             }
         }
         collapseDuplicateFeedPosts(list);
+        if (replaced > 0) {
+            android.util.Log.i("DEDUP", "replaced=" + replaced
+                    + " added=" + added
+                    + " size=" + list.size());
+        }
+        return added;
     }
 
     /**
@@ -18304,15 +18365,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         final long cursorActualBefore = actual_skip;
                         final int specialsBeforeAppend = (isSpecialFeedMode() && !page0Replace)
                                 ? countFullSpecialPosts(list) : 0;
+                        final int incomingRows = validateUserOtp.getData() != null
+                                ? validateUserOtp.getData().size() : 0;
+                        int addedRows;
                         if (page0Replace) {
                             // Clear then append-unique so a single page-0 payload that
                             // contains the same post_id twice (push/share sticky + chrono
                             // companion, or sticky pin + list) cannot paint two cards.
                             list.clear();
-                            addUniqueArticles(validateUserOtp.getData());
+                            addedRows = addUniqueArticles(validateUserOtp.getData());
                             listSizeBeforeAppend = 0;
                         } else {
-                            addUniqueArticles(validateUserOtp.getData());
+                            addedRows = addUniqueArticles(validateUserOtp.getData());
                         }
                         // Hard guarantee after any merge: Special list has no half posts.
                         if (isSpecialFeedMode()) {
@@ -18575,6 +18639,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 + " skip=" + skip + " actual_skip=" + actual_skip
                                 + " last_post_id=" + last_post_id
                                 + " page0Replace=" + page0Replace);
+                        if (!fromCache) {
+                            int after = list != null ? list.size() : -1;
+                            String flipLine = "apply before=" + listSizeBeforeAppend
+                                    + " after=" + after
+                                    + " incoming=" + incomingRows
+                                    + " added=" + addedRows
+                                    + " skip=" + skip
+                                    + " actual_skip=" + actual_skip
+                                    + " page0=" + page0Replace;
+                            android.util.Log.i("FeedFlip", flipLine);
+                            showLog("FeedFlip " + flipLine);
+                        }
                         if (list != null && !list.isEmpty() && list.get(0).getPostId() != null) {
                             updated_post_id_firebase = list.get(0).getPostId().intValue();
                         }
