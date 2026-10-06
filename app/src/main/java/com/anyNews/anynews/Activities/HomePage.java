@@ -16070,6 +16070,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 || "magazines".equalsIgnoreCase(postType);
     }
 
+    /** Full / magazine / gallery cards only. Ads and ratings are seats, not a new Special post. */
+    private static int countFullSpecialPosts(
+            @Nullable java.util.List<ModelClass.Datum> items) {
+        if (items == null || items.isEmpty()) return 0;
+        int n = 0;
+        for (int i = 0; i < items.size(); i++) {
+            ModelClass.Datum d = items.get(i);
+            if (d != null && isFullOrSpecialPostType(d.getPostType())
+                    && d.getPostId() != null && d.getPostId() > 0) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     private boolean listContainsHalfNews(
             @Nullable java.util.List<ModelClass.Datum> items) {
         if (items == null) return false;
@@ -18282,6 +18297,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         // Later pages incl. held merge with reqPos=-1: append unique (never clear).
                         // Do NOT use reqPos < 0 as replace — that wrongly wiped the feed on held apply.
                         final boolean page0Replace = fromCache || replacePage0 || list.isEmpty();
+                        // Cursors and special-post count from BEFORE this payload merges.
+                        // A later page of half news or ids already on screen must not
+                        // look like a new window just because skip stepped by 8.
+                        final long cursorSkipBefore = skip;
+                        final long cursorActualBefore = actual_skip;
+                        final int specialsBeforeAppend = (isSpecialFeedMode() && !page0Replace)
+                                ? countFullSpecialPosts(list) : 0;
                         if (page0Replace) {
                             // Clear then append-unique so a single page-0 payload that
                             // contains the same post_id twice (push/share sticky + chrono
@@ -18404,8 +18426,32 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         if (validateUserOtp.getActualSkip() != null) {
                             actual_skip = validateUserOtp.getActualSkip();
                         }
-                        // Any non-empty live page proves the archive is not exhausted.
-                        if (!fromCache && list != null
+                        // Special's real cursor is actual_skip (news-merge index).
+                        // skip always steps by the page size even when the server
+                        // resends the same specials. Half posts were already stripped;
+                        // addUniqueArticles replaces duplicate ids in place. Either
+                        // one leaves specialsBeforeAppend == specials now.
+                        final int specialsNow = isSpecialFeedMode()
+                                ? countFullSpecialPosts(list) : 0;
+                        final boolean addedSpecialPost = !isSpecialFeedMode()
+                                || (page0Replace ? specialsNow > 0
+                                : specialsNow > specialsBeforeAppend);
+                        final boolean specialCursorAdvanced = !isSpecialFeedMode()
+                                || addedSpecialPost
+                                || actual_skip > cursorActualBefore
+                                || (cursorActualBefore <= 0 && actual_skip <= 0
+                                        && skip > cursorSkipBefore);
+                        if (!fromCache && isSpecialFeedMode() && !addedSpecialPost) {
+                            showLog("special page added no new post specials "
+                                    + specialsBeforeAppend + "->" + specialsNow
+                                    + " skip " + cursorSkipBefore + "->" + skip
+                                    + " actual_skip " + cursorActualBefore + "->" + actual_skip
+                                    + " advanced=" + specialCursorAdvanced
+                                    + " list=" + (list != null ? list.size() : -1));
+                        }
+                        // A live page that actually added a post clears the empty streak.
+                        // A duplicate / half page must not — otherwise the walk never caps.
+                        if (!fromCache && addedSpecialPost && list != null
                                 && ReadArticleStore.countPaintableArticles(list) > 0) {
                             onlineNewsAllReadSkipStreak = 0;
                         }
@@ -18467,16 +18513,41 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 fingerMoving = isNewsUserDrivingFlip();
                             } catch (Exception ignored) {
                             }
-                            if (fingerMoving
+                            boolean atEnd = false;
+                            try {
+                                int seat = feedPagingSeat();
+                                atEnd = seat >= Math.max(0, n - 3)
+                                        || positionx >= Math.max(0, n - 3);
+                            } catch (Exception ignored) {
+                            }
+                            // Fast fling still prefetches the next skip (4d24097).
+                            // A Special page that added no full post must also ask
+                            // for the following skip while the finger is at the end.
+                            // Stop when that payload is empty (handled above) or the
+                            // special cursor did not advance (same window again).
+                            final boolean specialNoNewAtEnd = isSpecialFeedMode()
+                                    && !addedSpecialPost
+                                    && specialCursorAdvanced
                                     && pageHadArticles
+                                    && atEnd;
+                            final boolean fastFlingPrefetch = fingerMoving
+                                    && pageHadArticles
+                                    && !(isSpecialFeedMode()
+                                            && !addedSpecialPost
+                                            && !specialCursorAdvanced);
+                            if ((fastFlingPrefetch || specialNoNewAtEnd)
                                     && dummyResponse == null
                                     && isDeviceOnline()) {
                                 final int prefetchAt = requestPostition;
                                 final boolean specialAtParse = specialNow;
                                 showLog((category_id == -1 ? "local" : specialAtParse
                                         ? "special" : "news")
-                                        + " feed prefetch at pos=" + prefetchAt
-                                        + " list=" + n + " skip=" + skip);
+                                        + (specialNoNewAtEnd && !fastFlingPrefetch
+                                                ? " no-new-post next skip"
+                                                : " feed prefetch")
+                                        + " at pos=" + prefetchAt
+                                        + " list=" + n + " skip=" + skip
+                                        + " actual_skip=" + actual_skip);
                                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                                     @Override
                                     public void run() {

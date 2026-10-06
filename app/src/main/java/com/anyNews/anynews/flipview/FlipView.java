@@ -2142,6 +2142,21 @@ public class FlipView extends FrameLayout {
     }
 
     /**
+     * Vertical article feed must still flip when the seat is a native ad or a
+     * full-bleed video. Those views call {@code requestDisallowInterceptTouchEvent}
+     * on every down, which used to swallow the swipe so {@code onOverFlip} /
+     * {@code onFlippedToPage} never ran. Horizontal magazine FlipViews still honor
+     * the request so a nested gallery can take a sideways drag.
+     */
+    @Override
+    public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
+        if (mIsFlippingVertically && disallowIntercept) {
+            return;
+        }
+        super.requestDisallowInterceptTouchEvent(disallowIntercept);
+    }
+
+    /**
      * Nested horizontal gallery FlipView: keep the parent (article) FlipView from
      * intercepting mid-swipe. No-op for the main vertical feed FlipView.
      */
