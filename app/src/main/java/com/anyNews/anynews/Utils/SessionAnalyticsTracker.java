@@ -749,6 +749,15 @@ public final class SessionAnalyticsTracker {
                         CricketSurfaceConfigHelper.saveMiniPlayerEnabled(context, newVal);
                         cricketSurfaceFlipped = oldVal != newVal;
                     }
+                    if (resBody.has("cricket_match_on")
+                            && !resBody.get("cricket_match_on").isJsonNull()) {
+                        try {
+                            com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.saveCricketMatchOn(
+                                    context,
+                                    resBody.get("cricket_match_on").getAsBoolean());
+                        } catch (Exception ignored) {
+                        }
+                    }
                     if (resBody.has("cricket_footer_tab_enabled")
                             && !resBody.get("cricket_footer_tab_enabled").isJsonNull()) {
                         boolean newFooter = resBody.get("cricket_footer_tab_enabled").getAsBoolean();

@@ -47,6 +47,9 @@ public final class DailyUpdatesConfigHelper {
             putBool(app, Constants.DU_PANCHANGAM_ENABLED, o.optBoolean("panchangam_enabled", true));
             putBool(app, Constants.DU_RASHI_ENABLED, o.optBoolean("rashi_enabled", true));
             putBool(app, Constants.DU_CRICKET_ENABLED, o.optBoolean("cricket_enabled", true));
+            if (o.has("cricket_match_on")) {
+                putBool(app, Constants.DU_CRICKET_MATCH_ON, o.optBoolean("cricket_match_on", false));
+            }
             putBool(app, Constants.DU_MANA_ZILLA_ENABLED, o.optBoolean("mana_zilla_enabled", true));
             putBool(app, Constants.DU_FLASH_NEWS_ENABLED, o.optBoolean("flash_news_enabled", true));
             putBool(app, Constants.DU_STOCK_ENABLED, o.optBoolean("stock_enabled", true));
@@ -144,7 +147,7 @@ public final class DailyUpdatesConfigHelper {
             SharedPrefsData.putString(
                     app, Constants.DU_MANA_ZILLA_LANGUAGE_IDS, csv.toString(), Constants.PREF_NAME);
 
-            // Per-feature language allow-lists (empty CSV = all languages).
+            // Per-feature language allow-lists. Explicit [] is stored as none.
             saveFeatureLangCsv(app, o, "weather_language_ids", Constants.DU_WEATHER_LANGUAGE_IDS);
             saveFeatureLangCsv(app, o, "fuel_language_ids", Constants.DU_FUEL_LANGUAGE_IDS);
             saveFeatureLangCsv(app, o, "gold_language_ids", Constants.DU_GOLD_LANGUAGE_IDS);
@@ -328,10 +331,27 @@ public final class DailyUpdatesConfigHelper {
                 && isFeatureLanguageAllowed(context, Constants.DU_RASHI_LANGUAGE_IDS);
     }
 
-    /** Cricket card. Default ON, same as Panchangam, until admin turns a language off. */
+    /** Cricket language gate. Default ON, same as Panchangam, until that language cell is off. */
     public static boolean isCricketEnabled(@Nullable Context context) {
         return readBool(context, Constants.DU_CRICKET_ENABLED, true)
                 && isFeatureLanguageAllowed(context, Constants.DU_CRICKET_LANGUAGE_IDS);
+    }
+
+    /**
+     * Daily Updates cricket card. Hub language must be ON and the old Cricket
+     * Live Hub match switch must be ON. Missing match flag stays off.
+     */
+    public static boolean isCricketCardVisible(@Nullable Context context) {
+        return isCricketEnabled(context) && isCricketMatchOn(context);
+    }
+
+    public static boolean isCricketMatchOn(@Nullable Context context) {
+        return readBool(context, Constants.DU_CRICKET_MATCH_ON, false);
+    }
+
+    public static void saveCricketMatchOn(@Nullable Context context, boolean on) {
+        if (context == null) return;
+        putBool(context.getApplicationContext(), Constants.DU_CRICKET_MATCH_ON, on);
     }
 
     public static boolean isFlashNewsEnabled(@Nullable Context context) {
@@ -502,9 +522,13 @@ public final class DailyUpdatesConfigHelper {
         return false;
     }
 
+    /** Explicit empty language list from the hub matrix (every language OFF). */
+    private static final String LANG_NONE = "-";
+
     /**
-     * Empty / missing CSV → all languages allowed (backward compatible).
-     * Non-empty → only listed language ids.
+     * Missing CSV → all languages allowed (list never delivered).
+     * {@link #LANG_NONE} → every language OFF.
+     * Otherwise only listed language ids.
      */
     public static boolean isFeatureLanguageAllowed(
             @Nullable Context context, @NonNull String prefsKey) {
@@ -522,6 +546,7 @@ public final class DailyUpdatesConfigHelper {
         } catch (Exception ignored) {
         }
         if (TextUtils.isEmpty(csv)) return true;
+        if (LANG_NONE.equals(csv.trim())) return false;
         String[] parts = csv.split(",");
         for (String p : parts) {
             try {
@@ -537,10 +562,13 @@ public final class DailyUpdatesConfigHelper {
             @NonNull JSONObject o,
             @NonNull String jsonKey,
             @NonNull String prefsKey) {
+        if (!o.has(jsonKey) || o.isNull(jsonKey)) return;
         StringBuilder csv = new StringBuilder();
+        boolean sawList = false;
         try {
             Object raw = o.opt(jsonKey);
             if (raw instanceof JSONArray) {
+                sawList = true;
                 JSONArray langs = (JSONArray) raw;
                 for (int i = 0; i < langs.length(); i++) {
                     int id = splashNumberFromArray(langs, i);
@@ -549,6 +577,7 @@ public final class DailyUpdatesConfigHelper {
                     csv.append(id);
                 }
             } else if (raw instanceof java.util.Collection) {
+                sawList = true;
                 for (Object item : (java.util.Collection<?>) raw) {
                     int id = splashNumberFromObject(item);
                     if (id <= 0) continue;
@@ -558,7 +587,9 @@ public final class DailyUpdatesConfigHelper {
             }
         } catch (Exception ignored) {
         }
-        SharedPrefsData.putString(app, prefsKey, csv.toString(), Constants.PREF_NAME);
+        if (!sawList) return;
+        String stored = csv.length() == 0 ? LANG_NONE : csv.toString();
+        SharedPrefsData.putString(app, prefsKey, stored, Constants.PREF_NAME);
     }
 
     private static int splashNumberFromArray(@NonNull JSONArray arr, int index) {

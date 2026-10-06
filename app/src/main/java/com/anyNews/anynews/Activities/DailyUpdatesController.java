@@ -1066,7 +1066,7 @@ public final class DailyUpdatesController {
         if (rashi != null && DailyUpdatesConfigHelper.isRashiEnabled(host)) {
             visible.add(rashi);
         }
-        if (cricket != null && DailyUpdatesConfigHelper.isCricketEnabled(host)) {
+        if (cricket != null && DailyUpdatesConfigHelper.isCricketCardVisible(host)) {
             visible.add(cricket);
         }
 
@@ -1172,7 +1172,7 @@ public final class DailyUpdatesController {
         View cricketCard = root.findViewById(R.id.du_card_cricket_wrap);
         if (cricketCard != null) {
             cricketCard.setOnClickListener(v -> {
-                if (!DailyUpdatesConfigHelper.isCricketEnabled(host)) return;
+                if (!DailyUpdatesConfigHelper.isCricketCardVisible(host)) return;
                 if (callbacks != null) {
                     callbacks.openCricketFromDailyUpdates();
                 } else {

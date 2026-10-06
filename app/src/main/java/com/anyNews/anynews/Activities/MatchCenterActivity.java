@@ -69,6 +69,8 @@ public class MatchCenterActivity extends AppCompatActivity {
 
     private ActiveMatch match;
     private CricketMatchDetailResponse.Detail detail;
+    /** Set when detail failed so Scorecard does not stay on "Loading" forever. */
+    private String detailNote;
 
     private TextView tabLive, tabScorecard;
     private View tabIndicator;
@@ -139,7 +141,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         boolean fromDailyUpdates = getIntent() != null
                 && getIntent().getBooleanExtra(EXTRA_FROM_DAILY_UPDATES, false);
         if (!fromDailyUpdates
-                || !com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketEnabled(this)) {
+                || !com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketCardVisible(this)) {
             finish();
             return;
         }
@@ -187,7 +189,7 @@ public class MatchCenterActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (!com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketEnabled(this)) {
+        if (!com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketCardVisible(this)) {
             finish();
             return;
         }
@@ -310,20 +312,30 @@ public class MatchCenterActivity extends AppCompatActivity {
         nameView.setText(name);
         loadTeamFlag(flag, flagUrl, teamCode, name);
 
-        if (TextUtils.isEmpty(score)) {
+        String[] parts = splitScoreAndOvers(score, overs);
+        String cleanScore = parts[0];
+        String cleanOvers = parts[1];
+        scoreView.setEllipsize(null);
+        scoreView.setSingleLine(false);
+        scoreView.setMaxLines(2);
+        oversView.setEllipsize(null);
+        oversView.setSingleLine(true);
+        oversView.setMaxLines(1);
+
+        if (TextUtils.isEmpty(cleanScore)) {
             scoreView.setText("–");
             oversView.setVisibility(View.GONE);
             rrView.setVisibility(View.GONE);
             return;
         }
-        scoreView.setText(score);
-        if (TextUtils.isEmpty(overs)) {
+        scoreView.setText(cleanScore);
+        if (TextUtils.isEmpty(cleanOvers)) {
             oversView.setVisibility(View.GONE);
         } else {
             oversView.setVisibility(View.VISIBLE);
-            oversView.setText("(" + overs + ")");
+            oversView.setText("(" + cleanOvers + ")");
         }
-        String rr = runRate(score, overs);
+        String rr = runRate(cleanScore, cleanOvers);
         if (TextUtils.isEmpty(rr)) {
             rrView.setVisibility(View.GONE);
         } else {
@@ -423,6 +435,27 @@ public class MatchCenterActivity extends AppCompatActivity {
             return detail.getLive().getStatus_text();
         }
         return match != null ? match.getStatus_text() : "";
+    }
+
+    /**
+     * Keep runs/wickets and overs on separate lines. A combined "184/5(36.0)"
+     * is split so the overs are not squeezed into the last digit of the score.
+     */
+    private static String[] splitScoreAndOvers(String score, String overs) {
+        String s = score == null ? "" : score.trim();
+        String o = overs == null ? "" : overs.trim();
+        if (s.endsWith(")")) {
+            int open = s.lastIndexOf('(');
+            if (open > 0) {
+                String embedded = s.substring(open + 1, s.length() - 1).trim();
+                String head = s.substring(0, open).trim();
+                if (!head.isEmpty() && !embedded.isEmpty()) {
+                    if (o.isEmpty()) o = embedded;
+                    s = head;
+                }
+            }
+        }
+        return new String[] { s, o };
     }
 
     /** Derive run rate (runs per over) from a "44/1" score and a "21.2" over count. */
@@ -811,7 +844,15 @@ public class MatchCenterActivity extends AppCompatActivity {
             contentLive.setTranslationX(0f);
         }
         liveDynamic.removeAllViews();
-        if (detail == null) return;
+        if (detail == null) {
+            TextView waiting = new TextView(this);
+            waiting.setText(TextUtils.isEmpty(detailNote) ? "Loading live score…" : detailNote);
+            waiting.setTextColor(ContextCompat.getColor(this, R.color.cmp_text_secondary));
+            waiting.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            waiting.setPadding(0, dp(12), 0, dp(8));
+            liveDynamic.addView(waiting);
+            return;
+        }
 
         CricketMatchDetailResponse.Live live = detail.getLive();
         CricketMatchDetailResponse.Innings inn = currentInnings();
@@ -1481,7 +1522,7 @@ public class MatchCenterActivity extends AppCompatActivity {
 
         if (!any) {
             showEmptyFor("Scorecard", detail == null
-                    ? "Loading scorecard…"
+                    ? (TextUtils.isEmpty(detailNote) ? "Loading scorecard…" : detailNote)
                     : "The full batting & bowling scorecard will appear here once the match is under way.");
             return;
         }
@@ -2312,10 +2353,12 @@ public class MatchCenterActivity extends AppCompatActivity {
                 @Override
                 public void onResponse(@NonNull Call<CricketMatchDetailResponse> call,
                                        @NonNull Response<CricketMatchDetailResponse> response) {
-                    if (isFinishing() || response.body() == null) return;
-                    if (response.body().getSuccess() != null && response.body().getSuccess()
-                            && response.body().getData() != null) {
-                        detail = response.body().getData();
+                    if (isFinishing() || !scorePageVisible) return;
+                    CricketMatchDetailResponse body = response.body();
+                    if (body != null && body.getSuccess() != null && body.getSuccess()
+                            && body.getData() != null) {
+                        detail = body.getData();
+                        detailNote = null;
                         // First load of a finished match opens on Scorecard (which
                         // now carries the summary content). Live matches stay on Live.
                         if (!initialTabChosen) {
@@ -2328,12 +2371,19 @@ public class MatchCenterActivity extends AppCompatActivity {
                             }
                         }
                         renderCurrentTab();
+                        return;
+                    }
+                    if (detail == null) {
+                        detailNote = "Scorecard is not ready yet. It will refresh while this page is open.";
+                        renderCurrentTab();
                     }
                 }
 
                 @Override
                 public void onFailure(@NonNull Call<CricketMatchDetailResponse> call, @NonNull Throwable t) {
-                    // Transient — keep the last rendered detail.
+                    if (isFinishing() || !scorePageVisible || detail != null) return;
+                    detailNote = "Scorecard is not ready yet. It will refresh while this page is open.";
+                    renderCurrentTab();
                 }
             });
         } catch (Exception ignored) {

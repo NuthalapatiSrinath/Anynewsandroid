@@ -3482,7 +3482,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /** Daily Updates cricket card → existing Crex match page. Score polls start there. */
     private void openCrexFromDailyUpdates() {
-        if (!com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketEnabled(this)) {
+        if (!com.anyNews.anynews.Utils.DailyUpdatesConfigHelper.isCricketCardVisible(this)) {
             return;
         }
         try {

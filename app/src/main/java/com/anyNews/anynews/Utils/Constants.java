@@ -705,6 +705,11 @@ public class Constants {
     public static String DU_RASHI_ENABLED = "du_rashi_enabled";
     /** Cricket / Crex Daily Updates card (splash daily_updates.cricket_enabled). Default ON. */
     public static String DU_CRICKET_ENABLED = "du_cricket_enabled";
+    /**
+     * Old Cricket Live Hub match switch (splash daily_updates.cricket_match_on
+     * and session cricket_match_on). Default false until the server says a match is on.
+     */
+    public static String DU_CRICKET_MATCH_ON = "du_cricket_match_on";
     public static String DU_MANA_ZILLA_ENABLED = "du_mana_zilla_enabled";
     public static String DU_FLASH_NEWS_ENABLED = "du_flash_news_enabled";
     /** Stock Market row kill switch (splash daily_updates.stock_enabled). */
@@ -720,7 +725,7 @@ public class Constants {
     public static String DU_CARD_IMAGE_OFFSET_DP = "du_card_image_offset_dp";
     /** CSV of language ids allowed for Mana Zilla (default "3" = Telugu). */
     public static String DU_MANA_ZILLA_LANGUAGE_IDS = "du_mana_zilla_language_ids";
-    /** Per-feature language allow-lists (CSV). Empty = all languages ON. */
+    /** Per-feature language allow-lists (CSV). Empty = unset (all ON). "-" = every language OFF. */
     public static String DU_WEATHER_LANGUAGE_IDS = "du_weather_language_ids";
     public static String DU_FUEL_LANGUAGE_IDS = "du_fuel_language_ids";
     public static String DU_GOLD_LANGUAGE_IDS = "du_gold_language_ids";

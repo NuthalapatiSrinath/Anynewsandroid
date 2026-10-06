@@ -114,7 +114,7 @@ public final class DailyUpdatesSearchSuggest {
         if (DailyUpdatesConfigHelper.isRashiEnabled(context)) {
             all.add(new Match(titleRashi(lang), "rashi", null, DU_OPEN_RASHI));
         }
-        if (DailyUpdatesConfigHelper.isCricketEnabled(context)) {
+        if (DailyUpdatesConfigHelper.isCricketCardVisible(context)) {
             all.add(new Match(titleCricket(lang), "cricket", null, DU_OPEN_CRICKET));
         }
         if (DailyUpdatesConfigHelper.isStockEnabled(context)) {
