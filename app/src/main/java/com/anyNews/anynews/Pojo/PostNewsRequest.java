@@ -36,6 +36,10 @@ public class PostNewsRequest {
     @SerializedName("include_engagement")
     @Expose
     private Boolean includeEngagement;
+    /** Current app language so Pending/Articles match the profile articles tile. */
+    @SerializedName("language_id")
+    @Expose
+    private Integer languageId;
 
     public Integer getDraftId() {
         return draftId;
@@ -115,5 +119,9 @@ public class PostNewsRequest {
 
     public void setIncludeEngagement(Boolean includeEngagement) {
         this.includeEngagement = includeEngagement;
+    }
+
+    public void setLanguageId(Integer languageId) {
+        this.languageId = languageId;
     }
 }

@@ -35,6 +35,9 @@ public class UserProfileRequest implements Serializable {
         @SerializedName("draft_id")
         @Expose
         private Integer draftId;
+        @SerializedName("language_id")
+        @Expose
+        private Integer languageId;
 
     public String getEmail() {
         return email;
@@ -55,6 +58,10 @@ public class UserProfileRequest implements Serializable {
 
     public void setDraftId(Integer draftId) {
         this.draftId = draftId;
+    }
+
+    public void setLanguageId(Integer languageId) {
+        this.languageId = languageId;
     }
         public String getApiKey() {
             return apiKey;

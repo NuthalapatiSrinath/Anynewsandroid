@@ -54,6 +54,7 @@ public final class ReporterProfilePrefetcher {
             } catch (Exception ignored) {
             }
             requestModel.setDraftId(SharedPrefsData.getInt(app, Constants.DraftID, Constants.PREF_NAME));
+            requestModel.setLanguageId(SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME));
             String jsonString = GSON.toJson(requestModel);
             String encrpt = MyUtils.encrypt(jsonString);
             EncritonRequestData body = new EncritonRequestData();

@@ -69,6 +69,7 @@ import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.ReporterPostGateHelper;
+import com.anyNews.anynews.Utils.ReporterProfileCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
 import com.canhub.cropper.CropImageContract;
@@ -1308,6 +1309,7 @@ public class PostArticles extends AppCompatActivity {
                     SingleArticleResponse languageModel = gsonObj.fromJson(encrpt_data, SingleArticleResponse.class);
 
                     if (languageModel.getSuccess()) {
+                        ReporterProfileCache.markStale(PostArticles.this);
                         Toast.makeText(PostArticles.this, "Your Article has been updated and resubmitted.", Toast.LENGTH_SHORT).show();
                         clearDraftImageState();
                         Intent intent = new Intent(PostArticles.this, HomePage.class);
@@ -1377,6 +1379,7 @@ public class PostArticles extends AppCompatActivity {
                 SingleArticleResponse languageModel = gsonObj.fromJson(encrpt_data, SingleArticleResponse.class);
 
                 if (languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess())) {
+                    ReporterProfileCache.markStale(PostArticles.this);
                     Toast.makeText(PostArticles.this, "Your Article Posted Succesfully.", Toast.LENGTH_SHORT).show();
                     clearDraftImageState();
                     Intent intent = new Intent(PostArticles.this, HomePage.class);

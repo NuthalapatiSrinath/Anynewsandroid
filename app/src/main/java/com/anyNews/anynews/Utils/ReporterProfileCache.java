@@ -64,6 +64,11 @@ public final class ReporterProfileCache {
                     Constants.PROFILE_CACHE_FETCHED_AT,
                     System.currentTimeMillis(),
                     Constants.PREF_NAME);
+            SharedPrefsData.putInt(
+                    app,
+                    Constants.PROFILE_CACHE_ARTICLES_LANG,
+                    SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME),
+                    Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
         try {
@@ -83,6 +88,12 @@ public final class ReporterProfileCache {
                     SharedPrefsData.getLong(
                             app, Constants.PROFILE_CACHE_FETCHED_AT, Constants.PREF_NAME);
             if (at <= 0L) return false;
+            int cachedLang =
+                    SharedPrefsData.getInt(
+                            app, Constants.PROFILE_CACHE_ARTICLES_LANG, Constants.PREF_NAME);
+            int currentLang =
+                    SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+            if (currentLang > 0 && cachedLang != currentLang) return false;
             return System.currentTimeMillis() - at < SOFT_REFRESH_TTL_MS;
         } catch (Exception e) {
             return false;
@@ -136,6 +147,25 @@ public final class ReporterProfileCache {
         }
     }
 
+    /**
+     * Next profile open must refetch. A new post changes the articles tile,
+     * and the 3-minute soft-refresh would otherwise keep the old number.
+     */
+    public static void markStale(Context context) {
+        memoryKey = null;
+        memoryJson = null;
+        memoryParsed = null;
+        if (context == null) return;
+        Context app = context.getApplicationContext();
+        try {
+            SharedPrefsData.putLong(
+                    app, Constants.PROFILE_CACHE_FETCHED_AT, 0L, Constants.PREF_NAME);
+            SharedPrefsData.putInt(
+                    app, Constants.PROFILE_CACHE_ARTICLES_LANG, 0, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
     public static void clear(Context context) {
         memoryKey = null;
         memoryJson = null;
@@ -150,6 +180,7 @@ public final class ReporterProfileCache {
             SharedPrefsData.putString(app, Constants.PROFILE_CACHE, "", Constants.PREF_NAME);
             SharedPrefsData.putString(app, Constants.PROFILE_CACHE_KEY, "", Constants.PREF_NAME);
             SharedPrefsData.putLong(app, Constants.PROFILE_CACHE_FETCHED_AT, 0L, Constants.PREF_NAME);
+            SharedPrefsData.putInt(app, Constants.PROFILE_CACHE_ARTICLES_LANG, 0, Constants.PREF_NAME);
             // Also clear current identity key.
             SharedPrefsData.putString(app, cacheKey(app), "", Constants.PREF_NAME);
         } catch (Exception ignored) {

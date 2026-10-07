@@ -2613,6 +2613,8 @@ public class newProfileDetails extends AppCompatActivity {
             requestModel.setEmail(prefShare.getEmailId());
         }
         requestModel.setDraftId(SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME));
+        requestModel.setLanguageId(SharedPrefsData.getInt(
+                getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
         showLog("API REQUEST E" + jsonString.toString());

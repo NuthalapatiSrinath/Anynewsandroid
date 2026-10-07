@@ -67,6 +67,7 @@ import com.anyNews.anynews.Utils.CropHelper;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.ReporterPostGateHelper;
+import com.anyNews.anynews.Utils.ReporterProfileCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
 import com.anyNews.anynews.models.SearchModel;
@@ -502,6 +503,7 @@ public class FullPost extends AppCompatActivity implements  AdapterView.OnItemSe
 
                 showLog(" VVVVVVVVV VVV " + encrpt_data);
                 if (languageModel != null && Boolean.TRUE.equals(languageModel.getSuccess())) {
+                    ReporterProfileCache.markStale(FullPost.this);
                     Toast.makeText(FullPost.this, "Your Full Image Posted Successfully.", Toast.LENGTH_SHORT).show();
                     Intent intent = new Intent(FullPost.this, HomePage.class);
                     startActivity(intent);

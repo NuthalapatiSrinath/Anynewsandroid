@@ -815,6 +815,8 @@ public class PostArticleStatus extends AppCompatActivity {
         requestModel.setGroupByWeek(true);
         // Metric screens need likes/comments/views; status tabs stay lean.
         requestModel.setIncludeEngagement(isMetricMode());
+        requestModel.setLanguageId(SharedPrefsData.getInt(
+                getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME));
         String start = filterStart;
         String floor = ReporterPaymentAppConfig.articlesFromDate(this);
         if (!TextUtils.isEmpty(floor)

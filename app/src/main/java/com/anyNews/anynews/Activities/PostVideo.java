@@ -74,6 +74,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DeferredMediaPermissions;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.ReporterPostGateHelper;
+import com.anyNews.anynews.Utils.ReporterProfileCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.holder.GpsTracker;
 import com.bumptech.glide.Glide;
@@ -1271,6 +1272,7 @@ public class PostVideo extends AppCompatActivity {
                     SingleArticleResponse languageModel = gsonObj.fromJson(encrpt_data, SingleArticleResponse.class);
 
                     if (languageModel != null && languageModel.getSuccess()) {
+                        ReporterProfileCache.markStale(PostVideo.this);
                         Toast.makeText(PostVideo.this, "Your Article Posted Successfully.", Toast.LENGTH_SHORT).show();
                         Intent intent = new Intent(PostVideo.this, HomePage.class);
                         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
