@@ -1643,24 +1643,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             final String duPage = DailyUpdatesShareLinks.canonicalKey(duRedirect);
             if (duPage != null) {
-                int duLang = -1;
-                try {
-                    if (getIntent() != null && getIntent().hasExtra("DU_REDIRECT_LANG")) {
-                        duLang = getIntent().getIntExtra("DU_REDIRECT_LANG", -1);
-                    }
-                } catch (Exception ignored) {
-                }
-                if (duLang < 0) {
-                    duLang = SharedPrefsData.getInt(
-                            getApplicationContext(), Constants.PENDING_SHARE_DU_LANG, Constants.PREF_NAME);
-                }
-                final int shareLang = duLang;
+                SharedPrefsData.putInt(getApplicationContext(),
+                        Constants.PENDING_SHARE_DU_LANG, -1, Constants.PREF_NAME);
                 SharedPrefsData.putString(
                         getApplicationContext(), Constants.PENDING_SHARE_DU, "", Constants.PREF_NAME);
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                     try {
                         startActivity(DailyUpdatesShareLinks.openIntent(
-                                HomePage.this, duPage, shareLang));
+                                HomePage.this, duPage, -1));
                     } catch (Exception e) {
                         showLog("daily updates share open failed: " + e.getMessage());
                     }

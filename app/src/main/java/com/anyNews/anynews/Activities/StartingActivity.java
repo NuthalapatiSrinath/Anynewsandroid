@@ -395,7 +395,6 @@ public class StartingActivity extends AppCompatActivity {
             if (!isFcmPushIntentUri(data)) {
                 extractData(data);
                 absorbSharePageExtra(intent);
-                absorbDuLangExtra(intent);
                 maybeResolveLegacyPageLink(data);
                 maybeResolveShareShortCode(data);
             }
@@ -751,7 +750,8 @@ public class StartingActivity extends AppCompatActivity {
             String duPage = DailyUpdatesShareLinks.pageFromUri(uri);
             if (duPage != null && !duPage.isEmpty()) {
                 duPageKey = duPage;
-                duShareLang = DailyUpdatesShareLinks.langFromUri(uri);
+                // The link has no language id. This phone keeps its own language.
+                duShareLang = -1;
                 jobId1 = null;
                 articleId1 = null;
                 SharedPrefsData.putString(getApplicationContext(),
@@ -960,30 +960,6 @@ public class StartingActivity extends AppCompatActivity {
      * or {@code /p/{code}}, or null when this URI is already a numeric /p/{id}
      * (or not a share host).
      */
-    /**
-     * Chrome sometimes drops {@code ?lang=} before {@code #Intent}. The landing
-     * also sends {@code S.lang}. Query on the URI wins when it was already read.
-     */
-    private void absorbDuLangExtra(@Nullable Intent intent) {
-        if (duPageKey == null || duPageKey.isEmpty() || duShareLang >= 0 || intent == null) {
-            return;
-        }
-        int lang = -1;
-        try {
-            if (intent.getExtras() != null && intent.getExtras().get("lang") != null) {
-                String raw = String.valueOf(intent.getExtras().get("lang")).trim();
-                lang = Integer.parseInt(raw.replaceAll("[^0-9]", ""));
-            }
-        } catch (Exception ignored) {
-        }
-        if (lang < 0 || lang > 10) {
-            return;
-        }
-        duShareLang = lang;
-        SharedPrefsData.putInt(getApplicationContext(),
-                Constants.PENDING_SHARE_DU_LANG, duShareLang, Constants.PREF_NAME);
-    }
-
     /** Warm or cold handoff: open the Daily Updates screen, not the news feed. */
     private void openDailyUpdatesSharePage() {
         if (duPageKey == null || duPageKey.isEmpty()) {
@@ -1304,7 +1280,6 @@ public class StartingActivity extends AppCompatActivity {
             if (!isFcmPushIntentUri(data)) {
                 extractData(data);
                 absorbSharePageExtra(intent);
-                absorbDuLangExtra(intent);
                 maybeResolveLegacyPageLink(data);
                 // Same magazine already resolved: deliver now so ?page= moves the
                 // open pager. A different code must not reuse the previous post id.

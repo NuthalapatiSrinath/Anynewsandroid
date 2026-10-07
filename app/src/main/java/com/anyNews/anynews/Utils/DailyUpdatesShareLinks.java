@@ -23,7 +23,8 @@ import java.util.Locale;
  * <p>Built on the phone from the Admin share domain already saved at splash
  * ({@link SharePublicBaseHelper}). No extra network call. Article short codes
  * name a post id, so they cannot point at these screens — the path is
- * {@code {shareBase}/du/{page}?lang={LanguageID}}.
+ * {@code {shareBase}/du/{page}}. The link does not carry a language id.
+ * The phone that opens it uses the language already selected there.
  */
 public final class DailyUpdatesShareLinks {
 
@@ -127,18 +128,7 @@ public final class DailyUpdatesShareLinks {
             key = "rashi";
         }
         String base = SharePublicBaseHelper.getBaseUrl(context);
-        int lang = 0;
-        if (context != null) {
-            try {
-                lang = SharedPrefsData.getInt(
-                        context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-            } catch (Exception ignored) {
-            }
-        }
-        if (lang < 0) {
-            lang = 0;
-        }
-        return base + "/du/" + key + "?lang=" + lang;
+        return base + "/du/" + key;
     }
 
     @NonNull

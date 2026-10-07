@@ -41,6 +41,7 @@ import com.anyNews.anynews.Utils.DailyUpdatesShareLanguage;
 import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FuelLabels;
+import com.anyNews.anynews.Utils.FuelPlaceNames;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
 import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -185,6 +186,27 @@ public class FuelDetailActivity extends AppCompatActivity {
         View hero = findViewById(R.id.fuel_hero_image);
         if (hero == null || hero.getParent() == null) return;
         View parent = (View) hero.getParent();
+        // The station photo must not use its own height. The price block sets
+        // the card size; the city list sits under that card.
+        if (hero instanceof android.widget.ImageView) {
+            android.widget.ImageView iv = (android.widget.ImageView) hero;
+            iv.setAdjustViewBounds(false);
+            iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        }
+        ViewGroup.LayoutParams heroLp = hero.getLayoutParams();
+        if (heroLp != null) {
+            heroLp.height = 0;
+            hero.setLayoutParams(heroLp);
+        }
+        parent.addOnLayoutChangeListener(
+                (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                    int h = v.getHeight();
+                    ViewGroup.LayoutParams lp = hero.getLayoutParams();
+                    if (h > 0 && lp != null && lp.height != h) {
+                        lp.height = h;
+                        hero.setLayoutParams(lp);
+                    }
+                });
         final float radius = 16f * getResources().getDisplayMetrics().density;
         parent.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -1107,54 +1129,59 @@ public class FuelDetailActivity extends AppCompatActivity {
     }
 
     /**
-     * District name in the selected language when the fuel city is matched to
-     * a location-master district. Otherwise the source city name.
+     * City in the selected language. Location-master wins when it is already
+     * that script. Otherwise the English source is mapped into that script.
+     * English and another language's script are not shown.
      */
     @NonNull
     private String displayCityName(@NonNull JSONObject row) {
+        int lang = languageId();
         int stateId = row.optInt("state_id", 0);
         int distId = row.optInt("district_id", 0);
         if (stateId > 0 && distId > 0) {
             String master = districtNamesByKey.get(stateId + ":" + distId);
-            if (nameOk(master)) return master.trim();
+            if (FuelPlaceNames.matchesLanguage(master, lang)) return master.trim();
         }
         if (distId > 0) {
             String saved = savedDistrictLabel(distId);
-            if (nameOk(saved)) return saved.trim();
+            if (FuelPlaceNames.matchesLanguage(saved, lang)) return saved.trim();
         }
-        String city = row.optString("city", "");
-        if (nameOk(city)) return city.trim();
+        String written = row.optString("city", "");
+        if (FuelPlaceNames.matchesLanguage(written, lang)) return written.trim();
         String en = row.optString("city_en", "");
-        if (!en.isEmpty()) return en.trim();
-        return city;
+        if (en.isEmpty()) en = written;
+        String mapped = FuelPlaceNames.inLanguage(en, lang);
+        if (!mapped.isEmpty()) return mapped;
+        return en;
     }
 
     /**
-     * State name for the selected language. Master name wins. A native-script
-     * label is used only when it is that language. Otherwise the English source
-     * name — never another language's script.
+     * State name in the selected language. Andhra Pradesh and Telangana use
+     * the language labels. Every other state is mapped into that same script.
      */
     @NonNull
     private String displayState(@NonNull JSONObject row) {
+        int lang = languageId();
         int stateId = row.optInt("state_id", 0);
         if (stateId > 0) {
             String master = stateNamesById.get(stateId);
-            if (nameOk(master)) return master.trim();
+            if (FuelPlaceNames.matchesLanguage(master, lang)) return master.trim();
         }
         String key = row.optString("state_key", "");
         if (KEY_TG.equals(key)) {
             String labeled = FuelLabels.stateTelangana(this);
-            if (nameOk(labeled)) return labeled;
+            if (FuelPlaceNames.matchesLanguage(labeled, lang)) return labeled;
         } else if (KEY_AP.equals(key)) {
             String labeled = FuelLabels.stateAndhra(this);
-            if (nameOk(labeled)) return labeled;
+            if (FuelPlaceNames.matchesLanguage(labeled, lang)) return labeled;
         }
-        String nativeName = row.optString("state_native", "");
-        if (nameOk(nativeName)) return nativeName.trim();
         String en = row.optString("state", "");
         if (en.isEmpty()) en = row.optString("source_state", "");
-        if (!en.isEmpty()) return en.trim();
-        return nativeName.isEmpty() ? key : nativeName;
+        String mapped = FuelPlaceNames.inLanguage(en, lang);
+        if (!mapped.isEmpty()) return mapped;
+        if (KEY_TG.equals(key)) return FuelLabels.stateTelangana(this);
+        if (KEY_AP.equals(key)) return FuelLabels.stateAndhra(this);
+        return en;
     }
 
     @Nullable
@@ -1200,9 +1227,11 @@ public class FuelDetailActivity extends AppCompatActivity {
         if (f != null) {
             String s = LocalUpdatesConfigHelper.optString(f, "state_filter", "");
             s = s.replace("▾", "").replace("▼", "").trim();
-            if (nameOk(s)) return s;
+            String mapped = FuelPlaceNames.inLanguage(s, languageId());
+            if (FuelPlaceNames.matchesLanguage(mapped, languageId())) return mapped;
             s = LocalUpdatesConfigHelper.optString(f, "location_region", "");
-            if (nameOk(s)) return s;
+            mapped = FuelPlaceNames.inLanguage(s, languageId());
+            if (FuelPlaceNames.matchesLanguage(mapped, languageId())) return mapped;
         }
         return FuelLabels.stateAndhra(this);
     }
