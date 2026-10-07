@@ -16786,7 +16786,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     + " skip=" + skip);
         }
 
-        attachSpecialResumeCursor(requestModel);
+        attachFeedResumeCursor(requestModel);
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
@@ -17625,14 +17625,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Special load-more: the Redis rank ({@code actual_skip}) shifts when new
-     * posts are published, so the same ids come back and {@link #addUniqueArticles}
-     * replaces them in place. Send the ids already on screen, and the oldest
-     * card's publish time, so the next page is posts after that card.
+     * Load-more for every flip feed (News, Special, Local, Category, Video,
+     * Flash). The Redis rank ({@code skip} / {@code actual_skip}) shifts when
+     * new posts are published, so the same ids come back and
+     * {@link #addUniqueArticles} replaces them in place. Send the ids already
+     * on screen, and the oldest card's publish time, so the next page is posts
+     * after that card.
      */
-    private void attachSpecialResumeCursor(ListAllArticlesRequest requestModel) {
-        if (requestModel == null || !requestModel.isSpecial_posts()) return;
-        if (!isSpecialFeedMode()) return;
+    private void attachFeedResumeCursor(ListAllArticlesRequest requestModel) {
+        if (requestModel == null) return;
+        // Search is a finite deck. Do not turn it into a feed cursor.
+        if (searchFeedActive) return;
         if (skip <= 0 && actual_skip <= 0) return;
         if (list == null || list.isEmpty()) return;
         java.util.ArrayList<Long> seen = new java.util.ArrayList<>();
@@ -17660,7 +17663,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (anchorTime >= 1_000_000_000_000L) {
             requestModel.setLastPostId(anchorTime);
         }
-        String line = "special request skip=" + skip
+        String mode = isSpecialFeedMode() ? "special"
+                : isVideoFeedMode() ? "flash"
+                : category_id == -1 ? "local"
+                : category_id > 0 ? "category"
+                : "news";
+        String line = mode + " request skip=" + skip
                 + " actual_skip=" + actual_skip
                 + " afterPost=" + anchorId
                 + " afterTime=" + anchorTime
@@ -18497,25 +18505,29 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         // one leaves specialsBeforeAppend == specials now.
                         final int specialsNow = isSpecialFeedMode()
                                 ? countFullSpecialPosts(list) : 0;
-                        final boolean addedSpecialPost = !isSpecialFeedMode()
-                                || (page0Replace ? specialsNow > 0
-                                : specialsNow > specialsBeforeAppend);
-                        final boolean specialCursorAdvanced = !isSpecialFeedMode()
-                                || addedSpecialPost
+                        // Special counts full cards after the half-post strip.
+                        // Every other flip feed counts rows actually appended.
+                        // Replacements do not grow the deck, so they are not progress.
+                        final boolean addedFeedPost = isSpecialFeedMode()
+                                ? (page0Replace ? specialsNow > 0
+                                : specialsNow > specialsBeforeAppend)
+                                : addedRows > 0;
+                        final boolean feedCursorAdvanced = addedFeedPost
                                 || actual_skip > cursorActualBefore
-                                || (cursorActualBefore <= 0 && actual_skip <= 0
-                                        && skip > cursorSkipBefore);
-                        if (!fromCache && isSpecialFeedMode() && !addedSpecialPost) {
-                            showLog("special page added no new post specials "
-                                    + specialsBeforeAppend + "->" + specialsNow
+                                || skip > cursorSkipBefore;
+                        if (!fromCache && !addedFeedPost) {
+                            showLog("feed page added no new post"
+                                    + (isSpecialFeedMode()
+                                    ? " specials " + specialsBeforeAppend + "->" + specialsNow
+                                    : " added=" + addedRows)
                                     + " skip " + cursorSkipBefore + "->" + skip
                                     + " actual_skip " + cursorActualBefore + "->" + actual_skip
-                                    + " advanced=" + specialCursorAdvanced
+                                    + " advanced=" + feedCursorAdvanced
                                     + " list=" + (list != null ? list.size() : -1));
                         }
                         // A live page that actually added a post clears the empty streak.
-                        // A duplicate / half page must not — otherwise the walk never caps.
-                        if (!fromCache && addedSpecialPost && list != null
+                        // A duplicate page must not — otherwise the walk never caps.
+                        if (!fromCache && addedFeedPost && list != null
                                 && ReadArticleStore.countPaintableArticles(list) > 0) {
                             onlineNewsAllReadSkipStreak = 0;
                         }
@@ -18536,8 +18548,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             // Post anyway; the runnable bails if a newer request started.
                             // Only while the finger is moving — an idle Flash open must
                             // not walk the whole archive. A non-empty page is not the end.
-                            if (fingerMoving
+                            // A page of posts already on screen is not the end.
+                            // Stop when that payload added nothing and the cursor
+                            // did not move (the same window again).
+                            boolean flashAtEnd = false;
+                            try {
+                                int seat = feedPagingSeat();
+                                flashAtEnd = seat >= Math.max(0, n - 3)
+                                        || positionx >= Math.max(0, n - 3);
+                            } catch (Exception ignored) {
+                            }
+                            final boolean flashNoNewAtEnd = !addedFeedPost
+                                    && feedCursorAdvanced
                                     && pageHadArticles
+                                    && flashAtEnd;
+                            if ((fingerMoving || flashNoNewAtEnd)
+                                    && pageHadArticles
+                                    && feedCursorAdvanced
                                     && dummyResponse == null
                                     && isDeviceOnline()) {
                                 final int prefetchAt = requestPostition;
@@ -18585,28 +18612,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             } catch (Exception ignored) {
                             }
                             // Fast fling still prefetches the next skip (4d24097).
-                            // A Special page that added no full post must also ask
-                            // for the following skip while the finger is at the end.
-                            // Stop when that payload is empty (handled above) or the
-                            // special cursor did not advance (same window again).
-                            final boolean specialNoNewAtEnd = isSpecialFeedMode()
-                                    && !addedSpecialPost
-                                    && specialCursorAdvanced
+                            // A page that added no new post must also ask for the
+                            // following cursor while the finger is at the end.
+                            // Stop when that payload is empty (handled above) or
+                            // the cursor did not advance (same window again).
+                            final boolean noNewAtEnd = !addedFeedPost
+                                    && feedCursorAdvanced
                                     && pageHadArticles
                                     && atEnd;
                             final boolean fastFlingPrefetch = fingerMoving
                                     && pageHadArticles
-                                    && !(isSpecialFeedMode()
-                                            && !addedSpecialPost
-                                            && !specialCursorAdvanced);
-                            if ((fastFlingPrefetch || specialNoNewAtEnd)
+                                    && feedCursorAdvanced;
+                            if ((fastFlingPrefetch || noNewAtEnd)
                                     && dummyResponse == null
                                     && isDeviceOnline()) {
                                 final int prefetchAt = requestPostition;
                                 final boolean specialAtParse = specialNow;
                                 showLog((category_id == -1 ? "local" : specialAtParse
-                                        ? "special" : "news")
-                                        + (specialNoNewAtEnd && !fastFlingPrefetch
+                                        ? "special" : category_id > 0 ? "category" : "news")
+                                        + (noNewAtEnd && !fastFlingPrefetch
                                                 ? " no-new-post next skip"
                                                 : " feed prefetch")
                                         + " at pos=" + prefetchAt
