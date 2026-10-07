@@ -191,11 +191,12 @@
                                 android:orientation="vertical">
 
                                 <TextView
+                                    android:id="@+id/fuel_updated_caption"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="చివరి నవీకరణ"
                                     android:textColor="#BFFFFFFF"
-                                    android:textSize="9sp" />
+                                    android:textSize="9sp"
+                                    tools:text="Last updated" />
 
                                 <TextView
                                     android:id="@+id/fuel_updated"
@@ -241,12 +242,13 @@
                                         android:tint="#FF34D399" />
 
                                     <TextView
+                                        android:id="@+id/fuel_petrol_caption"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="పెట్రోల్"
                                         android:textColor="#FF34D399"
                                         android:textSize="11sp"
-                                        android:textStyle="bold" />
+                                        android:textStyle="bold"
+                                        tools:text="Petrol" />
                                 </LinearLayout>
 
                                 <TextView
@@ -293,12 +295,13 @@
                                         android:tint="#FF60A5FA" />
 
                                     <TextView
+                                        android:id="@+id/fuel_diesel_caption"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="డీజిల్"
                                         android:textColor="#FF60A5FA"
                                         android:textSize="11sp"
-                                        android:textStyle="bold" />
+                                        android:textStyle="bold"
+                                        tools:text="Diesel" />
                                 </LinearLayout>
 
                                 <TextView
@@ -435,38 +438,42 @@
                         android:paddingBottom="4dp">
 
                         <TextView
+                            android:id="@+id/fuel_col_city"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1.2"
-                            android:text="నగరం"
                             android:textColor="#FF94A3B8"
-                            android:textSize="9sp" />
+                            android:textSize="9sp"
+                            tools:text="City" />
 
                         <TextView
+                            android:id="@+id/fuel_col_petrol"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:paddingStart="4dp"
                             android:paddingEnd="4dp"
-                            android:text="పెట్రోల్ (₹/L)"
                             android:textColor="#FF34D399"
-                            android:textSize="9sp" />
+                            android:textSize="9sp"
+                            tools:text="Petrol (₹/L)" />
 
                         <TextView
+                            android:id="@+id/fuel_col_diesel"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:paddingStart="4dp"
                             android:paddingEnd="4dp"
-                            android:text="డీజిల్ (₹/L)"
                             android:textColor="#FF60A5FA"
-                            android:textSize="9sp" />
+                            android:textSize="9sp"
+                            tools:text="Diesel (₹/L)" />
 
                         <TextView
+                            android:id="@+id/fuel_col_change"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:paddingStart="4dp"
-                            android:text="మార్పు"
                             android:textColor="#FF94A3B8"
-                            android:textSize="9sp" />
+                            android:textSize="9sp"
+                            tools:text="Change" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -482,71 +489,10 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:textColor="#FF64748B"
-                    android:textSize="9sp" />
+                    android:textSize="9sp"
+                    android:visibility="gone" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_local_update_card"
-                    android:orientation="vertical"
-                    android:padding="10dp">
-
-                    <RelativeLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content">
-
-                        <TextView
-                            android:id="@+id/fuel_history_title"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_alignParentStart="true"
-                            android:textColor="#FFFFFFFF"
-                            android:textSize="12sp"
-                            android:textStyle="bold"
-                            tools:text="ధరల చరిత్ర (7 రోజులు)" />
-
-                        <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_alignParentEnd="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="● పెట్రోల్"
-                                android:textColor="#FF34D399"
-                                android:textSize="9sp" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:text="● డీజిల్"
-                                android:textColor="#FF60A5FA"
-                                android:textSize="9sp" />
-                        </LinearLayout>
-                    </RelativeLayout>
-
-                    <com.anyNews.anynews.Ui.FuelHistoryChartView
-                        android:id="@+id/fuel_history_chart"
-                        android:layout_width="match_parent"
-                        android:layout_height="168dp"
-                        android:layout_marginTop="6dp" />
-
-                    <TextView
-                        android:id="@+id/fuel_history_note"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:textColor="#FF64748B"
-                        android:textSize="9sp"
-                        tools:text="పూర్తి 7 రోజుల చరిత్ర అందుబాటులో లేదు" />
-                </LinearLayout>
-
-                <!-- Promo — alert / Set Alert intentionally omitted -->
+                <!-- Promo — today's-rate chart removed; alert / Set Alert omitted -->
                 <LinearLayout
                     android:id="@+id/fuel_promo_row"
                     android:layout_width="match_parent"

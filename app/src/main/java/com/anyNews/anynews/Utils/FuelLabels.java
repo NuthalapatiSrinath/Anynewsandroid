@@ -104,6 +104,55 @@ public final class FuelLabels {
     }
 
     @NonNull
+    public static String lastUpdated(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "അവസാന അപ്ഡേറ്റ്";
+            case 2: return "अंतिम अपडेट";
+            case 3: return "చివరి నవీకరణ";
+            case 4: return "கடைசி புதுப்பிப்பு";
+            case 5: return "ಕೊನೆಯ ನವೀಕರಣ";
+            case 6: return "ଶେଷ ଅପଡେଟ୍";
+            default: return "Last updated";
+        }
+    }
+
+    @NonNull
+    public static String today(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "ഇന്ന്";
+            case 2: return "आज";
+            case 3: return "ఈరోజు";
+            case 4: return "இன்று";
+            case 5: return "ಇಂದು";
+            case 6: return "ଆଜି";
+            default: return "Today";
+        }
+    }
+
+    @NonNull
+    public static String changeColumn(@Nullable Context c) {
+        switch (lang(c)) {
+            case 1: return "മാറ്റം";
+            case 2: return "बदलाव";
+            case 3: return "మార్పు";
+            case 4: return "மாற்றம்";
+            case 5: return "ಬದಲಾವಣೆ";
+            case 6: return "ପରିବର୍ତ୍ତନ";
+            default: return "Change";
+        }
+    }
+
+    @NonNull
+    public static String petrolColumn(@Nullable Context c) {
+        return DailyUpdatesLabels.petrol(c) + " (₹/L)";
+    }
+
+    @NonNull
+    public static String dieselColumn(@Nullable Context c) {
+        return DailyUpdatesLabels.diesel(c) + " (₹/L)";
+    }
+
+    @NonNull
     public static String perLiter(@Nullable Context c) {
         switch (lang(c)) {
             case 1: return " / ലീറ്റർ";

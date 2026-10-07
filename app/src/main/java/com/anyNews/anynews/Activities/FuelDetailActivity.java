@@ -13,6 +13,7 @@ import android.view.ViewOutlineProvider;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -28,24 +29,50 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import com.anyNews.anynews.Pojo.EncreptionRequest;
+import com.anyNews.anynews.Pojo.EncritonRequestData;
+import com.anyNews.anynews.Pojo.LanguageSelectionRequest;
 import com.anyNews.anynews.R;
-import com.anyNews.anynews.Ui.FuelHistoryChartView;
+import com.anyNews.anynews.Services.APIService;
+import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DailyUpdatesLabels;
+import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FuelLabels;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
+import com.anyNews.anynews.Utils.SelectionListCache;
 import com.anyNews.anynews.Utils.SharedPrefsData;
+import com.anyNews.anynews.models.DistricsModel;
+import com.anyNews.anynews.models.StatesModel;
 import com.bumptech.glide.Glide;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+import static com.anyNews.anynews.Utils.MyUtils.decrypt;
+import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 /**
  * Fuel prices detail — splash {@code root_settings.fuel}.
  * State / city pickers refresh hero + city table from stored {@code places}
  * (or legacy {@code by_state} when that array is absent). No third-party call.
  * Promo copy is derived from today-vs-yesterday deltas (not static admin strings).
- * Chart uses real yesterday→today points only (source has no 7-day series).
+ * Place names come from the location master for the selected language.
  */
 public class FuelDetailActivity extends AppCompatActivity {
 
@@ -54,10 +81,23 @@ public class FuelDetailActivity extends AppCompatActivity {
 
     @Nullable private static WeakReference<FuelDetailActivity> openRef;
 
+    private static final Pattern CLOCK = Pattern.compile("(\\d{1,2}:\\d{2}\\s*[APap][Mm])");
+
     /** Working view of fuel JSON for the selected state (mutated on switch). */
     @Nullable private JSONObject activeFuel;
     @NonNull private String selectedStateKey = KEY_AP;
     @Nullable private String selectedCity;
+    private int selectedDistrictId;
+    @Nullable private String selectedCityEn;
+
+    /** Location-master names for {@link Constants#LanguageID}, keyed by state id. */
+    private final Map<Integer, String> stateNamesById = new HashMap<>();
+    /** {@code stateId:districtId} → name in the selected language. */
+    private final Map<String, String> districtNamesByKey = new HashMap<>();
+    private final Set<Integer> districtFetchStarted = new HashSet<>();
+    private boolean statesFetchStarted;
+    /** True after the user taps a state in this screen. Otherwise prefs win. */
+    private boolean statePickedInSession;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -72,6 +112,7 @@ public class FuelDetailActivity extends AppCompatActivity {
         clipHero();
         JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
         if (root == null) root = new JSONObject();
+        applyNameMaps();
         selectedStateKey = resolveInitialStateKey(root);
         selectedCity = resolveInitialCity(root, selectedStateKey);
         if (TextUtils.isEmpty(selectedCity)) {
@@ -80,6 +121,7 @@ public class FuelDetailActivity extends AppCompatActivity {
         activeFuel = overlayState(root, selectedStateKey);
         bindUi(activeFuel);
         wireClicks();
+        ensureLocationNames();
     }
 
     @Override
@@ -152,20 +194,13 @@ public class FuelDetailActivity extends AppCompatActivity {
 
     private void bindUi(@Nullable JSONObject f) {
         if (f == null) f = new JSONObject();
-        setText(R.id.fuel_top_title, LocalUpdatesConfigHelper.optString(f, "header_title",
-                getString(R.string.fuel_title_default)));
-        String headerSub = LocalUpdatesConfigHelper.optString(f, "header_subtitle", "");
-        if (headerSub.isEmpty() || FuelLabels.looksLikeTeluguChrome(headerSub)) {
-            headerSub = FuelLabels.subtitle(this);
-        }
-        setText(R.id.fuel_top_subtitle, headerSub);
-
+        bindChrome();
         String stateLabel = stateLabelForKey(selectedStateKey, f);
         setText(R.id.fuel_location, stateLabel);
         View regionView = findViewById(R.id.fuel_region);
         if (regionView != null) regionView.setVisibility(View.GONE);
 
-        setText(R.id.fuel_updated, LocalUpdatesConfigHelper.optString(f, "last_updated", "—"));
+        setText(R.id.fuel_updated, localizedUpdated(f));
 
         double petrol = positiveOr(LocalUpdatesConfigHelper.optNumber(f, "petrol_price", 0), 0);
         double diesel = positiveOr(LocalUpdatesConfigHelper.optNumber(f, "diesel_price", 0), 0);
@@ -209,41 +244,17 @@ public class FuelDetailActivity extends AppCompatActivity {
         if (bannerRow != null) bannerRow.setVisibility(View.GONE);
         View banner = findViewById(R.id.fuel_banner);
         if (banner != null) banner.setVisibility(View.GONE);
-        String citiesTitle = LocalUpdatesConfigHelper.optString(f, "cities_title", "");
-        if (citiesTitle.isEmpty() || FuelLabels.looksLikeTeluguChrome(citiesTitle)) {
-            citiesTitle = FuelLabels.majorCities(this);
-        }
-        setText(R.id.fuel_cities_title, citiesTitle);
+        setText(R.id.fuel_cities_title, FuelLabels.majorCities(this));
         updateStateFilterUi(stateLabel);
-        setText(R.id.fuel_cities_footnote, LocalUpdatesConfigHelper.optString(f, "cities_footnote", ""));
+        bindFootnote(LocalUpdatesConfigHelper.optString(f, "cities_footnote", ""));
 
-        // Honest history title — source has no real 7-day series
-        String histTitle = LocalUpdatesConfigHelper.optString(f, "history_title", "");
-        if (histTitle.isEmpty() || histTitle.contains("7")
-                || FuelLabels.looksLikeTeluguChrome(histTitle)) {
-            histTitle = FuelLabels.historyTitle(this);
-        }
-        setText(R.id.fuel_history_title, histTitle);
-
-        JSONArray districtHistory = historyForSelectedDistrict(f);
-        String histNote;
-        if (districtHistory.length() < 2) {
-            histNote = FuelLabels.historySingleNote(this);
-        } else {
-            histNote = FuelLabels.historyNote(this);
-        }
-        setText(R.id.fuel_history_note, histNote);
         String districtLabel = TextUtils.isEmpty(selectedCity)
                 ? FuelLabels.pickCity(this)
                 : (selectedCity + " ▾");
         setText(R.id.fuel_district_filter, districtLabel);
 
         bindPromoFromDeltas(petrolCh, dieselCh);
-        String promoCta = LocalUpdatesConfigHelper.optString(f, "promo_cta", "");
-        if (promoCta.isEmpty() || FuelLabels.looksLikeTeluguChrome(promoCta)) {
-            promoCta = FuelLabels.seeOtherCities(this);
-        }
-        setText(R.id.fuel_promo_cta, promoCta);
+        setText(R.id.fuel_promo_cta, FuelLabels.seeOtherCities(this));
 
         View fuelSource = findViewById(R.id.fuel_source);
         if (fuelSource != null) fuelSource.setVisibility(View.GONE);
@@ -261,35 +272,72 @@ public class FuelDetailActivity extends AppCompatActivity {
         }
 
         bindCities(LocalUpdatesConfigHelper.optArray(f, "cities"));
-
-        FuelHistoryChartView chart = findViewById(R.id.fuel_history_chart);
-        if (chart != null) {
-            // One stored snapshot is not a line. Never invent yesterday from today's price.
-            chart.setHistory(districtHistory.length() >= 2 ? districtHistory : new JSONArray());
-        }
     }
 
-    /** Real hourly points for the district the user is looking at. */
+    /** Chrome follows {@link Constants#LanguageID}. Payload copy is often Telugu. */
+    private void bindChrome() {
+        setText(R.id.fuel_top_title, FuelLabels.title(this));
+        View sub = findViewById(R.id.fuel_top_subtitle);
+        if (sub != null) sub.setVisibility(View.GONE);
+        setText(R.id.fuel_updated_caption, FuelLabels.lastUpdated(this));
+        setText(R.id.fuel_petrol_caption, DailyUpdatesLabels.petrol(this));
+        setText(R.id.fuel_diesel_caption, DailyUpdatesLabels.diesel(this));
+        setText(R.id.fuel_col_city, FuelLabels.cityColumn(this));
+        setText(R.id.fuel_col_petrol, FuelLabels.petrolColumn(this));
+        setText(R.id.fuel_col_diesel, FuelLabels.dieselColumn(this));
+        setText(R.id.fuel_col_change, FuelLabels.changeColumn(this));
+    }
+
+    private void bindFootnote(@Nullable String note) {
+        TextView tv = findViewById(R.id.fuel_cities_footnote);
+        if (tv == null) return;
+        if (!nameOk(note)) {
+            tv.setText("");
+            tv.setVisibility(View.GONE);
+            return;
+        }
+        tv.setVisibility(View.VISIBLE);
+        tv.setText(note);
+    }
+
     @NonNull
-    private JSONArray historyForSelectedDistrict(@NonNull JSONObject f) {
-        if (TextUtils.isEmpty(selectedCity)) return new JSONArray();
-        JSONArray places = placesOf(f);
-        for (int i = 0; i < places.length(); i++) {
-            JSONObject row = places.optJSONObject(i);
-            if (row == null) continue;
-            if (!selectedStateKey.equals(row.optString("state_key", ""))) continue;
-            String city = displayCity(row);
-            String cityEn = row.optString("city_en", "");
-            if (!selectedCity.equals(city) && !selectedCity.equalsIgnoreCase(cityEn)) continue;
-            JSONArray history = row.optJSONArray("history");
-            return history != null ? history : new JSONArray();
+    private String localizedUpdated(@NonNull JSONObject f) {
+        String clock = clockFrom(f.optString("last_updated", ""));
+        if (clock.isEmpty()) clock = clockFromFetchedAt(f.optString("fetched_at", ""));
+        if (clock.isEmpty()) return "—";
+        return FuelLabels.today(this) + " " + clock;
+    }
+
+    @NonNull
+    private static String clockFrom(@Nullable String raw) {
+        if (raw == null || raw.isEmpty()) return "";
+        Matcher m = CLOCK.matcher(raw);
+        if (!m.find()) return "";
+        return m.group(1).toUpperCase(java.util.Locale.US);
+    }
+
+    @NonNull
+    private static String clockFromFetchedAt(@Nullable String iso) {
+        if (iso == null || iso.isEmpty()) return "";
+        try {
+            String trimmed = iso.trim();
+            if (trimmed.endsWith("Z") || trimmed.endsWith("z")) {
+                trimmed = trimmed.substring(0, trimmed.length() - 1);
+            }
+            int dot = trimmed.indexOf('.');
+            if (dot > 0) trimmed = trimmed.substring(0, dot);
+            java.text.SimpleDateFormat in = new java.text.SimpleDateFormat(
+                    "yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US);
+            in.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            java.util.Date date = in.parse(trimmed);
+            if (date == null) return "";
+            java.text.SimpleDateFormat out = new java.text.SimpleDateFormat(
+                    "hh:mm a", java.util.Locale.US);
+            out.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Kolkata"));
+            return out.format(date).toUpperCase(java.util.Locale.US);
+        } catch (Exception e) {
+            return "";
         }
-        JSONObject cityRow = findCity(f, selectedCity);
-        if (cityRow != null) {
-            JSONArray history = cityRow.optJSONArray("history");
-            if (history != null) return history;
-        }
-        return new JSONArray();
     }
 
     private void bindPromoFromDeltas(double petrolCh, double dieselCh) {
@@ -345,12 +393,13 @@ public class FuelDetailActivity extends AppCompatActivity {
             double di = LocalUpdatesConfigHelper.optNumber(row, "diesel", 0);
             if (!(p > 0) || !(di > 0)) continue;
             final String cityName = LocalUpdatesConfigHelper.optString(row, "city", "");
+            final String cityEn = LocalUpdatesConfigHelper.optString(row, "city_en", "");
+            final int distId = row.optInt("district_id", 0);
             LinearLayout line = new LinearLayout(this);
             line.setOrientation(LinearLayout.HORIZONTAL);
             line.setPadding(0, (int) (6 * d), 0, (int) (6 * d));
             line.setGravity(Gravity.CENTER_VERTICAL);
-            boolean selected = !TextUtils.isEmpty(selectedCity)
-                    && selectedCity.equals(cityName);
+            boolean selected = cityRowSelected(cityName, cityEn, distId);
             if (selected) {
                 line.setBackgroundColor(0x22FF6A1A);
             }
@@ -369,18 +418,29 @@ public class FuelDetailActivity extends AppCompatActivity {
             line.addView(changeTv);
             line.setClickable(true);
             line.setFocusable(true);
-            line.setOnClickListener(v -> selectCity(cityName));
+            line.setOnClickListener(v -> selectCity(cityName, cityEn, distId));
             list.addView(line);
         }
     }
 
-    private void selectCity(@Nullable String cityName) {
+    private void selectCity(@Nullable String cityName, @Nullable String cityEn, int distId) {
         selectedCity = cityName;
+        selectedCityEn = cityEn;
+        selectedDistrictId = distId;
         if (activeFuel != null) bindUi(activeFuel);
         Toast.makeText(this,
                 TextUtils.isEmpty(cityName)
                         ? FuelLabels.stateAverageSelected(this) : cityName,
                 Toast.LENGTH_SHORT).show();
+    }
+
+    private boolean cityRowSelected(@Nullable String cityName, @Nullable String cityEn, int distId) {
+        if (selectedDistrictId > 0 && distId > 0 && selectedDistrictId == distId) return true;
+        if (!TextUtils.isEmpty(selectedCityEn) && !TextUtils.isEmpty(cityEn)
+                && selectedCityEn.equalsIgnoreCase(cityEn)) {
+            return true;
+        }
+        return !TextUtils.isEmpty(selectedCity) && selectedCity.equals(cityName);
     }
 
     private TextView makeTv(String text, int color, int sp, boolean bold) {
@@ -523,10 +583,12 @@ public class FuelDetailActivity extends AppCompatActivity {
         if (sub != null) sub.setVisibility(View.GONE);
         LinearLayout list = content.findViewById(R.id.fuel_picker_list);
         float dens = getResources().getDisplayMetrics().density;
+        View selectedRow = null;
         for (int i = 0; i < available.size(); i++) {
             final String key = available.get(i)[0];
             final String label = available.get(i)[1];
             JSONObject snap = byState.optJSONObject(key);
+            boolean selected = key.equals(selectedStateKey);
 
             LinearLayout row = new LinearLayout(this);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -536,13 +598,14 @@ public class FuelDetailActivity extends AppCompatActivity {
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setBackgroundResource(R.drawable.bg_local_update_card);
+            if (selected) row.setBackgroundColor(0x33FF6A1A);
             row.setPadding((int) (14 * dens), (int) (12 * dens), (int) (14 * dens), (int) (12 * dens));
 
             TextView name = new TextView(this);
             name.setLayoutParams(new LinearLayout.LayoutParams(0,
                     ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            name.setText(label + (key.equals(selectedStateKey) ? "  ✓" : ""));
-            name.setTextColor(0xFFFFFFFF);
+            name.setText(label + (selected ? "  ✓" : ""));
+            name.setTextColor(selected ? 0xFFFF6A1A : 0xFFFFFFFF);
             name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
             name.setTypeface(name.getTypeface(), android.graphics.Typeface.BOLD);
             row.addView(name);
@@ -559,8 +622,10 @@ public class FuelDetailActivity extends AppCompatActivity {
                 applyStateSelection(key);
             });
             list.addView(row);
+            if (selected) selectedRow = row;
         }
         sheet.setContentView(content);
+        revealPickerRow(sheet, content, selectedRow);
         sheet.show();
     }
 
@@ -583,15 +648,20 @@ public class FuelDetailActivity extends AppCompatActivity {
         }
         LinearLayout list = content.findViewById(R.id.fuel_picker_list);
         float dens = getResources().getDisplayMetrics().density;
+        View selectedRow = null;
 
-        // Option: state average / clear city override
-        list.addView(pickerRow(FuelLabels.stateAveragePrimary(this),
-                heroPriceLabel(f), TextUtils.isEmpty(selectedCity), dens, () -> {
+        boolean avg = TextUtils.isEmpty(selectedCity) && selectedDistrictId <= 0;
+        View avgRow = pickerRow(FuelLabels.stateAveragePrimary(this),
+                heroPriceLabel(f), avg, dens, () -> {
                     sheet.dismiss();
                     selectedCity = null;
+                    selectedCityEn = null;
+                    selectedDistrictId = 0;
                     bindUi(activeFuel);
                     scrollToCities();
-                }));
+                });
+        list.addView(avgRow);
+        if (avg) selectedRow = avgRow;
 
         for (int i = 0; i < cities.length(); i++) {
             JSONObject row = cities.optJSONObject(i);
@@ -600,16 +670,23 @@ public class FuelDetailActivity extends AppCompatActivity {
             double di = LocalUpdatesConfigHelper.optNumber(row, "diesel", 0);
             if (!(p > 0) || !(di > 0)) continue;
             final String cityName = LocalUpdatesConfigHelper.optString(row, "city", "");
-            String price = "P ₹" + LocalUpdatesConfigHelper.formatMoney2(p)
-                    + "  D ₹" + LocalUpdatesConfigHelper.formatMoney2(di);
-            boolean sel = cityName.equals(selectedCity);
-            list.addView(pickerRow(cityName, price, sel, dens, () -> {
+            final String cityEn = LocalUpdatesConfigHelper.optString(row, "city_en", "");
+            final int distId = row.optInt("district_id", 0);
+            String price = DailyUpdatesLabels.petrol(this) + " ₹"
+                    + LocalUpdatesConfigHelper.formatMoney2(p)
+                    + "  " + DailyUpdatesLabels.diesel(this) + " ₹"
+                    + LocalUpdatesConfigHelper.formatMoney2(di);
+            boolean sel = cityRowSelected(cityName, cityEn, distId);
+            View cityRow = pickerRow(cityName, price, sel, dens, () -> {
                 sheet.dismiss();
-                selectCity(cityName);
+                selectCity(cityName, cityEn, distId);
                 scrollToCities();
-            }));
+            });
+            list.addView(cityRow);
+            if (sel) selectedRow = cityRow;
         }
         sheet.setContentView(content);
+        revealPickerRow(sheet, content, selectedRow);
         sheet.show();
     }
 
@@ -622,13 +699,14 @@ public class FuelDetailActivity extends AppCompatActivity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setBackgroundResource(R.drawable.bg_local_update_card);
+        if (selected) row.setBackgroundColor(0x33FF6A1A);
         row.setPadding((int) (14 * dens), (int) (12 * dens), (int) (14 * dens), (int) (12 * dens));
 
         TextView nameTv = new TextView(this);
         nameTv.setLayoutParams(new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         nameTv.setText(name + (selected ? "  ✓" : ""));
-        nameTv.setTextColor(0xFFFFFFFF);
+        nameTv.setTextColor(selected ? 0xFFFF6A1A : 0xFFFFFFFF);
         nameTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         nameTv.setTypeface(nameTv.getTypeface(), android.graphics.Typeface.BOLD);
         row.addView(nameTv);
@@ -657,6 +735,7 @@ public class FuelDetailActivity extends AppCompatActivity {
     }
 
     private void applyStateSelection(@NonNull String key) {
+        statePickedInSession = true;
         JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
         if (root == null) root = new JSONObject();
         selectedStateKey = key;
@@ -666,6 +745,28 @@ public class FuelDetailActivity extends AppCompatActivity {
         }
         activeFuel = overlayState(root, key);
         bindUi(activeFuel);
+        ensureLocationNames();
+    }
+
+    /** Open the sheet on the saved row, not the first row. */
+    private void revealPickerRow(
+            @NonNull BottomSheetDialog sheet,
+            @NonNull View content,
+            @Nullable View selectedRow) {
+        ScrollView scroll = content.findViewById(R.id.fuel_picker_scroll);
+        sheet.setOnShowListener(dialog -> {
+            if (scroll == null || selectedRow == null) return;
+            int maxH = (int) (getResources().getDisplayMetrics().heightPixels * 0.62f);
+            scroll.post(() -> {
+                View list = content.findViewById(R.id.fuel_picker_list);
+                int contentH = list != null ? list.getHeight() : 0;
+                if (contentH > maxH && scroll.getLayoutParams() != null) {
+                    scroll.getLayoutParams().height = maxH;
+                    scroll.requestLayout();
+                }
+                scroll.post(() -> scroll.smoothScrollTo(0, Math.max(0, selectedRow.getTop())));
+            });
+        });
     }
 
     /**
@@ -725,7 +826,7 @@ public class FuelDetailActivity extends AppCompatActivity {
     @NonNull
     private String resolveInitialStateKey(@NonNull JSONObject root) {
         if (!hasPlaces(root)) return resolveStateKey(root);
-        int stateId = SharedPrefsData.getInt(this, Constants.StateID, Constants.PREF_NAME);
+        int stateId = savedStateId();
         if (stateId > 0) {
             JSONArray places = placesOf(root);
             for (int i = 0; i < places.length(); i++) {
@@ -740,24 +841,37 @@ public class FuelDetailActivity extends AppCompatActivity {
 
     @Nullable
     private String resolveInitialCity(@NonNull JSONObject root, @NonNull String stateKey) {
+        selectedDistrictId = 0;
+        selectedCityEn = null;
         if (!hasPlaces(root)) return null;
         int distId = SharedPrefsData.getInt(this, Constants.Selected_Distric_Id, Constants.PREF_NAME);
         String nameA = SharedPrefsData.getString(this, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
         String nameB = SharedPrefsData.getString(this, Constants.Selected_Distric_Name, Constants.PREF_NAME);
         JSONArray places = placesOf(root);
         String byName = null;
+        String byEn = null;
+        int byDist = 0;
         for (int i = 0; i < places.length(); i++) {
             JSONObject row = places.optJSONObject(i);
             if (row == null) continue;
             if (!stateKey.equals(row.optString("state_key", ""))) continue;
-            String city = displayCity(row);
+            String city = displayCityName(row);
             String cityEn = row.optString("city_en", "");
-            if (distId > 0 && row.optInt("district_id", 0) == distId && !city.isEmpty()) {
+            int rowDist = row.optInt("district_id", 0);
+            if (distId > 0 && rowDist == distId && !city.isEmpty()) {
+                selectedDistrictId = rowDist;
+                selectedCityEn = cityEn;
                 return city;
             }
             if (namesMatch(nameA, city, cityEn) || namesMatch(nameB, city, cityEn)) {
                 byName = city;
+                byEn = cityEn;
+                byDist = rowDist;
             }
+        }
+        if (byName != null) {
+            selectedDistrictId = byDist;
+            selectedCityEn = byEn;
         }
         return byName;
     }
@@ -772,10 +886,8 @@ public class FuelDetailActivity extends AppCompatActivity {
             if (!(row.optDouble("petrol", 0) > 0) || !(row.optDouble("diesel", 0) > 0)) continue;
             String key = row.optString("state_key", "");
             if (key.isEmpty() || labels.containsKey(key)) continue;
-            String label = row.optString("state_native", "");
-            if (label.isEmpty()) label = row.optString("state", key);
-            if (KEY_TG.equals(key)) label = FuelLabels.stateTelangana(this);
-            else if (KEY_AP.equals(key)) label = FuelLabels.stateAndhra(this);
+            String label = displayState(row);
+            if (label.isEmpty()) label = key;
             labels.put(key, label);
         }
         java.util.List<String[]> out = new java.util.ArrayList<>();
@@ -828,7 +940,7 @@ public class FuelDetailActivity extends AppCompatActivity {
                 double petrol = row.optDouble("petrol", 0);
                 double diesel = row.optDouble("diesel", 0);
                 if (!(petrol > 0) || !(diesel > 0)) continue;
-                String city = displayCity(row);
+                String city = displayCityName(row);
                 if (city.isEmpty()) continue;
                 JSONObject cityRow = new JSONObject();
                 cityRow.put("city", city);
@@ -840,17 +952,12 @@ public class FuelDetailActivity extends AppCompatActivity {
                 if (row.has("history")) cityRow.put("history", row.get("history"));
                 if (row.optInt("district_id", 0) > 0) cityRow.put("district_id", row.optInt("district_id"));
                 cities.put(cityRow);
-                if (stateLabel.isEmpty()) {
-                    stateLabel = row.optString("state_native", "");
-                    if (stateLabel.isEmpty()) stateLabel = row.optString("state", "");
-                }
+                if (stateLabel.isEmpty()) stateLabel = displayState(row);
                 boolean picked = !TextUtils.isEmpty(selectedCity) && selectedCity.equals(city);
                 if (picked || hero == null) {
                     hero = cityRow;
                 }
             }
-            if (KEY_TG.equals(key)) stateLabel = FuelLabels.stateTelangana(this);
-            else if (KEY_AP.equals(key)) stateLabel = FuelLabels.stateAndhra(this);
             if (!stateLabel.isEmpty()) {
                 out.put("location_name", stateLabel);
                 out.put("location_region", stateLabel);
@@ -874,13 +981,23 @@ public class FuelDetailActivity extends AppCompatActivity {
     private String firstCityInState(@NonNull JSONObject root, @NonNull String stateKey) {
         JSONArray places = placesOf(root);
         String first = null;
+        String firstEn = null;
+        int firstDist = 0;
         for (int i = 0; i < places.length(); i++) {
             JSONObject row = places.optJSONObject(i);
             if (row == null || !stateKey.equals(row.optString("state_key", ""))) continue;
             if (!(row.optDouble("petrol", 0) > 0) || !(row.optDouble("diesel", 0) > 0)) continue;
-            String city = displayCity(row);
+            String city = displayCityName(row);
             if (city.isEmpty()) continue;
-            if (first == null || city.compareToIgnoreCase(first) < 0) first = city;
+            if (first == null || city.compareToIgnoreCase(first) < 0) {
+                first = city;
+                firstEn = row.optString("city_en", "");
+                firstDist = row.optInt("district_id", 0);
+            }
+        }
+        if (first != null) {
+            selectedCityEn = firstEn;
+            selectedDistrictId = firstDist;
         }
         return first;
     }
@@ -933,42 +1050,108 @@ public class FuelDetailActivity extends AppCompatActivity {
             LocalUpdatesConfigHelper.saveFuelFromSplash(this, next);
             runOnUiThread(() -> {
                 if (isFinishing()) return;
+                applyNameMaps();
                 JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
                 if (root == null) return;
+                if (!statePickedInSession) {
+                    String again = resolveInitialStateKey(root);
+                    if (!again.equals(selectedStateKey)) {
+                        selectedStateKey = again;
+                        selectedCity = null;
+                    }
+                }
                 if (TextUtils.isEmpty(selectedCity)
                         || !cityExistsInState(root, selectedStateKey, selectedCity)) {
                     selectedCity = resolveInitialCity(root, selectedStateKey);
                     if (TextUtils.isEmpty(selectedCity)) {
                         selectedCity = firstCityInState(root, selectedStateKey);
                     }
+                } else {
+                    refreshSelectionLabel(root);
                 }
                 activeFuel = overlayState(root, selectedStateKey);
                 bindUi(activeFuel);
+                ensureLocationNames();
             });
         } catch (Exception ignored) {
         }
     }
 
-    private static boolean cityExistsInState(
+    private boolean cityExistsInState(
             @NonNull JSONObject root, @NonNull String stateKey, @NonNull String cityName) {
         JSONArray places = root.optJSONArray("places");
         if (places == null) return false;
         for (int i = 0; i < places.length(); i++) {
             JSONObject row = places.optJSONObject(i);
             if (row == null || !stateKey.equals(row.optString("state_key", ""))) continue;
-            if (cityName.equals(displayCity(row))
-                    || cityName.equalsIgnoreCase(row.optString("city_en", ""))) {
+            if (selectedDistrictId > 0 && row.optInt("district_id", 0) == selectedDistrictId) {
+                return true;
+            }
+            if (cityName.equals(displayCityName(row))
+                    || cityName.equalsIgnoreCase(row.optString("city_en", ""))
+                    || cityName.equals(row.optString("city", ""))) {
                 return true;
             }
         }
         return false;
     }
 
+    /**
+     * District name in the selected language when the fuel city is matched to
+     * a location-master district. Otherwise the source city name.
+     */
     @NonNull
-    private static String displayCity(@NonNull JSONObject row) {
+    private String displayCityName(@NonNull JSONObject row) {
+        int stateId = row.optInt("state_id", 0);
+        int distId = row.optInt("district_id", 0);
+        if (stateId > 0 && distId > 0) {
+            String master = districtNamesByKey.get(stateId + ":" + distId);
+            if (nameOk(master)) return master.trim();
+        }
+        if (distId > 0) {
+            String saved = savedDistrictLabel(distId);
+            if (nameOk(saved)) return saved.trim();
+        }
         String city = row.optString("city", "");
-        if (!city.isEmpty()) return city;
-        return row.optString("city_en", "");
+        if (nameOk(city)) return city.trim();
+        String en = row.optString("city_en", "");
+        if (!en.isEmpty()) return en.trim();
+        return city;
+    }
+
+    /**
+     * State name for the selected language. Master name wins. A native-script
+     * label is used only when it is that language. Otherwise the English source
+     * name — never another language's script.
+     */
+    @NonNull
+    private String displayState(@NonNull JSONObject row) {
+        int stateId = row.optInt("state_id", 0);
+        if (stateId > 0) {
+            String master = stateNamesById.get(stateId);
+            if (nameOk(master)) return master.trim();
+        }
+        String key = row.optString("state_key", "");
+        if (KEY_TG.equals(key)) {
+            String labeled = FuelLabels.stateTelangana(this);
+            if (nameOk(labeled)) return labeled;
+        } else if (KEY_AP.equals(key)) {
+            String labeled = FuelLabels.stateAndhra(this);
+            if (nameOk(labeled)) return labeled;
+        }
+        String nativeName = row.optString("state_native", "");
+        if (nameOk(nativeName)) return nativeName.trim();
+        String en = row.optString("state", "");
+        if (en.isEmpty()) en = row.optString("source_state", "");
+        if (!en.isEmpty()) return en.trim();
+        return nativeName.isEmpty() ? key : nativeName;
+    }
+
+    @Nullable
+    private String savedDistrictLabel(int distId) {
+        int saved = SharedPrefsData.getInt(this, Constants.Selected_Distric_Id, Constants.PREF_NAME);
+        if (distId <= 0 || distId != saved) return null;
+        return DistrictLabelHelper.resolveDisplayLabel(this);
     }
 
     private static boolean namesMatch(@Nullable String pref, @NonNull String city, @NonNull String cityEn) {
@@ -994,13 +1177,22 @@ public class FuelDetailActivity extends AppCompatActivity {
 
     @NonNull
     private String stateLabelForKey(@NonNull String key, @Nullable JSONObject f) {
+        JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
+        JSONArray places = placesOf(root != null ? root : f);
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null || !key.equals(row.optString("state_key", ""))) continue;
+            String label = displayState(row);
+            if (!label.isEmpty()) return label;
+        }
         if (KEY_TG.equals(key)) return FuelLabels.stateTelangana(this);
         if (KEY_AP.equals(key)) return FuelLabels.stateAndhra(this);
         if (f != null) {
             String s = LocalUpdatesConfigHelper.optString(f, "state_filter", "");
-            if (!TextUtils.isEmpty(s)) return s.replace("▾", "").replace("▼", "").trim();
+            s = s.replace("▾", "").replace("▼", "").trim();
+            if (nameOk(s)) return s;
             s = LocalUpdatesConfigHelper.optString(f, "location_region", "");
-            if (!TextUtils.isEmpty(s)) return s;
+            if (nameOk(s)) return s;
         }
         return FuelLabels.stateAndhra(this);
     }
@@ -1052,5 +1244,235 @@ public class FuelDetailActivity extends AppCompatActivity {
     private void setText(int id, String value) {
         TextView tv = findViewById(id);
         if (tv != null) tv.setText(value);
+    }
+
+    private int languageId() {
+        return SharedPrefsData.getInt(this, Constants.LanguageID, Constants.PREF_NAME);
+    }
+
+    private int savedStateId() {
+        int stateId = SharedPrefsData.getInt(this, Constants.StateID, Constants.PREF_NAME);
+        if (stateId > 0) return stateId;
+        int lang = languageId();
+        if (lang <= 0) return 0;
+        return SharedPrefsData.getInt(
+                this, Constants.StateID + "_lang_" + lang, Constants.PREF_NAME);
+    }
+
+    private boolean nameOk(@Nullable String name) {
+        if (!DistrictLabelHelper.isUsable(name)) return false;
+        int lang = languageId();
+        if (lang >= 1 && lang <= 6) {
+            return !DistrictLabelHelper.isClearScriptConflict(name, lang);
+        }
+        return !hasIndicScript(name);
+    }
+
+    private static boolean hasIndicScript(@NonNull String s) {
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            i += Character.charCount(cp);
+            if (cp >= 0x0900 && cp <= 0x0D7F) return true;
+        }
+        return false;
+    }
+
+    /** State and district names already cached for the selected language. */
+    private void applyNameMaps() {
+        stateNamesById.clear();
+        districtNamesByKey.clear();
+        int lang = languageId();
+        if (lang <= 0) return;
+        List<StatesModel.Datum> states = SelectionListCache.loadStates(this, lang);
+        if (states != null) {
+            for (StatesModel.Datum s : states) {
+                if (s == null || s.getId() == null || s.getId() <= 0) continue;
+                if (nameOk(s.getName())) stateNamesById.put(s.getId(), s.getName().trim());
+            }
+        }
+        Set<Integer> stateIds = new HashSet<>();
+        JSONArray places = placesOf(LocalUpdatesConfigHelper.fuelJson(this));
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null) continue;
+            int sid = row.optInt("state_id", 0);
+            if (sid > 0) stateIds.add(sid);
+        }
+        for (int sid : stateIds) {
+            // District lists are per language. Skip a state the language does
+            // not own — that request would return another state's districts.
+            if (!stateNamesById.containsKey(sid)) continue;
+            List<DistricsModel.Datum> dists = SelectionListCache.loadDistricts(this, lang, sid);
+            if (dists == null) continue;
+            for (DistricsModel.Datum d : dists) {
+                if (d == null || d.getId() == null || d.getId() <= 0) continue;
+                if (!nameOk(d.getName())) continue;
+                districtNamesByKey.put(sid + ":" + d.getId(), d.getName().trim());
+            }
+        }
+    }
+
+    private void refreshSelectionLabel(@NonNull JSONObject root) {
+        JSONArray places = placesOf(root);
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null || !selectedStateKey.equals(row.optString("state_key", ""))) continue;
+            int dist = row.optInt("district_id", 0);
+            String en = row.optString("city_en", "");
+            boolean hit = (selectedDistrictId > 0 && dist == selectedDistrictId)
+                    || (!TextUtils.isEmpty(selectedCityEn) && selectedCityEn.equalsIgnoreCase(en))
+                    || (!TextUtils.isEmpty(selectedCity) && (selectedCity.equals(row.optString("city", ""))
+                    || selectedCity.equalsIgnoreCase(en)));
+            if (!hit) continue;
+            String name = displayCityName(row);
+            if (name.isEmpty()) return;
+            selectedCity = name;
+            if (dist > 0) selectedDistrictId = dist;
+            if (!en.isEmpty()) selectedCityEn = en;
+            return;
+        }
+    }
+
+    private void ensureLocationNames() {
+        int lang = languageId();
+        if (lang <= 0 || isFinishing()) return;
+        if (stateNamesById.isEmpty() && !statesFetchStarted) {
+            List<StatesModel.Datum> cached = SelectionListCache.loadStates(this, lang);
+            if (cached == null || cached.isEmpty()) {
+                fetchStates(lang);
+                return;
+            }
+        }
+        int sid = stateIdForKey(selectedStateKey);
+        if (sid > 0 && stateNamesById.containsKey(sid)
+                && districtsMissing(lang, sid)
+                && districtFetchStarted.add(sid)) {
+            fetchDistricts(lang, sid);
+        }
+    }
+
+    private int stateIdForKey(@NonNull String key) {
+        JSONArray places = placesOf(LocalUpdatesConfigHelper.fuelJson(this));
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null || !key.equals(row.optString("state_key", ""))) continue;
+            int sid = row.optInt("state_id", 0);
+            if (sid > 0) return sid;
+        }
+        return 0;
+    }
+
+    private boolean districtsMissing(int lang, int stateId) {
+        List<DistricsModel.Datum> list = SelectionListCache.loadDistricts(this, lang, stateId);
+        return list == null || list.isEmpty();
+    }
+
+    private void onLocationNamesUpdated() {
+        if (isFinishing()) return;
+        applyNameMaps();
+        JSONObject root = LocalUpdatesConfigHelper.fuelJson(this);
+        if (root == null) root = new JSONObject();
+        if (!statePickedInSession) {
+            String again = resolveInitialStateKey(root);
+            if (!again.equals(selectedStateKey)) {
+                selectedStateKey = again;
+                selectedCity = null;
+            }
+        }
+        if (TextUtils.isEmpty(selectedCity)) {
+            selectedCity = resolveInitialCity(root, selectedStateKey);
+            if (TextUtils.isEmpty(selectedCity)) {
+                selectedCity = firstCityInState(root, selectedStateKey);
+            }
+        } else {
+            refreshSelectionLabel(root);
+        }
+        activeFuel = overlayState(root, selectedStateKey);
+        bindUi(activeFuel);
+    }
+
+    private void fetchStates(int lang) {
+        statesFetchStarted = true;
+        try {
+            LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
+            requestModel.setDraftId(SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+            requestModel.setLanguageId(lang);
+            EncritonRequestData enc = new EncritonRequestData();
+            enc.setData(encrypt(new Gson().toJson(requestModel)));
+            JsonObject body = new Gson().toJsonTree(enc).getAsJsonObject();
+            APIService api = RestApiClient.getClient().create(APIService.class);
+            api.Get_states_requiest("v3", body).enqueue(new Callback<EncreptionRequest>() {
+                @Override
+                public void onResponse(@NonNull Call<EncreptionRequest> call,
+                                       @NonNull Response<EncreptionRequest> response) {
+                    if (!response.isSuccessful() || response.body() == null
+                            || TextUtils.isEmpty(response.body().getData())) {
+                        return;
+                    }
+                    try {
+                        StatesModel model = new Gson().fromJson(
+                                decrypt(response.body().getData()), StatesModel.class);
+                        if (model != null && model.getData() != null && !model.getData().isEmpty()) {
+                            SelectionListCache.saveStates(FuelDetailActivity.this, lang, model);
+                        }
+                    } catch (Exception ignored) {
+                        return;
+                    }
+                    runOnUiThread(() -> {
+                        if (isFinishing()) return;
+                        onLocationNamesUpdated();
+                        ensureLocationNames();
+                    });
+                }
+
+                @Override
+                public void onFailure(@NonNull Call<EncreptionRequest> call, @NonNull Throwable t) {
+                }
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void fetchDistricts(int lang, int stateId) {
+        if (!stateNamesById.containsKey(stateId)) return;
+        try {
+            LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
+            requestModel.setDraftId(SharedPrefsData.getInt(this, Constants.DraftID, Constants.PREF_NAME));
+            requestModel.setLanguageId(lang);
+            requestModel.setStateId(stateId);
+            EncritonRequestData enc = new EncritonRequestData();
+            enc.setData(encrypt(new Gson().toJson(requestModel)));
+            JsonObject body = new Gson().toJsonTree(enc).getAsJsonObject();
+            APIService api = RestApiClient.getClient().create(APIService.class);
+            api.Get_districts("v3", body).enqueue(new Callback<EncreptionRequest>() {
+                @Override
+                public void onResponse(@NonNull Call<EncreptionRequest> call,
+                                       @NonNull Response<EncreptionRequest> response) {
+                    if (!response.isSuccessful() || response.body() == null
+                            || TextUtils.isEmpty(response.body().getData())) {
+                        return;
+                    }
+                    try {
+                        DistricsModel model = new Gson().fromJson(
+                                decrypt(response.body().getData()), DistricsModel.class);
+                        if (model != null && model.getData() != null && !model.getData().isEmpty()) {
+                            SelectionListCache.saveDistricts(
+                                    FuelDetailActivity.this, lang, stateId, model);
+                        }
+                    } catch (Exception ignored) {
+                        return;
+                    }
+                    runOnUiThread(() -> {
+                        if (isFinishing()) return;
+                        onLocationNamesUpdated();
+                    });
+                }
+
+                @Override
+                public void onFailure(@NonNull Call<EncreptionRequest> call, @NonNull Throwable t) {
+                }
+            });
+        } catch (Exception ignored) {
+        }
     }
 }
