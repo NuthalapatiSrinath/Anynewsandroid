@@ -298,15 +298,6 @@
                                 tools:text="పెట్రోల్  ₹104.20" />
 
                             <TextView
-                                android:id="@+id/du_fuel_petrol_change"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:includeFontPadding="false"
-                                android:textSize="9sp"
-                                tools:text="▼ 0.15"
-                                tools:textColor="#FF4ADE80" />
-
-                            <TextView
                                 android:id="@+id/du_fuel_diesel"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
@@ -318,15 +309,6 @@
                                 android:textSize="11sp"
                                 android:textStyle="bold"
                                 tools:text="డీజిల్  ₹92.80" />
-
-                            <TextView
-                                android:id="@+id/du_fuel_diesel_change"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:includeFontPadding="false"
-                                android:textSize="9sp"
-                                tools:text="▼ 0.12"
-                                tools:textColor="#FF4ADE80" />
                         </LinearLayout>
 
                         <TextView

@@ -195,8 +195,6 @@ public final class DailyUpdatesController {
         setSp(R.id.du_weather_summary, Math.max(8f, cardBody - 2f));
         setSp(R.id.du_fuel_petrol, cardBody);
         setSp(R.id.du_fuel_diesel, cardBody);
-        setSp(R.id.du_fuel_petrol_change, Math.max(8f, cardBody - 2f));
-        setSp(R.id.du_fuel_diesel_change, Math.max(8f, cardBody - 2f));
         setSp(R.id.du_gold_24k, cardBody);
         setSp(R.id.du_gold_silver, cardBody);
         setSp(R.id.du_gold_24k_change, Math.max(8f, cardBody - 2f));
@@ -890,9 +888,7 @@ public final class DailyUpdatesController {
 
     private void bindFuelCard() {
         TextView petrol = root.findViewById(R.id.du_fuel_petrol);
-        TextView petrolCh = root.findViewById(R.id.du_fuel_petrol_change);
         TextView diesel = root.findViewById(R.id.du_fuel_diesel);
-        TextView dieselCh = root.findViewById(R.id.du_fuel_diesel_change);
         double p = LocalUpdatesConfigHelper.fuelPetrol(host);
         double d = LocalUpdatesConfigHelper.fuelDiesel(host);
         String petrolLabel = DailyUpdatesLabels.petrol(host);
@@ -912,18 +908,6 @@ public final class DailyUpdatesController {
             } else {
                 diesel.setText(dieselLabel + "  —");
             }
-        }
-        if (p > 0) {
-            setTrend(petrolCh, LocalUpdatesConfigHelper.fuelPetrolChange(host), false, true);
-        } else if (petrolCh != null) {
-            petrolCh.setText("—");
-            petrolCh.setTextColor(Color.parseColor("#FF94A3B8"));
-        }
-        if (d > 0) {
-            setTrend(dieselCh, LocalUpdatesConfigHelper.fuelDieselChange(host), false, true);
-        } else if (dieselCh != null) {
-            dieselCh.setText("—");
-            dieselCh.setTextColor(Color.parseColor("#FF94A3B8"));
         }
     }
 

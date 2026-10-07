@@ -105,11 +105,10 @@
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp">
 
-                <FrameLayout
+                <com.anyNews.anynews.Ui.FuelHeroFrame
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:minHeight="210dp">
+                    android:layout_marginTop="4dp">
 
                     <ImageView
                         android:id="@+id/fuel_hero_image"
@@ -120,10 +119,10 @@
                         android:src="@drawable/fuel_hero_station" />
 
                     <View
+                        android:id="@+id/fuel_hero_scrim"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:background="#C708080A"
-                        android:minHeight="210dp" />
+                        android:layout_height="0dp"
+                        android:background="#C708080A" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -356,7 +355,7 @@
                                 tools:text="ధరలు ప్రతిరోజూ ఉదయం 6 గంటలకు నవీకరించబడతాయి" />
                         </LinearLayout>
                     </LinearLayout>
-                </FrameLayout>
+                </com.anyNews.anynews.Ui.FuelHeroFrame>
 
                 <RelativeLayout
                     android:layout_width="match_parent"

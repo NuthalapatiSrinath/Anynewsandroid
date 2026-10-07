@@ -193,20 +193,6 @@ public class FuelDetailActivity extends AppCompatActivity {
             iv.setAdjustViewBounds(false);
             iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
         }
-        ViewGroup.LayoutParams heroLp = hero.getLayoutParams();
-        if (heroLp != null) {
-            heroLp.height = 0;
-            hero.setLayoutParams(heroLp);
-        }
-        parent.addOnLayoutChangeListener(
-                (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-                    int h = v.getHeight();
-                    ViewGroup.LayoutParams lp = hero.getLayoutParams();
-                    if (h > 0 && lp != null && lp.height != h) {
-                        lp.height = h;
-                        hero.setLayoutParams(lp);
-                    }
-                });
         final float radius = 16f * getResources().getDisplayMetrics().density;
         parent.setOutlineProvider(new ViewOutlineProvider() {
             @Override
