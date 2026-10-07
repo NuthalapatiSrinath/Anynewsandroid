@@ -7,9 +7,11 @@ import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
@@ -42,6 +44,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import com.android.volley.DefaultRetryPolicy;
 import com.android.volley.NetworkResponse;
@@ -87,6 +90,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +106,9 @@ import retrofit2.Response;
 
 public class PostVideo extends AppCompatActivity {
     private static final String TAG = "REPORTER_VIDEO";
+    private static final String STATE_IMAGE_ID = "video_image_id";
+    private static final String STATE_LOCAL_PATH = "video_local_path";
+    private static final String STATE_CAMERA_PATH = "video_camera_path";
 
     ImageView img_upload_photo;
     private int PICK_IMAGE_REQUEST = 1;
@@ -138,6 +149,14 @@ public class PostVideo extends AppCompatActivity {
     TextView tv_agree_view;
     TextView tv_upload_percent;
     private Uri mVideoURI;
+    /** App-owned copy of the picked/recorded clip. Submit reads this, not the picker URI. */
+    private File localVideoFile;
+    /** EXTRA_OUTPUT target while the camera app is recording. */
+    private File cameraVideoFile;
+    private boolean videoPrepareInFlight;
+    private boolean videoUploadInFlight;
+    private int videoPickGeneration;
+    private int uploadGeneration;
     private ActivityResultLauncher<String[]> locationPermissionLauncher;
 
     @Override
@@ -303,26 +322,22 @@ public class PostVideo extends AppCompatActivity {
 
                         Toast.makeText(PostVideo.this, " " + languageModelResponse.getData().getEnterDescription(), Toast.LENGTH_SHORT).show();
 
-                    } else {
-                        //ImageId = String.valueOf(mVideoURI);
-                        if (TextUtils.isEmpty(ImageId)) {
-                            Logone.e("VideoUpload",""+languageModelResponse.getData().getUploadVideo());
-
-                            Toast.makeText(PostVideo.this, "" + languageModelResponse.getData().getUploadVideo(), Toast.LENGTH_SHORT).show();
-
+                    } else if (videoPrepareInFlight || videoUploadInFlight) {
+                        Toast.makeText(PostVideo.this, "Please wait for video upload to finish", Toast.LENGTH_SHORT).show();
+                    } else if (TextUtils.isEmpty(ImageId)) {
+                        // Preview can already show a frame while ImageId is still empty.
+                        // A copied file means the clip is attached — upload it, do not ask again.
+                        if (hasAttachedVideoFile()) {
+                            uploadImage();
+                            Toast.makeText(PostVideo.this, "Please wait for video upload to finish", Toast.LENGTH_SHORT).show();
                         } else {
-
-                            if (checked_terms_conditions.isChecked()) {
-
-                                sendpostdata();
-
-
-                            } else {
-                                Toast.makeText(PostVideo.this, "" + languageModelResponse.getData().getTermsAndConditions(), Toast.LENGTH_SHORT).show();
-
-
-                            }
+                            Logone.e("VideoUpload", "" + languageModelResponse.getData().getUploadVideo());
+                            Toast.makeText(PostVideo.this, "" + languageModelResponse.getData().getUploadVideo(), Toast.LENGTH_SHORT).show();
                         }
+                    } else if (checked_terms_conditions.isChecked()) {
+                        sendpostdata();
+                    } else {
+                        Toast.makeText(PostVideo.this, "" + languageModelResponse.getData().getTermsAndConditions(), Toast.LENGTH_SHORT).show();
                     }
                 }
             }
@@ -339,6 +354,21 @@ public class PostVideo extends AppCompatActivity {
         getLocation();
         setStaticdata();
         setupLiveCounters();
+        restoreAttachedVideo(savedInstanceState);
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (ImageId != null && !ImageId.trim().isEmpty()) {
+            outState.putString(STATE_IMAGE_ID, ImageId);
+        }
+        if (localVideoFile != null) {
+            outState.putString(STATE_LOCAL_PATH, localVideoFile.getAbsolutePath());
+        }
+        if (cameraVideoFile != null) {
+            outState.putString(STATE_CAMERA_PATH, cameraVideoFile.getAbsolutePath());
+        }
     }
 
     private void setupLiveCounters() {
@@ -481,8 +511,7 @@ public class PostVideo extends AppCompatActivity {
                             new DeferredMediaPermissions.GrantCallback() {
                                 @Override
                                 public void onGranted() {
-                                    Intent takeVideoIntent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
-                                    startActivityForResult(takeVideoIntent, PICK_IMAGE_REQUEST);
+                                    startVideoCapture();
                                 }
                             });
                 } else if (options[item].equals("" + languageModelResponse.getData().getCancel())) {
@@ -542,18 +571,39 @@ public class PostVideo extends AppCompatActivity {
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         AppHelper.showLog("onActivityResult");
-        if (resultCode != RESULT_OK) return;
+        if (resultCode != RESULT_OK) {
+            if (cameraVideoFile != null && cameraVideoFile.length() == 0) {
+                cameraVideoFile.delete();
+            }
+            cameraVideoFile = null;
+            return;
+        }
         if (requestCode == PICK_IMAGE_REQUEST) {
             try {
-                if (data == null || data.getData() == null) {
+                if (cameraVideoFile != null && cameraVideoFile.exists() && cameraVideoFile.length() > 0) {
+                    File recorded = cameraVideoFile;
+                    cameraVideoFile = null;
+                    videoPickGeneration++;
+                    acceptLocalVideo(recorded);
+                    return;
+                }
+                cameraVideoFile = null;
+                Uri picked = null;
+                if (data != null && data.getData() != null) {
+                    picked = data.getData();
+                } else if (data != null && data.getClipData() != null
+                        && data.getClipData().getItemCount() > 0) {
+                    picked = data.getClipData().getItemAt(0).getUri();
+                }
+                if (picked == null) {
                     Toast.makeText(PostVideo.this, "No video selected", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                mVideoURI = data.getData();
-                showVideoPreview(mVideoURI);
-                setUploadProgressVisible(true, 0);
-                uploadImage();
+                mVideoURI = picked;
+                showVideoPreview(picked);
+                copyPickedVideoThenUpload(picked);
             } catch (Exception e) {
+                videoPrepareInFlight = false;
                 e.printStackTrace();
                 Toast.makeText(PostVideo.this, "Unable to use selected video", Toast.LENGTH_SHORT).show();
             }
@@ -609,6 +659,252 @@ public class PostVideo extends AppCompatActivity {
         } else if (requestCode == 200 && resultCode == RESULT_OK) {
 
 
+        }
+    }
+
+    /**
+     * Gallery/camera content URIs are readable by this Activity (preview works) but the
+     * temporary grant is not reliable on the application context. Copy into app cache
+     * with this Activity's resolver, then upload that file. No duration cutoff.
+     */
+    private void copyPickedVideoThenUpload(final Uri source) {
+        videoPrepareInFlight = true;
+        setUploadProgressVisible(true, 0);
+        final int generation = ++videoPickGeneration;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final File copied = copyVideoIntoCache(source);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (isFinishing() || generation != videoPickGeneration) {
+                            return;
+                        }
+                        videoPrepareInFlight = false;
+                        if (copied == null) {
+                            setUploadProgressVisible(false, 0);
+                            Toast.makeText(PostVideo.this, "Unable to read selected video", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        acceptLocalVideo(copied);
+                    }
+                });
+            }
+        }, "reporter-video-copy").start();
+    }
+
+    private void acceptLocalVideo(File file) {
+        videoPrepareInFlight = false;
+        localVideoFile = file;
+        ImageId = "";
+        try {
+            showVideoPreview(FileProvider.getUriForFile(this, getPackageName() + ".provider", file));
+        } catch (Exception e) {
+            Log.e(TAG, "preview local video failed", e);
+        }
+        uploadImage();
+    }
+
+    private void startVideoCapture() {
+        try {
+            cameraVideoFile = createCacheVideoFile(".mp4");
+        } catch (IOException e) {
+            Log.e(TAG, "create camera video file failed", e);
+            Toast.makeText(this, "Unable to create video file", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Uri outputUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", cameraVideoFile);
+        Intent takeVideoIntent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
+        takeVideoIntent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
+        takeVideoIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        List<ResolveInfo> resInfoList = getPackageManager()
+                .queryIntentActivities(takeVideoIntent, PackageManager.MATCH_DEFAULT_ONLY);
+        for (ResolveInfo resolveInfo : resInfoList) {
+            grantUriPermission(
+                    resolveInfo.activityInfo.packageName,
+                    outputUri,
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        try {
+            startActivityForResult(takeVideoIntent, PICK_IMAGE_REQUEST);
+        } catch (ActivityNotFoundException e) {
+            cameraVideoFile.delete();
+            cameraVideoFile = null;
+            Toast.makeText(this, "No camera app available", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private boolean hasAttachedVideoFile() {
+        return localVideoFile != null && localVideoFile.exists() && localVideoFile.length() > 0;
+    }
+
+    private File copyVideoIntoCache(Uri sourceUri) {
+        if (sourceUri == null) {
+            return null;
+        }
+        InputStream input = null;
+        OutputStream output = null;
+        File outFile = null;
+        try {
+            // Activity resolver — the picker grant belongs to this Activity.
+            input = getContentResolver().openInputStream(sourceUri);
+            if (input == null) {
+                Log.e(TAG, "openInputStream returned null for " + sourceUri);
+                return null;
+            }
+            outFile = createCacheVideoFile(extensionForVideoUri(sourceUri));
+            output = new FileOutputStream(outFile);
+            byte[] buffer = new byte[16384];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            output.flush();
+            if (outFile.length() <= 0) {
+                Log.e(TAG, "copied video is empty uri=" + sourceUri);
+                outFile.delete();
+                return null;
+            }
+            Log.e(TAG, "copied video bytes=" + outFile.length() + " file=" + outFile.getName());
+            return outFile;
+        } catch (Exception e) {
+            Log.e(TAG, "copyVideoIntoCache failed uri=" + sourceUri, e);
+            if (outFile != null && outFile.exists()) {
+                outFile.delete();
+            }
+            return null;
+        } finally {
+            try {
+                if (input != null) {
+                    input.close();
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                if (output != null) {
+                    output.close();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private File createCacheVideoFile(String extension) throws IOException {
+        File dir = new File(getCacheDir(), "videos");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IOException("Unable to create video cache directory");
+        }
+        String ext = (extension == null || extension.isEmpty()) ? ".mp4" : extension;
+        return File.createTempFile("reporter_", ext, dir);
+    }
+
+    private String extensionForVideoUri(Uri uri) {
+        String mime = null;
+        try {
+            mime = getContentResolver().getType(uri);
+        } catch (Exception ignored) {
+        }
+        if (mime != null) {
+            String lower = mime.toLowerCase();
+            if (lower.contains("3gpp")) return ".3gp";
+            if (lower.contains("webm")) return ".webm";
+            if (lower.contains("quicktime")) return ".mov";
+            if (lower.contains("matroska")) return ".mkv";
+        }
+        String segment = uri.getLastPathSegment();
+        if (segment != null) {
+            String lower = segment.toLowerCase();
+            if (lower.endsWith(".3gp")) return ".3gp";
+            if (lower.endsWith(".webm")) return ".webm";
+            if (lower.endsWith(".mov")) return ".mov";
+            if (lower.endsWith(".mkv")) return ".mkv";
+        }
+        return ".mp4";
+    }
+
+    private static String mimeForVideoFile(File file) {
+        String name = file.getName().toLowerCase();
+        if (name.endsWith(".3gp")) return "video/3gpp";
+        if (name.endsWith(".webm")) return "video/webm";
+        if (name.endsWith(".mov")) return "video/quicktime";
+        if (name.endsWith(".mkv")) return "video/x-matroska";
+        return "video/mp4";
+    }
+
+    private static byte[] readFileBytes(File file) {
+        FileInputStream input = null;
+        try {
+            input = new FileInputStream(file);
+            byte[] buffer = new byte[16384];
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        } catch (Exception e) {
+            Log.e(TAG, "readFileBytes failed", e);
+            return null;
+        } finally {
+            try {
+                if (input != null) {
+                    input.close();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void showAttachedLabel() {
+        if (upload_image == null) {
+            return;
+        }
+        String done = null;
+        if (languageModelResponse != null && languageModelResponse.getData() != null) {
+            done = languageModelResponse.getData().getVideoUploadSuccessfully();
+        }
+        if (done == null || done.trim().isEmpty()) {
+            done = "Video uploaded successfully";
+        }
+        upload_image.setText(" " + done);
+    }
+
+    private void restoreAttachedVideo(Bundle state) {
+        if (state == null) {
+            return;
+        }
+        String cameraPath = state.getString(STATE_CAMERA_PATH);
+        if (cameraPath != null) {
+            File camera = new File(cameraPath);
+            if (camera.exists()) {
+                cameraVideoFile = camera;
+            }
+        }
+        String localPath = state.getString(STATE_LOCAL_PATH);
+        if (localPath != null) {
+            File local = new File(localPath);
+            if (local.exists() && local.length() > 0) {
+                localVideoFile = local;
+            }
+        }
+        String savedId = state.getString(STATE_IMAGE_ID);
+        if (savedId != null && !savedId.trim().isEmpty()) {
+            ImageId = savedId;
+        }
+        if (localVideoFile == null) {
+            return;
+        }
+        try {
+            showVideoPreview(FileProvider.getUriForFile(this, getPackageName() + ".provider", localVideoFile));
+        } catch (Exception e) {
+            Log.e(TAG, "restore preview failed", e);
+        }
+        if (!TextUtils.isEmpty(ImageId)) {
+            showAttachedLabel();
+            setUploadProgressVisible(true, 100);
+        } else if (!videoUploadInFlight) {
+            uploadImage();
         }
     }
 
@@ -688,12 +984,29 @@ public class PostVideo extends AppCompatActivity {
     }
 
     private void uploadImage() {
+        final File uploadFile = localVideoFile;
+        if (uploadFile == null || !uploadFile.exists() || uploadFile.length() <= 0) {
+            videoUploadInFlight = false;
+            setUploadProgressVisible(false, 0);
+            Log.e(TAG, "uploadImage aborted — no local video file");
+            Toast.makeText(PostVideo.this, "Unable to read selected video", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final int generation = ++uploadGeneration;
+        final String mime = mimeForVideoFile(uploadFile);
+        final String fileName = uploadFile.getName();
+        videoUploadInFlight = true;
         AppHelper.showLog("uploadImage");
+        Log.e(TAG, "uploadImage file=" + fileName + " bytes=" + uploadFile.length() + " mime=" + mime);
         setUploadProgressVisible(true, 0);
         VolleyMultipartRequest multipartRequest = new VolleyMultipartRequest(Request.Method.POST,
                 CommonUtilities.URL + "" + APIService.URL_Upload_Image, new com.android.volley.Response.Listener<NetworkResponse>() {
             @Override
             public void onResponse(NetworkResponse response) {
+                if (generation != uploadGeneration) {
+                    return;
+                }
+                videoUploadInFlight = false;
                 Logone.v("picresponse", response.toString());
 
                 String resultResponse = new String(response.data);
@@ -703,9 +1016,21 @@ public class PostVideo extends AppCompatActivity {
                     boolean error = jObj.getBoolean("success");
                     if (error) {
                         JSONObject extraMsgOBJ = jObj.getJSONObject("extras");
-                        ImageId = extraMsgOBJ.getString("url");
-                        if (languageModelResponse.getData().getVideoUploadSuccessfully() != null) {
-                            Toast.makeText(PostVideo.this, "" + languageModelResponse.getData().getVideoUploadSuccessfully(), Toast.LENGTH_SHORT).show();
+                        String url = extraMsgOBJ.optString("url", "");
+                        if (url.trim().isEmpty()) {
+                            Log.e(TAG, "uploadImage success without url");
+                            Toast.makeText(PostVideo.this, "Video not Captured", Toast.LENGTH_SHORT).show();
+                            setUploadProgressVisible(false, 0);
+                            return;
+                        }
+                        ImageId = url;
+                        showAttachedLabel();
+                        String uploaded = null;
+                        if (languageModelResponse != null && languageModelResponse.getData() != null) {
+                            uploaded = languageModelResponse.getData().getVideoUploadSuccessfully();
+                        }
+                        if (uploaded != null && !uploaded.trim().isEmpty()) {
+                            Toast.makeText(PostVideo.this, uploaded, Toast.LENGTH_SHORT).show();
                         } else {
                             Toast.makeText(PostVideo.this, "Video upload successful", Toast.LENGTH_SHORT).show();
                         }
@@ -720,7 +1045,7 @@ public class PostVideo extends AppCompatActivity {
 
 
                     } else {
-                        Toast.makeText(getContext(), "Video not Captured", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(PostVideo.this, "Video not Captured", Toast.LENGTH_SHORT).show();
                         setUploadProgressVisible(false, 0);
 
                     }
@@ -733,6 +1058,10 @@ public class PostVideo extends AppCompatActivity {
         }, new com.android.volley.Response.ErrorListener() {
             @Override
             public void onErrorResponse(VolleyError error) {
+                if (generation != uploadGeneration) {
+                    return;
+                }
+                videoUploadInFlight = false;
                 NetworkResponse networkResponse = error.networkResponse;
                 String errorMessage = "Unknown error";
 //                mCropImageUri = null;
@@ -793,16 +1122,14 @@ public class PostVideo extends AppCompatActivity {
             @Override
             protected Map<String, DataPart> getByteData() {
                 Map<String, DataPart> params = new HashMap<>();
-                /// photo field in link
-                if (mVideoURI != null) {
-                    //params.put("video", new DataPart("file_avatar.mp4", AppHelper.getFileDataFromDrawables(getContext(), mVideoURI)));
-                    //params.put("video", new DataPart("file_avatar.mp4", AppHelper.getFileDataFromDrawables(getContext(), mVideoURI)));
-                    //Logone.e("videoparam",""+new DataPart(UUID.randomUUID().toString() + ".mp4", AppHelper.getFileDataFromDrawables(getApplicationContext(), ImageId)));
-                    //params.put("file", new DataPart(UUID.randomUUID().toString() + ".mp4", AppHelper.getFileDataFromDrawables(getApplicationContext(), ""+ImageId), "mp4/3gp"));
-                    // working for video
-                    //params.put("file", new DataPart(UUID.randomUUID().toString() + ".mp4", AppHelper.getFileDataFromDrawables(getApplicationContext(),mVideoURI),"mp4/3gp"));
-                    params.put("file", new DataPart(UUID.randomUUID().toString() + ".mp4", AppHelper.getFileDataFromDrawables(getApplicationContext(),mVideoURI),"mp4/3gp"));
+                // Own cache file. Do not read the picker content URI via the application
+                // context — that grant belongs to this Activity and comes back empty.
+                byte[] videoBytes = readFileBytes(uploadFile);
+                if (videoBytes == null || videoBytes.length == 0) {
+                    Log.e(TAG, "uploadImage read 0 bytes from " + uploadFile);
+                    return params;
                 }
+                params.put("file", new DataPart(fileName, videoBytes, mime));
                 return params;
             }
         };
