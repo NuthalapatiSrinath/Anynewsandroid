@@ -9,6 +9,8 @@ import androidx.annotation.Nullable;
 /**
  * Localize panchang / rashi display strings that ship as Telugu in the engine pack.
  * Uses {@link Constants#LanguageID}. Telugu (3) returns the source string unchanged.
+ * Other languages (including 8 Bengali, 9 Marathi, 10 Gujarati) are translated
+ * at display time; the year-pack payload stays Telugu.
  */
 public final class PanchangLabels {
 
@@ -65,6 +67,24 @@ public final class PanchangLabels {
             "ପୁଷ୍ୟା", "ଆଶ୍ଲେଷା", "ମଘା", "ପୂର୍ବା ଫାଲ୍ଗୁନୀ", "ଉତ୍ତରା ଫାଲ୍ଗୁନୀ", "ହସ୍ତା", "ଚିତ୍ରା", "ସ୍ୱାତୀ",
             "ବିଶାଖା", "ଅନୁରାଧା", "ଜ୍ୟେଷ୍ଠା", "ମୂଳା", "ପୂର୍ବାଷାଢ଼ା", "ଉତ୍ତରାଷାଢ଼ା", "ଶ୍ରବଣା",
             "ଧନିଷ୍ଠା", "ଶତଭିଷା", "ପୂର୍ବ ଭାଦ୍ରପଦ", "ଉତ୍ତର ଭାଦ୍ରପଦ", "ରେବତୀ"
+    };
+    private static final String[] NAK_BN = {
+            "অশ্বিনী", "ভরণী", "কৃত্তিকা", "রোহিণী", "মৃগশিরা", "আর্দ্রা", "পুনর্বসু",
+            "পুষ্যা", "অশ্লেষা", "মঘা", "পূর্ব ফল্গুনী", "উত্তর ফল্গুনী", "হস্তা", "চিত্রা", "স্বাতী",
+            "বিশাখা", "অনুরাধা", "জ্যেষ্ঠা", "মূলা", "পূর্বাষাঢ়া", "উত্তরাষাঢ়া", "শ্রবণা",
+            "ধনিষ্ঠা", "শতভিষা", "পূর্ব ভাদ্রপদ", "উত্তর ভাদ্রপদ", "রেবতী"
+    };
+    private static final String[] NAK_MR = {
+            "अश्विनी", "भरणी", "कृत्तिका", "रोहिणी", "मृगशिरा", "आर्द्रा", "पुनर्वसु",
+            "पुष्य", "आश्लेषा", "मघा", "पूर्वा फाल्गुनी", "उत्तरा फाल्गुनी", "हस्त", "चित्रा", "स्वाती",
+            "विशाखा", "अनुराधा", "ज्येष्ठा", "मूळ", "पूर्वाषाढा", "उत्तराषाढा", "श्रवण",
+            "धनिष्ठा", "शततारका", "पूर्वा भाद्रपदा", "उत्तरा भाद्रपदा", "रेवती"
+    };
+    private static final String[] NAK_GU = {
+            "અશ્વિની", "ભરણી", "કૃત્તિકા", "રોહિણી", "મૃગશિર", "આર્દ્રા", "પુનર્વસુ",
+            "પુષ્ય", "આશ્લેષા", "મઘા", "પૂર્વ ફાલ્ગુની", "ઉત્તર ફાલ્ગુની", "હસ્ત", "ચિત્રા", "સ્વાતિ",
+            "વિશાખા", "અનુરાધા", "જ્યેષ્ઠા", "મૂળ", "પૂર્વાષાઢા", "ઉત્તરાષાઢા", "શ્રવણ",
+            "ધનિષ્ઠા", "શતભિષા", "પૂર્વ ભાદ્રપદ", "ઉત્તર ભાદ્રપદ", "રેવતી"
     };
 
     private static final String[] TITHI_TE = {
@@ -125,6 +145,9 @@ public final class PanchangLabels {
             case 4: return NAK_TA[idx];
             case 5: return NAK_KN[idx];
             case 6: return NAK_OR[idx];
+            case 8: return NAK_BN[idx];
+            case 9: return NAK_MR[idx];
+            case 10: return NAK_GU[idx];
             default: return NAK_EN[idx];
         }
     }
@@ -169,6 +192,24 @@ public final class PanchangLabels {
                         "ଅଷ୍ଟମୀ", "ନବମୀ", "ଦଶମୀ", "ଏକାଦଶୀ", "ଦ୍ୱାଦଶୀ", "ତ୍ରୟୋଦଶୀ", "ଚତୁର୍ଦଶୀ",
                         "ପୂର୍ଣ୍ଣିମା", "ଅମାବାସ୍ୟା"
                 }[idx];
+            case 8:
+                return new String[]{
+                        "প্রতিপদ", "দ্বিতীয়া", "তৃতীয়া", "চতুর্থী", "পঞ্চমী", "ষষ্ঠী", "সপ্তমী",
+                        "অষ্টমী", "নবমী", "দশমী", "একাদশী", "দ্বাদশী", "ত্রয়োদশী", "চতুর্দশী",
+                        "পূর্ণিমা", "অমাবস্যা"
+                }[idx];
+            case 9:
+                return new String[]{
+                        "प्रतिपदा", "द्वितीया", "तृतीया", "चतुर्थी", "पंचमी", "षष्ठी", "सप्तमी",
+                        "अष्टमी", "नवमी", "दशमी", "एकादशी", "द्वादशी", "त्रयोदशी", "चतुर्दशी",
+                        "पौर्णिमा", "अमावस्या"
+                }[idx];
+            case 10:
+                return new String[]{
+                        "પ્રતિપદા", "દ્વિતીયા", "તૃતીયા", "ચતુર્થી", "પંચમી", "ષષ્ઠી", "સપ્તમી",
+                        "અષ્ટમી", "નવમી", "દશમી", "એકાદશી", "દ્વાદશી", "ત્રયોદશી", "ચતુર્દશી",
+                        "પૂર્ણિમા", "અમાસ"
+                }[idx];
             default: return TITHI_EN[idx];
         }
     }
@@ -183,6 +224,18 @@ public final class PanchangLabels {
             case 4: return MONTH_TA[m];
             case 5: return MONTH_KN[m];
             case 6: return MONTH_OR[m];
+            case 8: return new String[]{
+                    "জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন",
+                    "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"
+            }[m];
+            case 9: return new String[]{
+                    "जानेवारी", "फेब्रुवारी", "मार्च", "एप्रिल", "मे", "जून",
+                    "जुलै", "ऑगस्ट", "सप्टेंबर", "ऑक्टोबर", "नोव्हेंबर", "डिसेंबर"
+            }[m];
+            case 10: return new String[]{
+                    "જાન્યુઆરી", "ફેબ્રુઆરી", "માર્ચ", "એપ્રિલ", "મે", "જૂન",
+                    "જુલાઈ", "ઑગસ્ટ", "સપ્ટેમ્બર", "ઑક્ટોબર", "નવેમ્બર", "ડિસેમ્બર"
+            }[m];
             default: return MONTH_EN[m];
         }
     }
@@ -388,6 +441,61 @@ public final class PanchangLabels {
                 return "Wear auspicious color " + color
                         + "; end the day with quiet prayer or gratitude.";
         }
+    }
+
+    /**
+     * Year line under the month title. Telugu (3) is returned unchanged.
+     */
+    @NonNull
+    public static String localizeHeader(@Nullable Context c, @Nullable String te) {
+        if (te == null) return "";
+        if (lang(c) == 3 || te.isEmpty()) return te;
+        return PanchangText.header(lang(c), te);
+    }
+
+    /**
+     * One calendar day-cell line (tithi or nakshatra plus its end time).
+     */
+    @NonNull
+    public static String localizeCellLine(@Nullable Context c, @Nullable String line) {
+        if (line == null) return "";
+        int id = lang(c);
+        if (id == 3 || line.isEmpty()) return line;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "(రా\\.|ఉ\\.|మ\\.|సా\\.)\\s*(\\d{1,2}\\.\\d{2})\\s*$").matcher(line);
+        if (!m.find()) return localizeName(c, line.trim());
+        String name = line.substring(0, m.start()).trim();
+        String time = line.substring(m.start()).trim();
+        String shown = PanchangText.nakshatraShort(id, name);
+        if (shown == null) shown = localizeName(c, name);
+        return shown + " " + localizeTimePhrase(c, time);
+    }
+
+    /**
+     * Muhurta label, tithi, nakshatra, or festival name from the Telugu pack.
+     */
+    @NonNull
+    public static String localizeName(@Nullable Context c, @Nullable String te) {
+        if (te == null) return "";
+        int id = lang(c);
+        if (id == 3 || te.isEmpty()) return te;
+        String named = PanchangText.name(id, te);
+        if (!named.equals(te)) return named;
+        String ti = tithi(c, te);
+        if (!ti.equals(te)) return ti;
+        String nk = nakshatra(c, te);
+        if (!"—".equals(nk) && !nk.equals(te)) return nk;
+        return te;
+    }
+
+    /**
+     * Clock phrase. Numbers stay; Telugu day-part words and from/until connectors change.
+     */
+    @NonNull
+    public static String localizeTimePhrase(@Nullable Context c, @Nullable String te) {
+        if (te == null) return "";
+        if (lang(c) == 3 || te.isEmpty()) return te;
+        return PanchangText.timePhrase(lang(c), te);
     }
 
     private static int indexOfIgnoreSpace(@NonNull String[] arr, @NonNull String name) {

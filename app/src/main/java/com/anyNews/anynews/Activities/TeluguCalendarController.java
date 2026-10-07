@@ -1192,7 +1192,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
                 PanchangModels.DayData d = yearPack.day(m0 + 1, Math.min(15, selectedDay));
                 if (d != null) header = d.teluguHeader;
             }
-            teluguLine.setText(header != null ? header : "");
+            teluguLine.setText(PanchangLabels.localizeHeader(host, header));
         }
     }
 
@@ -1380,7 +1380,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             for (String line : lines) {
                 if (line == null || line.isEmpty()) continue;
                 TextView tv = new TextView(host);
-                tv.setText(line);
+                tv.setText(PanchangLabels.localizeCellLine(host, line));
                 tv.setTextColor(lineColor);
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8f);
                 tv.setMaxLines(1);
@@ -1456,7 +1456,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             if (festivalIcon != null) {
                 festivalIcon.setImageResource(R.drawable.ic_calendar_flag);
             }
-            SpannableStringBuilder sb = new SpannableStringBuilder(header.trim());
+            SpannableStringBuilder sb = new SpannableStringBuilder(
+                    PanchangLabels.localizeHeader(host, header.trim()));
             sb.setSpan(new ForegroundColorSpan(accent), 0, sb.length(),
                     SpannableStringBuilder.SPAN_EXCLUSIVE_EXCLUSIVE);
             festivalText.setText(sb);
@@ -1486,7 +1487,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         } else {
             datePart = CalendarRaasiLabels.monthName(host, month0) + " " + pick.day;
         }
-        String namePart = pick.name != null ? pick.name.trim() : "";
+        String namePart = pick.name != null
+                ? PanchangLabels.localizeName(host, pick.name.trim()) : "";
         SpannableStringBuilder sb = new SpannableStringBuilder();
         int dateStart = sb.length();
         sb.append(datePart);
@@ -1549,11 +1551,20 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             TextView name = row.findViewById(R.id.festival_row_name);
             if (icon != null) icon.setImageResource(iconRes(f.icon));
             if (date != null) {
-                date.setText(f.dateDisplayTe != null
-                        ? f.dateDisplayTe
-                        : (EN_MONTHS[Math.max(0, f.month - 1)] + " " + f.day));
+                if (languageId() == 3) {
+                    date.setText(f.dateDisplayTe != null
+                            ? f.dateDisplayTe
+                            : (EN_MONTHS[Math.max(0, f.month - 1)] + " " + f.day));
+                } else if (f.month >= 1 && f.month <= 12) {
+                    date.setText(CalendarRaasiLabels.monthName(host, f.month - 1)
+                            + " " + f.day);
+                } else {
+                    date.setText(f.dateDisplayTe != null ? f.dateDisplayTe : "");
+                }
             }
-            if (name != null) name.setText(f.name);
+            if (name != null) {
+                name.setText(f.name == null ? null : PanchangLabels.localizeName(host, f.name));
+            }
             final int day = f.day;
             row.setOnClickListener(v -> {
                 selectedDay = day;
@@ -2308,22 +2319,29 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
         sb.append("ANYNEWS — ").append(dateStr).append('\n');
 
-        appendShareSection(sb, CalendarRaasiLabels.shubhaTimes(host), day.safeShubha());
+        appendShareSection(sb, CalendarRaasiLabels.shubhaTimes(host),
+                localizeItems(day.safeShubha()));
         appendShareSection(sb, CalendarRaasiLabels.ashubhaTimes(host),
-                day.safeAshubhaMerged(CalendarRaasiLabels.againConnector(host)));
-        appendShareSection(sb, CalendarRaasiLabels.tithiLabel(host), day.safeTithiCard());
+                localizeItems(day.safeAshubhaMerged(CalendarRaasiLabels.againConnector(host))));
+        appendShareSection(sb, CalendarRaasiLabels.tithiLabel(host),
+                localizeTithiCard(day.safeTithiCard()));
         if (day.nakshatra != null && day.nakshatra.name != null) {
             List<PanchangModels.TimeItem> nak = new ArrayList<>();
             nak.add(new PanchangModels.TimeItem(
                     PanchangLabels.nakshatra(host, day.nakshatra.name),
                     day.nakshatra.endTime != null
-                            ? (PanchangLabels.endTimePrefix(host) + day.nakshatra.endTime)
+                            ? PanchangLabels.localizeTimePhrase(host,
+                            PanchangLabels.endTimePrefix(host) + day.nakshatra.endTime)
                             : ""));
             if (day.sunrise != null) {
-                nak.add(new PanchangModels.TimeItem(PanchangLabels.sunrise(host), day.sunrise));
+                nak.add(new PanchangModels.TimeItem(
+                        PanchangLabels.sunrise(host),
+                        PanchangLabels.localizeTimePhrase(host, day.sunrise)));
             }
             if (day.sunset != null) {
-                nak.add(new PanchangModels.TimeItem(PanchangLabels.sunset(host), day.sunset));
+                nak.add(new PanchangModels.TimeItem(
+                        PanchangLabels.sunset(host),
+                        PanchangLabels.localizeTimePhrase(host, day.sunset)));
             }
             appendShareSection(sb, CalendarRaasiLabels.nakshatraLabel(host), nak);
         }
@@ -2655,12 +2673,14 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             String shubhaTitle = onlyVehicle
                     ? CalendarRaasiLabels.shubhaMuhurthams(host)
                     : CalendarRaasiLabels.shubhaTimes(host);
-            pages.add(new CardPage(shubhaTitle, dateStr, R.drawable.ic_calendar_sun, shubha));
+            pages.add(new CardPage(shubhaTitle, dateStr, R.drawable.ic_calendar_sun,
+                    localizeItems(shubha)));
             pages.add(new CardPage(
                     CalendarRaasiLabels.ashubhaTimes(host),
                     dateStr,
                     R.drawable.ic_calendar_ashubha_star,
-                    d.safeAshubhaMerged(CalendarRaasiLabels.againConnector(host))));
+                    localizeItems(d.safeAshubhaMerged(
+                            CalendarRaasiLabels.againConnector(host)))));
             pages.add(new CardPage(
                     CalendarRaasiLabels.tithiLabel(host),
                     dateStr,
@@ -2671,15 +2691,18 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
                 nak.add(new PanchangModels.TimeItem(
                         PanchangLabels.nakshatra(host, d.nakshatra.name),
                         d.nakshatra.endTime != null
-                                ? (PanchangLabels.endTimePrefix(host) + d.nakshatra.endTime)
+                                ? PanchangLabels.localizeTimePhrase(host,
+                                PanchangLabels.endTimePrefix(host) + d.nakshatra.endTime)
                                 : ""));
                 if (d.sunrise != null) {
                     nak.add(new PanchangModels.TimeItem(
-                            PanchangLabels.sunrise(host), d.sunrise));
+                            PanchangLabels.sunrise(host),
+                            PanchangLabels.localizeTimePhrase(host, d.sunrise)));
                 }
                 if (d.sunset != null) {
                     nak.add(new PanchangModels.TimeItem(
-                            PanchangLabels.sunset(host), d.sunset));
+                            PanchangLabels.sunset(host),
+                            PanchangLabels.localizeTimePhrase(host, d.sunset)));
                 }
                 pages.add(new CardPage(
                         CalendarRaasiLabels.nakshatraLabel(host),
@@ -2789,12 +2812,22 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     @NonNull
     private List<PanchangModels.TimeItem> localizeTithiCard(
             @Nullable List<PanchangModels.TimeItem> raw) {
+        if (languageId() == 3) return raw != null ? raw : new ArrayList<>();
+        return localizeItems(raw);
+    }
+
+    /** Copy labels/ranges into the selected language. Telugu keeps the pack list. */
+    @NonNull
+    private List<PanchangModels.TimeItem> localizeItems(
+            @Nullable List<PanchangModels.TimeItem> raw) {
+        if (raw == null) return new ArrayList<>();
+        if (languageId() == 3) return raw;
         List<PanchangModels.TimeItem> out = new ArrayList<>();
-        if (raw == null) return out;
         for (PanchangModels.TimeItem ti : raw) {
             if (ti == null) continue;
-            String label = ti.label != null ? PanchangLabels.tithi(host, ti.label) : "";
-            out.add(new PanchangModels.TimeItem(label, ti.range != null ? ti.range : ""));
+            out.add(new PanchangModels.TimeItem(
+                    PanchangLabels.localizeName(host, ti.label),
+                    PanchangLabels.localizeTimePhrase(host, ti.range)));
         }
         return out;
     }

@@ -10,8 +10,9 @@ import com.anyNews.anynews.panchang.RaasiContent;
 
 /**
  * Localized chrome labels for Telugu Calendar + Raasi flip (not device Locale).
- * Uses {@link Constants#LanguageID}: 1 ML, 2 HI, 3 TE, 4 TA, 5 KN, 6 OR, else EN.
- * Traditional tithi/panchang data may stay Telugu; user-facing chrome follows app language.
+ * Uses {@link Constants#LanguageID}: 1 ML, 2 HI, 3 TE, 4 TA, 5 KN, 6 OR,
+ * 7 EN, 8 BN, 9 MR, 10 GU.
+ * Panchang pack text is translated in {@link PanchangLabels}; Telugu stays the source.
  */
 public final class CalendarRaasiLabels {
 
@@ -534,6 +535,9 @@ public final class CalendarRaasiLabels {
             case 4: return " மீண்டும் ";
             case 5: return " ಮತ್ತೆ ";
             case 6: return " ପୁଣି ";
+            case 8: return " আবার ";
+            case 9: return " पुन्हा ";
+            case 10: return " ફરી ";
             default: return " again ";
         }
     }
@@ -573,6 +577,21 @@ public final class CalendarRaasiLabels {
                         "ଜୁଲାଇ", "ଅଗଷ୍ଟ", "ସେପ୍ଟେମ୍ବର", "ଅକ୍ଟୋବର", "ନଭେମ୍ବର", "ଡିସେମ୍ବର"};
                 return n[m];
             }
+            case 8: {
+                String[] n = {"জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন",
+                        "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"};
+                return n[m];
+            }
+            case 9: {
+                String[] n = {"जानेवारी", "फेब्रुवारी", "मार्च", "एप्रिल", "मे", "जून",
+                        "जुलै", "ऑगस्ट", "सप्टेंबर", "ऑक्टोबर", "नोव्हेंबर", "डिसेंबर"};
+                return n[m];
+            }
+            case 10: {
+                String[] n = {"જાન્યુઆરી", "ફેબ્રુઆરી", "માર્ચ", "એપ્રિલ", "મે", "જૂન",
+                        "જુલાઈ", "ઑગસ્ટ", "સપ્ટેમ્બર", "ઑક્ટોબર", "નવેમ્બર", "ડિસેમ્બર"};
+                return n[m];
+            }
             default: {
                 String[] n = {"January", "February", "March", "April", "May", "June",
                         "July", "August", "September", "October", "November", "December"};
@@ -591,6 +610,9 @@ public final class CalendarRaasiLabels {
             case 4: return new String[]{"ஞாயி", "திங்", "செவ்", "புத", "வியா", "வெள்", "சனி"};
             case 5: return new String[]{"ಭಾನು", "ಸೋಮ", "ಮಂಗಳ", "ಬುಧ", "ಗುರು", "ಶುಕ್ರ", "ಶನಿ"};
             case 6: return new String[]{"ରବି", "ସୋମ", "ମଙ୍ଗଳ", "ବୁଧ", "ଗୁରୁ", "ଶୁକ୍ର", "ଶନି"};
+            case 8: return new String[]{"রবি", "সোম", "মঙ্গল", "বুধ", "বৃহ", "শুক্র", "শনি"};
+            case 9: return new String[]{"रवि", "सोम", "मंगळ", "बुध", "गुरु", "शुक्र", "शनि"};
+            case 10: return new String[]{"રવિ", "સોમ", "મંગળ", "બુધ", "ગુરુ", "શુક્ર", "શનિ"};
             default: return new String[]{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
         }
     }
@@ -603,6 +625,9 @@ public final class CalendarRaasiLabels {
             case 4: return "சுப நேரங்கள்";
             case 5: return "ಶುಭ ಸಮಯಗಳು";
             case 6: return "ଶୁଭ ସମୟ";
+            case 8: return "শুভ সময়";
+            case 9: return "शुभ काळ";
+            case 10: return "શુભ સમય";
             default: return "Auspicious times";
         }
     }
@@ -615,6 +640,9 @@ public final class CalendarRaasiLabels {
             case 4: return "சுப முகூர்த்தங்கள்";
             case 5: return "ಶುಭ ಮುಹೂರ್ತಗಳು";
             case 6: return "ଶୁଭ ମୁହୂର୍ତ୍ତ";
+            case 8: return "শুভ মুহূর্ত";
+            case 9: return "शुभ मुहूर्त";
+            case 10: return "શુભ મુહૂર્ત";
             default: return "Auspicious muhurthams";
         }
     }
@@ -627,6 +655,9 @@ public final class CalendarRaasiLabels {
             case 4: return "அசுபங்கள்";
             case 5: return "ಅಶುಭಗಳು";
             case 6: return "ଅଶୁଭ";
+            case 8: return "অশুভ";
+            case 9: return "अशुभ";
+            case 10: return "અશુભ";
             default: return "Inauspicious";
         }
     }
@@ -639,6 +670,9 @@ public final class CalendarRaasiLabels {
             case 4: return "திதி";
             case 5: return "ತಿಥಿ";
             case 6: return "ତିଥି";
+            case 8: return "তিথি";
+            case 9: return "तिथी";
+            case 10: return "તિથિ";
             default: return "Tithi";
         }
     }
@@ -651,6 +685,9 @@ public final class CalendarRaasiLabels {
             case 4: return "நட்சத்திரம்";
             case 5: return "ನಕ್ಷತ್ರ";
             case 6: return "ନକ୍ଷତ୍ର";
+            case 8: return "নক্ষত্র";
+            case 9: return "नक्षत्र";
+            case 10: return "નક્ષત્ર";
             default: return "Nakshatra";
         }
     }
