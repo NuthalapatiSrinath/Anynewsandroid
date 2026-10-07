@@ -3590,7 +3590,8 @@ public class newProfileDetails extends AppCompatActivity {
     }
 
     /**
-     * Show + only for logged-in approved reporters. Mini actions honor admin
+     * Show + only for a logged-in reporter whose current language has reporter
+     * login turned on. Mini actions honor admin
      * {@link Constants#ENABLE_ARTICLE_POST} / {@link Constants#ENABLE_VIDEO_POST} /
      * {@link Constants#ENABLE_FULL_POST} (same prefs as old home FAB satellites).
      */
@@ -3598,7 +3599,8 @@ public class newProfileDetails extends AppCompatActivity {
         boolean loggedIn = SharedPrefsData.getBool(this, Constants.is_login, Constants.PREF_NAME);
         boolean isReporter = SharedPrefsData.getBool(this, Constants.is_reporter, Constants.PREF_NAME)
                 || showingReporterUi;
-        boolean showFab = loggedIn && isReporter;
+        boolean showFab = loggedIn && isReporter
+                && com.anyNews.anynews.Utils.ReporterLoginVisibility.isEnabledForCurrentLanguage(this);
 
         if (profileReporterFabRoot == null) {
             profileReporterFabRoot = findViewById(R.id.profile_reporter_fab_root);
@@ -3799,6 +3801,9 @@ public class newProfileDetails extends AppCompatActivity {
         }
         if (!isReporter) {
             Toast.makeText(this, ProfileHubLabels.reporterDeskPending(this), Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        if (!com.anyNews.anynews.Utils.ReporterLoginVisibility.isEnabledForCurrentLanguage(this)) {
             return false;
         }
         if (ReporterPostGateHelper.blockComposeIfIncomplete(this)) {

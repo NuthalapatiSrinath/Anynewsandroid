@@ -18034,6 +18034,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             encreptionRequest.getEnable_article_post(),
                             encreptionRequest.getEnable_full_post()
                     );
+                    // Current language's reporter-login toggle for the profile plus.
+                    // Omitted keys stay null and do not wipe a previous ON list.
+                    com.anyNews.anynews.Utils.ReporterLoginVisibility.save(
+                            HomePage.this,
+                            encreptionRequest.getShow_reporter_login(),
+                            encreptionRequest.getReporter_login_languages(),
+                            SharedPrefsData.getInt(
+                                    HomePage.this, Constants.LanguageID, Constants.PREF_NAME));
                     // Only update when the envelope explicitly includes the field.
                     // Flash/error fallbacks that omit it must not wipe splash=true.
                     if (encreptionRequest.hasRequire_full_profile_to_post()

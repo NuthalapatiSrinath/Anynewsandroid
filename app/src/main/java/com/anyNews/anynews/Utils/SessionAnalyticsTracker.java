@@ -24,6 +24,8 @@ import com.anyNews.anynews.Services.CommonUtilities;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Services.SessionFlushService;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import org.json.JSONObject;
@@ -724,6 +726,35 @@ public final class SessionAnalyticsTracker {
         return retrofit.create(APIService.class);
     }
 
+    /** Reporter-login ON list for the profile plus. Omitted keys do not wipe. */
+    private void saveReporterLoginFromSession(Context context, JsonObject resBody) {
+        try {
+            Boolean flag = null;
+            java.util.List<Integer> ids = null;
+            if (resBody.has("show_reporter_login")
+                    && !resBody.get("show_reporter_login").isJsonNull()) {
+                flag = resBody.get("show_reporter_login").getAsBoolean();
+            }
+            if (resBody.has("reporter_login_languages")
+                    && resBody.get("reporter_login_languages").isJsonArray()) {
+                ids = new java.util.ArrayList<>();
+                JsonArray arr = resBody.getAsJsonArray("reporter_login_languages");
+                for (int i = 0; i < arr.size(); i++) {
+                    JsonElement el = arr.get(i);
+                    if (el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isNumber()) {
+                        ids.add(el.getAsInt());
+                    }
+                }
+            }
+            if (flag == null && ids == null) {
+                return;
+            }
+            int lang = SharedPrefsData.getInt(context, Constants.LanguageID, Constants.PREF_NAME);
+            ReporterLoginVisibility.save(context, flag, ids, lang);
+        } catch (Exception ignored) {
+        }
+    }
+
     /** Must run on NET_EXEC for critical paths. */
     private void executeSessionCall(
             Context context, JSONObject body, boolean clearPendingOnSuccess, boolean fastClose) {
@@ -742,6 +773,7 @@ public final class SessionAnalyticsTracker {
                 }
                 JsonObject resBody = response.body();
                 if (resBody != null) {
+                    saveReporterLoginFromSession(context, resBody);
                     boolean cricketSurfaceFlipped = false;
                     if (resBody.has("cricket_mini_player_enabled")) {
                         boolean newVal = resBody.get("cricket_mini_player_enabled").getAsBoolean();

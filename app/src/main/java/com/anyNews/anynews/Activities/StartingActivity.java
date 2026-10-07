@@ -2193,6 +2193,17 @@ public class StartingActivity extends AppCompatActivity {
                                 Constants.PREF_NAME
                         );
 
+                        Integer splashLang = startActivityReqModel.getData().getLanguageId();
+                        int reporterLoginLang = splashLang != null && splashLang > 0
+                                ? splashLang
+                                : SharedPrefsData.getInt(
+                                        getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+                        com.anyNews.anynews.Utils.ReporterLoginVisibility.save(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getShowReporterLogin(),
+                                startActivityReqModel.getData().getReporterLoginLanguages(),
+                                reporterLoginLang);
+
                         // Admin full/half autoplay (null fields keep cache; legacy-only
                         // payloads copy the global onto both card types).
                         if (startActivityReqModel.getData().hasVideoAutoplayEnabled()

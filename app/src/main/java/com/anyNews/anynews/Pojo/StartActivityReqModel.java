@@ -1,10 +1,13 @@
 
 package com.anyNews.anynews.Pojo;
 
+import com.google.gson.JsonElement;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class StartActivityReqModel implements Serializable {
@@ -176,6 +179,35 @@ public class StartActivityReqModel implements Serializable {
 
         public Integer getSearchIconSizeDp() {
             return searchIconSizeDp;
+        }
+
+        @SerializedName("show_reporter_login")
+        @Expose
+        private Boolean showReporterLogin;
+
+        public Boolean getShowReporterLogin() {
+            return showReporterLogin;
+        }
+
+        @SerializedName("reporter_login_languages")
+        @Expose
+        private JsonElement reporterLoginLanguages;
+
+        /** Null when splash omitted the list. Empty means every language is off. */
+        public List<Integer> getReporterLoginLanguages() {
+            if (reporterLoginLanguages == null || !reporterLoginLanguages.isJsonArray()) {
+                return null;
+            }
+            List<Integer> ids = new ArrayList<>();
+            for (JsonElement el : reporterLoginLanguages.getAsJsonArray()) {
+                try {
+                    if (el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isNumber()) {
+                        ids.add(el.getAsInt());
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            return ids;
         }
 
         @SerializedName("enable_video_post")

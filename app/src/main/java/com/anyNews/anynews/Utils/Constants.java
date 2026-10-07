@@ -268,6 +268,15 @@ public class Constants {
     public static String ENABLE_VIDEO_POST = "enable_video_post";
     public static String ENABLE_ARTICLE_POST = "enable_article_post";
     public static String ENABLE_FULL_POST = "enable_full_post";
+    /**
+     * JSON array of language ids whose Reporter login toggle is ON.
+     * Missing pref means the phone has not received the list yet.
+     * {@code []} means every language is off.
+     */
+    public static String REPORTER_LOGIN_LANGUAGE_IDS = "reporter_login_languages";
+    /** Boolean {@code show_reporter_login} for {@link #SHOW_REPORTER_LOGIN_LANG}. */
+    public static String SHOW_REPORTER_LOGIN = "show_reporter_login";
+    public static String SHOW_REPORTER_LOGIN_LANG = "show_reporter_login_lang";
     /** Admin: require 100% profile (name/email/mobile/photo) before compose / Create_User_Post. */
     public static String REQUIRE_FULL_PROFILE_TO_POST = "require_full_profile_to_post";
     /**

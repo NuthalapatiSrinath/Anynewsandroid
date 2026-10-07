@@ -1,8 +1,10 @@
 package com.anyNews.anynews.Pojo;
 
+import com.google.gson.JsonElement;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class EncreptionRequest {
@@ -137,8 +139,13 @@ public class EncreptionRequest {
     @Expose
     private boolean update_user_language;
 
-    public boolean isShow_reporter_login() {
+    /** Null when the envelope omitted the key (do not treat that as off). */
+    public Boolean getShow_reporter_login() {
         return show_reporter_login;
+    }
+
+    public boolean isShow_reporter_login() {
+        return Boolean.TRUE.equals(show_reporter_login);
     }
 
     public void setShow_reporter_login(boolean show_reporter_login) {
@@ -147,7 +154,31 @@ public class EncreptionRequest {
 
     @SerializedName("show_reporter_login")
     @Expose
-    private boolean show_reporter_login;
+    private Boolean show_reporter_login;
+
+    /**
+     * Language ids with reporter login ON. Null when omitted.
+     * Empty array means every language is off.
+     */
+    public List<Integer> getReporter_login_languages() {
+        if (reporter_login_languages == null || !reporter_login_languages.isJsonArray()) {
+            return null;
+        }
+        List<Integer> ids = new ArrayList<>();
+        for (JsonElement el : reporter_login_languages.getAsJsonArray()) {
+            try {
+                if (el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isNumber()) {
+                    ids.add(el.getAsInt());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return ids;
+    }
+
+    @SerializedName("reporter_login_languages")
+    @Expose
+    private JsonElement reporter_login_languages;
 
     public boolean isIs_reporter() {
         return is_reporter;
