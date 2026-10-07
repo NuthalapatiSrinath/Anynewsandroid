@@ -832,8 +832,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean honorFlipCheckpointThisInstance = false;
     /**
      * This open is a return inside the admin keep-position window (activity
-     * was recreated). {@link #ShowNews_Data_Values} paints cache and does not
-     * call List_All_Articles. Explicit Reload clears it.
+     * was recreated, and splash did not clear the seat). {@link #ShowNews_Data_Values}
+     * paints cache and does not call List_All_Articles. Explicit Reload clears it.
      */
     private boolean skipFeedNetworkForPositionKeep = false;
     /** Chooser returns inside this window stay on the card the user was reading. */
@@ -1720,10 +1720,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } catch (Exception ignored) {
             }
             clearPendingFlipRestore();
+        } else if (!honorFlipCheckpointThisInstance
+                && !openAsSpecial
+                && !categorySessionOpen
+                && !searchFeedActive
+                && !restoreDailyUpdatesOnCreate
+                && FeedPositionKeepConfig.shouldKeepPosition(this)) {
+            // Not a cold splash (splash already cleared the seat) and still
+            // inside the admin minutes. Recreate must not jump to card 0.
+            skipFeedNetworkForPositionKeep = true;
+            int saved = FeedPositionKeepConfig.savedIndex(this);
+            long pid = FeedPositionKeepConfig.savedPostId(this);
+            pendingRestoreFlipIndex = saved;
+            pendingRestorePostId = pid;
+            pendingFlipRestore = saved > 0 || pid > 0;
+            showLog("feed position keep: recreate inside window index="
+                    + saved + " postId=" + pid);
         } else if (!honorFlipCheckpointThisInstance) {
-            // Launcher, swipe-away, or a new screen. Latest feed, card 0.
-            // Coming back from a share keeps the living screen; it does not
-            // start here, and it must not replay a saved pager index.
+            // Cold splash, or away longer than the admin minutes. Latest card.
             skipFeedNetworkForPositionKeep = false;
             try {
                 FeedPositionKeepConfig.clear(this);
@@ -21162,10 +21176,11 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /**
-     * Home / recents → process not visible. {@link ProcessLifecycleOwner} ON_STOP
-     * is what sets {@link #appEnteredBackground} (not onPause). A normal return
-     * reloads My Feed at the first card. Coming back from a share inside the
-     * admin window keeps that card. A new push still seats the pushed post.
+     * Home / recents / WhatsApp → process not visible. {@link ProcessLifecycleOwner}
+     * ON_STOP is what sets {@link #appEnteredBackground} (not onPause). Coming
+     * back inside the admin minutes keeps the same card and does not refetch.
+     * A cold splash never reaches this as a return. A new push still seats
+     * the pushed post.
      */
     @Override
     protected void onStart() {
@@ -21214,10 +21229,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
     }
 
     /**
-     * A normal return reloads My Feed at the first card. A share return inside
-     * the admin window keeps the card already on screen, with no feed refetch.
-     * A push that arrived in this resume is seated instead and does not restore
-     * the card they shared from.
+     * A return inside the admin minutes keeps the card already on screen and
+     * does not refetch. Past that window, My Feed reloads at the first card.
+     * A push that arrived in this resume is seated instead and does not
+     * restore the card they left.
      */
     private void runDeferredBackgroundFeedRefresh() {
         pendingBackgroundRefreshCheck = false;
@@ -21264,16 +21279,10 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (!unstuckSpecial
                 && (incomingIntent || recentShareSheet || expectNotifSettingsOrPermReturn)) {
             // Back from the share sheet within a few seconds: stay on that
-            // card and do not refetch. Then drop the seat so a later close
-            // cannot replay it.
-            if (recentShareSheet
-                    && FeedPositionKeepConfig.isAwaitingShareReturn()
-                    && FeedPositionKeepConfig.shouldKeepPosition(this)) {
+            // card and do not refetch. The seat stays until the admin window
+            // ends, a cold splash, a push, or an explicit reload.
+            if (recentShareSheet && FeedPositionKeepConfig.shouldKeepPosition(this)) {
                 restoreKeptFeedSeatIfNeeded();
-                try {
-                    FeedPositionKeepConfig.clear(this);
-                } catch (Exception ignored) {
-                }
             }
             showLog("background resume skip feed refresh intent=" + incomingIntent
                     + " shareSheet=" + recentShareSheet
@@ -21286,16 +21295,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (!unstuckSpecial && !isPlainMainNewsFeed()) {
             return;
         }
-        if (!unstuckSpecial
-                && FeedPositionKeepConfig.isAwaitingShareReturn()
-                && FeedPositionKeepConfig.shouldKeepPosition(this)) {
-            showLog("background resume keep feed position (share, within admin minutes)");
+        if (!unstuckSpecial && FeedPositionKeepConfig.shouldKeepPosition(this)) {
+            showLog("background resume keep feed position (within admin minutes)");
             restoreKeptFeedSeatIfNeeded();
-            // One return only. A later close must not replay this card.
-            try {
-                FeedPositionKeepConfig.clear(this);
-            } catch (Exception ignored) {
-            }
             return;
         }
         try {
@@ -21360,14 +21362,33 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     boolean fromShare = shareDepartureAwaitingBackground
                             || FeedPositionKeepConfig.consumeShareDeparture(HomePage.this);
                     shareDepartureAwaitingBackground = false;
-                    // Closing, or leaving without a share, drops the seat. The
-                    // card was already recorded when the share started; do not
-                    // write a new one here or a later open jumps to it.
-                    if (!fromShare || isFinishing() || languageSwitch) {
+                    // Swipe-away and a language change are not a return. A cold
+                    // splash also clears the seat. Any other leave (WhatsApp,
+                    // Home, recents) records the card and starts the clock.
+                    if (isFinishing() || languageSwitch) {
                         FeedPositionKeepConfig.clear(HomePage.this);
                         return;
                     }
-                    FeedPositionKeepConfig.confirmShareBackground(HomePage.this);
+                    if (fromShare) {
+                        FeedPositionKeepConfig.confirmShareBackground(HomePage.this);
+                        return;
+                    }
+                    if (!isPlainMainNewsFeed()) {
+                        FeedPositionKeepConfig.clear(HomePage.this);
+                        return;
+                    }
+                    int flipIndex = resolveCurrentFlipIndexForSave();
+                    long postId = resolvePostIdForFlipIndex(flipIndex);
+                    int seatLang = 0;
+                    try {
+                        seatLang = SharedPrefsData.getInt(
+                                HomePage.this, Constants.LanguageID, Constants.PREF_NAME);
+                    } catch (Exception ignoredLang) {
+                    }
+                    FeedPositionKeepConfig.noteBackgroundLeave(
+                            HomePage.this, flipIndex, postId, seatLang);
+                    showLog("feed position keep: left foreground index="
+                            + flipIndex + " postId=" + postId);
                 } catch (Exception ignored) {
                 }
             }

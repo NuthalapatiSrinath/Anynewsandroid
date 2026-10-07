@@ -370,8 +370,9 @@ public class Constants {
      */
     public static String FEED_POSITION_LANGUAGE_ID = "feed_position_language_id";
     /**
-     * True only when {@link #FEED_POSITION_INDEX} was saved because the user
-     * left to share. A normal Home / launcher open must not resume that seat.
+     * True when {@link #FEED_POSITION_INDEX} was saved from a share sheet.
+     * Home and recents save the same seat with this false. A cold splash
+     * clears the seat either way.
      */
     public static String FEED_POSITION_FROM_SHARE = "feed_position_from_share";
     /**

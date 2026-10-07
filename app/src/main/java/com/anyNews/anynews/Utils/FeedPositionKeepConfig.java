@@ -6,19 +6,21 @@ import android.text.TextUtils;
 import androidx.annotation.Nullable;
 
 /**
- * How long to keep the news card after the user leaves to share (WhatsApp).
+ * How long to keep the news card after the app leaves the foreground.
  *
  * <p>The minutes value is cached from splash / session
- * ({@code feed_position_keep_minutes}). The seat is written when a share
- * starts, and the clock starts when that share actually puts the process in
- * the background. Coming back inside the window must not call the server.
- * Closing the app, the launcher, and a background that was not a share do
- * not keep the card — those opens start at the newest card.
+ * ({@code feed_position_keep_minutes}). The seat and the leave time are
+ * written when the process actually backgrounds (WhatsApp, Home, or
+ * recents), not only when a share starts. Coming back inside the window
+ * must not call the server and must not jump to the first card. The clock
+ * is the phone's wall time from that leave.
  *
- * <p>The “waiting to come back from this share” flag lives only in this
- * process. A swipe-away or a new process cannot replay the seat.
+ * <p>A cold open through splash clears the seat first, so that launch still
+ * starts at the newest card. The same happens when they were away longer
+ * than the configured minutes. A push still clears the seat.
  *
- * <p>Missing / old server → {@link #DEFAULT_MINUTES} (15). This is not
+ * <p>Missing / old server → {@link #DEFAULT_MINUTES} (15). Values below 1
+ * are the admin default (15), matching the 1–180 control. This is not
  * {@link OpenPathCache#SPLASH_TTL_MS}.
  */
 public final class FeedPositionKeepConfig {
@@ -29,7 +31,8 @@ public final class FeedPositionKeepConfig {
 
     /**
      * Set only after this process backgrounds because of a share. Dies with
-     * the process, so a later cold open cannot treat a saved seat as a return.
+     * the process. A dismissed share sheet must not wipe a seat that the
+     * background return already confirmed.
      */
     private static boolean awaitingShareReturn = false;
 
@@ -100,9 +103,9 @@ public final class FeedPositionKeepConfig {
     }
 
     /**
-     * @param fromShare true only when this background is a share sheet. A later
-     *                  open keeps the card only for that case, and only inside
-     *                  the admin window.
+     * @param fromShare true when this background is a share sheet. Home and
+     *                  recents pass false. Either way, a later return keeps
+     *                  the card inside the admin window.
      */
     public static void noteLeftForeground(
             @Nullable Context context,
@@ -131,9 +134,22 @@ public final class FeedPositionKeepConfig {
     }
 
     /**
-     * Call when a share sheet or WhatsApp send actually starts. This is the
-     * only place that records the card. A later Home / recents / close must
-     * not write a new seat.
+     * Home, recents, or another app. Records the card on screen and starts
+     * the admin window from now. Does not call the network.
+     */
+    public static void noteBackgroundLeave(
+            @Nullable Context context, int flipIndex, long postId, int languageId) {
+        if (context == null) {
+            return;
+        }
+        noteLeftForeground(context, flipIndex, postId, languageId, false);
+    }
+
+    /**
+     * Call when a share sheet or WhatsApp send actually starts. Records the
+     * card. The admin window starts later, when that share puts the process
+     * in the background. A Home / recents leave records its own seat in
+     * {@link #noteBackgroundLeave}.
      */
     public static void noteShareStarted(
             @Nullable Context context, int flipIndex, long postId, int languageId) {
@@ -159,8 +175,8 @@ public final class FeedPositionKeepConfig {
 
     /**
      * The process left the foreground while a share was in progress. Starts
-     * the admin window from now and arms a one-shot return for this process.
-     * Does not move the saved card — the share-start seat is the one to keep.
+     * the admin window from now. Does not move the saved card — the
+     * share-start seat is the one to keep.
      */
     public static void confirmShareBackground(@Nullable Context context) {
         awaitingShareReturn = true;
@@ -223,12 +239,21 @@ public final class FeedPositionKeepConfig {
         }
     }
 
-    /** True when the user left to share recently enough that the same card should stay. */
+    /**
+     * True when the phone left the foreground recently enough that the same
+     * card should stay. Share, Home, and recents all qualify. A cold splash
+     * clears the seat before Home opens, so this is false on that launch.
+     * Process death does not erase the seat; only splash, a push, an
+     * explicit reload, or being away past the window does. Admin minutes
+     * are 1–180 (below 1 is stored as 15), so 0 cannot mean “always restart”.
+     */
     public static boolean shouldKeepPosition(@Nullable Context context) {
         if (context == null) {
             return false;
         }
-        if (!savedFromShare(context)) {
+        // Share tap writes a seat before the process leaves. It does not count
+        // until that share actually backgrounds (or the sheet is dismissed).
+        if (isShareDeparturePending(context)) {
             return false;
         }
         long leftAt = readLeftAt(context);
@@ -309,7 +334,7 @@ public final class FeedPositionKeepConfig {
         }
     }
 
-    /** Explicit reload, push open, close, or any open that is not a share return. */
+    /** Explicit reload, push open, splash, or leaving Home for good. */
     public static void clear(@Nullable Context context) {
         awaitingShareReturn = false;
         if (context == null) {
@@ -327,19 +352,6 @@ public final class FeedPositionKeepConfig {
                     .putBoolean(Constants.FEED_POSITION_SHARE_DEPARTURE, false)
                     .commit();
         } catch (Exception ignored) {
-        }
-    }
-
-    private static boolean savedFromShare(@Nullable Context context) {
-        if (context == null) {
-            return false;
-        }
-        try {
-            return context.getApplicationContext()
-                    .getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
-                    .getBoolean(Constants.FEED_POSITION_FROM_SHARE, false);
-        } catch (Exception ignored) {
-            return false;
         }
     }
 
