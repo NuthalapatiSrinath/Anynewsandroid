@@ -48,6 +48,7 @@ import androidx.viewpager.widget.ViewPager;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Ui.HomeFeedRevealView;
 import com.anyNews.anynews.Utils.CalendarRaasiLabels;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.PanchangLabels;
 import com.anyNews.anynews.Utils.CalendarUiConfigHelper;
 import com.anyNews.anynews.Utils.Constants;
@@ -2345,7 +2346,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             }
             appendShareSection(sb, CalendarRaasiLabels.nakshatraLabel(host), nak);
         }
-        sharePlainText(sb.toString().trim());
+        sharePlainText(sb.toString().trim(), "panchangam");
     }
 
     private void shareSelectedRaasi() {
@@ -2371,7 +2372,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             sb.append(CalendarRaasiLabels.luckyDirection(host)).append(": ")
                     .append(nullToEmpty(daily.direction));
         }
-        sharePlainText(sb.toString().trim());
+        sharePlainText(sb.toString().trim(), "rashi");
     }
 
     private void appendShareSection(@NonNull StringBuilder sb,
@@ -2389,7 +2390,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         }
     }
 
-    private void sharePlainText(@NonNull String text) {
+    private void sharePlainText(@NonNull String text, @NonNull String pageKey) {
+        text = DailyUpdatesShareLinks.withLink(host, text, pageKey);
         if (TextUtils.isEmpty(text)) {
             Toast.makeText(host, R.string.telugu_calendar_loading, Toast.LENGTH_SHORT).show();
             return;

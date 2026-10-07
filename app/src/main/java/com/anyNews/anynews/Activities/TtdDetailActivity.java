@@ -30,6 +30,8 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.anyNews.anynews.R;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLanguage;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.TtdConfigHelper;
 import com.anyNews.anynews.Utils.TtdLabels;
 import com.anyNews.anynews.ttd.TtdModels;
@@ -66,6 +68,7 @@ public class TtdDetailActivity extends AppCompatActivity {
             finish();
             return;
         }
+        DailyUpdatesShareLinks.beginLanguage(this);
         setContentView(R.layout.activity_ttd_detail);
         applySystemBars();
 
@@ -333,6 +336,12 @@ public class TtdDetailActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        DailyUpdatesShareLanguage.end();
+        super.onDestroy();
+    }
+
     private void wireClicks() {
         View back = findViewById(R.id.ttd_back);
         if (back != null) back.setOnClickListener(v -> finish());
@@ -383,6 +392,7 @@ public class TtdDetailActivity extends AppCompatActivity {
                 + TtdLabels.newsLine(0, this) + "\n\n"
                 + TtdConfigHelper.officialUrl(this) + "\n"
                 + TtdConfigHelper.bookingUrl(this);
+        text = DailyUpdatesShareLinks.withLink(this, text, "ttd");
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_TEXT, text);

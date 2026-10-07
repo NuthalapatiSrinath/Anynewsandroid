@@ -255,6 +255,10 @@
                     android:scheme="https"
                     android:host="api.anynews.co.in"
                     android:pathPrefix="/job-" />
+                <data
+                    android:scheme="https"
+                    android:host="api.anynews.co.in"
+                    android:pathPrefix="/du/" />
             </intent-filter>
             <!-- Brand apex App Links -->
             <intent-filter android:autoVerify="true">
@@ -273,6 +277,10 @@
                     android:scheme="https"
                     android:host="anynews.co.in"
                     android:pathPrefix="/job-" />
+                <data
+                    android:scheme="https"
+                    android:host="anynews.co.in"
+                    android:pathPrefix="/du/" />
             </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -290,12 +298,20 @@
                     android:scheme="https"
                     android:host="www.anynews.co.in"
                     android:pathPrefix="/job-" />
+                <data
+                    android:scheme="https"
+                    android:host="www.anynews.co.in"
+                    android:pathPrefix="/du/" />
             </intent-filter>
             <!-- Brand short domain (when SSL / assetlinks are valid) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="anws.in"
+                    android:pathPrefix="/du/" />
                 <data
                     android:scheme="https"
                     android:host="anws.in"
@@ -313,6 +329,10 @@
                 <data
                     android:scheme="https"
                     android:host="share.anynews.co.in"
+                    android:pathPrefix="/du/" />
+                <data
+                    android:scheme="https"
+                    android:host="share.anynews.co.in"
                     android:pathPattern="/.*" />
             </intent-filter>
             <!-- Legacy short share host (old inbound links only; do not use for new shares) -->
@@ -324,6 +344,10 @@
                     android:scheme="https"
                     android:host="sharedev.anynews.co.in"
                     android:pathPrefix="/p/" />
+                <data
+                    android:scheme="https"
+                    android:host="sharedev.anynews.co.in"
+                    android:pathPrefix="/du/" />
                 <data
                     android:scheme="https"
                     android:host="sharedev.anynews.co.in"
@@ -346,6 +370,10 @@
                     android:scheme="https"
                     android:host="anynewsdevelopmentapi.anynews.co.in"
                     android:pathPrefix="/job-" />
+                <data
+                    android:scheme="https"
+                    android:host="anynewsdevelopmentapi.anynews.co.in"
+                    android:pathPrefix="/du/" />
             </intent-filter>
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -374,6 +402,16 @@
                 <data
                     android:scheme="anynews"
                     android:host="job"
+                    android:pathPrefix="/" />
+            </intent-filter>
+            <!-- Daily Updates share: anynews://du/{page} -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="anynews"
+                    android:host="du"
                     android:pathPrefix="/" />
             </intent-filter>
             <intent-filter>

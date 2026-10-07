@@ -26,6 +26,8 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.anyNews.anynews.R;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLanguage;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
 import com.anyNews.anynews.Utils.WeatherDetailLabels;
 import com.bumptech.glide.Glide;
@@ -51,6 +53,7 @@ public class WeatherDetailActivity extends AppCompatActivity {
             finish();
             return;
         }
+        DailyUpdatesShareLinks.beginLanguage(this);
         setContentView(R.layout.activity_weather_detail);
         applySystemBars(R.id.weather_detail_root);
         clipHero();
@@ -364,6 +367,12 @@ public class WeatherDetailActivity extends AppCompatActivity {
         parent.addView(tv);
     }
 
+    @Override
+    protected void onDestroy() {
+        DailyUpdatesShareLanguage.end();
+        super.onDestroy();
+    }
+
     private void wireClicks() {
         View back = findViewById(R.id.weather_back);
         if (back != null) back.setOnClickListener(v -> finish());
@@ -375,6 +384,7 @@ public class WeatherDetailActivity extends AppCompatActivity {
                         + LocalUpdatesConfigHelper.optString(w, "location_name", "")
                         + ": " + LocalUpdatesConfigHelper.optNumberInt(w, "temp_c", 0) + "°C, "
                         + LocalUpdatesConfigHelper.optString(w, "condition", "");
+                body = DailyUpdatesShareLinks.withLink(this, body, "weather");
                 Intent send = new Intent(Intent.ACTION_SEND);
                 send.setType("text/plain");
                 send.putExtra(Intent.EXTRA_TEXT, body);

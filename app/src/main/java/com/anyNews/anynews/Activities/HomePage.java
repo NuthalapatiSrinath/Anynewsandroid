@@ -156,6 +156,7 @@ import com.anyNews.anynews.Utils.AdPreloader;
 import com.anyNews.anynews.Utils.VideoShareHelper;
 import com.anyNews.anynews.Utils.CommonMethods;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.CategoriesDiskCache;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.FlashNewsChipHelper;
@@ -1624,6 +1625,46 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
                     });
                 }
+            }
+        } catch (Exception ignored) {
+        }
+        // Daily Updates share: open that screen (rashi, fuel, gold, …), not the feed.
+        try {
+            String duRedirect = "";
+            try {
+                if (getIntent() != null) {
+                    duRedirect = "" + getIntent().getStringExtra("DU_REDIRECT_KEY");
+                }
+            } catch (Exception ignored) {
+            }
+            if (duRedirect == null || duRedirect.equals("null") || duRedirect.trim().isEmpty()) {
+                duRedirect = SharedPrefsData.getString(
+                        getApplicationContext(), Constants.PENDING_SHARE_DU, Constants.PREF_NAME);
+            }
+            final String duPage = DailyUpdatesShareLinks.canonicalKey(duRedirect);
+            if (duPage != null) {
+                int duLang = -1;
+                try {
+                    if (getIntent() != null && getIntent().hasExtra("DU_REDIRECT_LANG")) {
+                        duLang = getIntent().getIntExtra("DU_REDIRECT_LANG", -1);
+                    }
+                } catch (Exception ignored) {
+                }
+                if (duLang < 0) {
+                    duLang = SharedPrefsData.getInt(
+                            getApplicationContext(), Constants.PENDING_SHARE_DU_LANG, Constants.PREF_NAME);
+                }
+                final int shareLang = duLang;
+                SharedPrefsData.putString(
+                        getApplicationContext(), Constants.PENDING_SHARE_DU, "", Constants.PREF_NAME);
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    try {
+                        startActivity(DailyUpdatesShareLinks.openIntent(
+                                HomePage.this, duPage, shareLang));
+                    } catch (Exception e) {
+                        showLog("daily updates share open failed: " + e.getMessage());
+                    }
+                });
             }
         } catch (Exception ignored) {
         }

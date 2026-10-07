@@ -837,6 +837,16 @@ public class Constants {
     /** One-shot job id from /job/{id} or legacy /job-{base64} share deep links. */
     public static String PENDING_SHARE_JOB = "pending_share_job_id";
     /**
+     * One-shot Daily Updates page from {@code /du/{page}} share links
+     * (rashi, panchangam, fuel, gold, weather, ttd). Not an article id.
+     */
+    public static String PENDING_SHARE_DU = "pending_share_du_page";
+    /**
+     * Sharer's LanguageID on that Daily Updates link. -1 when the link
+     * omitted it. Never copied into {@link #LanguageID}.
+     */
+    public static String PENDING_SHARE_DU_LANG = "pending_share_du_lang";
+    /**
      * Admin share link base URL from splash ({@code share_public_base_url}).
      * e.g. https://share.anynews.co.in
      */

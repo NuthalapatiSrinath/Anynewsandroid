@@ -88,6 +88,7 @@ import com.anyNews.anynews.Utils.FontSettingsHelper;
 import com.anyNews.anynews.Utils.FullVideoShareCardHelper;
 import com.anyNews.anynews.Utils.PollOptionStyleHelper;
 import com.anyNews.anynews.Utils.ShareOutboundHelper;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.SharePublicBaseHelper;
 import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.NetworkCallDeduper;
@@ -169,6 +170,10 @@ public class StartingActivity extends AppCompatActivity {
     String articleId1;
     /** Job id from /job/{id} or legacy /job-{base64} deep links. */
     String jobId1;
+    /** Daily Updates page from /du/{page} (rashi, fuel, gold, …). */
+    String duPageKey;
+    /** Sharer's LanguageID on that /du/ link. -1 when omitted. */
+    int duShareLang = -1;
     /**
      * 0-based nested gallery/magazine page from share {@code ?page=} / {@code ?slide=}.
      * Forwarded to Home as {@code SHARE_GALLERY_PAGE}; 0 = first page (legacy links).
@@ -299,6 +304,8 @@ public class StartingActivity extends AppCompatActivity {
         // extractData() re-sets it only when this launch is an actual share link.
         SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
         SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_JOB, "", Constants.PREF_NAME);
+        SharedPrefsData.putString(getApplicationContext(), Constants.PENDING_SHARE_DU, "", Constants.PREF_NAME);
+        SharedPrefsData.putInt(getApplicationContext(), Constants.PENDING_SHARE_DU_LANG, -1, Constants.PREF_NAME);
         SharedPrefsData.putInt(getApplicationContext(), Constants.PENDING_SHARE_PAGE, 0, Constants.PREF_NAME);
         // Cold start via splash (incl. Recents swipe-away → reopen): do NOT restore
         // mid-feed from HomePage's theme-recreate flip checkpoint. Theme/uiMode
@@ -388,6 +395,7 @@ public class StartingActivity extends AppCompatActivity {
             if (!isFcmPushIntentUri(data)) {
                 extractData(data);
                 absorbSharePageExtra(intent);
+                absorbDuLangExtra(intent);
                 maybeResolveLegacyPageLink(data);
                 maybeResolveShareShortCode(data);
             }
@@ -739,6 +747,25 @@ public class StartingActivity extends AppCompatActivity {
             }
             applyDeepLinkParams(uri);
 
+            // Daily Updates pages first — /du/{page} is not a post or a job.
+            String duPage = DailyUpdatesShareLinks.pageFromUri(uri);
+            if (duPage != null && !duPage.isEmpty()) {
+                duPageKey = duPage;
+                duShareLang = DailyUpdatesShareLinks.langFromUri(uri);
+                jobId1 = null;
+                articleId1 = null;
+                SharedPrefsData.putString(getApplicationContext(),
+                        Constants.PENDING_SHARE_DU, duPage, Constants.PREF_NAME);
+                SharedPrefsData.putInt(getApplicationContext(),
+                        Constants.PENDING_SHARE_DU_LANG, duShareLang, Constants.PREF_NAME);
+                SharedPrefsData.putString(getApplicationContext(),
+                        Constants.PENDING_SHARE_JOB, "", Constants.PREF_NAME);
+                SharedPrefsData.putString(getApplicationContext(),
+                        Constants.PENDING_SHARE_POST, "", Constants.PREF_NAME);
+                showLog("CHECK POINT DailyUpdates @@@:" + duPage + " lang=" + duShareLang);
+                return;
+            }
+
             // Job shares first — /job/{id} must not be mistaken for article paths.
             String jobId2 = uri.getQueryParameter("jobId");
             if (jobId2 == null || jobId2.isEmpty()) {
@@ -748,6 +775,7 @@ public class StartingActivity extends AppCompatActivity {
                 jobId2 = jobIdFromPath(uri);
             }
             if (jobId2 != null && !jobId2.isEmpty()) {
+                duPageKey = null;
                 jobId1 = jobId2;
                 SharedPrefsData.putString(getApplicationContext(),
                         Constants.PENDING_SHARE_JOB, jobId2, Constants.PREF_NAME);
@@ -764,6 +792,7 @@ public class StartingActivity extends AppCompatActivity {
             }
             showLog("CHECK POINT ArticleId1 @@@:" + articleId2);
             if (articleId2 != null && !articleId2.isEmpty()) {
+                duPageKey = null;
                 articleId1 = articleId2;
                 // Share / App Link opens must use SHARE_REDIRECT_ID + share_post_id only.
                 // Do NOT set TITLE=articleId — TITLE is the FCM push sticky (push_post_id).
@@ -931,9 +960,52 @@ public class StartingActivity extends AppCompatActivity {
      * or {@code /p/{code}}, or null when this URI is already a numeric /p/{id}
      * (or not a share host).
      */
+    /**
+     * Chrome sometimes drops {@code ?lang=} before {@code #Intent}. The landing
+     * also sends {@code S.lang}. Query on the URI wins when it was already read.
+     */
+    private void absorbDuLangExtra(@Nullable Intent intent) {
+        if (duPageKey == null || duPageKey.isEmpty() || duShareLang >= 0 || intent == null) {
+            return;
+        }
+        int lang = -1;
+        try {
+            if (intent.getExtras() != null && intent.getExtras().get("lang") != null) {
+                String raw = String.valueOf(intent.getExtras().get("lang")).trim();
+                lang = Integer.parseInt(raw.replaceAll("[^0-9]", ""));
+            }
+        } catch (Exception ignored) {
+        }
+        if (lang < 0 || lang > 10) {
+            return;
+        }
+        duShareLang = lang;
+        SharedPrefsData.putInt(getApplicationContext(),
+                Constants.PENDING_SHARE_DU_LANG, duShareLang, Constants.PREF_NAME);
+    }
+
+    /** Warm or cold handoff: open the Daily Updates screen, not the news feed. */
+    private void openDailyUpdatesSharePage() {
+        if (duPageKey == null || duPageKey.isEmpty()) {
+            return;
+        }
+        try {
+            Intent page = DailyUpdatesShareLinks.openIntent(this, duPageKey, duShareLang);
+            page.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(page);
+            SharedPrefsData.putString(getApplicationContext(),
+                    Constants.PENDING_SHARE_DU, "", Constants.PREF_NAME);
+        } catch (Exception e) {
+            showLog("daily updates share open failed: " + e.getMessage());
+        }
+    }
+
     @Nullable
     private String shareShortCodeFromUri(@Nullable Uri data) {
         if (data == null || !isShareShortHost(data.getHost())) {
+            return null;
+        }
+        if (DailyUpdatesShareLinks.pageFromUri(data) != null) {
             return null;
         }
         String path = data.getPath();
@@ -1232,6 +1304,7 @@ public class StartingActivity extends AppCompatActivity {
             if (!isFcmPushIntentUri(data)) {
                 extractData(data);
                 absorbSharePageExtra(intent);
+                absorbDuLangExtra(intent);
                 maybeResolveLegacyPageLink(data);
                 // Same magazine already resolved: deliver now so ?page= moves the
                 // open pager. A different code must not reuse the previous post id.
@@ -1259,6 +1332,8 @@ public class StartingActivity extends AppCompatActivity {
                     }
                 } catch (Exception ignored) {
                 }
+            } else if (duPageKey != null && !duPageKey.isEmpty()) {
+                openDailyUpdatesSharePage();
             } else if (articleId1 != null && !articleId1.isEmpty()) {
                 // Warm share (app already on Home): pin the exact post / magazine.
                 deliverShareRedirectToHome(articleId1);

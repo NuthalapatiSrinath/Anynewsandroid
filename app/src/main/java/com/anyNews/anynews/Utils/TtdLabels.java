@@ -437,11 +437,6 @@ public final class TtdLabels {
 
     private static int lang(@Nullable Context context) {
         if (context == null) return 0;
-        try {
-            return SharedPrefsData.getInt(
-                    context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-        } catch (Exception ignored) {
-            return 0;
-        }
+        return DailyUpdatesShareLanguage.effective(context);
     }
 }

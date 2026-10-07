@@ -31,6 +31,8 @@ import androidx.fragment.app.Fragment;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Ui.GoldHistoryChartView;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLanguage;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.GoldLabels;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
 import com.bumptech.glide.Glide;
@@ -103,6 +105,7 @@ public class GoldDetailActivity extends AppCompatActivity {
             finish();
             return;
         }
+        DailyUpdatesShareLinks.beginLanguage(this);
         try {
             setContentView(R.layout.activity_gold_detail);
         } catch (Throwable t) {
@@ -1353,6 +1356,12 @@ public class GoldDetailActivity extends AppCompatActivity {
 
     // ─── Clicks / share ───────────────────────────────────────────────────────
 
+    @Override
+    protected void onDestroy() {
+        DailyUpdatesShareLanguage.end();
+        super.onDestroy();
+    }
+
     private void wireClicks() {
         View back = findViewById(R.id.gold_back);
         if (back != null) back.setOnClickListener(v -> finish());
@@ -1385,6 +1394,7 @@ public class GoldDetailActivity extends AppCompatActivity {
                     + (g10 > 0 ? ": 24K ₹" + LocalUpdatesConfigHelper.formatInr(g10) + " /10g" : "")
                     + (skg > 0 ? ", Silver ₹" + LocalUpdatesConfigHelper.formatInr(skg) + " /kg" : "");
         }
+        body = DailyUpdatesShareLinks.withLink(this, body, "gold");
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_TEXT, body);

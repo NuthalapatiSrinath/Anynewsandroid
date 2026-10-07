@@ -752,12 +752,7 @@ public final class CalendarRaasiLabels {
 
     private static int languageId(@Nullable Context context) {
         if (context == null) return 0;
-        try {
-            return SharedPrefsData.getInt(
-                    context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-        } catch (Exception ignored) {
-            return 0;
-        }
+        return DailyUpdatesShareLanguage.effective(context);
     }
 
     private static String str(@Nullable Context context, int resId, String fallback) {

@@ -18,12 +18,7 @@ public final class PanchangLabels {
 
     private static int lang(@Nullable Context c) {
         if (c == null) return 0;
-        try {
-            return SharedPrefsData.getInt(
-                    c.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-        } catch (Exception e) {
-            return 0;
-        }
+        return DailyUpdatesShareLanguage.effective(c);
     }
 
     private static final String[] NAK_TE = {

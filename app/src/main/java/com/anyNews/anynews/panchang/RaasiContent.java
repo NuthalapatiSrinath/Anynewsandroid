@@ -5,9 +5,6 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.anyNews.anynews.Utils.Constants;
-import com.anyNews.anynews.Utils.SharedPrefsData;
-
 import java.util.Calendar;
 import java.util.Locale;
 
@@ -609,12 +606,7 @@ public final class RaasiContent {
 
     private static int langFromContext(@Nullable Context context) {
         if (context == null) return 0;
-        try {
-            return SharedPrefsData.getInt(
-                    context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-        } catch (Exception e) {
-            return 0;
-        }
+        return com.anyNews.anynews.Utils.DailyUpdatesShareLanguage.effective(context);
     }
 
     @NonNull
@@ -715,12 +707,7 @@ public final class RaasiContent {
 
     private static int languageId(@Nullable Context context) {
         if (context == null) return 0;
-        try {
-            return SharedPrefsData.getInt(
-                    context.getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
-        } catch (Exception ignored) {
-            return 0;
-        }
+        return com.anyNews.anynews.Utils.DailyUpdatesShareLanguage.effective(context);
     }
 
     private static final String[] EN_MONTHS = {

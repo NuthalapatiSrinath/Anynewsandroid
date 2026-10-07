@@ -37,6 +37,8 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DailyUpdatesLabels;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLanguage;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FuelLabels;
 import com.anyNews.anynews.Utils.LocalUpdatesConfigHelper;
@@ -107,6 +109,7 @@ public class FuelDetailActivity extends AppCompatActivity {
             finish();
             return;
         }
+        DailyUpdatesShareLinks.beginLanguage(this);
         setContentView(R.layout.activity_fuel_detail);
         applySystemBars(R.id.fuel_detail_root);
         clipHero();
@@ -472,6 +475,12 @@ public class FuelDetailActivity extends AppCompatActivity {
         return (Double.isFinite(v) && v > 0) ? v : fallback;
     }
 
+    @Override
+    protected void onDestroy() {
+        DailyUpdatesShareLanguage.end();
+        super.onDestroy();
+    }
+
     private void wireClicks() {
         View back = findViewById(R.id.fuel_back);
         if (back != null) back.setOnClickListener(v -> finish());
@@ -482,11 +491,12 @@ public class FuelDetailActivity extends AppCompatActivity {
                 double petrol = positiveOr(LocalUpdatesConfigHelper.optNumber(f, "petrol_price", 0), 0);
                 double diesel = positiveOr(LocalUpdatesConfigHelper.optNumber(f, "diesel_price", 0), 0);
                 String where = stateLabelForKey(selectedStateKey, f);
-                String body = FuelLabels.shareBody(
+                String body = DailyUpdatesShareLinks.withLink(this, FuelLabels.shareBody(
                         this,
                         where,
                         petrol > 0 ? LocalUpdatesConfigHelper.formatMoney2(petrol) : "—",
-                        diesel > 0 ? LocalUpdatesConfigHelper.formatMoney2(diesel) : "—");
+                        diesel > 0 ? LocalUpdatesConfigHelper.formatMoney2(diesel) : "—"),
+                        "fuel");
                 Intent send = new Intent(Intent.ACTION_SEND);
                 send.setType("text/plain");
                 send.putExtra(Intent.EXTRA_TEXT, body);
