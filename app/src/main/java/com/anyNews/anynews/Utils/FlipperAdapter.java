@@ -2467,6 +2467,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         stripHalfPostsIfSpecialMode(list__);
         list = list__;
         normalizeEngagementCounts(list);
+        rememberNewsShareHost(list);
         notifyWhenFlipSettled();
     }
 
@@ -2480,6 +2481,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         stripHalfPostsIfSpecialMode(list__);
         list = list__;
         normalizeEngagementCounts(list);
+        rememberNewsShareHost(list);
         try {
             notifyDataSetChangedNow();
         } catch (Exception e) {
@@ -2500,7 +2502,28 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         stripHalfPostsIfSpecialMode(list__);
         list = list__;
         normalizeEngagementCounts(list);
+        rememberNewsShareHost(list);
         notifyPageCountGrewQuietly();
+    }
+
+    /** Store the host a news share on this phone would use. */
+    private void rememberNewsShareHost(@Nullable ArrayList<ModelClass.Datum> rows) {
+        if (rows == null || context == null || rows.isEmpty()) {
+            return;
+        }
+        ArrayList<String> links = new ArrayList<>(Math.min(rows.size(), 80));
+        int n = Math.min(rows.size(), 80);
+        for (int i = 0; i < n; i++) {
+            ModelClass.Datum row = rows.get(i);
+            if (row == null) {
+                continue;
+            }
+            String link = row.getShareLink();
+            if (link != null && !link.isEmpty()) {
+                links.add(link);
+            }
+        }
+        SharePublicBaseHelper.rememberFromNewsShareLinks(context, links);
     }
 
     /**

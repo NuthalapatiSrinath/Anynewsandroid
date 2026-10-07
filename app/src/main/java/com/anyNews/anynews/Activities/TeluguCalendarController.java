@@ -2391,18 +2391,13 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     }
 
     private void sharePlainText(@NonNull String text, @NonNull String pageKey) {
-        text = DailyUpdatesShareLinks.withLink(host, text, pageKey);
         if (TextUtils.isEmpty(text)) {
             Toast.makeText(host, R.string.telugu_calendar_loading, Toast.LENGTH_SHORT).show();
             return;
         }
         try {
-            Intent send = new Intent(Intent.ACTION_SEND);
-            send.setType("text/plain");
-            send.putExtra(Intent.EXTRA_TEXT, text);
-            send.putExtra(Intent.EXTRA_SUBJECT, "ANYNEWS");
-            host.startActivity(Intent.createChooser(
-                    send, CalendarRaasiLabels.shareChooser(host)));
+            DailyUpdatesShareLinks.launch(
+                    host, text, pageKey, CalendarRaasiLabels.shareChooser(host));
         } catch (Exception e) {
             Toast.makeText(host, CalendarRaasiLabels.shareChooser(host), Toast.LENGTH_SHORT).show();
         }

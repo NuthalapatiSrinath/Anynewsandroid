@@ -40,6 +40,7 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.DailyUpdatesShareLinks;
 import com.anyNews.anynews.Utils.JobsConfigHelper;
 import com.anyNews.anynews.Utils.JobsLabels;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -596,18 +597,8 @@ public class JobsPageActivity extends AppCompatActivity {
         }
         String text = JobsLabels.shareMessage(this, title, location, url);
         try {
-            Intent i = new Intent(Intent.ACTION_SEND);
-            i.setType("text/plain");
-            i.putExtra(Intent.EXTRA_SUBJECT, title);
-            i.putExtra(Intent.EXTRA_TEXT, text);
-            // Prefer WhatsApp when available (Way2-style share)
-            try {
-                i.setPackage("com.whatsapp");
-                startActivity(i);
-            } catch (Exception noWa) {
-                i.setPackage(null);
-                startActivity(Intent.createChooser(i, JobsLabels.pageTitle(this)));
-            }
+            DailyUpdatesShareLinks.launchPrepared(
+                    this, text, "jobs", JobsLabels.pageTitle(this));
         } catch (Exception ignored) {
         }
     }

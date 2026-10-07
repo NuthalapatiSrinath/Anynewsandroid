@@ -1,6 +1,5 @@
 package com.anyNews.anynews.Activities;
 
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.os.Bundle;
@@ -384,11 +383,8 @@ public class WeatherDetailActivity extends AppCompatActivity {
                         + LocalUpdatesConfigHelper.optString(w, "location_name", "")
                         + ": " + LocalUpdatesConfigHelper.optNumberInt(w, "temp_c", 0) + "°C, "
                         + LocalUpdatesConfigHelper.optString(w, "condition", "");
-                body = DailyUpdatesShareLinks.withLink(this, body, "weather");
-                Intent send = new Intent(Intent.ACTION_SEND);
-                send.setType("text/plain");
-                send.putExtra(Intent.EXTRA_TEXT, body);
-                startActivity(Intent.createChooser(send, getString(R.string.local_update_share)));
+                DailyUpdatesShareLinks.launch(
+                        this, body, "weather", getString(R.string.local_update_share));
             });
         }
         View sevenDay = findViewById(R.id.weather_forecast_7day_btn);

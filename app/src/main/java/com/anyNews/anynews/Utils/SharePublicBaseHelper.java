@@ -7,13 +7,18 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Locale;
+
 /**
- * Admin {@code share_public_base_url} from splash (Root_Settings).
+ * Share https origin used when the phone builds a link itself.
  *
- * <p>One stable production share domain for admin/testing and live
- * ({@code share.anynews.co.in}). Outbound {@code share_link} on each post is
- * already built server-side from Admin; this helper caches that value for
- * fallbacks and owned-host checks.
+ * <p>A normal news caption does not build a host. It copies {@code share_link}
+ * from the article the server already rewrote to the Admin share domain.
+ * Splash {@code share_public_base_url} is a second copy and can still be the
+ * production default while those article links are already on another host.
+ * {@link #rememberFromNewsShareLink} stores the origin of a news {@code share_link}
+ * already on the phone. {@link #getBaseUrl} prefers that origin, then splash,
+ * then the production fallback. No extra request.
  */
 public final class SharePublicBaseHelper {
 
@@ -36,15 +41,143 @@ public final class SharePublicBaseHelper {
                 context, Constants.SHARE_PUBLIC_BASE_URL, normalized, Constants.PREF_NAME);
     }
 
+    /**
+     * Learn the https origin from a news article {@code share_link} already
+     * on the phone (the URL a normal news share would put in the message).
+     *
+     * @return true when {@code shareLink} is an article share URL and its
+     *         origin is now the one {@link #getBaseUrl} will return
+     */
+    public static boolean rememberFromNewsShareLink(
+            @Nullable Context context, @Nullable String shareLink) {
+        if (context == null) {
+            return false;
+        }
+        String origin = newsShareOrigin(shareLink);
+        if (origin.isEmpty()) {
+            return false;
+        }
+        storeObservedBase(context, origin);
+        return true;
+    }
+
+    /**
+     * Learn from a feed page. If this page contains both the production
+     * fallback host and another host, keep the other host — that is the
+     * Admin domain a current news share is using.
+     */
+    public static void rememberFromNewsShareLinks(
+            @Nullable Context context, @Nullable Iterable<String> shareLinks) {
+        if (context == null || shareLinks == null) {
+            return;
+        }
+        String first = "";
+        String other = "";
+        int seen = 0;
+        for (String link : shareLinks) {
+            if (seen++ >= 80) {
+                break;
+            }
+            String origin = newsShareOrigin(link);
+            if (origin.isEmpty()) {
+                continue;
+            }
+            if (first.isEmpty()) {
+                first = origin;
+            }
+            if (!FALLBACK_BASE.equals(origin)) {
+                other = origin;
+                break;
+            }
+        }
+        String chosen = !other.isEmpty() ? other : first;
+        if (!chosen.isEmpty()) {
+            storeObservedBase(context, chosen);
+        }
+    }
+
+    private static void storeObservedBase(@NonNull Context context, @NonNull String origin) {
+        String stored = normalize(SharedPrefsData.getString(
+                context, Constants.NEWS_SHARE_OBSERVED_BASE, Constants.PREF_NAME));
+        if (!origin.equals(stored)) {
+            SharedPrefsData.putString(
+                    context, Constants.NEWS_SHARE_OBSERVED_BASE, origin, Constants.PREF_NAME);
+        }
+    }
+
     @NonNull
     public static String getBaseUrl(@Nullable Context context) {
         if (context == null) {
             return FALLBACK_BASE;
         }
+        String observed = normalize(SharedPrefsData.getString(
+                context, Constants.NEWS_SHARE_OBSERVED_BASE, Constants.PREF_NAME));
+        if (!observed.isEmpty()) {
+            return observed;
+        }
         String stored = SharedPrefsData.getString(
                 context, Constants.SHARE_PUBLIC_BASE_URL, Constants.PREF_NAME);
         String normalized = normalize(stored);
         return normalized.isEmpty() ? FALLBACK_BASE : normalized;
+    }
+
+    /**
+     * Origin of an article share URL ({@code https://host/{code}} or
+     * {@code https://host/p/{id}}). Daily Updates paths and job paths are
+     * ignored so this phone does not learn a host from its own /du/ links.
+     */
+    @NonNull
+    static String newsShareOrigin(@Nullable String shareLink) {
+        if (TextUtils.isEmpty(shareLink)) {
+            return "";
+        }
+        try {
+            Uri uri = Uri.parse(shareLink.trim());
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (scheme == null || host == null) {
+                return "";
+            }
+            if (!"https".equalsIgnoreCase(scheme) && !"http".equalsIgnoreCase(scheme)) {
+                return "";
+            }
+            if (!isArticleSharePath(uri.getPath())) {
+                return "";
+            }
+            String h = host.toLowerCase(Locale.US);
+            if (h.contains("cloudfront") || h.contains("amazonaws")
+                    || h.contains("googleusercontent") || h.contains("ytimg")) {
+                return "";
+            }
+            return "https://" + h;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** True for {@code /{code}}, {@code /{id}}, and {@code /p/{id}} — not {@code /du/} or {@code /job/}. */
+    private static boolean isArticleSharePath(@Nullable String path) {
+        if (path == null || path.isEmpty() || "/".equals(path)) {
+            return false;
+        }
+        String p = path.startsWith("/") ? path.substring(1) : path;
+        int slash = p.indexOf('/');
+        if (slash < 0) {
+            return p.matches("[A-Za-z0-9]{4,16}") || p.matches("\\d+");
+        }
+        String first = p.substring(0, slash);
+        String rest = p.substring(slash + 1);
+        int slash2 = rest.indexOf('/');
+        if (slash2 >= 0) {
+            rest = rest.substring(0, slash2);
+        }
+        if (rest.isEmpty()) {
+            return false;
+        }
+        if ("p".equalsIgnoreCase(first) || "post".equalsIgnoreCase(first)) {
+            return rest.matches("\\d+");
+        }
+        return false;
     }
 
     @Nullable

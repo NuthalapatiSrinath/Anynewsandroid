@@ -392,11 +392,7 @@ public class TtdDetailActivity extends AppCompatActivity {
                 + TtdLabels.newsLine(0, this) + "\n\n"
                 + TtdConfigHelper.officialUrl(this) + "\n"
                 + TtdConfigHelper.bookingUrl(this);
-        text = DailyUpdatesShareLinks.withLink(this, text, "ttd");
-        Intent send = new Intent(Intent.ACTION_SEND);
-        send.setType("text/plain");
-        send.putExtra(Intent.EXTRA_TEXT, text);
-        startActivity(Intent.createChooser(send, getString(R.string.ttd_share)));
+        DailyUpdatesShareLinks.launch(this, text, "ttd", getString(R.string.ttd_share));
     }
 
     private void openUrl(@Nullable String url) {

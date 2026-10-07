@@ -3,6 +3,7 @@ package com.anyNews.anynews.Utils;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.text.TextUtils;
 
@@ -20,11 +21,18 @@ import java.util.Locale;
 /**
  * Outbound Daily Updates share links.
  *
- * <p>Built on the phone from the Admin share domain already saved at splash
- * ({@link SharePublicBaseHelper}). No extra network call. Article short codes
- * name a post id, so they cannot point at these screens — the path is
- * {@code {shareBase}/du/{page}}. The link does not carry a language id.
- * The phone that opens it uses the language already selected there.
+ * <p>The host is the same origin a normal news share on this phone already
+ * uses ({@link SharePublicBaseHelper}): the article {@code share_link} when
+ * one has been seen, otherwise the splash Admin domain. No extra network
+ * call to look up the domain. Article short codes name a post id, so they
+ * cannot point at these screens — the path is {@code {shareBase}/du/{page}}.
+ * The link does not carry a language id. The phone that opens it uses the
+ * language already selected there.
+ *
+ * <p>Sending goes through {@link ShareOutboundHelper#launchChooserOnTargetChosen}.
+ * When WhatsApp is installed the intent is packaged, so the share is counted
+ * only after WhatsApp returns {@link android.app.Activity#RESULT_OK}. Opening
+ * the sheet is not a share.
  */
 public final class DailyUpdatesShareLinks {
 
@@ -143,6 +151,60 @@ public final class DailyUpdatesShareLinks {
             return link;
         }
         return text + "\n" + link;
+    }
+
+    /**
+     * Share {@code body} plus {@code {base}/du/{page}}. Counts the box only
+     * after the send completes ({@link android.app.Activity#RESULT_OK} when
+     * WhatsApp is installed).
+     */
+    public static void launch(
+            @NonNull Activity activity,
+            @Nullable String body,
+            @NonNull String pageKey,
+            @Nullable CharSequence title) {
+        String key = canonicalKey(pageKey);
+        if (key == null) {
+            key = "rashi";
+        }
+        launchPrepared(activity, withLink(activity, body, key), key, title);
+    }
+
+    /**
+     * Share text that already contains its link (jobs use {@code /job/{id}}).
+     * {@code boxKey} is the admin counter name.
+     */
+    public static void launchPrepared(
+            @NonNull Activity activity,
+            @NonNull String text,
+            @NonNull String boxKey,
+            @Nullable CharSequence title) {
+        if (TextUtils.isEmpty(text)) {
+            return;
+        }
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_TEXT, text);
+        if (whatsAppInstalled(activity)) {
+            send.setPackage("com.whatsapp");
+        }
+        final String box = boxKey;
+        ShareOutboundHelper.launchChooserOnTargetChosen(
+                activity,
+                send,
+                title != null ? title : "Share",
+                () -> DailyUpdatesShareReporter.report(activity, box));
+    }
+
+    private static boolean whatsAppInstalled(@NonNull Context context) {
+        try {
+            context.getPackageManager().getPackageInfo("com.whatsapp", 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @NonNull

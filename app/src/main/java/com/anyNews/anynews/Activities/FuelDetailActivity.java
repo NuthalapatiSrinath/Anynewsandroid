@@ -1,6 +1,5 @@
 package com.anyNews.anynews.Activities;
 
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.os.Bundle;
@@ -499,16 +498,13 @@ public class FuelDetailActivity extends AppCompatActivity {
                 double petrol = positiveOr(LocalUpdatesConfigHelper.optNumber(f, "petrol_price", 0), 0);
                 double diesel = positiveOr(LocalUpdatesConfigHelper.optNumber(f, "diesel_price", 0), 0);
                 String where = stateLabelForKey(selectedStateKey, f);
-                String body = DailyUpdatesShareLinks.withLink(this, FuelLabels.shareBody(
+                String body = FuelLabels.shareBody(
                         this,
                         where,
                         petrol > 0 ? LocalUpdatesConfigHelper.formatMoney2(petrol) : "—",
-                        diesel > 0 ? LocalUpdatesConfigHelper.formatMoney2(diesel) : "—"),
-                        "fuel");
-                Intent send = new Intent(Intent.ACTION_SEND);
-                send.setType("text/plain");
-                send.putExtra(Intent.EXTRA_TEXT, body);
-                startActivity(Intent.createChooser(send, getString(R.string.local_update_share)));
+                        diesel > 0 ? LocalUpdatesConfigHelper.formatMoney2(diesel) : "—");
+                DailyUpdatesShareLinks.launch(
+                        this, body, "fuel", getString(R.string.local_update_share));
             });
         }
 

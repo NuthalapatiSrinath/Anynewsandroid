@@ -858,6 +858,12 @@ public class Constants {
      */
     public static String SHARE_PUBLIC_BASE_URL = "share_public_base_url";
     /**
+     * Origin of a news article {@code share_link} already on this phone.
+     * News captions use that link (server-stamped). Daily Updates reads this
+     * so gold/fuel/rashi use the same host, without another request.
+     */
+    public static String NEWS_SHARE_OBSERVED_BASE = "news_share_observed_base";
+    /**
      * Admin half-video share logo URL from splash / feed poll.
      * Empty or missing → bundled {@code app_share_logo}.
      */

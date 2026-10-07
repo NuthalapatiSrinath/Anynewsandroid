@@ -298,7 +298,9 @@ public final class ShareOutboundHelper {
     public static String resolveHttpsShareLink(
             android.content.Context context, String shareLink, Long postId) {
         if (!TextUtils.isEmpty(shareLink)) {
-            return shareLink.trim();
+            String link = shareLink.trim();
+            SharePublicBaseHelper.rememberFromNewsShareLink(context, link);
+            return link;
         }
         return SharePublicBaseHelper.buildFallbackShareUrl(context, postId, null);
     }

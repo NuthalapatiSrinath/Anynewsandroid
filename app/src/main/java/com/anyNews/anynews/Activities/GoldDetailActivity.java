@@ -1,7 +1,6 @@
 package com.anyNews.anynews.Activities;
 
 import android.app.DatePickerDialog;
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
@@ -1394,11 +1393,8 @@ public class GoldDetailActivity extends AppCompatActivity {
                     + (g10 > 0 ? ": 24K ₹" + LocalUpdatesConfigHelper.formatInr(g10) + " /10g" : "")
                     + (skg > 0 ? ", Silver ₹" + LocalUpdatesConfigHelper.formatInr(skg) + " /kg" : "");
         }
-        body = DailyUpdatesShareLinks.withLink(this, body, "gold");
-        Intent send = new Intent(Intent.ACTION_SEND);
-        send.setType("text/plain");
-        send.putExtra(Intent.EXTRA_TEXT, body);
-        startActivity(Intent.createChooser(send, getString(R.string.local_update_share)));
+        DailyUpdatesShareLinks.launch(
+                this, body, "gold", getString(R.string.local_update_share));
     }
 
     private void setText(int id, String value) {

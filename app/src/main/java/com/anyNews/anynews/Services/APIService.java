@@ -291,6 +291,10 @@ public interface APIService {
     @POST("app/{version}/update_post_count")                  //  ok
     Call<EncreptionRequest> update_post_count(@Path("version") String version, @Body JsonObject shop);
 
+    /** Completed Daily Updates share (fuel, gold, rashi, …). Not an article count. */
+    @POST("app/{version}/daily_updates_share")
+    Call<EncreptionRequest> daily_updates_share(@Path("version") String version, @Body JsonObject body);
+
 
     //Categories
     @POST("app/{version}/List_All_categories")
