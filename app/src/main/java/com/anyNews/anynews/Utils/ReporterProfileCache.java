@@ -64,11 +64,9 @@ public final class ReporterProfileCache {
                     Constants.PROFILE_CACHE_FETCHED_AT,
                     System.currentTimeMillis(),
                     Constants.PREF_NAME);
+            // 0 = articles total is every language. A leftover language id is stale.
             SharedPrefsData.putInt(
-                    app,
-                    Constants.PROFILE_CACHE_ARTICLES_LANG,
-                    SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME),
-                    Constants.PREF_NAME);
+                    app, Constants.PROFILE_CACHE_ARTICLES_LANG, 0, Constants.PREF_NAME);
         } catch (Exception ignored) {
         }
         try {
@@ -88,12 +86,12 @@ public final class ReporterProfileCache {
                     SharedPrefsData.getLong(
                             app, Constants.PROFILE_CACHE_FETCHED_AT, Constants.PREF_NAME);
             if (at <= 0L) return false;
+            // Older builds stored the app language here because the tile counted
+            // one language. That number is wrong for the all-language total.
             int cachedLang =
                     SharedPrefsData.getInt(
                             app, Constants.PROFILE_CACHE_ARTICLES_LANG, Constants.PREF_NAME);
-            int currentLang =
-                    SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
-            if (currentLang > 0 && cachedLang != currentLang) return false;
+            if (cachedLang > 0) return false;
             return System.currentTimeMillis() - at < SOFT_REFRESH_TTL_MS;
         } catch (Exception e) {
             return false;

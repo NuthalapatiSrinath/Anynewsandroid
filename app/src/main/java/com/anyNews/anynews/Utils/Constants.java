@@ -545,7 +545,11 @@ public class Constants {
             "rewards_engagement_flush_interval_seconds";
     /** Epoch ms of last successful get_user_profile soft-refresh (profile TTL). */
     public static String PROFILE_CACHE_FETCHED_AT = "profile_cache_fetched_at_ms";
-    /** LanguageID the cached profile articles tile was counted for. */
+    /**
+     * Legacy: language the cached articles tile was counted for.
+     * A value above 0 means that snapshot is per-language and must be refetched.
+     * 0 means the cached total already covers every language.
+     */
     public static String PROFILE_CACHE_ARTICLES_LANG = "profile_cache_articles_lang";
     /** Epoch ms of last rewards_hub soft-refresh from Profile (hub TTL). */
     public static String REWARDS_HUB_FLAGS_FETCHED_AT = "rewards_hub_flags_fetched_at_ms";

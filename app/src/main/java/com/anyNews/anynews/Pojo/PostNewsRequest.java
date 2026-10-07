@@ -36,7 +36,7 @@ public class PostNewsRequest {
     @SerializedName("include_engagement")
     @Expose
     private Boolean includeEngagement;
-    /** Current app language so Pending/Articles match the profile articles tile. */
+    /** Sent with the request. My Articles lists every language for this reporter. */
     @SerializedName("language_id")
     @Expose
     private Integer languageId;
