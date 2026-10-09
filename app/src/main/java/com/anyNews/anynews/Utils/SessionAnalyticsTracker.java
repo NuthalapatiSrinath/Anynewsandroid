@@ -1316,6 +1316,16 @@ public final class SessionAnalyticsTracker {
                             });
                         }
                     }
+                    if (resBody.has("birthday_template_id")
+                            && !resBody.get("birthday_template_id").isJsonNull()) {
+                        String templateId = resBody.get("birthday_template_id").getAsString();
+                        String templateUrl = "";
+                        if (resBody.has("birthday_template_image_url")
+                                && !resBody.get("birthday_template_image_url").isJsonNull()) {
+                            templateUrl = resBody.get("birthday_template_image_url").getAsString();
+                        }
+                        ProfileHubConfigHelper.saveBirthdayTemplate(context, templateId, templateUrl);
+                    }
                     if (resBody.has("festival_splash_enabled")
                             || resBody.has("festival_splash_show_on_push")
                             || resBody.has("festival_splash_show_on_share")

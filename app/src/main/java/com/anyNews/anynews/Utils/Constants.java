@@ -570,6 +570,10 @@ public class Constants {
     public static String ENABLE_BECOME_A_REPORTER = "enable_become_a_reporter";
     /** Profile hub Birthday Special row (splash master). Default true; OFF hides row. */
     public static String ENABLE_BIRTHDAY_SPECIAL = "enable_birthday_special";
+    /** Selected Birthday Special artwork. "a" (default) or "b". Old builds ignore it. */
+    public static String BIRTHDAY_TEMPLATE_ID = "birthday_template_id";
+    /** Image URL for the selected template. Empty = bundled artwork. */
+    public static String BIRTHDAY_TEMPLATE_IMAGE_URL = "birthday_template_image_url";
     /** JSON map of language_id → not-hiring message (splash). */
     public static String BECOME_A_REPORTER_NOT_HIRING_MESSAGES =
             "become_a_reporter_not_hiring_messages";

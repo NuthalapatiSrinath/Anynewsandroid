@@ -858,6 +858,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private Boolean enableBirthdaySpecial;
 
+        @SerializedName("birthday_template_id")
+        @Expose
+        private String birthdayTemplateId;
+
+        @SerializedName("birthday_template_image_url")
+        @Expose
+        private String birthdayTemplateImageUrl;
+
         @SerializedName("become_a_reporter_not_hiring_messages")
         @Expose
         private Object becomeAReporterNotHiringMessages;
@@ -1536,6 +1544,14 @@ public class StartActivityReqModel implements Serializable {
 
         public Boolean getEnableBirthdaySpecial() {
             return enableBirthdaySpecial;
+        }
+
+        public String getBirthdayTemplateId() {
+            return birthdayTemplateId;
+        }
+
+        public String getBirthdayTemplateImageUrl() {
+            return birthdayTemplateImageUrl;
         }
 
         public Object getBecomeAReporterNotHiringMessages() {

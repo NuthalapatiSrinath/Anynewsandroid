@@ -19612,6 +19612,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 ProfileHubConfigHelper.saveBirthdaySpecialEnabled(
                         this, enc.getEnable_birthday_special());
             }
+            if (enc.hasBirthday_template_id()) {
+                ProfileHubConfigHelper.saveBirthdayTemplate(
+                        this,
+                        enc.getBirthday_template_id(),
+                        enc.hasBirthday_template_image_url()
+                                ? enc.getBirthday_template_image_url()
+                                : "");
+            }
             if (enc.hasEnable_become_a_reporter()) {
                 ProfileHubConfigHelper.saveBecomeAReporterEnabled(
                         this, enc.getEnable_become_a_reporter());

@@ -42,6 +42,7 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Ui.BirthdayPosterPreviewView;
 import com.anyNews.anynews.Utils.BirthdayFonts;
+import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.BirthdayPhotoNormalizer;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
@@ -293,6 +294,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         }
 
         refreshLiveTexts();
+        applyBirthdayTemplate(
+                ProfileHubConfigHelper.getBirthdayTemplateId(this),
+                ProfileHubConfigHelper.getBirthdayTemplateImageUrl(this));
         loadConfig();
         loadMyPosts();
     }
@@ -744,6 +748,25 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                         }
                                     }
                                     updateScheduleInfo();
+                                    if (data.has("birthday_template_id")
+                                            && !data.get("birthday_template_id").isJsonNull()) {
+                                        String templateId =
+                                                data.get("birthday_template_id").getAsString();
+                                        String templateUrl = "";
+                                        if (data.has("birthday_template_image_url")
+                                                && !data.get("birthday_template_image_url")
+                                                        .isJsonNull()) {
+                                            templateUrl =
+                                                    data.get("birthday_template_image_url")
+                                                            .getAsString();
+                                        }
+                                        ProfileHubConfigHelper.saveBirthdayTemplate(
+                                                BirthdayAutoActivity.this, templateId, templateUrl);
+                                        final String shownId = templateId;
+                                        final String shownUrl = templateUrl;
+                                        runOnUiThread(
+                                                () -> applyBirthdayTemplate(shownId, shownUrl));
+                                    }
                                     if (data.has("fonts") && data.get("fonts").isJsonArray()) {
                                         try {
                                             org.json.JSONArray fonts =
@@ -806,6 +829,19 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                 applyFallbackDates();
                             }
                         });
+    }
+
+    /** Template A keeps the circle hint. Template B points at the rounded frame. */
+    private void applyBirthdayTemplate(@Nullable String templateId, @Nullable String imageUrl) {
+        if (livePreview != null) livePreview.applyTemplate(templateId, imageUrl);
+        TextView hint = findViewById(R.id.birthday_auto_pan_hint);
+        if (hint != null) {
+            boolean frame = livePreview != null && livePreview.isTemplateB();
+            hint.setText(
+                    frame
+                            ? R.string.birthday_auto_pan_hint_frame
+                            : R.string.birthday_auto_pan_hint);
+        }
     }
 
     private void applyFallbackDates() {

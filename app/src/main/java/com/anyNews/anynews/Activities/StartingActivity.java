@@ -2488,6 +2488,12 @@ public class StartingActivity extends AppCompatActivity {
                         ProfileHubConfigHelper.saveBirthdaySpecialEnabled(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getEnableBirthdaySpecial());
+                        if (startActivityReqModel.getData().getBirthdayTemplateId() != null) {
+                            ProfileHubConfigHelper.saveBirthdayTemplate(
+                                    getApplicationContext(),
+                                    startActivityReqModel.getData().getBirthdayTemplateId(),
+                                    startActivityReqModel.getData().getBirthdayTemplateImageUrl());
+                        }
                         ProfileHubConfigHelper.saveNotHiringMessages(
                                 getApplicationContext(),
                                 startActivityReqModel.getData()

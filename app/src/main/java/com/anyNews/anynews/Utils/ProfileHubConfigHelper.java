@@ -299,6 +299,43 @@ public final class ProfileHubConfigHelper {
                 Constants.PREF_NAME);
     }
 
+    /**
+     * Selected birthday artwork from splash, session, feed poll, or birthday_config.
+     * Null id leaves the cache. Empty image URL is stored (built-in artwork).
+     */
+    public static void saveBirthdayTemplate(
+            @Nullable Context context, @Nullable String templateId, @Nullable String imageUrl) {
+        if (context == null || templateId == null) return;
+        String id = "b".equalsIgnoreCase(templateId.trim()) ? "b" : "a";
+        Context app = context.getApplicationContext();
+        SharedPrefsData.putStringImmediate(app, Constants.BIRTHDAY_TEMPLATE_ID, id, Constants.PREF_NAME);
+        if (imageUrl != null) {
+            SharedPrefsData.putStringImmediate(
+                    app, Constants.BIRTHDAY_TEMPLATE_IMAGE_URL, imageUrl.trim(), Constants.PREF_NAME);
+        }
+    }
+
+    /** Missing or unknown values stay on template A. */
+    public static String getBirthdayTemplateId(@Nullable Context context) {
+        if (context == null) return "a";
+        String v =
+                SharedPrefsData.getString(
+                        context.getApplicationContext(),
+                        Constants.BIRTHDAY_TEMPLATE_ID,
+                        Constants.PREF_NAME);
+        return "b".equalsIgnoreCase(v == null ? "" : v.trim()) ? "b" : "a";
+    }
+
+    public static String getBirthdayTemplateImageUrl(@Nullable Context context) {
+        if (context == null) return "";
+        String v =
+                SharedPrefsData.getString(
+                        context.getApplicationContext(),
+                        Constants.BIRTHDAY_TEMPLATE_IMAGE_URL,
+                        Constants.PREF_NAME);
+        return v == null ? "" : v.trim();
+    }
+
     /** Default true — show Birthday Special on Profile hub. */
     public static boolean isBirthdaySpecialEnabled(@Nullable Context context) {
         return readBool(context, Constants.ENABLE_BIRTHDAY_SPECIAL, true);

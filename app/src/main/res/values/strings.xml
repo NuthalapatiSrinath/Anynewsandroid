@@ -330,6 +330,7 @@
     <string name="birthday_auto_rotate">Photo orientation</string>
     <string name="birthday_auto_rotate_hint">Tap 0° / 90° / 180° / 270° if the photo looks sideways</string>
     <string name="birthday_auto_pan_hint">Drag inside the photo circle to move left/right or up/down</string>
+    <string name="birthday_auto_pan_hint_frame">Drag inside the photo frame to move left/right or up/down</string>
     <string name="birthday_auto_font_style">Name font</string>
     <string name="birthday_auto_addr_font_style">Address font</string>
     <string name="birthday_auto_font_size">Size</string>

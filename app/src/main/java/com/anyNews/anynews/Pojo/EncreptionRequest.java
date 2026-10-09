@@ -278,6 +278,15 @@ public class EncreptionRequest {
     @Expose
     private Boolean enable_birthday_special;
 
+    /** Additive. Null when an old server omits it — app keeps template A. */
+    @SerializedName("birthday_template_id")
+    @Expose
+    private String birthday_template_id;
+
+    @SerializedName("birthday_template_image_url")
+    @Expose
+    private String birthday_template_image_url;
+
     @SerializedName("enable_become_a_reporter")
     @Expose
     private Boolean enable_become_a_reporter;
@@ -831,6 +840,22 @@ public class EncreptionRequest {
 
     public boolean hasEnable_birthday_special() {
         return enable_birthday_special != null;
+    }
+
+    public String getBirthday_template_id() {
+        return birthday_template_id;
+    }
+
+    public boolean hasBirthday_template_id() {
+        return birthday_template_id != null;
+    }
+
+    public String getBirthday_template_image_url() {
+        return birthday_template_image_url;
+    }
+
+    public boolean hasBirthday_template_image_url() {
+        return birthday_template_image_url != null;
     }
 
     public Boolean getEnable_become_a_reporter() {

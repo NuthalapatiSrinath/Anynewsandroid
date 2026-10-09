@@ -24,6 +24,8 @@ import androidx.annotation.Nullable;
 import com.anyNews.anynews.Utils.BirthdayFonts;
 
 import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 /**
  * Live Birthday Special poster preview matching admin/server geometry
@@ -54,6 +56,27 @@ public class BirthdayPosterPreviewView extends View {
     private static final int TEXT_COLOR = 0xFFE63B19;
     private static final int SPECIAL_COLOR = 0xFF1F2937;
 
+    /**
+     * Template B (celebration poster, 1003×1568). Photo window is the white
+     * rounded rectangle, not A's circle. Name sits on the plaque under it.
+     */
+    private static final float B_W = 1003f;
+    private static final float B_H = 1568f;
+    private static final float B_PHOTO_L = 258f;
+    private static final float B_PHOTO_T = 382f;
+    private static final float B_PHOTO_R = 848f;
+    private static final float B_PHOTO_B = 806f;
+    private static final float B_PHOTO_RADIUS = 50f;
+    private static final float B_NAME_CX = 564f;
+    private static final float B_NAME_CY = 936f;
+    private static final float B_NAME_MAX_W = 440f;
+    private static final float B_NAME_MAX_SIZE = 46f;
+    private static final float B_SPECIAL_LEFT = 336f;
+    private static final float B_SPECIAL_MAX_W = 400f;
+    private static final float[] B_SPECIAL_BASELINES = {1324f, 1354f, 1383f, 1413f};
+    private static final String ASSET_A = "birthday/birthday_template_orange.jpg";
+    private static final String ASSET_B = "birthday/birthday_template_celebration.png";
+
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint circlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint namePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
@@ -83,6 +106,10 @@ public class BirthdayPosterPreviewView extends View {
     private int photoRotation = 0;
     /** Optional cap so compose controls (zoom/rotate) stay on-screen. */
     private int maxHeightPx = 0;
+    /** False = template A (circle). True = template B (rounded rectangle). */
+    private boolean templateB;
+    private int templateLoadGen;
+    @Nullable private String templateImageUrl = "";
 
     private float lastTouchX;
     private float lastTouchY;
@@ -118,13 +145,56 @@ public class BirthdayPosterPreviewView extends View {
         addressPaint.setTextAlign(Paint.Align.LEFT);
         specialPaint.setColor(SPECIAL_COLOR);
         specialPaint.setTextAlign(Paint.Align.LEFT);
-        loadTemplateAsync();
+        loadBundledTemplate(0);
     }
 
-    private void loadTemplateAsync() {
+    /**
+     * Switch artwork. Template A keeps the circle asset and geometry.
+     * A null or blank id stays on A. Image URL empty uses the bundled file.
+     */
+    public void applyTemplate(@Nullable String templateId, @Nullable String imageUrl) {
+        templateB = "b".equalsIgnoreCase(templateId == null ? "" : templateId.trim());
+        templateImageUrl = imageUrl == null ? "" : imageUrl.trim();
+        final int gen = ++templateLoadGen;
+        final String url = templateImageUrl;
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            new Thread(
+                    () -> {
+                        Bitmap bmp = decodeUrl(url);
+                        post(
+                                () -> {
+                                    if (gen != templateLoadGen) {
+                                        if (bmp != null && !bmp.isRecycled()) bmp.recycle();
+                                        return;
+                                    }
+                                    if (bmp != null) {
+                                        template = bmp;
+                                        requestLayout();
+                                        invalidate();
+                                    } else {
+                                        loadBundledTemplate(gen);
+                                    }
+                                });
+                    })
+                    .start();
+        } else {
+            loadBundledTemplate(gen);
+        }
+        requestLayout();
+        invalidate();
+    }
+
+    public boolean isTemplateB() {
+        return templateB;
+    }
+
+    private void loadBundledTemplate(int gen) {
+        final boolean wantB = templateB;
         post(() -> {
-            try (InputStream is = getContext().getAssets().open(
-                    "birthday/birthday_template_orange.jpg")) {
+            if (gen != templateLoadGen && gen != 0) return;
+            if (gen == 0 && templateLoadGen != 0) return;
+            String asset = wantB ? ASSET_B : ASSET_A;
+            try (InputStream is = getContext().getAssets().open(asset)) {
                 BitmapFactory.Options opts = new BitmapFactory.Options();
                 opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
                 template = BitmapFactory.decodeStream(is, null, opts);
@@ -132,6 +202,28 @@ public class BirthdayPosterPreviewView extends View {
             } catch (Exception ignored) {
             }
         });
+    }
+
+    @Nullable
+    private static Bitmap decodeUrl(String url) {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(25000);
+            conn.setInstanceFollowRedirects(true);
+            conn.connect();
+            if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
+            try (InputStream is = conn.getInputStream()) {
+                BitmapFactory.Options opts = new BitmapFactory.Options();
+                opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                return BitmapFactory.decodeStream(is, null, opts);
+            }
+        } catch (Exception ignored) {
+            return null;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
     }
 
     public void setPanListener(@Nullable PanListener listener) {
@@ -227,10 +319,12 @@ public class BirthdayPosterPreviewView extends View {
         if (width <= 0) {
             width = (int) (getResources().getDisplayMetrics().widthPixels * 0.9f);
         }
-        int height = Math.round(width * (TEMPLATE_H / TEMPLATE_W));
+        float aspect = templateB ? (B_H / B_W) : (TEMPLATE_H / TEMPLATE_W);
+        float inv = templateB ? (B_W / B_H) : (TEMPLATE_W / TEMPLATE_H);
+        int height = Math.round(width * aspect);
         if (maxHeightPx > 0 && height > maxHeightPx) {
             height = maxHeightPx;
-            width = Math.round(height * (TEMPLATE_W / TEMPLATE_H));
+            width = Math.round(height * inv);
         }
         setMeasuredDimension(width, height);
     }
@@ -241,6 +335,7 @@ public class BirthdayPosterPreviewView extends View {
         float w = getWidth();
         float h = getHeight();
         if (w <= 0 || h <= 0) return super.onTouchEvent(event);
+        if (templateB) return onTouchTemplateB(event, w, h);
         float sx = w / TEMPLATE_W;
         float sy = h / TEMPLATE_H;
         float cx = CIRCLE_CX * sx;
@@ -296,6 +391,10 @@ public class BirthdayPosterPreviewView extends View {
         float w = getWidth();
         float h = getHeight();
         if (w <= 0 || h <= 0) return;
+        if (templateB) {
+            drawTemplateB(canvas, w, h);
+            return;
+        }
         float sx = w / TEMPLATE_W;
         float sy = h / TEMPLATE_H;
 
@@ -408,6 +507,159 @@ public class BirthdayPosterPreviewView extends View {
                 if (line.isEmpty() && i >= SPECIAL_BASELINES.length) continue;
                 float y = SPECIAL_BASELINES[Math.min(i, SPECIAL_BASELINES.length - 1)] * sy;
                 canvas.drawText(line, SPECIAL_LEFT_X * sx, y, specialPaint);
+            }
+        }
+    }
+
+    private boolean onTouchTemplateB(MotionEvent event, float w, float h) {
+        float sx = w / B_W;
+        float sy = h / B_H;
+        float left = B_PHOTO_L * sx;
+        float top = B_PHOTO_T * sy;
+        float right = B_PHOTO_R * sx;
+        float bottom = B_PHOTO_B * sy;
+        float rad = B_PHOTO_RADIUS * Math.min(sx, sy);
+        float destW = right - left;
+        float destH = bottom - top;
+
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                if (hitRoundRect(event.getX(), event.getY(), left, top, right, bottom, rad)) {
+                    draggingPhoto = true;
+                    lastTouchX = event.getX();
+                    lastTouchY = event.getY();
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                }
+                break;
+            }
+            case MotionEvent.ACTION_MOVE: {
+                if (!draggingPhoto) break;
+                float dx = event.getX() - lastTouchX;
+                float dy = event.getY() - lastTouchY;
+                lastTouchX = event.getX();
+                lastTouchY = event.getY();
+                panX = clampPan(panX + dx / destW);
+                panY = clampPan(panY + dy / destH);
+                invalidate();
+                if (panListener != null) panListener.onPanChanged(panX, panY);
+                return true;
+            }
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (draggingPhoto) {
+                    draggingPhoto = false;
+                    getParent().requestDisallowInterceptTouchEvent(false);
+                    if (panListener != null) panListener.onPanChanged(panX, panY);
+                    return true;
+                }
+                break;
+            default:
+                break;
+        }
+        return super.onTouchEvent(event);
+    }
+
+    private static boolean hitRoundRect(
+            float x, float y, float left, float top, float right, float bottom, float rad) {
+        if (x < left || x > right || y < top || y > bottom) return false;
+        float rr = Math.min(rad, Math.min((right - left) / 2f, (bottom - top) / 2f));
+        if (x < left + rr && y < top + rr) {
+            float dx = x - (left + rr);
+            float dy = y - (top + rr);
+            return dx * dx + dy * dy <= rr * rr;
+        }
+        if (x > right - rr && y < top + rr) {
+            float dx = x - (right - rr);
+            float dy = y - (top + rr);
+            return dx * dx + dy * dy <= rr * rr;
+        }
+        if (x < left + rr && y > bottom - rr) {
+            float dx = x - (left + rr);
+            float dy = y - (bottom - rr);
+            return dx * dx + dy * dy <= rr * rr;
+        }
+        if (x > right - rr && y > bottom - rr) {
+            float dx = x - (right - rr);
+            float dy = y - (bottom - rr);
+            return dx * dx + dy * dy <= rr * rr;
+        }
+        return true;
+    }
+
+    /** Rounded-rectangle poster. Does not use A's circle coordinates. */
+    private void drawTemplateB(Canvas canvas, float w, float h) {
+        float sx = w / B_W;
+        float sy = h / B_H;
+        if (template != null && !template.isRecycled()) {
+            destRect.set(0, 0, w, h);
+            canvas.drawBitmap(template, null, destRect, bitmapPaint);
+        } else {
+            canvas.drawColor(0xFFFFF1E6);
+        }
+        float left = B_PHOTO_L * sx;
+        float top = B_PHOTO_T * sy;
+        float right = B_PHOTO_R * sx;
+        float bottom = B_PHOTO_B * sy;
+        float destW = right - left;
+        float destH = bottom - top;
+        float rad = B_PHOTO_RADIUS * Math.min(sx, sy);
+        if (photo != null && !photo.isRecycled()) {
+            clipPath.reset();
+            clipPath.addRoundRect(left, top, right, bottom, rad, rad, Path.Direction.CW);
+            int save = canvas.save();
+            canvas.clipPath(clipPath);
+            canvas.drawRect(left, top, right, bottom, circlePaint);
+            float srcW = photo.getWidth();
+            float srcH = photo.getHeight();
+            float orientW = (photoRotation == 90 || photoRotation == 270) ? srcH : srcW;
+            float orientH = (photoRotation == 90 || photoRotation == 270) ? srcW : srcH;
+            float base = Math.max(destW / orientW, destH / orientH);
+            float scale = base * zoom;
+            float drawW = orientW * scale;
+            float drawH = orientH * scale;
+            float drawLeft = left + (destW - drawW) / 2f + panX * destW;
+            float drawTop = top + (destH - drawH) / 2f + panY * destH;
+            photoMatrix.reset();
+            photoMatrix.postTranslate(-srcW / 2f, -srcH / 2f);
+            if (photoRotation != 0) photoMatrix.postRotate(photoRotation);
+            photoMatrix.postScale(scale, scale);
+            photoMatrix.postTranslate(drawLeft + drawW / 2f, drawTop + drawH / 2f);
+            canvas.drawBitmap(photo, photoMatrix, bitmapPaint);
+            canvas.restoreToCount(save);
+        }
+
+        Typeface nameTf = BirthdayFonts.typefaceForText(getContext(), nameFontId, nameBold, nameText);
+        namePaint.setTypeface(nameTf);
+        float nameCap = Math.min(nameSizePx * sy, B_NAME_MAX_SIZE * sy);
+        namePaint.setTextSize(fitTextSize(namePaint, nameText, B_NAME_MAX_W * sx, nameCap, 14f * sy));
+        if (!TextUtils.isEmpty(nameText)) {
+            namePaint.setTextAlign(Paint.Align.CENTER);
+            Paint.FontMetrics fm = namePaint.getFontMetrics();
+            float midAdjust = (fm.ascent + fm.descent) / 2f;
+            canvas.drawText(nameText, B_NAME_CX * sx, B_NAME_CY * sy - midAdjust, namePaint);
+        }
+        if (!TextUtils.isEmpty(specialText)) {
+            specialPaint.setTypeface(
+                    BirthdayFonts.typefaceForText(
+                            getContext(), BirthdayFonts.DEFAULT_SPECIAL_FONT_ID, false, specialText));
+            specialPaint.setTextSize(15f * sy);
+            specialPaint.setTextAlign(Paint.Align.LEFT);
+            float maxW = B_SPECIAL_MAX_W * sx;
+            StaticLayout layout =
+                    StaticLayout.Builder.obtain(
+                                    specialText, 0, specialText.length(), specialPaint, (int) maxW)
+                            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                            .setMaxLines(B_SPECIAL_BASELINES.length)
+                            .setEllipsize(TextUtils.TruncateAt.END)
+                            .setIncludePad(false)
+                            .build();
+            int lineCount = Math.min(B_SPECIAL_BASELINES.length, layout.getLineCount());
+            for (int i = 0; i < lineCount; i++) {
+                int start = layout.getLineStart(i);
+                int end = layout.getLineEnd(i);
+                String line = specialText.substring(start, end).replace("\n", "");
+                canvas.drawText(line, B_SPECIAL_LEFT * sx, B_SPECIAL_BASELINES[i] * sy, specialPaint);
             }
         }
     }
