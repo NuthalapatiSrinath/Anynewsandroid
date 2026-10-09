@@ -831,6 +831,12 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                         });
     }
 
+    /** Artwork the open composer is actually using (circle or celebration). */
+    private String currentPosterTemplateId() {
+        if (livePreview != null) return livePreview.isTemplateB() ? "b" : "a";
+        return ProfileHubConfigHelper.getBirthdayTemplateId(this);
+    }
+
     /** Template A keeps the circle hint. Template B points at the rounded frame. */
     private void applyBirthdayTemplate(@Nullable String templateId, @Nullable String imageUrl) {
         if (livePreview != null) livePreview.applyTemplate(templateId, imageUrl);
@@ -963,6 +969,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
     private void clearEditingMode() {
         editingBirthdayId = 0;
         updateSubmitLabel();
+        applyBirthdayTemplate(
+                ProfileHubConfigHelper.getBirthdayTemplateId(this),
+                ProfileHubConfigHelper.getBirthdayTemplateImageUrl(this));
     }
 
     private void submit() {
@@ -1104,6 +1113,7 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         body.addProperty("pan_x", panX);
         body.addProperty("pan_y", panY);
         body.addProperty("photo_rotation", photoRotation);
+        body.addProperty("birthday_template_id", currentPosterTemplateId());
 
         JsonObject nameStyle = new JsonObject();
         nameStyle.addProperty("fontId", selectedNameFontId());
@@ -1377,6 +1387,15 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         if (id <= 0) return;
         editingBirthdayId = id;
         updateSubmitLabel();
+        String postedTemplate = optString(row, "template_id");
+        if ("a".equalsIgnoreCase(postedTemplate) || "b".equalsIgnoreCase(postedTemplate)) {
+            String current = ProfileHubConfigHelper.getBirthdayTemplateId(this);
+            String url =
+                    postedTemplate.equalsIgnoreCase(current)
+                            ? ProfileHubConfigHelper.getBirthdayTemplateImageUrl(this)
+                            : "";
+            applyBirthdayTemplate(postedTemplate, url);
+        }
 
         if (nameInput != null) nameInput.setText(optString(row, "name"));
         if (addressInput != null) addressInput.setText(optString(row, "address"));
