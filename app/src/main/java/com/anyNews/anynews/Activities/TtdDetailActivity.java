@@ -323,14 +323,17 @@ public class TtdDetailActivity extends AppCompatActivity {
             bindNewsList(null);
             return;
         }
-        int hours = live.optInt("sarva_hours", 0);
+        JSONObject facts = darshanFacts(live);
+        int hours = facts.optInt("sarva_hours", 0);
         setText(R.id.ttd_stat_sarva, TtdLabels.hoursCount(hours, this));
-        if (live.has("special_inr") && !live.isNull("special_inr") && live.optInt("special_inr", 0) > 0) {
-            setText(R.id.ttd_stat_special, formatInr(live.optInt("special_inr", 0)));
+        if (facts.has("special_inr") && !facts.isNull("special_inr")
+                && facts.optInt("special_inr", 0) > 0) {
+            setText(R.id.ttd_stat_special, formatInr(facts.optInt("special_inr", 0)));
         } else {
-            setText(R.id.ttd_stat_special, "");
+            setText(R.id.ttd_stat_special,
+                    TtdLabels.specialName(facts.optString("special_name", ""), this));
         }
-        JSONArray windows = live.optJSONArray("windows");
+        JSONArray windows = facts.optJSONArray("windows");
         StringBuilder times = new StringBuilder();
         if (windows != null) {
             for (int i = 0; i < windows.length(); i++) {
@@ -341,7 +344,22 @@ public class TtdDetailActivity extends AppCompatActivity {
             }
         }
         setText(R.id.ttd_stat_timings, times.toString());
-        bindNewsList(live);
+        bindNewsList(facts);
+    }
+
+    /**
+     * The Redis slice is flat ({@code sarva_hours}, {@code windows},
+     * {@code special_inr}, {@code special_name}). Splash may hand the
+     * whole {@code ttd} object with that slice under {@code live}.
+     */
+    @NonNull
+    private static JSONObject darshanFacts(@NonNull JSONObject live) {
+        if (live.has("sarva_hours") || live.has("windows") || live.has("special_name")
+                || live.has("special_inr")) {
+            return live;
+        }
+        JSONObject inner = live.optJSONObject("live");
+        return inner != null ? inner : live;
     }
 
     private void refreshFromRedis() {

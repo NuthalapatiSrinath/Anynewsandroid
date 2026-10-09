@@ -251,6 +251,29 @@ public final class TtdLabels {
             {"ଜାନ", "ଫେବ", "ମାର୍ଚ୍ଚ", "ଅପ୍ରେ", "ମଇ", "ଜୁନ", "ଜୁଲା", "ଅଗ", "ସେପ୍ଟ", "ଅକ୍ଟୋ", "ନଭ", "ଡିସ"},
     };
 
+    /**
+     * Value under Special Darshanam. A rupee is painted only when the pack
+     * has {@code special_inr}. Otherwise this is the official name
+     * (Seeghra Darshan), in the selected script. Unknown source text is
+     * shown as written. Empty stays empty — no guessed price.
+     */
+    public static String specialName(@Nullable String source, @Nullable Context c) {
+        String raw = source == null ? "" : source.trim();
+        if (raw.isEmpty()) return "";
+        if (raw.matches("(?i)seeghra\\s+darshan(am)?")) {
+            switch (lang(c)) {
+                case 1: return "ശീഘ്ര ദർശനം";
+                case 2: return "शीघ्र दर्शन";
+                case 3: return "శీఘ్ర దర్శనం";
+                case 4: return "சீக்கிர தரிசனம்";
+                case 5: return "ಶೀಘ್ರ ದರ್ಶನ";
+                case 6: return "ଶୀଘ୍ର ଦର୍ଶନ";
+                default: return "Seeghra Darshan";
+            }
+        }
+        return raw;
+    }
+
     public static String specialLabel(@Nullable Context c) {
         switch (lang(c)) {
             case 1: return "പ്രത്യേക ദർശനം";
