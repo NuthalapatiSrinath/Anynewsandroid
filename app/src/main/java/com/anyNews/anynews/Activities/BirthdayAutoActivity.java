@@ -159,10 +159,10 @@ public class BirthdayAutoActivity extends AppCompatActivity {
             serverPreview.setClickable(false);
             serverPreview.setFocusable(false);
         }
-        // Cap preview so pick / zoom / 0°–270° stay visible under the banner.
+        // Poster uses the full card width (a height cap used to shrink it and
+        // leave a blank gap on the right). Zoom and rotate stay in the scroll.
         if (livePreview != null) {
-            int maxH = Math.round(getResources().getDisplayMetrics().heightPixels * 0.42f);
-            livePreview.setMaxHeightPx(Math.max(220, maxH));
+            livePreview.setArtworkListener(this::updatePosterHint);
         }
         nameInput = findViewById(R.id.birthday_auto_name);
         addressInput = findViewById(R.id.birthday_auto_address);
@@ -840,14 +840,16 @@ public class BirthdayAutoActivity extends AppCompatActivity {
     /** Template A keeps the circle hint. Template B points at the rounded frame. */
     private void applyBirthdayTemplate(@Nullable String templateId, @Nullable String imageUrl) {
         if (livePreview != null) livePreview.applyTemplate(templateId, imageUrl);
+        updatePosterHint(livePreview != null && livePreview.isTemplateB());
+    }
+
+    private void updatePosterHint(boolean celebration) {
         TextView hint = findViewById(R.id.birthday_auto_pan_hint);
-        if (hint != null) {
-            boolean frame = livePreview != null && livePreview.isTemplateB();
-            hint.setText(
-                    frame
-                            ? R.string.birthday_auto_pan_hint_frame
-                            : R.string.birthday_auto_pan_hint);
-        }
+        if (hint == null) return;
+        hint.setText(
+                celebration
+                        ? R.string.birthday_auto_pan_hint_frame
+                        : R.string.birthday_auto_pan_hint);
     }
 
     private void applyFallbackDates() {

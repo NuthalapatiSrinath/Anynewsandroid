@@ -11,6 +11,7 @@ import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.os.Looper;
 import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
@@ -112,12 +113,16 @@ public class BirthdayPosterPreviewView extends View {
     private float panY = 0f;
     /** Manual clockwise degrees: 0 / 90 / 180 / 270 */
     private int photoRotation = 0;
-    /** Optional cap so compose controls (zoom/rotate) stay on-screen. */
-    private int maxHeightPx = 0;
-    /** False = template A (circle). True = template B (rounded rectangle). */
+    /**
+     * False = drawing template A (circle). True only after celebration artwork
+     * has actually decoded. A missing or in-flight URL stays on A.
+     */
     private boolean templateB;
     private int templateLoadGen;
-    @Nullable private String templateImageUrl = "";
+    /** Generation whose celebration bitmap is installed. -1 until a download wins. */
+    private int celebrationGen = -1;
+    @Nullable private String loadedCelebrationUrl = "";
+    @Nullable private ArtworkListener artworkListener;
 
     private float lastTouchX;
     private float lastTouchY;
@@ -126,6 +131,11 @@ public class BirthdayPosterPreviewView extends View {
 
     public interface PanListener {
         void onPanChanged(float panX, float panY);
+    }
+
+    /** Fires when the preview switches between the circle poster and celebration art. */
+    public interface ArtworkListener {
+        void onArtworkChanged(boolean celebration);
     }
 
     public BirthdayPosterPreviewView(Context context) {
@@ -153,26 +163,38 @@ public class BirthdayPosterPreviewView extends View {
         addressPaint.setTextAlign(Paint.Align.LEFT);
         specialPaint.setColor(SPECIAL_COLOR);
         specialPaint.setTextAlign(Paint.Align.LEFT);
-        loadBundledTemplate(0);
+        showBundledCircle(0);
+    }
+
+    public void setArtworkListener(@Nullable ArtworkListener listener) {
+        artworkListener = listener;
     }
 
     /**
      * Switch artwork. Template A keeps the circle asset and geometry.
-     * A null or blank id stays on A. Template A with an empty URL uses the
-     * bundled circle file. Template B is not packaged; it loads from
-     * {@code birthday_template_image_url}.
+     * Template B is not packaged. Until {@code birthday_template_image_url}
+     * decodes, and whenever that URL is empty or the download fails, the
+     * preview stays on the bundled circle poster — never an empty canvas.
      */
     public void applyTemplate(@Nullable String templateId, @Nullable String imageUrl) {
-        templateB = "b".equalsIgnoreCase(templateId == null ? "" : templateId.trim());
-        templateImageUrl = imageUrl == null ? "" : imageUrl.trim();
+        final boolean wantB = "b".equalsIgnoreCase(templateId == null ? "" : templateId.trim());
+        final String url = imageUrl == null ? "" : imageUrl.trim();
         final int gen = ++templateLoadGen;
-        final boolean wantB = templateB;
-        final String url = templateImageUrl;
-        if (url.startsWith("http://") || url.startsWith("https://")) {
+        final boolean http = url.startsWith("http://") || url.startsWith("https://");
+        if (wantB && http && TextUtils.equals(url, loadedCelebrationUrl) && showingCelebration()) {
+            notifyArtwork();
+            requestLayout();
+            invalidate();
+            return;
+        }
+        // Circle immediately. Do not flip into B geometry with a null bitmap.
+        showBundledCircle(gen);
+        if (wantB && http) {
+            final String fetchUrl = url;
             new Thread(
                     () -> {
-                        Bitmap bmp = decodeUrl(url);
-                        Bitmap overlay = bmp != null && wantB ? punchCelebrationHole(bmp) : null;
+                        Bitmap bmp = decodeUrl(fetchUrl);
+                        Bitmap overlay = bmp != null ? punchCelebrationHole(bmp) : null;
                         post(
                                 () -> {
                                     if (gen != templateLoadGen) {
@@ -180,48 +202,85 @@ public class BirthdayPosterPreviewView extends View {
                                         recycleBitmap(overlay);
                                         return;
                                     }
-                                    if (bmp != null) {
-                                        replaceArtwork(bmp, overlay);
-                                        requestLayout();
-                                        invalidate();
-                                    } else {
+                                    if (bmp == null) {
                                         recycleBitmap(overlay);
-                                        loadBundledTemplate(gen);
+                                        showBundledCircle(gen);
+                                        return;
                                     }
+                                    loadedCelebrationUrl = fetchUrl;
+                                    celebrationGen = gen;
+                                    templateB = true;
+                                    replaceArtwork(bmp, overlay);
+                                    requestLayout();
+                                    invalidate();
+                                    notifyArtwork();
                                 });
                     })
                     .start();
-        } else {
-            loadBundledTemplate(gen);
         }
         requestLayout();
         invalidate();
     }
 
+    /** True only while the celebration bitmap is what this view is drawing. */
     public boolean isTemplateB() {
-        return templateB;
+        return showingCelebration();
     }
 
-    private void loadBundledTemplate(int gen) {
-        final boolean wantB = templateB;
-        post(() -> {
-            if (gen != templateLoadGen && gen != 0) return;
-            if (gen == 0 && templateLoadGen != 0) return;
-            // Celebration poster is downloaded from birthday_template_image_url.
-            // Only the small circle banner is packaged.
-            if (wantB) {
-                replaceArtwork(null, null);
-                invalidate();
-                return;
-            }
-            try (InputStream is = getContext().getAssets().open(ASSET_A)) {
-                BitmapFactory.Options opts = new BitmapFactory.Options();
-                opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                replaceArtwork(BitmapFactory.decodeStream(is, null, opts), null);
-                invalidate();
-            } catch (Exception ignored) {
-            }
-        });
+    private boolean showingCelebration() {
+        return templateB && template != null && !template.isRecycled();
+    }
+
+    /**
+     * Bundled circle banner. Runs on the UI thread so the first draw already
+     * has artwork. Never clears the bitmap to paint an empty poster.
+     */
+    private void showBundledCircle(int gen) {
+        Runnable job =
+                () -> {
+                    if (gen != templateLoadGen && gen != 0) return;
+                    if (gen == 0 && templateLoadGen != 0) return;
+                    // This generation already installed celebration art (download won).
+                    if (celebrationGen == gen && showingCelebration()) return;
+                    if (!templateB && template != null && !template.isRecycled()) {
+                        notifyArtwork();
+                        return;
+                    }
+                    try (InputStream is = getContext().getAssets().open(ASSET_A)) {
+                        BitmapFactory.Options opts = new BitmapFactory.Options();
+                        opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                        Bitmap bmp = BitmapFactory.decodeStream(is, null, opts);
+                        if (gen != templateLoadGen && gen != 0) {
+                            recycleBitmap(bmp);
+                            return;
+                        }
+                        if (gen == 0 && templateLoadGen != 0) {
+                            recycleBitmap(bmp);
+                            return;
+                        }
+                        if (celebrationGen == gen && showingCelebration()) {
+                            recycleBitmap(bmp);
+                            return;
+                        }
+                        if (bmp == null) return;
+                        templateB = false;
+                        celebrationGen = -1;
+                        loadedCelebrationUrl = "";
+                        replaceArtwork(bmp, null);
+                        requestLayout();
+                        invalidate();
+                        notifyArtwork();
+                    } catch (Exception ignored) {
+                    }
+                };
+        if (Looper.myLooper() == Looper.getMainLooper()) job.run();
+        else post(job);
+    }
+
+    private void notifyArtwork() {
+        if (artworkListener != null) {
+            artworkListener.onArtworkChanged(showingCelebration());
+        }
     }
 
     private void replaceArtwork(@Nullable Bitmap nextTemplate, @Nullable Bitmap nextOverlay) {
@@ -396,12 +455,6 @@ public class BirthdayPosterPreviewView extends View {
         invalidate();
     }
 
-    /** Cap measured height (keeps zoom/rotate visible under a tall poster). */
-    public void setMaxHeightPx(int maxHeightPx) {
-        this.maxHeightPx = Math.max(0, maxHeightPx);
-        requestLayout();
-    }
-
     public float getPanX() {
         return panX;
     }
@@ -425,13 +478,10 @@ public class BirthdayPosterPreviewView extends View {
         if (width <= 0) {
             width = (int) (getResources().getDisplayMetrics().widthPixels * 0.9f);
         }
-        float aspect = templateB ? (B_H / B_W) : (TEMPLATE_H / TEMPLATE_W);
-        float inv = templateB ? (B_W / B_H) : (TEMPLATE_W / TEMPLATE_H);
-        int height = Math.round(width * aspect);
-        if (maxHeightPx > 0 && height > maxHeightPx) {
-            height = maxHeightPx;
-            width = Math.round(height * inv);
-        }
+        // Always the full card width. Shrinking width to honor maxHeightPx left
+        // the poster start-aligned with an empty gap on the right.
+        float aspect = showingCelebration() ? (B_H / B_W) : (TEMPLATE_H / TEMPLATE_W);
+        int height = Math.max(1, Math.round(width * aspect));
         setMeasuredDimension(width, height);
     }
 
@@ -441,7 +491,7 @@ public class BirthdayPosterPreviewView extends View {
         float w = getWidth();
         float h = getHeight();
         if (w <= 0 || h <= 0) return super.onTouchEvent(event);
-        if (templateB) return onTouchTemplateB(event, w, h);
+        if (showingCelebration()) return onTouchTemplateB(event, w, h);
         float sx = w / TEMPLATE_W;
         float sy = h / TEMPLATE_H;
         float cx = CIRCLE_CX * sx;
@@ -497,7 +547,7 @@ public class BirthdayPosterPreviewView extends View {
         float w = getWidth();
         float h = getHeight();
         if (w <= 0 || h <= 0) return;
-        if (templateB) {
+        if (showingCelebration()) {
             drawTemplateB(canvas, w, h);
             return;
         }
@@ -508,7 +558,7 @@ public class BirthdayPosterPreviewView extends View {
             destRect.set(0, 0, w, h);
             canvas.drawBitmap(template, null, destRect, bitmapPaint);
         } else {
-            canvas.drawColor(0xFFFFF1E6);
+            return;
         }
 
         if (photo != null && !photo.isRecycled()) {
@@ -710,13 +760,9 @@ public class BirthdayPosterPreviewView extends View {
         boolean hasPhoto = photo != null && !photo.isRecycled();
         boolean ribbonsOnTop =
                 hasPhoto && frameOverlay != null && !frameOverlay.isRecycled();
-        if (!ribbonsOnTop) {
-            if (template != null && !template.isRecycled()) {
-                destRect.set(0, 0, w, h);
-                canvas.drawBitmap(template, null, destRect, bitmapPaint);
-            } else {
-                canvas.drawColor(0xFFFFF1E6);
-            }
+        if (!ribbonsOnTop && template != null && !template.isRecycled()) {
+            destRect.set(0, 0, w, h);
+            canvas.drawBitmap(template, null, destRect, bitmapPaint);
         }
         if (hasPhoto) {
             clipPath.reset();
