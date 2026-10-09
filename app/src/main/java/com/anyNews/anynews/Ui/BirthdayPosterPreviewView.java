@@ -59,14 +59,18 @@ public class BirthdayPosterPreviewView extends View {
     /**
      * Template B (celebration poster, 1003×1568). Photo window is the white
      * rounded rectangle, not A's circle. Name sits on the plaque under it.
+     *
+     * <p>The window is the inner edge of the orange stroke. The top-left and
+     * bottom-right ribbons are decorations painted on top of that photo. They
+     * are not holes and the photo is not inset to dodge them.
      */
     private static final float B_W = 1003f;
     private static final float B_H = 1568f;
-    private static final float B_PHOTO_L = 258f;
-    private static final float B_PHOTO_T = 382f;
-    private static final float B_PHOTO_R = 848f;
-    private static final float B_PHOTO_B = 806f;
-    private static final float B_PHOTO_RADIUS = 50f;
+    private static final float B_PHOTO_L = 243f;
+    private static final float B_PHOTO_T = 360f;
+    private static final float B_PHOTO_R = 869f;
+    private static final float B_PHOTO_B = 831f;
+    private static final float B_PHOTO_RADIUS = 40f;
     private static final float B_NAME_CX = 564f;
     private static final float B_NAME_CY = 936f;
     private static final float B_NAME_MAX_W = 440f;
@@ -75,7 +79,6 @@ public class BirthdayPosterPreviewView extends View {
     private static final float B_SPECIAL_MAX_W = 400f;
     private static final float[] B_SPECIAL_BASELINES = {1324f, 1354f, 1383f, 1413f};
     private static final String ASSET_A = "birthday/birthday_template_orange.jpg";
-    private static final String ASSET_B = "birthday/birthday_template_celebration.png";
 
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint circlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -89,6 +92,11 @@ public class BirthdayPosterPreviewView extends View {
     private final RectF plaqueDst = new RectF();
 
     @Nullable private Bitmap template;
+    /**
+     * Template B artwork with the white photo hole transparent, so the ribbons
+     * and orange border paint over the photo. Null for template A.
+     */
+    @Nullable private Bitmap frameOverlay;
     @Nullable private Bitmap photo;
     private String nameText = "";
     private String addressText = "";
@@ -150,28 +158,34 @@ public class BirthdayPosterPreviewView extends View {
 
     /**
      * Switch artwork. Template A keeps the circle asset and geometry.
-     * A null or blank id stays on A. Image URL empty uses the bundled file.
+     * A null or blank id stays on A. Template A with an empty URL uses the
+     * bundled circle file. Template B is not packaged; it loads from
+     * {@code birthday_template_image_url}.
      */
     public void applyTemplate(@Nullable String templateId, @Nullable String imageUrl) {
         templateB = "b".equalsIgnoreCase(templateId == null ? "" : templateId.trim());
         templateImageUrl = imageUrl == null ? "" : imageUrl.trim();
         final int gen = ++templateLoadGen;
+        final boolean wantB = templateB;
         final String url = templateImageUrl;
         if (url.startsWith("http://") || url.startsWith("https://")) {
             new Thread(
                     () -> {
                         Bitmap bmp = decodeUrl(url);
+                        Bitmap overlay = bmp != null && wantB ? punchCelebrationHole(bmp) : null;
                         post(
                                 () -> {
                                     if (gen != templateLoadGen) {
-                                        if (bmp != null && !bmp.isRecycled()) bmp.recycle();
+                                        recycleBitmap(bmp);
+                                        recycleBitmap(overlay);
                                         return;
                                     }
                                     if (bmp != null) {
-                                        template = bmp;
+                                        replaceArtwork(bmp, overlay);
                                         requestLayout();
                                         invalidate();
                                     } else {
+                                        recycleBitmap(overlay);
                                         loadBundledTemplate(gen);
                                     }
                                 });
@@ -193,15 +207,107 @@ public class BirthdayPosterPreviewView extends View {
         post(() -> {
             if (gen != templateLoadGen && gen != 0) return;
             if (gen == 0 && templateLoadGen != 0) return;
-            String asset = wantB ? ASSET_B : ASSET_A;
-            try (InputStream is = getContext().getAssets().open(asset)) {
+            // Celebration poster is downloaded from birthday_template_image_url.
+            // Only the small circle banner is packaged.
+            if (wantB) {
+                replaceArtwork(null, null);
+                invalidate();
+                return;
+            }
+            try (InputStream is = getContext().getAssets().open(ASSET_A)) {
                 BitmapFactory.Options opts = new BitmapFactory.Options();
                 opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                template = BitmapFactory.decodeStream(is, null, opts);
+                replaceArtwork(BitmapFactory.decodeStream(is, null, opts), null);
                 invalidate();
             } catch (Exception ignored) {
             }
         });
+    }
+
+    private void replaceArtwork(@Nullable Bitmap nextTemplate, @Nullable Bitmap nextOverlay) {
+        Bitmap oldTemplate = template;
+        Bitmap oldOverlay = frameOverlay;
+        template = nextTemplate;
+        frameOverlay = nextOverlay;
+        if (oldTemplate != nextTemplate && oldTemplate != nextOverlay) recycleBitmap(oldTemplate);
+        if (oldOverlay != nextTemplate && oldOverlay != nextOverlay) recycleBitmap(oldOverlay);
+    }
+
+    private static void recycleBitmap(@Nullable Bitmap bmp) {
+        if (bmp != null && !bmp.isRecycled()) bmp.recycle();
+    }
+
+    /**
+     * Copy of the celebration artwork with the white photo window transparent.
+     * Orange ribbons and the border stay opaque so they sit on the photo.
+     */
+    @Nullable
+    private static Bitmap punchCelebrationHole(@Nullable Bitmap src) {
+        if (src == null || src.isRecycled()) return null;
+        Bitmap out = src.copy(Bitmap.Config.ARGB_8888, true);
+        if (out == null) return null;
+        int bw = out.getWidth();
+        int bh = out.getHeight();
+        if (bw <= 0 || bh <= 0) {
+            recycleBitmap(out);
+            return null;
+        }
+        int[] px = new int[bw * bh];
+        out.getPixels(px, 0, bw, 0, 0, bw, bh);
+        float sx = bw / B_W;
+        float sy = bh / B_H;
+        float left = B_PHOTO_L * sx;
+        float top = B_PHOTO_T * sy;
+        float right = B_PHOTO_R * sx;
+        float bottom = B_PHOTO_B * sy;
+        float rad = B_PHOTO_RADIUS * Math.min(sx, sy);
+        int x0 = Math.max(0, (int) Math.floor(left));
+        int y0 = Math.max(0, (int) Math.floor(top));
+        int x1 = Math.min(bw - 1, (int) Math.ceil(right));
+        int y1 = Math.min(bh - 1, (int) Math.ceil(bottom));
+        for (int y = y0; y <= y1; y++) {
+            int row = y * bw;
+            for (int x = x0; x <= x1; x++) {
+                if (!hitRoundRect(x + 0.5f, y + 0.5f, left, top, right, bottom, rad)) continue;
+                int c = px[row + x];
+                if (!isPhotoHoleWhite(c) || nearRibbonOrange(px, bw, bh, x, y)) continue;
+                px[row + x] = 0;
+            }
+        }
+        out.setPixels(px, 0, bw, 0, 0, bw, bh);
+        return out;
+    }
+
+    /** Flat white placeholder inside the frame. Ribbon orange is not this. */
+    private static boolean isPhotoHoleWhite(int c) {
+        int r = (c >> 16) & 0xff;
+        int g = (c >> 8) & 0xff;
+        int b = c & 0xff;
+        int max = Math.max(r, Math.max(g, b));
+        int min = Math.min(r, Math.min(g, b));
+        return (max - min) <= 18 && max >= 230;
+    }
+
+    private static boolean isRibbonOrange(int c) {
+        int r = (c >> 16) & 0xff;
+        int g = (c >> 8) & 0xff;
+        int b = c & 0xff;
+        return r > 200 && g < 180 && b < 110 && (r - g) > 50 && (r - b) > 80;
+    }
+
+    /** Keep bright folds on the ribbon; they sit on orange, not in the white hole. */
+    private static boolean nearRibbonOrange(int[] px, int bw, int bh, int x, int y) {
+        int yStart = Math.max(0, y - 2);
+        int yEnd = Math.min(bh - 1, y + 2);
+        int xStart = Math.max(0, x - 2);
+        int xEnd = Math.min(bw - 1, x + 2);
+        for (int yy = yStart; yy <= yEnd; yy++) {
+            int row = yy * bw;
+            for (int xx = xStart; xx <= xEnd; xx++) {
+                if (isRibbonOrange(px[row + xx])) return true;
+            }
+        }
+        return false;
     }
 
     @Nullable
@@ -587,16 +693,13 @@ public class BirthdayPosterPreviewView extends View {
         return true;
     }
 
-    /** Rounded-rectangle poster. Does not use A's circle coordinates. */
+    /**
+     * Rounded-rectangle poster. Does not use A's circle coordinates.
+     * Photo fills the inner frame; the ribbon overlay is painted after it.
+     */
     private void drawTemplateB(Canvas canvas, float w, float h) {
         float sx = w / B_W;
         float sy = h / B_H;
-        if (template != null && !template.isRecycled()) {
-            destRect.set(0, 0, w, h);
-            canvas.drawBitmap(template, null, destRect, bitmapPaint);
-        } else {
-            canvas.drawColor(0xFFFFF1E6);
-        }
         float left = B_PHOTO_L * sx;
         float top = B_PHOTO_T * sy;
         float right = B_PHOTO_R * sx;
@@ -604,7 +707,18 @@ public class BirthdayPosterPreviewView extends View {
         float destW = right - left;
         float destH = bottom - top;
         float rad = B_PHOTO_RADIUS * Math.min(sx, sy);
-        if (photo != null && !photo.isRecycled()) {
+        boolean hasPhoto = photo != null && !photo.isRecycled();
+        boolean ribbonsOnTop =
+                hasPhoto && frameOverlay != null && !frameOverlay.isRecycled();
+        if (!ribbonsOnTop) {
+            if (template != null && !template.isRecycled()) {
+                destRect.set(0, 0, w, h);
+                canvas.drawBitmap(template, null, destRect, bitmapPaint);
+            } else {
+                canvas.drawColor(0xFFFFF1E6);
+            }
+        }
+        if (hasPhoto) {
             clipPath.reset();
             clipPath.addRoundRect(left, top, right, bottom, rad, rad, Path.Direction.CW);
             int save = canvas.save();
@@ -627,6 +741,10 @@ public class BirthdayPosterPreviewView extends View {
             photoMatrix.postTranslate(drawLeft + drawW / 2f, drawTop + drawH / 2f);
             canvas.drawBitmap(photo, photoMatrix, bitmapPaint);
             canvas.restoreToCount(save);
+        }
+        if (ribbonsOnTop) {
+            destRect.set(0, 0, w, h);
+            canvas.drawBitmap(frameOverlay, null, destRect, bitmapPaint);
         }
 
         Typeface nameTf = BirthdayFonts.typefaceForText(getContext(), nameFontId, nameBold, nameText);
