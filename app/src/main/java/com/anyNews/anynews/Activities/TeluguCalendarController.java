@@ -22,8 +22,6 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.animation.AccelerateDecelerateInterpolator;
-import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
 import android.widget.BaseAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -118,8 +116,10 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     private TextView flipIndicatorRaasi;
     private ImageView dayShare;
     private ImageView raasiShare;
-    /** Magazine/gallery-style blinking Share (bottom-right overlay on calendar root). */
+    /** Retired bottom FAB. Panchangam share is the header button; this stays gone. */
     @Nullable private ImageView blinkShare;
+    /** Panchangam header share — right end of the month row (petrol/gold slot). */
+    @Nullable private ImageView panchangHeaderShare;
     /** Panchangam | Raasi Phalalu top chrome (News|Read pattern — show ~3s then auto-hide). */
     @Nullable private View ttdToggleRoot;
     @Nullable private View ttdThumb;
@@ -407,8 +407,8 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         updateFlipIndicators(position);
         refreshBlinkShareContentDescription(position);
         syncSegmentThumb(raasiSegmentSelected);
-        // Blue blink FAB only on Panchangam; Raasi keeps orange header share (fuel style).
-        setBlinkShareVisible(position == 0 && !isBlinkShareCoveredBySheet());
+        // Bottom blink FAB stays hidden; Panchangam and Raasi each use a header share.
+        setBlinkShareVisible(false);
         syncDedicatedBackChrome();
     }
 
@@ -464,12 +464,14 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             }
         }
         if (panchangBack != null) {
+            // Stay the first child of the month row. bringToFront() on a
+            // LinearLayout moves the child to the end, which put Back on the right.
+            pinPanchangBackAtRowStart();
             if (show) {
                 panchangBack.setVisibility(View.VISIBLE);
                 panchangBack.setClickable(true);
                 panchangBack.setFocusable(true);
-                panchangBack.bringToFront();
-                panchangBack.setElevation(dp(12));
+                panchangBack.setElevation(0f);
                 panchangBack.setOnClickListener(v -> requestCloseToDailyUpdates());
             } else {
                 panchangBack.setVisibility(View.GONE);
@@ -538,6 +540,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
             swipeArrow.setOnClickListener(null);
         }
         hideLegacyCardShare(dayShare);
+        wirePanchangHeaderShare();
         syncDedicatedBackChrome();
         if (pager != null) {
             pager.setAdapter(detailAdapter);
@@ -563,36 +566,40 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
     }
 
     /**
-     * Wire the Special/full-post blue circular Share onto the calendar root
-     * (bottom-right above footer). Same asset + sizing as
-     * {@code FlipperAdapter} {@code full_image_share_bg}: {@code R.drawable.ic_share_full},
-     * no tint, no chip background. Blink uses {@code R.anim.blink_share}.
-     * Tap runs day share on the Panchangam flip page only — Raasi Phalalu keeps
-     * the orange header share ({@code telugu_calendar_raasi_header_share}) and never
-     * shows this blue FAB overlay.
+     * Bottom blink FAB is retired. Panchangam share is
+     * {@code telugu_calendar_header_share}; Raasi keeps its own header share.
      */
     private void wireBlinkShareOverlay() {
         blinkShare = root.findViewById(R.id.telugu_calendar_blink_share);
         if (blinkShare == null) return;
-        blinkShare.setClickable(true);
-        blinkShare.setFocusable(true);
-        // Match full_image_share_bg: blue circular PNG, no white tint / dark chip.
-        blinkShare.setImageResource(R.drawable.ic_share_full);
-        blinkShare.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        blinkShare.clearColorFilter();
-        blinkShare.setBackground(null);
-        blinkShare.setOnClickListener(v -> {
-            int page = flipPager != null ? flipPager.getCurrentPage() : 0;
-            if (page == 1) {
-                shareSelectedRaasi();
-            } else {
-                shareSelectedDay();
-            }
+        blinkShare.setOnClickListener(null);
+        blinkShare.setClickable(false);
+        setBlinkShareVisible(false);
+    }
+
+    /**
+     * Header share on the right of the month row. Same panchangam share as before
+     * ({@link #shareSelectedDay()} → Daily Updates link). Not shown on the festival row.
+     */
+    private void wirePanchangHeaderShare() {
+        if (panchangHeaderShare == null) return;
+        panchangHeaderShare.setVisibility(View.VISIBLE);
+        panchangHeaderShare.setClickable(true);
+        panchangHeaderShare.setFocusable(true);
+        panchangHeaderShare.setOnClickListener(v -> {
+            revealSegmentChromeIfHidden();
+            shareSelectedDay();
         });
-        refreshBlinkShareContentDescription(
-                flipPager != null ? flipPager.getCurrentPage() : 0);
-        // Show on Panchangam only; Raasi uses header orange share.
-        setBlinkShareVisible(!isRaasiPageVisible());
+    }
+
+    /** Keep Back as the first child so it stays at the start of the month header. */
+    private void pinPanchangBackAtRowStart() {
+        if (panchangBack == null) return;
+        if (!(panchangBack.getParent() instanceof ViewGroup)) return;
+        ViewGroup row = (ViewGroup) panchangBack.getParent();
+        if (row.indexOfChild(panchangBack) == 0) return;
+        row.removeView(panchangBack);
+        row.addView(panchangBack, 0);
     }
 
     private void refreshBlinkShareContentDescription(int flipPage) {
@@ -603,13 +610,6 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         blinkShare.setContentDescription(label);
     }
 
-    private void startBlinkShareAnimation() {
-        if (blinkShare == null) return;
-        blinkShare.clearAnimation();
-        Animation blink = AnimationUtils.loadAnimation(host, R.anim.blink_share);
-        blinkShare.startAnimation(blink);
-    }
-
     private void stopBlinkShareAnimation() {
         if (blinkShare == null) return;
         blinkShare.clearAnimation();
@@ -618,17 +618,10 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
 
     private void setBlinkShareVisible(boolean visible) {
         if (blinkShare == null) return;
-        // Raasi Phalalu: orange header share only — never overlay the blue blink FAB.
-        if (visible && isRaasiPageVisible()) {
-            visible = false;
-        }
-        if (visible) {
-            blinkShare.setVisibility(View.VISIBLE);
-            startBlinkShareAnimation();
-        } else {
-            stopBlinkShareAnimation();
-            blinkShare.setVisibility(View.GONE);
-        }
+        // Always hidden. The blue FAB used to cover the festival row; share is in the header.
+        stopBlinkShareAnimation();
+        blinkShare.setVisibility(View.GONE);
+        blinkShare.setClickable(false);
     }
 
     /** True when a calendar sheet is covering the content (blink FAB should stay hidden). */
@@ -2535,6 +2528,7 @@ public final class TeluguCalendarController implements FlipView.OnFlipListener {
         pager = page.findViewById(R.id.telugu_calendar_pager);
         detailPageIndicator = page.findViewById(R.id.telugu_calendar_detail_page_indicator);
         dayShare = page.findViewById(R.id.telugu_calendar_day_share);
+        panchangHeaderShare = page.findViewById(R.id.telugu_calendar_header_share);
         festivalStrip = page.findViewById(R.id.telugu_calendar_festival_strip);
         festivalIcon = page.findViewById(R.id.telugu_calendar_festival_icon);
         festivalText = page.findViewById(R.id.telugu_calendar_festival_text);

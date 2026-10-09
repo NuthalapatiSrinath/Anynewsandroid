@@ -25,22 +25,16 @@
         android:layout_gravity="top" />
 
     <!--
-      Same blue circular Share as Special/full posts (FlipperAdapter full_image_share_bg
-      → R.drawable.ic_share_full). Slow blink via R.anim.blink_share in controller.
-      Bottom-right of content, above the HomePage footer tab bar.
-      Shown on Panchangam only — Raasi Phalalu uses gold header share instead.
-      Sheets below this node in z-order cover it while open.
+      Retired bottom-right blink FAB. It sat on the festival row.
+      Panchangam share is telugu_calendar_header_share (header end, petrol/gold slot).
+      Id kept so older findViewById call sites stay null-safe and the view stays gone.
     -->
     <ImageView
         android:id="@+id/telugu_calendar_blink_share"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_gravity="end|bottom"
-        android:layout_marginEnd="@dimen/_20sdp"
-        android:layout_marginBottom="10dp"
         android:contentDescription="@string/telugu_calendar_share_day"
-        android:padding="12dp"
-        android:scaleType="centerInside"
         android:src="@drawable/ic_share_full"
         android:visibility="gone" />
 
