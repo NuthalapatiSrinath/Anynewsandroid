@@ -205,6 +205,52 @@ public final class TtdLabels {
         }
     }
 
+    /** Hour count from the saved Tirumala pack, in the selected script. */
+    public static String hoursCount(int hours, @Nullable Context c) {
+        if (hours <= 0) return "";
+        String n = String.valueOf(hours);
+        switch (lang(c)) {
+            case 1: return n + " മണിക്കൂർ";
+            case 2: return n + " घंटे";
+            case 3: return n + " గంటలు";
+            case 4: return n + " மணி";
+            case 5: return n + " ಗಂಟೆಗಳು";
+            case 6: return n + " ଘଣ୍ଟା";
+            default: return n + " Hours";
+        }
+    }
+
+    /** {@code yyyy-MM-dd} from the official update date, month in the selected script. */
+    public static String newsDate(@Nullable String iso, @Nullable Context c) {
+        if (iso == null || iso.length() < 10) return "";
+        try {
+            int year = Integer.parseInt(iso.substring(0, 4));
+            int month = Integer.parseInt(iso.substring(5, 7));
+            int day = Integer.parseInt(iso.substring(8, 10));
+            if (month < 1 || month > 12 || day < 1 || day > 31) return "";
+            String mon = MONTHS[monthIndex(c)][month - 1];
+            return String.format(java.util.Locale.US, "%02d %s, %d", day, mon, year);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static int monthIndex(@Nullable Context c) {
+        int id = lang(c);
+        if (id < 0 || id > 6) return 0;
+        return id;
+    }
+
+    private static final String[][] MONTHS = {
+            {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
+            {"ജനു", "ഫെബ്രു", "മാർ", "ഏപ്രി", "മേയ്", "ജൂൺ", "ജൂലൈ", "ഓഗ", "സെപ്റ്റ", "ഒക്ടോ", "നവം", "ഡിസം"},
+            {"जन", "फर", "मार्च", "अप्रै", "मई", "जून", "जुल", "अग", "सित", "अक्टू", "नव", "दिस"},
+            {"జన", "ఫిబ్ర", "మార్చి", "ఏప్రి", "మే", "జూన్", "జూలై", "ఆగ", "సెప్టె", "అక్టో", "నవం", "డిసె"},
+            {"ஜன", "பிப்", "மார்", "ஏப்", "மே", "ஜூன்", "ஜூலை", "ஆக", "செப்", "அக்", "நவ", "டிச"},
+            {"ಜನ", "ಫೆಬ್ರ", "ಮಾರ್ಚ್", "ಏಪ್ರಿ", "ಮೇ", "ಜೂನ್", "ಜುಲೈ", "ಆಗ", "ಸೆಪ್ಟೆ", "ಅಕ್ಟೋ", "ನವಂ", "ಡಿಸೆ"},
+            {"ଜାନ", "ଫେବ", "ମାର୍ଚ୍ଚ", "ଅପ୍ରେ", "ମଇ", "ଜୁନ", "ଜୁଲା", "ଅଗ", "ସେପ୍ଟ", "ଅକ୍ଟୋ", "ନଭ", "ଡିସ"},
+    };
+
     public static String specialLabel(@Nullable Context c) {
         switch (lang(c)) {
             case 1: return "പ്രത്യേക ദർശനം";

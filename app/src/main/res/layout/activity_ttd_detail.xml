@@ -83,7 +83,7 @@
             <FrameLayout
                 android:id="@+id/ttd_hero_card"
                 android:layout_width="match_parent"
-                android:layout_height="148dp"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="14dp"
                 android:layout_marginTop="8dp"
                 android:layout_marginEnd="14dp"
@@ -94,9 +94,10 @@
                 <ImageView
                     android:id="@+id/ttd_hero_image"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
+                    android:adjustViewBounds="true"
                     android:contentDescription="@null"
-                    android:scaleType="matrix"
+                    android:scaleType="fitCenter"
                     android:src="@drawable/img_ttd_hero_banner" />
             </FrameLayout>
 
@@ -263,7 +264,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
-                            android:text="₹ 300"
+                            android:gravity="center"
                             android:textColor="#FFFFFFFF"
                             android:textSize="13sp"
                             android:textStyle="bold" />
@@ -297,7 +298,6 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
                             android:gravity="center"
-                            android:text="5:00 AM – 9:00 PM"
                             android:textColor="#FFFFFFFF"
                             android:textSize="12sp"
                             android:textStyle="bold" />

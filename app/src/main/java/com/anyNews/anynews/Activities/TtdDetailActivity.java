@@ -2,10 +2,8 @@ package com.anyNews.anynews.Activities;
 
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.Outline;
 import android.graphics.PorterDuff;
-import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.TypedValue;
@@ -19,6 +17,9 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -74,8 +75,10 @@ public class TtdDetailActivity extends AppCompatActivity {
 
         pack = TtdRepository.loadToday(this);
         bindUi(pack);
+        applyLive(TtdConfigHelper.liveJson(this));
         wireClicks();
         clipHeroPhoto();
+        refreshFromRedis();
     }
 
     private void applySystemBars() {
@@ -124,39 +127,8 @@ public class TtdDetailActivity extends AppCompatActivity {
         }
         hero.setOutlineProvider(round);
         hero.setClipToOutline(true);
-        hero.setScaleX(1f);
-        hero.setScaleY(1f);
-        hero.setImageResource(R.drawable.img_ttd_hero_banner);
-        // MATRIX cover + overscale: crop all edges (hide white fringe); mild end bias
-        // keeps "Tirumala Tirupati Devasthanams" on the right readable.
-        hero.setScaleType(ImageView.ScaleType.MATRIX);
-        hero.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> applyHeroCoverMatrix(hero));
-        hero.post(() -> applyHeroCoverMatrix(hero));
-    }
-
-    /**
-     * Cover-scale the hero drawable with a slight overscale so all four edges are
-     * cropped (hides white fringe). Mild end bias keeps the right-side title readable.
-     */
-    private void applyHeroCoverMatrix(@NonNull ImageView hero) {
-        Drawable d = hero.getDrawable();
-        if (d == null) return;
-        int vw = hero.getWidth();
-        int vh = hero.getHeight();
-        int dw = d.getIntrinsicWidth();
-        int dh = d.getIntrinsicHeight();
-        if (vw <= 0 || vh <= 0 || dw <= 0 || dh <= 0) return;
-        // Overscale ~8% so thin edge artifacts are clipped on all sides.
-        float scale = Math.max((float) vw / dw, (float) vh / dh) * 1.08f;
-        float scaledW = dw * scale;
-        float scaledH = dh * scale;
-        // Bias crop toward the start so right title stays in frame, still inset right.
-        float dx = (vw - scaledW) * 0.35f;
-        float dy = (vh - scaledH) * 0.5f;
-        Matrix m = new Matrix();
-        m.setScale(scale, scale);
-        m.postTranslate(dx, dy);
-        hero.setImageMatrix(m);
+        hero.setAdjustViewBounds(true);
+        hero.setScaleType(ImageView.ScaleType.FIT_CENTER);
     }
 
     private void bindUi(@NonNull TtdModels.DayPack p) {
@@ -165,7 +137,9 @@ public class TtdDetailActivity extends AppCompatActivity {
         setText(R.id.ttd_date, TtdLabels.today(this));
         setText(R.id.ttd_darshan_heading, TtdLabels.darshanHeading(this));
         setText(R.id.ttd_label_sarva, TtdLabels.sarvaLabel(this));
-        setText(R.id.ttd_stat_sarva, TtdLabels.sarvaValue(this));
+        setText(R.id.ttd_stat_sarva, "");
+        setText(R.id.ttd_stat_special, "");
+        setText(R.id.ttd_stat_timings, "");
         setText(R.id.ttd_label_special, TtdLabels.specialLabel(this));
         setText(R.id.ttd_label_timings, TtdLabels.timingsLabel(this));
         setText(R.id.ttd_book_cta, TtdLabels.bookDarshan(this));
@@ -228,7 +202,7 @@ public class TtdDetailActivity extends AppCompatActivity {
         }
 
         bindSevasRow();
-        bindNewsList(p);
+        bindNewsList(null);
     }
 
     private void bindQuick(int includeId, int iconRes, @NonNull String title,
@@ -296,44 +270,153 @@ public class TtdDetailActivity extends AppCompatActivity {
         }
     }
 
-    private void bindNewsList(@NonNull TtdModels.DayPack p) {
+    private void bindNewsList(@Nullable JSONObject live) {
         LinearLayout list = findViewById(R.id.ttd_news_list);
         if (list == null) return;
         list.removeAllViews();
-        String[] dates = {"08 Aug, 2026", "12 Aug, 2026", "20 Aug, 2026"};
+        JSONArray news = live != null ? live.optJSONArray("news") : null;
+        if (news == null || news.length() == 0) return;
+        int lang = com.anyNews.anynews.Utils.DailyUpdatesShareLanguage.effective(this);
         float density = getResources().getDisplayMetrics().density;
-        for (int i = 0; i < 3; i++) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, (int) (8 * density), 0, (int) (8 * density));
+        for (int i = 0; i < news.length(); i++) {
+            JSONObject row = news.optJSONObject(i);
+            if (row == null) continue;
+            String title = row.optString("title", "").trim();
+            if (!titleMatchesLanguage(title, lang)) continue;
+            String date = TtdLabels.newsDate(row.optString("date_iso", ""), this);
+
+            LinearLayout line = new LinearLayout(this);
+            line.setOrientation(LinearLayout.HORIZONTAL);
+            line.setGravity(Gravity.CENTER_VERTICAL);
+            line.setPadding(0, (int) (8 * density), 0, (int) (8 * density));
 
             TextView bullet = new TextView(this);
             bullet.setText("●");
             bullet.setTextColor(ACCENT);
             bullet.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-            row.addView(bullet);
+            line.addView(bullet);
 
             TextView body = new TextView(this);
             LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             blp.setMargins((int) (8 * density), 0, (int) (8 * density), 0);
             body.setLayoutParams(blp);
-            body.setText(TtdLabels.newsLine(i, this));
+            body.setText(title);
             body.setTextColor(0xFFE8E8E8);
             body.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            row.addView(body);
+            line.addView(body);
 
-            TextView date = new TextView(this);
-            date.setText(dates[i]);
-            date.setTextColor(0x99FFFFFF);
-            date.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-            row.addView(date);
+            TextView dateTv = new TextView(this);
+            dateTv.setText(date);
+            dateTv.setTextColor(0x99FFFFFF);
+            dateTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            line.addView(dateTv);
 
-            // News bullets are display-only — do not open TTD websites.
-            row.setClickable(false);
-            list.addView(row);
+            line.setClickable(false);
+            list.addView(line);
         }
+    }
+
+    /** Paint the saved Redis slice. Missing facts stay blank — nothing is invented. */
+    private void applyLive(@Nullable JSONObject live) {
+        if (live == null) {
+            bindNewsList(null);
+            return;
+        }
+        int hours = live.optInt("sarva_hours", 0);
+        setText(R.id.ttd_stat_sarva, TtdLabels.hoursCount(hours, this));
+        if (live.has("special_inr") && !live.isNull("special_inr") && live.optInt("special_inr", 0) > 0) {
+            setText(R.id.ttd_stat_special, formatInr(live.optInt("special_inr", 0)));
+        } else {
+            setText(R.id.ttd_stat_special, "");
+        }
+        JSONArray windows = live.optJSONArray("windows");
+        StringBuilder times = new StringBuilder();
+        if (windows != null) {
+            for (int i = 0; i < windows.length(); i++) {
+                String w = windows.optString(i, "").trim();
+                if (w.isEmpty()) continue;
+                if (times.length() > 0) times.append('\n');
+                times.append(w);
+            }
+        }
+        setText(R.id.ttd_stat_timings, times.toString());
+        bindNewsList(live);
+    }
+
+    private void refreshFromRedis() {
+        try {
+            com.anyNews.anynews.Services.APIService api =
+                    com.anyNews.anynews.Services.RestApiClient.getClient()
+                            .create(com.anyNews.anynews.Services.APIService.class);
+            int lang = com.anyNews.anynews.Utils.DailyUpdatesShareLanguage.effective(this);
+            api.ttdDataset("v3", lang).enqueue(new retrofit2.Callback<com.google.gson.JsonObject>() {
+                @Override
+                public void onResponse(
+                        @NonNull retrofit2.Call<com.google.gson.JsonObject> call,
+                        @NonNull retrofit2.Response<com.google.gson.JsonObject> response) {
+                    if (isFinishing() || response.body() == null) return;
+                    try {
+                        JSONObject body = new JSONObject(response.body().toString());
+                        if (!body.optBoolean("ok", false)) return;
+                        TtdConfigHelper.saveLiveIfNewer(TtdDetailActivity.this, body);
+                        JSONObject saved = TtdConfigHelper.liveJson(TtdDetailActivity.this);
+                        runOnUiThread(() -> {
+                            if (!isFinishing()) applyLive(saved);
+                        });
+                    } catch (Exception ignored) {
+                    }
+                }
+
+                @Override
+                public void onFailure(
+                        @NonNull retrofit2.Call<com.google.gson.JsonObject> call,
+                        @NonNull Throwable t) {
+                    /* keep the splash / feed pack */
+                }
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean titleMatchesLanguage(@NonNull String title, int lang) {
+        if (title.isEmpty()) return false;
+        if (lang == 0 || lang == 7) return true;
+        int start;
+        int end;
+        switch (lang) {
+            case 1: start = 0x0D00; end = 0x0D7F; break;
+            case 2: start = 0x0900; end = 0x097F; break;
+            case 3: start = 0x0C00; end = 0x0C7F; break;
+            case 4: start = 0x0B80; end = 0x0BFF; break;
+            case 5: start = 0x0C80; end = 0x0CFF; break;
+            case 6: start = 0x0B00; end = 0x0B7F; break;
+            default: return true;
+        }
+        for (int i = 0; i < title.length(); ) {
+            int cp = title.codePointAt(i);
+            if (cp >= start && cp <= end) return true;
+            i += Character.charCount(cp);
+        }
+        return false;
+    }
+
+    @NonNull
+    private static String formatInr(int amount) {
+        String digits = Integer.toString(amount);
+        if (digits.length() <= 3) return "₹ " + digits;
+        String tail = digits.substring(digits.length() - 3);
+        String head = digits.substring(0, digits.length() - 3);
+        StringBuilder sb = new StringBuilder();
+        int i = head.length() % 2;
+        if (i > 0) sb.append(head, 0, i);
+        for (; i < head.length(); i += 2) {
+            if (sb.length() > 0) sb.append(',');
+            sb.append(head, i, Math.min(i + 2, head.length()));
+        }
+        if (sb.length() > 0) sb.append(',');
+        sb.append(tail);
+        return "₹ " + sb;
     }
 
     @Override
@@ -385,14 +468,7 @@ public class TtdDetailActivity extends AppCompatActivity {
     }
 
     private void sharePack() {
-        if (pack == null) return;
-        String text = TtdLabels.heroTitle(this) + "\n"
-                + TtdLabels.heroSubtitle(this) + "\n"
-                + pack.dateLabel + "\n\n"
-                + TtdLabels.newsLine(0, this) + "\n\n"
-                + TtdConfigHelper.officialUrl(this) + "\n"
-                + TtdConfigHelper.bookingUrl(this);
-        DailyUpdatesShareLinks.launch(this, text, "ttd", getString(R.string.ttd_share));
+        DailyUpdatesShareLinks.launch(this, "", "ttd", getString(R.string.ttd_share));
     }
 
     private void openUrl(@Nullable String url) {

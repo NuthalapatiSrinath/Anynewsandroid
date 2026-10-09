@@ -435,6 +435,12 @@ public interface APIService {
     @GET("app/{version}/fuel_dataset")
     Call<JsonObject> fuelDataset(@Path("version") String version);
 
+    /** TTD screen — Redis darshan + news pack. Does not scrape tirumala.org. */
+    @GET("app/{version}/ttd_dataset")
+    Call<JsonObject> ttdDataset(
+            @Path("version") String version,
+            @Query("language_id") int languageId);
+
     /** Stock Market — Yahoo via server Redis/memory cache. section=indices|watchlist|quote|search */
     @GET("app/{version}/stock_market")
     Call<JsonObject> stockMarket(

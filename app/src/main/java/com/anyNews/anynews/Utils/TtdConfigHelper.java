@@ -95,7 +95,47 @@ public final class TtdConfigHelper {
                     normalizeScheduleRaw(o.optString("booking_closes_at", "")),
                     Constants.PREF_NAME);
             SharedPrefsData.putBool(app, Constants.TTD_CONFIG_SET, true, Constants.PREF_NAME);
+            JSONObject live = o.optJSONObject("live");
+            if (live != null) saveLiveIfNewer(app, live);
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * Persist the hourly Redis slice. An older {@code fetched_at} does not
+     * replace a newer pack already on the phone.
+     */
+    public static void saveLiveIfNewer(@Nullable Context context, @Nullable JSONObject incoming) {
+        if (context == null || incoming == null) return;
+        try {
+            String inAt = incoming.optString("fetched_at", "");
+            JSONObject existing = liveJson(context);
+            if (existing != null) {
+                String exAt = existing.optString("fetched_at", "");
+                if (!inAt.isEmpty() && !exAt.isEmpty() && inAt.compareTo(exAt) < 0) return;
+                if (inAt.isEmpty() && !exAt.isEmpty()) return;
+            }
+            SharedPrefsData.putString(
+                    context.getApplicationContext(),
+                    Constants.TTD_CONTENT_JSON,
+                    incoming.toString(),
+                    Constants.PREF_NAME);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Nullable
+    public static JSONObject liveJson(@Nullable Context context) {
+        if (context == null) return null;
+        try {
+            String raw = SharedPrefsData.getString(
+                    context.getApplicationContext(),
+                    Constants.TTD_CONTENT_JSON,
+                    Constants.PREF_NAME);
+            if (TextUtils.isEmpty(raw)) return null;
+            return new JSONObject(raw);
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

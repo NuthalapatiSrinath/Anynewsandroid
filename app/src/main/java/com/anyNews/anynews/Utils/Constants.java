@@ -693,6 +693,8 @@ public class Constants {
     public static String TTD_HERO_TITLE = "ttd_hero_title";
     public static String TTD_HERO_SUBTITLE = "ttd_hero_subtitle";
     public static String TTD_BLESSING = "ttd_blessing";
+    /** Hourly Redis pack (darshan + news) delivered on splash, feed poll, and ttd_dataset. */
+    public static String TTD_CONTENT_JSON = "ttd_content_json";
 
     /** Weather / Fuel / Gold — splash root_settings blobs for Daily Updates. */
     public static String WEATHER_CONFIG_SET = "weather_config_set";
