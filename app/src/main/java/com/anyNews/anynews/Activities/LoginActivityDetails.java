@@ -888,8 +888,12 @@ public class LoginActivityDetails extends AppCompatActivity {
         requestModel.setDraftId(SharedPrefsData.getInt(LoginActivityDetails.this, Constants.DraftID, Constants.PREF_NAME));
         requestModel.setCountryCode("+91");
         requestModel.setMobileNumber(mobile_et.getText().toString());
-        // Name/email collected after OTP (step 3); older servers ignore empty values.
-        requestModel.setUsername("");
+        // Live production rejects a blank user_name and never calls MSG91.
+        // Name is collected after OTP (step 3). A single space passes that check.
+        // Trimmed it is empty, so the server does not sync it as the display name.
+        String typedName = username_et.getText() != null
+                ? username_et.getText().toString().trim() : "";
+        requestModel.setUsername(typedName.isEmpty() ? " " : typedName);
         requestModel.setMessageId("4er54r");
         requestModel.setEmail("");
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
