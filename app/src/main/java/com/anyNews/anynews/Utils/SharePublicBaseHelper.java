@@ -195,7 +195,7 @@ public final class SharePublicBaseHelper {
             return false;
         }
         String h = host.toLowerCase(java.util.Locale.US);
-        return h.equals("share.anynews.co.in") || h.equals("sharedev.anynews.co.in");
+        return h.equals("share.anynews.co.in");
     }
 
     /**

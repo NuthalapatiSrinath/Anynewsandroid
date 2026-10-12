@@ -934,7 +934,7 @@ public class StartingActivity extends AppCompatActivity {
                 }
             }
         }
-        // share.anynews.co.in|sharedev…/{digits} only — alphanumeric codes need HTTP resolve
+        // share.anynews.co.in/{digits} only — alphanumeric codes need HTTP resolve
         if (isShareShortHost(host)) {
             for (String seg : segments) {
                 if (seg != null && seg.matches("\\d+")) {
@@ -945,14 +945,13 @@ public class StartingActivity extends AppCompatActivity {
         return null;
     }
 
-    /** Production share host + legacy sharedev (old inbound links only). */
+    /** Production share host. The phone uses the host the server sends. */
     private static boolean isShareShortHost(@Nullable String host) {
         if (host == null || host.isEmpty()) {
             return false;
         }
         String h = host.toLowerCase(java.util.Locale.US);
-        return h.equals("share.anynews.co.in")
-                || h.equals("sharedev.anynews.co.in");
+        return h.equals("share.anynews.co.in");
     }
 
     /**
@@ -3081,11 +3080,6 @@ public class StartingActivity extends AppCompatActivity {
 
     private void navigateAfterSplash(StartActivityReqModel startActivityReqModel) {
         try {
-            if (OpenPathCache.shouldSkipLanguageOnboarding(getApplicationContext())) {
-                openHomeFromSplash();
-                return;
-            }
-
             scrren = startActivityReqModel.getData().getNextScreen();
             if (scrren == null) {
                 scrren = "main";
@@ -3095,6 +3089,17 @@ public class StartingActivity extends AppCompatActivity {
                     getApplicationContext(), Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
             if (prefsNext != null && !prefsNext.isEmpty()) {
                 scrren = prefsNext;
+            }
+
+            // Language already chosen: home, unless this splash still asks for
+            // state or district (new user with an empty district). A saved pair
+            // comes back as next_screen main and is not asked again.
+            boolean needsGeography = "district".equalsIgnoreCase(scrren)
+                    || "state".equalsIgnoreCase(scrren);
+            if (OpenPathCache.shouldSkipLanguageOnboarding(getApplicationContext())
+                    && !needsGeography) {
+                openHomeFromSplash();
+                return;
             }
 
             if (scrren.equals("language")) {

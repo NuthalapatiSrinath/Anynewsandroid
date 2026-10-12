@@ -33,9 +33,7 @@ public final class OwnedHttpsOpener {
         }
         String h = host.toLowerCase(java.util.Locale.US);
         return h.equals("share.anynews.co.in")
-                || h.equals("sharedev.anynews.co.in")
                 || h.equals("api.anynews.co.in")
-                || h.equals("anynewsdevelopmentapi.anynews.co.in")
                 || h.equals("anynews.co.in")
                 || h.equals("www.anynews.co.in")
                 || h.equals("anws.in")
