@@ -9703,14 +9703,30 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             showLog("Halfshare"+ context + "First" + context.getPackageName() + "Second" + BuildConfig.APPLICATION_ID);
                             final long halfPostId = list.get(customPosition).getPostId();
                             final boolean halfWhatsapp = from == 1;
-                            // WhatsApp counts only on RESULT_OK after Send. A normal
-                            // Share sheet counts only after the user picks an app.
-                            ShareOutboundHelper.launchChooserOnTargetChosen(
-                                    context,
-                                    intent,
-                                    "Share Link",
-                                    () -> Share_Count_Value(
-                                            shareCountProperty(halfWhatsapp), halfPostId));
+                            if (halfWhatsapp) {
+                                // Footer WhatsApp (and the likes-row chip, same action)
+                                // must write admin WA Share even when the chip is hidden
+                                // and WhatsApp never returns RESULT_OK. Count once at
+                                // handoff; a later Send result is the same tap.
+                                final boolean[] counted = { false };
+                                Runnable countWhatsapp = () -> {
+                                    if (counted[0]) {
+                                        return;
+                                    }
+                                    counted[0] = true;
+                                    Share_Count_Value("whatsapp_share", halfPostId);
+                                };
+                                ShareOutboundHelper.launchChooserOnTargetChosen(
+                                        context, intent, "Share Link", countWhatsapp);
+                                countWhatsapp.run();
+                            } else {
+                                // Normal Share sheet counts only after the user picks an app.
+                                ShareOutboundHelper.launchChooserOnTargetChosen(
+                                        context,
+                                        intent,
+                                        "Share Link",
+                                        () -> Share_Count_Value("share", halfPostId));
+                            }
                         }
                     } finally {
                         releaseShareLaunch();
