@@ -7946,14 +7946,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                 && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                             final long galleryPostId = list.get(position).getPostId();
                             final boolean countAsWhatsapp = galleryWhatsapp;
-                            // WhatsApp counts only on RESULT_OK after Send. A normal
-                            // sheet counts only after the user picks an app.
-                            ShareOutboundHelper.launchChooserOnTargetChosen(
-                                    context,
-                                    intent,
-                                    "Share Link",
-                                    () -> Share_Count_Value(
-                                            shareCountProperty(countAsWhatsapp), galleryPostId));
+                            Runnable onConfirmed = () -> Share_Count_Value(
+                                    shareCountProperty(countAsWhatsapp), galleryPostId);
+                            if (countAsWhatsapp) {
+                                ShareOutboundHelper.launchWhatsappHandoffCounted(
+                                        context, intent, "Share Link", onConfirmed);
+                            } else {
+                                ShareOutboundHelper.launchChooserOnTargetChosen(
+                                        context, intent, "Share Link", onConfirmed);
+                            }
                         }
                         fromWhatsapp = false;
                     } finally {
@@ -8953,10 +8954,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     if (fullImageActivity.layout_strip_iconnew != null) {
                         fullImageActivity.layout_strip_iconnew.setVisibility(View.GONE);
                     }
-                    // Count when WhatsApp returns RESULT_OK after Send, not on launch.
                     if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                         final long waPostId = list.get(position).getPostId();
-                        ShareOutboundHelper.launchChooserOnTargetChosen(
+                        ShareOutboundHelper.launchWhatsappHandoffCounted(
                                 context,
                                 intent,
                                 "Share",
@@ -9014,7 +9014,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     }
                     if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                         final long surveyPostId = list.get(position).getPostId();
-                        ShareOutboundHelper.launchChooserOnTargetChosen(
+                        ShareOutboundHelper.launchWhatsappHandoffCounted(
                                 context,
                                 intent,
                                 "Share",
@@ -9704,21 +9704,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             final long halfPostId = list.get(customPosition).getPostId();
                             final boolean halfWhatsapp = from == 1;
                             if (halfWhatsapp) {
-                                // Footer WhatsApp (and the likes-row chip, same action)
-                                // must write admin WA Share even when the chip is hidden
-                                // and WhatsApp never returns RESULT_OK. Count once at
-                                // handoff; a later Send result is the same tap.
-                                final boolean[] counted = { false };
-                                Runnable countWhatsapp = () -> {
-                                    if (counted[0]) {
-                                        return;
-                                    }
-                                    counted[0] = true;
-                                    Share_Count_Value("whatsapp_share", halfPostId);
-                                };
-                                ShareOutboundHelper.launchChooserOnTargetChosen(
-                                        context, intent, "Share Link", countWhatsapp);
-                                countWhatsapp.run();
+                                ShareOutboundHelper.launchWhatsappHandoffCounted(
+                                        context,
+                                        intent,
+                                        "Share Link",
+                                        () -> Share_Count_Value("whatsapp_share", halfPostId));
                             } else {
                                 // Normal Share sheet counts only after the user picks an app.
                                 ShareOutboundHelper.launchChooserOnTargetChosen(
@@ -11704,8 +11694,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
 
         int postIndex = findPostIndex(post_id);
-        // Sheet picks pass "share". WhatsApp passes "whatsapp_share" only after
-        // RESULT_OK. Defer FlipView rebind so the sheet can open.
+        // Sheet picks pass "share". WhatsApp passes "whatsapp_share" at handoff
+        // (and is guarded if RESULT_OK also fires). Defer FlipView rebind so
+        // the sheet can open.
         if (postIndex >= 0) {
             ModelClass.Datum item = list.get(postIndex);
             boolean bumped = false;
@@ -11783,6 +11774,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /** Property for Update_Post_Counts — WhatsApp button vs normal share sheet. */
     private String shareCountProperty(boolean whatsapp) {
         return whatsapp ? "whatsapp_share" : "share";
+    }
+
+    private static boolean isWhatsappPackage(@Nullable String packageName) {
+        if (packageName == null || packageName.isEmpty()) {
+            return false;
+        }
+        return "com.whatsapp".equals(packageName)
+                || "com.whatsapp.w4b".equals(packageName);
     }
 
     /**
@@ -12281,8 +12280,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
      * Capture on UI, compress/attach on a worker, then open the system share sheet.
      * Keeps Single Page / screenshot shares feeling instant (no PNG@100 on the main thread).
      * {@code onShareConfirmed} runs when the user picks an app from the system
-     * sheet, or when a direct WhatsApp share returns RESULT_OK after Send.
-     * Opening WhatsApp does not run it. Dismissing the sheet does not run it.
+     * sheet. For packaged WhatsApp, callers should use
+     * {@link ShareOutboundHelper#launchWhatsappHandoffCounted} instead.
      */
     private void prepareAndLaunchScreenshotShare(
             @Nullable View captureView,
@@ -12345,12 +12344,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         try {
                             if (context != null
                                     && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                                // WhatsApp counts on RESULT_OK. A normal sheet counts on a pick.
-                                ShareOutboundHelper.launchChooserOnTargetChosen(
-                                        context,
-                                        launchIntent,
-                                        "Share Link",
-                                        onShareConfirmed);
+                                if (whatsappDirect) {
+                                    ShareOutboundHelper.launchWhatsappHandoffCounted(
+                                            context,
+                                            launchIntent,
+                                            "Share Link",
+                                            onShareConfirmed);
+                                } else {
+                                    ShareOutboundHelper.launchChooserOnTargetChosen(
+                                            context,
+                                            launchIntent,
+                                            "Share Link",
+                                            onShareConfirmed);
+                                }
                             }
                         } catch (Exception e) {
                             e.printStackTrace();
@@ -15658,7 +15664,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 intent.putExtra("jid", "status@broadcast");
                 intent.setPackage("com.whatsapp");
-                ShareOutboundHelper.launchChooserOnTargetChosen(
+                ShareOutboundHelper.launchWhatsappHandoffCounted(
                         context, intent, "Share Link", onShareConfirmed);
             } else if (whatsappMode == 2) {
                 if (!appInstalledOrNot("com.whatsapp")) {
@@ -15666,7 +15672,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     return;
                 }
                 intent.setPackage("com.whatsapp");
-                ShareOutboundHelper.launchChooserOnTargetChosen(
+                ShareOutboundHelper.launchWhatsappHandoffCounted(
                         context, intent, "Share Link", onShareConfirmed);
             } else if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
                 ShareOutboundHelper.launchChooserOnTargetChosen(
@@ -15888,13 +15894,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private void startShareActivity(
             Intent intent, String chooserTitle, @Nullable Runnable onShareConfirmed) {
         try {
-            // Packaged WhatsApp counts on RESULT_OK. An open sheet counts on a pick.
             Context launchCtx = (activity != null && !activity.isFinishing()) ? activity : context;
             if (launchCtx == null) {
                 return;
             }
-            ShareOutboundHelper.launchChooserOnTargetChosen(
-                    launchCtx, intent, chooserTitle, onShareConfirmed);
+            if (onShareConfirmed != null && isWhatsappPackage(intent.getPackage())) {
+                ShareOutboundHelper.launchWhatsappHandoffCounted(
+                        launchCtx, intent, chooserTitle, onShareConfirmed);
+            } else {
+                ShareOutboundHelper.launchChooserOnTargetChosen(
+                        launchCtx, intent, chooserTitle, onShareConfirmed);
+            }
         } catch (ActivityNotFoundException e) {
             Toast.makeText(context, "No app available to share", Toast.LENGTH_SHORT).show();
         }

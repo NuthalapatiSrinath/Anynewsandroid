@@ -9300,8 +9300,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * One WhatsApp share of the visible article. The half-row chip and the middle
-     * footer icon both call this. The count is written only after WhatsApp
-     * returns RESULT_OK (the user sent). Opening WhatsApp does not write it.
+     * footer icon both call this. Admin {@code whatsapp_shares} is written when
+     * the post is handed to WhatsApp (same tap), not only on RESULT_OK.
      */
     public void onArticleWhatsappClicked(int position) {
         try {
@@ -9319,8 +9319,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Footer WhatsApp. An ad uses the default ad screen's "share app with your
-     * friends" WhatsApp send. A news post keeps the article share, which counts
-     * only after WhatsApp returns RESULT_OK.
+     * friends" WhatsApp send. A news post uses the article WhatsApp handoff path.
      */
     private void onFooterCenterWhatsappClicked() {
         if (footerWhatsappSharesTheApp()) {

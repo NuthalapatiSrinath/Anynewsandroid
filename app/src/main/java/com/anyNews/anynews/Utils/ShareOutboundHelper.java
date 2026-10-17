@@ -136,6 +136,36 @@ public final class ShareOutboundHelper {
         }
     }
 
+    /**
+     * Packaged WhatsApp share for admin {@code whatsapp_shares}: count once when the
+     * post is handed to WhatsApp on this tap. A later {@link Activity#RESULT_OK}
+     * from Send uses the same guarded callback and does not double-count.
+     *
+     * <p>Generic share sheets must use {@link #launchChooserOnTargetChosen} with
+     * {@code property=share} instead — never this helper.
+     */
+    public static void launchWhatsappHandoffCounted(
+            @NonNull Context context,
+            @NonNull Intent sendIntent,
+            @Nullable CharSequence title,
+            @Nullable Runnable onHandoffCounted) {
+        final boolean[] counted = { false };
+        Runnable guarded = () -> {
+            if (counted[0] || onHandoffCounted == null) {
+                return;
+            }
+            counted[0] = true;
+            try {
+                onHandoffCounted.run();
+            } catch (Exception ignored) {
+            }
+        };
+        launchChooserOnTargetChosen(context, sendIntent, title, guarded);
+        if (isDirectPackageLaunch(sendIntent)) {
+            guarded.run();
+        }
+    }
+
     /** True when the intent is already aimed at one app (WhatsApp), not a chooser. */
     private static boolean isDirectPackageLaunch(@NonNull Intent sendIntent) {
         String pkg = sendIntent.getPackage();

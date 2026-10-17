@@ -963,9 +963,8 @@ public class VideoShareHelper {
                     if (mode == ShareMode.WHATSAPP_STATUS) {
                         intent.putExtra("jid", "status@broadcast");
                     }
-                    // Count only when WhatsApp returns RESULT_OK after Send.
                     grantRead(context, activity, uri, pkg);
-                    ShareOutboundHelper.launchChooserOnTargetChosen(
+                    ShareOutboundHelper.launchWhatsappHandoffCounted(
                             launchCtx, intent, "Share Video", onConfirmed);
                     return;
                 }
