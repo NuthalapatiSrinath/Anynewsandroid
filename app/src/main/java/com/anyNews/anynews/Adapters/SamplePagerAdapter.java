@@ -101,6 +101,8 @@ public class SamplePagerAdapter extends PagerAdapter {
                 useContainFit ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.FIT_XY);
         if (useContainFit) {
             imageView.setBackgroundColor(Color.BLACK);
+        } else {
+            imageView.setBackgroundColor(Color.TRANSPARENT);
         }
         if(fromHalfGallery){
             ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, layoutHeight);

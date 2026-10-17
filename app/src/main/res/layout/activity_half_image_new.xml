@@ -32,7 +32,9 @@
                     android:id="@+id/layoutImageHeight"
                     android:layout_width="match_parent"
                     android:layout_height="340dp"
-                    android:background="@color/image_placeholder">
+                    android:background="@android:color/transparent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false">
                     <RelativeLayout
                         android:id="@+id/galleryImageLayout"
                         android:layout_width="match_parent"
@@ -100,7 +102,9 @@
                         android:id="@+id/new_half_image"
                         android:layout_width="match_parent"
                         android:layout_height="340dp"
-                        android:background="@color/image_placeholder"
+                        android:layout_alignParentTop="true"
+                        android:background="@android:color/transparent"
+                        android:cropToPadding="false"
                         android:scaleType="fitXY" />
 
                     <!-- Article TTS speaker (admin tts_enabled). Pulse glow while speaking. -->
@@ -143,11 +147,12 @@
                         android:textSize="8dp" />
 </RelativeLayout>
 
-            <!--middle content like comment share-->
+            <!--middle content like comment share; -18dp tucks icons over the
+                 cover bitmap so a 1px FIT_XY seam cannot show as a hairline. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="-15dp"
+                android:layout_marginTop="-18dp"
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:minHeight="44dp"

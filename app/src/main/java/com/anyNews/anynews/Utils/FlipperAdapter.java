@@ -9059,8 +9059,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfImageActivity.new_half_image = convertView.findViewById(R.id.new_half_image);
         final ImageView new_half_image = convertView.findViewById(R.id.new_half_image);
         final RelativeLayout layoutImageHeight = convertView.findViewById(R.id.layoutImageHeight);
-        new_half_image.getLayoutParams().height = getVideoLayoutTopHeight();
-        layoutImageHeight.getLayoutParams().height = getVideoLayoutTopHeight();
+        int slotH = getVideoLayoutTopHeight();
+        layoutImageHeight.getLayoutParams().height = slotH;
+        // Cover/FIT_XY: hang 3dp of bitmap under the icon row so a 1px black
+        // seam at the ImageView bottom is tucked, not painted into the headline.
+        boolean containFit = list.get(position).usesContainFeedImage();
+        int tuckPx = containFit
+                ? 0
+                : Math.round(3f * context.getResources().getDisplayMetrics().density);
+        new_half_image.getLayoutParams().height = slotH + tuckPx;
+        layoutImageHeight.setClipChildren(false);
+        layoutImageHeight.setClipToPadding(false);
         halfImageActivity.ll_refer_and_earn_half = convertView.findViewById(R.id.ll_refer_and_earn_half);
         halfImageActivity.layoutParentDate = convertView.findViewById(R.id.layoutParentDate);
         TextView textViewPostDate = convertView.findViewById(R.id.textViewPostDate);
@@ -13465,6 +13474,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Upload Original → FIT_CENTER (full frame, letterbox OK).
      * Upload Cropped / default → FIT_XY (fill Normal Post slot).
+     *
+     * Cover must not keep a black ImageView / slot background: FIT_XY can leave
+     * 1–2px of that fill at the bottom, which reads as a hairline above the
+     * like/comment row even when the bitmap itself has no black edge.
      */
     private void applyHalfFeedImageScale(
             @Nullable ImageView target, @Nullable ModelClass.Datum item) {
@@ -13477,10 +13490,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             target.setTag(null);
         }
         target.setScaleType(next);
-        if (contain) {
-            target.setBackgroundColor(Color.BLACK);
-        } else {
-            target.setBackgroundColor(Color.TRANSPARENT);
+        int slotBg = contain ? Color.BLACK : Color.TRANSPARENT;
+        target.setBackgroundColor(slotBg);
+        if (target.getParent() instanceof ViewGroup) {
+            ViewGroup parent = (ViewGroup) target.getParent();
+            if (parent.getId() == R.id.layoutImageHeight) {
+                parent.setBackgroundColor(slotBg);
+                parent.setClipChildren(false);
+                parent.setClipToPadding(false);
+            }
         }
     }
 
