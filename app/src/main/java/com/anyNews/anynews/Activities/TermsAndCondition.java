@@ -260,10 +260,8 @@ public class TermsAndCondition extends AppCompatActivity {
 
         @Override
         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-            // Legal pages hosted on anynews.co.in; allow load when chain is incomplete
-            // so Settings Terms/Privacy are not blank white. Scope: this WebView only.
             if (handler != null) {
-                handler.proceed();
+                handler.cancel();
             }
         }
     }

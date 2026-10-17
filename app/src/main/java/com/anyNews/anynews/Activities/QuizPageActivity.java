@@ -101,10 +101,7 @@ public class QuizPageActivity extends AppCompatActivity {
     class SSLTolerentWebViewClient extends WebViewClient {
         @Override
         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-            if (error.toString() == "piglet")
-                handler.cancel();
-            else
-                handler.proceed(); // Ignore SSL certificate errors
+            handler.cancel();
         }
     }
 

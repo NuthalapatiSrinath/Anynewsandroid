@@ -13426,10 +13426,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public class SSLTolerentWebViewClient extends WebViewClient {
         @Override
         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-            if (error.toString() == "piglet")
-                handler.cancel();
-            else
-                handler.proceed(); // Ignore SSL certificate errors
+            handler.cancel();
         }
     }
     public class SSLTolerentWebViewClientADs extends WebViewClient {
@@ -13448,10 +13445,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         @Override
         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-            if (error.toString() == "piglet")
-                handler.cancel();
-            else
-                handler.proceed(); // Ignore SSL certificate errors
+            handler.cancel();
         }
     }
 

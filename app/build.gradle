@@ -57,9 +57,9 @@ android {
         minSdkVersion 24
         targetSdk 35
         multiDexEnabled true
-        // Play 364 still counts WA only on RESULT_OK — ship 365+ for handoff whatsapp_shares.
-        versionCode 361
-        versionName "3.42.33"
+        // Play 364: Device and Network Abuse (WebView SSL). Ship 365 cancel-only SSL + WA share handoff.
+        versionCode 365
+        versionName "3.42.37"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
