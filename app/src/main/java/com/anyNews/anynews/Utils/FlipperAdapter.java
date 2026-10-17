@@ -6352,37 +6352,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     case "web_ads":
                         pauseVideo();
                         webViewHolderAD = new WebViewHolderAD();
-                        String eventLink = "" + list.get(position).getSource_link();
                         showLog("LINK:::"+list.get(position).getSource_link());
-                        convertView = inflater.inflate(R.layout.activity_webview_ads, parent, false);
-                      final WebView webView = convertView.findViewById(R.id.webView);
-                        webView.setWebViewClient(new SSLTolerentWebViewClientADs());
-                        webView.getSettings().setLoadsImagesAutomatically(true);
-                        webView.getSettings().setJavaScriptEnabled(true);
-                        webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
-                        webView.getSettings().setLoadWithOverviewMode(true);
-                        webView.getSettings().setUseWideViewPort(true);
-                        webView.getSettings().setBuiltInZoomControls(true);
-                        webView.getSettings().setDisplayZoomControls(false);
-                        webView.loadUrl(eventLink);
-
-
+                        convertView = bindFlipWebPage(parent, convertView, position, true);
+                        if (convertView != null) {
+                            webViewHolderAD.webView = convertView.findViewById(R.id.webView);
+                        }
                         break;
                     case "web":
                         pauseVideo();
                         webViewHolder = new WebViewHolder();
-                      //   eventLink = "" + list.get(position).getSource_link();
-                        convertView = inflater.inflate(R.layout.activity_webview_detailes, parent, false);
-                        webViewHolder.webView = convertView.findViewById(R.id.webView);
-                        webViewHolder.webView.setWebViewClient(new FlipperAdapter.SSLTolerentWebViewClient());
-                        webViewHolder.webView.getSettings().setLoadsImagesAutomatically(true);
-                        webViewHolder.webView.getSettings().setJavaScriptEnabled(true);
-                        webViewHolder.webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
-                        webViewHolder.webView.getSettings().setLoadWithOverviewMode(true);
-                        webViewHolder.webView.getSettings().setUseWideViewPort(true);
-                        webViewHolder.webView.getSettings().setBuiltInZoomControls(true);
-                        webViewHolder.webView.getSettings().setDisplayZoomControls(false);
-                        webViewHolder.webView.loadUrl(list.get(position).getSource_link());
+                        convertView = bindFlipWebPage(parent, convertView, position, false);
+                        if (convertView != null) {
+                            webViewHolder.webView = convertView.findViewById(R.id.webView);
+                        }
                         break;
 
                     case "survey":
@@ -6641,6 +6623,68 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Bind a full-page {@code web} / {@code web_ads} FlipView card.
+     * Reuse the scrap WebView so flip-away/back does not {@code loadUrl} again
+     * (blank white). Transparent background so a layer snapshot cannot paint
+     * Chromium's default white while the compositor is detached.
+     */
+    private View bindFlipWebPage(ViewGroup parent, View convertView, int position,
+            boolean ads) {
+        String typeKey = ads ? "web_ads" : "web";
+        String url = "";
+        try {
+            if (list != null && position >= 0 && position < list.size()
+                    && list.get(position) != null
+                    && list.get(position).getSource_link() != null) {
+                url = String.valueOf(list.get(position).getSource_link());
+            }
+        } catch (Exception ignored) {
+        }
+        if (!canReuseFlipView(convertView, typeKey)) {
+            convertView = inflater.inflate(
+                    ads ? R.layout.activity_webview_ads : R.layout.activity_webview_detailes,
+                    parent, false);
+            markFlipViewType(convertView, typeKey);
+        }
+        if (convertView != null) {
+            convertView.setBackgroundColor(Color.TRANSPARENT);
+        }
+        final WebView webView = convertView != null
+                ? convertView.findViewById(R.id.webView) : null;
+        if (webView == null) {
+            return convertView;
+        }
+        prepareFlipWebView(webView, ads);
+        Object loaded = webView.getTag();
+        if (url != null && !url.equals(String.valueOf(loaded))) {
+            webView.loadUrl(url);
+            webView.setTag(url);
+        }
+        return convertView;
+    }
+
+    private void prepareFlipWebView(WebView webView, boolean ads) {
+        // Default WebView fill is opaque white — that is the flash when FlipView
+        // snapshots the page and Chromium has not painted into the layer yet.
+        webView.setBackgroundColor(Color.TRANSPARENT);
+        if (webView.getLayerType() != View.LAYER_TYPE_NONE) {
+            webView.setLayerType(View.LAYER_TYPE_NONE, null);
+        }
+        if (ads) {
+            webView.setWebViewClient(new SSLTolerentWebViewClientADs());
+        } else {
+            webView.setWebViewClient(new SSLTolerentWebViewClient());
+        }
+        webView.getSettings().setLoadsImagesAutomatically(true);
+        webView.getSettings().setJavaScriptEnabled(true);
+        webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
+        webView.getSettings().setLoadWithOverviewMode(true);
+        webView.getSettings().setUseWideViewPort(true);
+        webView.getSettings().setBuiltInZoomControls(true);
+        webView.getSettings().setDisplayZoomControls(false);
     }
 
     /**

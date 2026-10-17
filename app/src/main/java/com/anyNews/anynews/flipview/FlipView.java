@@ -1850,26 +1850,54 @@ public class FlipView extends FrameLayout {
     }
 
     /**
-     * Enable a hardware layer for the view.
-     *
-     * @param v
-     * @param drawWithLayer
+     * Enable a layer for the flipping page so Camera/Matrix can fold it.
+     * {@code web}/{@code web_ads} cards must not use {@link #LAYER_TYPE_HARDWARE}:
+     * Chromium does not draw into an ancestor hardware layer (only its default
+     * white background does), which is the white flash when leaving a mid-scroll
+     * sponsored WebView. A software layer snapshots the live pixels instead.
      */
     @SuppressLint("NewApi")
     private void setDrawWithLayer(View v, boolean drawWithLayer) {
         if (v == null) {
             return;
         }
-        if (isHardwareAccelerated()) {
-            if (v.getLayerType() != LAYER_TYPE_HARDWARE && drawWithLayer) {
-                v.setLayerType(LAYER_TYPE_HARDWARE, null);
-            } else if (v.getLayerType() != LAYER_TYPE_NONE && !drawWithLayer) {
-                v.setLayerType(LAYER_TYPE_NONE, null);
-            }
-        }
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.JELLY_BEAN_MR2) {
             v.setLayerType(LAYER_TYPE_NONE, null);
+            return;
         }
+        if (!isHardwareAccelerated()) {
+            return;
+        }
+        if (isWebFlipPage(v)) {
+            int want = drawWithLayer ? LAYER_TYPE_SOFTWARE : LAYER_TYPE_NONE;
+            if (v.getLayerType() != want) {
+                v.setLayerType(want, null);
+            }
+            return;
+        }
+        if (v.getLayerType() != LAYER_TYPE_HARDWARE && drawWithLayer) {
+            v.setLayerType(LAYER_TYPE_HARDWARE, null);
+        } else if (v.getLayerType() != LAYER_TYPE_NONE && !drawWithLayer) {
+            v.setLayerType(LAYER_TYPE_NONE, null);
+        }
+    }
+
+    /** Full-page {@code web} / {@code web_ads} FlipView card (LinearLayout + WebView). */
+    private static boolean isWebFlipPage(View v) {
+        if (v instanceof android.webkit.WebView) {
+            return true;
+        }
+        Object tag = v.getTag();
+        if ("web_ads".equals(tag) || "web".equals(tag)) {
+            return true;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            if (g.getChildCount() > 0 && g.getChildAt(0) instanceof android.webkit.WebView) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void positionMatrix() {
