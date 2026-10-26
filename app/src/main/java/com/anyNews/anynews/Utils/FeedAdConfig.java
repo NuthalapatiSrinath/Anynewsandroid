@@ -45,19 +45,20 @@ public final class FeedAdConfig {
     public static final int MAX_EVERY_N = 10;
 
     /**
-     * Match admin Performance range (3–12). Default 6 ≈ next 1–2 ad seats at
-     * {@link #DEFAULT_EVERY_N}=4. Deeper windows stockpile matched ads that never
-     * impress and depress match rate.
+     * Match admin Performance range (3–12). Default {@link #DEFAULT_EVERY_N}
+     * ≈ next one ad seat only. Deeper windows stockpile matched ads that never
+     * impress and depress match rate. App hard-caps seat AdLoader starts to 1.
      */
-    public static final int DEFAULT_PREFETCH_LOOKAHEAD = 6;
+    public static final int DEFAULT_PREFETCH_LOOKAHEAD = DEFAULT_EVERY_N;
     public static final int MIN_PREFETCH_LOOKAHEAD = 3;
     public static final int MAX_PREFETCH_LOOKAHEAD = 12;
 
     /**
-     * Match admin Performance range (1–5). Default 2 = current seat + one ahead.
-     * Higher values raced AdPreloader and over-requested without impressions.
+     * Match admin Performance range (1–5). Default 1 = one seat AdLoader at a
+     * time (primary; secondary only after that seat's primary no-fill). Higher
+     * values raced AdPreloader and over-requested without impressions.
      */
-    public static final int DEFAULT_MAX_IN_FLIGHT = 2;
+    public static final int DEFAULT_MAX_IN_FLIGHT = 1;
     public static final int MIN_MAX_IN_FLIGHT = 1;
     public static final int MAX_MAX_IN_FLIGHT = 5;
 

@@ -499,9 +499,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private int getMaxNativeAdLoadsInFlight() {
         int admin = FeedAdConfig.getMaxInFlight(this);
-        // Hard hygiene: at most 2 concurrent seat loads (current + one ahead).
-        // Higher admin values historically drove match-without-impression floods.
-        admin = Math.min(admin, 2);
+        // Hard hygiene: one seat AdLoader at a time (primary; secondary only after
+        // that seat's primary no-fill). Higher admin values drove dual-path floods.
+        admin = Math.min(admin, 1);
         // Rapid flips: hard-clamp so AdMob never stacks concurrent SDK work.
         if (FlipAdWorkGate.shouldDeferAdWork() || isNewsFlipAnimating()) {
             return Math.min(admin, FlipAdWorkGate.MAX_IN_FLIGHT_DURING_FLIP);
@@ -512,11 +512,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private int getAdPrefetchLookahead() {
         int look = FeedAdConfig.getPrefetchLookahead(this);
         // Cap even if admin still has an old high value stored in prefs.
-        look = Math.min(look, 6);
-        // Mid-flip: still look far enough for ~1–2 upcoming ad seats, but do not run
-        // the full idle window (that competed with settle ensure and starved fill).
+        // One every-N window ≈ next ad seat; deeper windows multiply requests.
+        look = Math.min(look, FeedAdConfig.DEFAULT_EVERY_N);
         if (FlipAdWorkGate.shouldDeferAdWork() || isNewsFlipAnimating()) {
-            return Math.min(look, 5);
+            return Math.min(look, FeedAdConfig.DEFAULT_EVERY_N);
         }
         return look;
     }
@@ -4783,77 +4782,36 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Best-effort mid-flip warm for the next upcoming ad seat only. Never mutates
-     * {@code ad_req_position}, never marks a seat permanently failed, and never
-     * replaces {@link #runSettledAdWork} — on-land ensure always runs after settle.
-     * Prefer claiming an existing AdPreloader creative over starting a new AdLoader.
+     * Soft-warm {@link AdPreloader} only when no seat AdLoader is in flight and
+     * the pool is empty. Avoids dual-path (seat load + pool load) request storms.
      */
-    private void warmNextAdSeatDuringFlip() {
-        // Never start AdLoader / ensureFeedNativeAdLoaded mid-gesture — that is a
-        // primary hitch on fast flips. Shared pool soft-warm only; on-land
-        // scheduleSettledAdWork owns the reliability seat request.
-        if (isNewsFlipAnimating() || isNewsUserDrivingFlip()) {
-            try {
-                if (AdPreloader.get().readyCount() == 0 && !AdPreloader.get().isLoading()) {
-                    AdPreloader.get().prefetch(getApplicationContext());
-                }
-            } catch (Exception ignored) {
-            }
-            return;
-        }
-        if (list == null || list.isEmpty()) {
-            return;
-        }
-        if (isSearchFeedActive() || searchFeedActive) {
-            return;
-        }
-        if (FeedAdConfig.isInterstitial(this)) {
-            return;
-        }
-        // Warm pool can cover the next seat — skip a duplicate AdLoader.
-        // Do NOT bail merely because AdPreloader isLoading: that blocked the July
-        // on-seat path while primary refill was in-flight/no-fill, leaving Share.
-        if (AdPreloader.get().readyCount() > 0) {
-            return;
-        }
-        int from = Math.max(0, positionx);
+    private void softWarmAdPreloaderIfIdle() {
         try {
-            if (mFlipView != null) {
-                int cur = mFlipView.getCurrentPage();
-                if (cur >= 0) from = cur;
+            if (FeedAdConfig.isInterstitial(this)) {
+                return;
+            }
+            if (countInFlightNativeAdLoads() > 0) {
+                return;
+            }
+            if (AdPreloader.get().readyCount() == 0 && !AdPreloader.get().isLoading()) {
+                AdPreloader.get().prefetch(getApplicationContext());
             }
         } catch (Exception ignored) {
         }
-        int look = getAdPrefetchLookahead();
-        int end = Math.min(list.size() - 1, from + look);
-        final int maxWarmSeats = 1;
-        int warmed = 0;
+    }
+
+    /**
+     * Best-effort mid-flip warm: AdPreloader soft-prefetch only (MAX_READY=1,
+     * primary then optional secondary). Never starts a seat {@code AdLoader}
+     * mid-gesture — that hitchs Camera frames and dual-paths with settle.
+     * {@link #runSettledAdWork} owns the reliability seat request on land.
+     */
+    private void warmNextAdSeatDuringFlip() {
+        if (isSearchFeedActive() || searchFeedActive) {
+            return;
+        }
         try {
-            for (int i = from; i <= end && warmed < maxWarmSeats; i++) {
-                ModelClass.Datum d = list.get(i);
-                if (d == null || !ReadArticleStore.isAdFeedSlot(d)) {
-                    continue;
-                }
-                if (hasLoadedNativeForSlot(d)) {
-                    continue;
-                }
-                Integer pos = d.getAd_req_position();
-                if (pos == null) {
-                    continue;
-                }
-                String code = d.getAd_code();
-                if (code == null || code.isEmpty()) {
-                    code = d.getNext_req_ad_code();
-                }
-                showLog("warmNextAdSeatDuringFlip best-effort flip=" + i
-                        + " reqPos=" + pos + " seat=" + (warmed + 1));
-                ensureFeedNativeAdLoaded(code, pos, d.getAd_type());
-                warmed++;
-            }
-            // If no concrete seat was in range, soft-warm the shared pool once.
-            if (warmed == 0) {
-                AdPreloader.get().prefetch(getApplicationContext());
-            }
+            softWarmAdPreloaderIfIdle();
         } catch (Exception e) {
             showLog("warmNextAdSeatDuringFlip: " + e.getMessage());
         }
@@ -4896,9 +4854,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * Idle-only ad path: fill current seat, prefetch lookahead, refill pool, paint
-     * deferred MediaView. Must not run mid-fling. This is the reliability path —
-     * always request the landed ad seat even if mid-flip warm failed or was capped.
+     * Idle-only ad path: fill current seat (pool claim OR seat AdLoader — never both),
+     * soft-warm AdPreloader for the next seat when the current seat already has a
+     * creative, paint deferred MediaView. Must not run mid-fling.
      */
     private void runSettledAdWork(int position) {
         if (list == null || position < 0 || position >= list.size()) {
@@ -4920,7 +4878,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         String postTypeAtPos = list.get(position).getPostType();
-        if (postTypeAtPos != null && postTypeAtPos.equalsIgnoreCase("ad")) {
+        final boolean onAdSeat = postTypeAtPos != null
+                && postTypeAtPos.equalsIgnoreCase("ad");
+        if (onAdSeat) {
             showLog("SETTLED AD work Loading pos=" + position);
             try {
                 ModelClass.Datum seat = list.get(position);
@@ -4953,6 +4913,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
                     }
                 }
+                // Pool OR seat AdLoader — ensureFeedNativeAdLoaded enforces single path.
                 ensureFeedNativeAdLoaded(code, reqPos, type);
                 // Interstitial: show full-screen when landed on an ad seat (cadence = every N).
                 maybeShowFeedInterstitialForSlot(seat);
@@ -4965,17 +4926,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             } catch (Exception ignored) {
             }
-            // Do not loadAds(next_req) here — prefetchUpcoming covers the next 1–2
-            // seats without a duplicate AdLoader for the same ahead inventory.
-        }
-        prefetchUpcomingNativeAds(position, getAdPrefetchLookahead());
-        // Soft top-up of shared warm only when empty (refill after claim owns the rest).
-        try {
-            if (AdPreloader.get().readyCount() == 0 && !AdPreloader.get().isLoading()) {
-                AdPreloader.get().prefetch(getApplicationContext());
+            // Do NOT start ahead-seat AdLoaders here (dual-path / request storms).
+            // Soft-warm shared pool only when this seat already has a creative and
+            // no seat AdLoader is still in flight.
+            try {
+                ModelClass.Datum landed = list.get(position);
+                if (hasExactLoadedNativeForSlot(landed)) {
+                    softWarmAdPreloaderIfIdle();
+                }
+            } catch (Exception ignored) {
             }
-        } catch (Exception ignored) {
+            return;
         }
+        // Non-ad land: soft-warm shared pool for the next ad seat (MAX_READY=1).
+        softWarmAdPreloaderIfIdle();
     }
 
     /**
@@ -5084,15 +5048,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (pendingNativeLoadStarts.contains(adReqPosition)) {
                     return;
                 }
-                // AdPreloader is best-effort warm only (Play Store / July fill path is
-                // always per-seat AdLoader). Rebind may claim a warm creative for
-                // faster paint — never skip loadAds because the pool looks ready.
-                // Skipping the current seat when isReady() left Share forever when
-                // rebind failed to claim / primary warm refill no-filled.
+                // Hygiene: never dual-path. If the shared pool is ready OR already
+                // loading the one warm creative, claim/paint that path and do NOT
+                // start a parallel seat AdLoader (max 1 primary + optional secondary
+                // total for the fill, not pool+seat).
                 if (!interstitialMode) {
                     try {
                         if (AdPreloader.get().isReady()) {
+                            showLog("ensure skip AdLoader — AdPreloader ready reqPos="
+                                    + adReqPosition);
                             scheduleFlipSafeAdRebind();
+                            return;
+                        }
+                        if (AdPreloader.get().isLoading()) {
+                            showLog("ensure skip AdLoader — AdPreloader in-flight reqPos="
+                                    + adReqPosition);
+                            scheduleFlipSafeAdRebind();
+                            return;
                         }
                     } catch (Exception ignored) {
                     }
@@ -5281,52 +5253,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     /**
-     * After a creative is claimed/impressed/destroyed, immediately top the shared
-     * warm pool and seat prefetch within lookahead. No stretch-beyond-lookahead
-     * walks — those doubled AdLoader work and janked flip.
+     * After a creative is claimed/impressed/destroyed, replenish the shared warm
+     * pool only (MAX_READY=1, primary then optional secondary). Do not start
+     * ahead-seat AdLoaders — that dual-pathed with settle and stormed requests.
      */
     public void refillNativeAdPoolAfterConsume() {
         if (isFinishing() || isDestroyed()) {
             return;
         }
         try {
-            // Replenish shared warm only when empty (after claim/show).
-            if (AdPreloader.get().readyCount() == 0 && !AdPreloader.get().isLoading()) {
-                AdPreloader.get().prefetch(getApplicationContext());
-            }
-        } catch (Exception ignored) {
-        }
-        if (list == null || list.isEmpty()) {
-            return;
-        }
-        try {
-            if (shouldDeferAdWork()) {
-                try {
-                    warmNextAdSeatDuringFlip();
-                } catch (Exception ignored) {
-                }
-                return;
-            }
-            int ready = countReadyUnclaimedNatives();
-            int inFlight = countInFlightNativeAdLoads();
-            int preloaderReady = AdPreloader.get().readyCount();
-            int target = getMaxNativeAdLoadsInFlight();
-            showLog("refillNativeAdPool ready=" + ready + " inFlight=" + inFlight
-                    + " preloader=" + preloaderReady + " target=" + target);
-            // Count warm inventory toward coverage — do not abort seat refill merely
-            // because AdPreloader has 1 creative (primary_only Share-after-first bug).
-            if (ready + inFlight + preloaderReady >= target) {
-                return;
-            }
-            int from = Math.max(0, positionx);
-            try {
-                if (mFlipView != null) {
-                    int cur = mFlipView.getCurrentPage();
-                    if (cur >= 0) from = cur;
-                }
-            } catch (Exception ignored) {
-            }
-            prefetchUpcomingNativeAds(from, getAdPrefetchLookahead());
+            showLog("refillNativeAdPool AdPreloader prefetch (MAX_READY=1)");
+            softWarmAdPreloaderIfIdle();
         } catch (Exception e) {
             showLog("refillNativeAdPoolAfterConsume: " + e.getMessage());
         }
@@ -6328,19 +6265,32 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void loadAdLoader(String adCode, Integer ad_req_position) {
-        Log.e(TAG, "loadAdLoader: "+adCode );
+        loadAdLoader(adCode, ad_req_position, false);
+    }
+
+    /**
+     * @param isSecondaryAttempt true when this is the one allowed fallback unit
+     *     after primary no-fill for the same seat (no further waterfall).
+     */
+    private void loadAdLoader(
+            String adCode, Integer ad_req_position, boolean isSecondaryAttempt) {
+        Log.e(TAG, "loadAdLoader: "+adCode
+                + (isSecondaryAttempt ? " (secondary)" : ""));
         // AdLoader.Builder + loadAd are main-thread SDK entry points but must not run
         // synchronously on the flip gesture path — post so the current frame finishes.
         if (ad_req_position != null) {
-            if (pendingNativeLoadStarts.contains(ad_req_position)
+            if (!isSecondaryAttempt
+                    && (pendingNativeLoadStarts.contains(ad_req_position)
                     || (nativeGoogleAdArray != null
-                    && nativeGoogleAdArray.contains(ad_req_position))) {
+                    && nativeGoogleAdArray.contains(ad_req_position)))) {
                 return;
             }
+            // Secondary retry: seat marker was cleared on primary fail; re-queue start.
             pendingNativeLoadStarts.add(ad_req_position);
         }
         final String code = adCode;
         final Integer reqPos = ad_req_position;
+        final boolean secondary = isSecondaryAttempt;
         final int gen = adLoaderGeneration;
         adPrefetchHandler.post(() -> {
             if (gen != adLoaderGeneration) {
@@ -6349,11 +6299,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
                 return;
             }
-            startNativeAdLoader(code, reqPos);
+            startNativeAdLoader(code, reqPos, secondary);
         });
     }
 
     private void startNativeAdLoader(String adCode, Integer ad_req_position) {
+        startNativeAdLoader(adCode, ad_req_position, false);
+    }
+
+    private void startNativeAdLoader(
+            String adCode, Integer ad_req_position, boolean isSecondaryAttempt) {
         if (isFinishing() || isDestroyed()) {
             if (ad_req_position != null) {
                 pendingNativeLoadStarts.remove(ad_req_position);
@@ -6367,16 +6322,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         // Local dedupe/cap before coordinator reservation so a skipped start cannot leave
-        // an orphaned in-flight cache entry.
+        // an orphaned in-flight cache entry. Secondary is only scheduled after primary
+        // cleared the seat marker — still skip if another load already owns the seat.
         if (nativeGoogleAdArray != null && nativeGoogleAdArray.contains(ad_req_position)) {
             pendingNativeLoadStarts.remove(ad_req_position);
             return;
         }
         if (countInFlightNativeAdLoads() >= getMaxNativeAdLoadsInFlight()) {
-            showLog("startNativeAdLoader cap skip pos=" + ad_req_position);
+            showLog("startNativeAdLoader cap skip pos=" + ad_req_position
+                    + (isSecondaryAttempt ? " (secondary — stop)" : ""));
             pendingNativeLoadStarts.remove(ad_req_position);
-            // Best-effort warm hit the cap — retry soon so settle/land still fills.
-            scheduleBoundedNativeRetry(adCode, ad_req_position, "google", 450L);
+            // Primary: defer so settle can retry. Secondary: stop (1+1 exhausted for now).
+            if (!isSecondaryAttempt) {
+                scheduleBoundedNativeRetry(adCode, ad_req_position, "google", 450L);
+            }
             return;
         }
         NativeAdCacheCoordinator.StartDecision cacheDecision =
@@ -6412,7 +6371,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         "google", adCode, ad_req_position);
                 NativeAdCacheCoordinator.get().allowSettleRetry(
                         "google", adCode, ad_req_position);
-                scheduleBoundedNativeRetry(adCode, ad_req_position, "google", 200L);
+                if (!isSecondaryAttempt) {
+                    scheduleBoundedNativeRetry(adCode, ad_req_position, "google", 200L);
+                }
+                return;
+            }
+            // Secondary could not start → stop this attempt (no 3rd AdLoader).
+            if (isSecondaryAttempt) {
+                showLog("startNativeAdLoader secondary defer stop " + cacheDecision
+                        + " pos=" + ad_req_position);
                 return;
             }
             long wait = NativeAdCacheCoordinator.get().millisUntilRetryAllowed(
@@ -6482,11 +6449,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     + " domain=" + errorDomain
                                     + " noFill=" + noFill
                                     + " message=" + errorMessage);
-                            // Always schedule — coordinator never session-kills (delay >= 0).
-                            long retryDelayMs = NativeAdCacheCoordinator.get().onFailed(
+                            // Record failure for counters / settle unlock. Do not auto-fire
+                            // another AdLoader after the 1+optional-2 unit attempt below.
+                            NativeAdCacheCoordinator.get().onFailed(
                                     "google", adCode, ad_req_position, noFill, errorMessage);
-                            // Waterfall: primary no-fill → second native unit (admin toggle).
-                            if (noFill) {
+                            // Per-slot hygiene: primary no-fill → one secondary request only.
+                            // Never waterfall further; never scheduleBoundedNativeRetry here
+                            // (that was a 3rd+ AdLoader). Later settle / shell timeout may
+                            // start a fresh 1+optional-2 attempt.
+                            if (noFill && !isSecondaryAttempt) {
                                 String secondary = FeedAdConfig.resolveFallbackUnitAfterNoFill(
                                         HomePage.this, adCode);
                                 if (!TextUtils.isEmpty(secondary)) {
@@ -6494,7 +6465,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                             + secondary + " reqPos=" + ad_req_position);
                                     NativeAdCacheCoordinator.get().allowSettleRetry(
                                             "google", secondary, ad_req_position);
-                                    loadAdLoader(secondary, ad_req_position);
+                                    loadAdLoader(secondary, ad_req_position, true);
                                     if (adapter != null) {
                                         runOnUiThread(new Runnable() {
                                             @Override
@@ -6513,9 +6484,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     return;
                                 }
                             }
-                            scheduleBoundedNativeRetry(
-                                    adCode, ad_req_position, "google",
-                                    Math.max(0L, retryDelayMs));
+                            Log.d(ADS_TAG, "seat load attempt exhausted (1"
+                                    + (isSecondaryAttempt ? "+2" : "")
+                                    + ") reqPos=" + ad_req_position
+                                    + " unit=" + adCode);
                             // Do not AdPreloader.prefetch on every seat fail — that
                             // doubled no-fill spam. Recover path owns warm refill.
 
@@ -23259,62 +23231,13 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
         if (items == null || items.isEmpty() || lookahead < 0) {
             return;
         }
+        // Hygiene: do not start ahead-seat AdLoaders (that dual-pathed with settle and
+        // multiplied AdMob requests). Soft-warm the shared pool only (MAX_READY=1,
+        // primary then optional secondary). Settled land owns the seat request.
         try {
-            int start = Math.max(0, fromIndex);
-            int end = Math.min(items.size() - 1, fromIndex + lookahead);
-            int started = 0;
-            int inFlight = countInFlightNativeAdLoads();
-            // Play Store / July: always start per-seat AdLoader. Warm pool may paint
-            // faster via rebind/claim but must not suppress ahead-seat requests —
-            // warmBudget skips left seats on Share when primary refill no-filled.
-            // Hard cap: at most 2 upcoming ad seats (current may already be in-flight).
-            final int maxSeatsToStart = 2;
-            for (int i = start; i <= end; i++) {
-                if (started >= maxSeatsToStart) {
-                    break;
-                }
-                if (inFlight + started >= getMaxNativeAdLoadsInFlight()) {
-                    showLog("prefetchUpcomingNativeAds cap inFlight="
-                            + inFlight + " started=" + started);
-                    break;
-                }
-                ModelClass.Datum d = items.get(i);
-                if (d == null || !ReadArticleStore.isAdFeedSlot(d)) {
-                    continue;
-                }
-                // Already filled — no load.
-                if (hasLoadedNativeForSlot(d)) {
-                    continue;
-                }
-                String code = d.getAd_code();
-                if (code == null || code.isEmpty()) {
-                    code = d.getNext_req_ad_code();
-                }
-                Integer pos = d.getAd_req_position();
-                if (pos == null) {
-                    // Do not invent flip-index reqPos (broke seat matching / stranded ads).
-                    continue;
-                }
-                // Dedup: already in-flight for this position.
-                boolean already = false;
-                try {
-                    String type = d.getAd_type();
-                    if (type == null || type.equalsIgnoreCase("google")
-                            || type.equalsIgnoreCase("admanager")) {
-                        already = nativeGoogleAdArray != null
-                                && nativeGoogleAdArray.contains(pos);
-                    } else {
-                        already = nativeFBAdArray != null
-                                && nativeFBAdArray.contains(pos);
-                    }
-                } catch (Exception ignored) {
-                }
-                if (already) {
-                    continue;
-                }
-                ensureFeedNativeAdLoaded(code, pos, d.getAd_type());
-                started++;
-            }
+            showLog("prefetchUpcoming soft-warm AdPreloader only from=" + fromIndex
+                    + " look=" + lookahead);
+            softWarmAdPreloaderIfIdle();
         } catch (Exception e) {
             showLog("prefetchUpcomingNativeAds: " + e.getMessage());
         }

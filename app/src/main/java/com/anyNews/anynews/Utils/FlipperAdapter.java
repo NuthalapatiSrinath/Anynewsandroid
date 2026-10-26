@@ -7361,8 +7361,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     /**
      * Ask HomePage to (re)load this slot if no creative is ready yet.
      * No-op when context is not HomePage (bookmark reader, etc.).
-     * Always fires per-seat load when the seat lacks a claimable creative —
-     * matching Play Store. Warm pool may still paint via rebind/claim.
+     * Prefer pool claim when ready; otherwise one seat AdLoader (primary then
+     * optional secondary). Never claim-from-pool AND start AdLoader together.
      */
     private void requestNativeAdLoadForSlot(@Nullable ModelClass.Datum slot) {
         if (slot == null || !(context instanceof HomePage)) return;
@@ -7376,8 +7376,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             if (hasNativeCreativeForSlot(slot)) {
                 return;
             }
-            // Best-effort claim warm inventory into the seat pool for faster paint,
-            // but never skip ensureFeedNativeAdLoaded just because AdPreloader is ready.
+            // Pool path: claim ready creative into this seat and stop (no AdLoader).
             try {
                 Integer warmPos = slot.getAd_req_position();
                 if (warmPos != null && AdPreloader.get().isReady()) {
@@ -7388,8 +7387,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
             } catch (Exception ignored) {
             }
-            // Best-effort warm (may run mid-flip). Cap/backoff never permanently blocks —
-            // HomePage settle path unlocks and retries on land.
             String code = slot.getAd_code();
             if (code == null || code.trim().isEmpty()) {
                 code = slot.getNext_req_ad_code();
@@ -7424,6 +7421,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 return;
             }
+            // Seat path: ensureFeedNativeAdLoaded skips AdLoader when pool is ready.
             ((HomePage) context).ensureFeedNativeAdLoaded(code, pos, type);
         } catch (Exception e) {
             showLog("requestNativeAdLoadForSlot: " + e.getMessage());

@@ -31,9 +31,10 @@ import java.util.List;
  *
  * <p>Best-effort early warm (splash / home idle / mid-flip). Safe during flip because
  * this path only runs AdLoader — no FlipView bind. On seat open, callers
- * {@link #takeReady(String)} if available; otherwise HomePage settle
- * {@code ensureFeedNativeAdLoaded} always requests. Prefetch never blocks or
- * cancels the on-settle seat load.
+ * {@link #takeReady(String)} if a creative is ready <b>or</b> HomePage settle
+ * {@code ensureFeedNativeAdLoaded} starts a seat load — never both for the same
+ * seat moment. Each warm/replenish uses primary then optional secondary on
+ * no-fill only (max 2 AdMob requests).
  */
 public final class AdPreloader {
     private static final String TAG = "ANYNEWS_ADS";
@@ -44,9 +45,9 @@ public final class AdPreloader {
     private static final long FAIL_BACKOFF_MS = 18_000L;
     /**
      * Shared warm depth across all non-reward feeds (not one-per-mode).
-     * Target next 1–2 seats only — deeper pools request ads that never impress.
+     * Keep exactly one ready creative — deeper pools request ads that never impress.
      */
-    private static final int MAX_READY = 2;
+    private static final int MAX_READY = 1;
     /** At most one AdLoader while topping up toward {@link #MAX_READY}. */
     private static final int MAX_PARALLEL_LOADS = 1;
 

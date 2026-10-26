@@ -7,9 +7,10 @@ import android.os.SystemClock;
  * gesture path. HomePage notes each flip; MediaView rebinds and impression flush
  * defer until the scroller has been idle for {@link #SETTLE_GRACE_MS}.
  *
- * <p>Mid-flip AdLoader warm is best-effort only. On-settle load is the reliability
- * path and must always run even if warm failed, was capped, or is still in flight.
- * Deferral of paint is not cancellation of an in-flight load.
+ * <p>Mid-flip warm is AdPreloader soft-prefetch only (no seat AdLoader). On-settle
+ * owns the reliability path: claim pool if ready for that seat, else one primary
+ * (+ optional secondary on no-fill). Deferral of paint is not cancellation of an
+ * in-flight load.
  */
 public final class FlipAdWorkGate {
 
@@ -18,8 +19,8 @@ public final class FlipAdWorkGate {
 
     /**
      * During an active fling / grace window, allow at most this many concurrent
-     * native loads (even if admin max_in_flight is higher). 1 = soft warm only;
-     * on-settle owns the reliability load for the landed seat.
+     * native seat loads (even if admin max_in_flight is higher). Soft warm uses
+     * {@link AdPreloader} only; on-settle owns the reliability load for the seat.
      */
     public static final int MAX_IN_FLIGHT_DURING_FLIP = 1;
 

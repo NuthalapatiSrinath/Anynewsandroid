@@ -26,10 +26,11 @@ import java.util.Map;
 public final class NativeAdCacheCoordinator {
     private static final String TAG = "ANYNEWS_ADS";
     /**
-     * Seat-level ready markers (not the AdPreloader object pool). Keep near warm
-     * depth so ahead-of-seat prefetch cannot stockpile unused matched creatives.
+     * Seat-level ready markers (not the AdPreloader object pool). Match warm
+     * depth ({@code AdPreloader} MAX_READY=1) so ahead-of-seat work cannot
+     * stockpile unused matched creatives.
      */
-    private static final int MAX_READY = 3;
+    private static final int MAX_READY = 1;
     /** Fast retries before entering long recover backoff (never session-kill). */
     private static final int FAST_RETRY_BURST = 1;
     private static final long RETRY_BASE_MS = 2_000L;

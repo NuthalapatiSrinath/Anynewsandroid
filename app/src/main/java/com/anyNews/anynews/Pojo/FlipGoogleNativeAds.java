@@ -102,8 +102,9 @@ public class FlipGoogleNativeAds {
 
     /**
      * True after the network reports a paid impression. Impressed objects must not
-     * transfer to another seat and must not be early-kept / re-shown on flip-back
-     * (July / Play Store: destroy on leave → fresh AdMob fill = new paid impression).
+     * transfer to another seat. When admin destroy-after-impression is ON, flip-away
+     * may destroy and refill with the same 1+optional-2 unit rule (not a reload storm).
+     * Default OFF keeps seat-sticky reuse on the same reqPos.
      */
     public boolean isImpressed() {
         return impressed;
