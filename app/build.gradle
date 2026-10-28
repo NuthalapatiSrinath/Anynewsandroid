@@ -57,9 +57,9 @@ android {
         minSdkVersion 24
         targetSdk 36
         multiDexEnabled true
-        // Play 500: WA share handoff + cancel-only SSL; Play-like TTS (install prompt reverted). Target API 36.
-        versionCode 500
-        versionName "3.42.38"
+        // Play 501: next free after used 500; versionName below 3.45.0. Target API 36.
+        versionCode 501
+        versionName "3.42.39"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
