@@ -16405,12 +16405,59 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return false;
     }
 
+    /**
+     * True when the painted list still shows a sealed greeting for a different
+     * IST slot (or any seal during a gap). Used to discard warm OpenPath paint.
+     */
+    private boolean openPathGreetingStaleForCurrentSlot() {
+        ModelClass.Datum onScreen = findGreetingInList(list);
+        if (onScreen == null) {
+            return false;
+        }
+        final int slot = GreetingDayPartHelper.currentSlot();
+        final String wantSlot = GreetingDayPartHelper.slotLabel(slot);
+        try {
+            String seal = onScreen.getGreetingSealSlot();
+            if (seal != null && !seal.trim().isEmpty()) {
+                if (slot == GreetingDayPartHelper.SLOT_NONE) {
+                    return true;
+                }
+                return !wantSlot.equalsIgnoreCase(seal.trim());
+            }
+        } catch (Exception ignored) {
+        }
+        // Pre-seal disk body: cannot prove slot — never warm-paint it.
+        return true;
+    }
+
     /** Capture greeting identity from a page-0 payload; return true when art changed. */
     private boolean noteGreetingArtFromPayload(
             @Nullable java.util.List<ModelClass.Datum> rows) {
         ModelClass.Datum g = findGreetingInList(rows);
+        // Prefer last stamped art; fall back to whatever FlipView already shows
+        // (OpenPath cache paint never stamped applied* before — that skipped rebind).
+        String prevUrl = appliedGreetingArtUrl;
+        String prevEtag = appliedGreetingArtEtag;
+        long prevPid = appliedGreetingPostId;
+        if (prevUrl == null || prevPid <= 0L) {
+            ModelClass.Datum onScreen = findGreetingInList(list);
+            if (onScreen != null) {
+                if (prevUrl == null) {
+                    prevUrl = primaryGreetingArtUrl(onScreen);
+                }
+                if (prevPid <= 0L && onScreen.getPostId() != null) {
+                    prevPid = onScreen.getPostId();
+                }
+                if (prevEtag == null) {
+                    try {
+                        prevEtag = onScreen.getGreetingArtEtag();
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
         if (g == null) {
-            boolean had = appliedGreetingPostId > 0L || appliedGreetingArtUrl != null;
+            boolean had = prevPid > 0L || prevUrl != null;
             appliedGreetingPostId = 0L;
             appliedGreetingArtUrl = null;
             appliedGreetingArtEtag = null;
@@ -16424,19 +16471,39 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         boolean changed = false;
-        if (pid > 0L && appliedGreetingPostId > 0L && pid == appliedGreetingPostId) {
-            if (url != null && appliedGreetingArtUrl != null
-                    && !url.equals(appliedGreetingArtUrl)) {
-                changed = true;
-            }
-            if (etag != null && appliedGreetingArtEtag != null
-                    && !etag.isEmpty()
-                    && !etag.equals(appliedGreetingArtEtag)) {
-                changed = true;
-            }
-        } else if (url != null && appliedGreetingArtUrl != null
-                && !url.equals(appliedGreetingArtUrl)) {
+        if (url != null && prevUrl != null && !url.equals(prevUrl)) {
             changed = true;
+        }
+        if (etag != null && prevEtag != null && !etag.isEmpty()
+                && !etag.equals(prevEtag)) {
+            changed = true;
+        }
+        try {
+            String seal = g.getGreetingSealSlot();
+            String prevSeal = null;
+            ModelClass.Datum onScreen = findGreetingInList(list);
+            if (onScreen != null) {
+                try {
+                    prevSeal = onScreen.getGreetingSealSlot();
+                } catch (Exception ignored) {
+                }
+            }
+            if (seal != null && !seal.trim().isEmpty()
+                    && prevSeal != null && !prevSeal.trim().isEmpty()
+                    && !seal.trim().equalsIgnoreCase(prevSeal.trim())) {
+                changed = true;
+            }
+            // Network seal vs current IST — always rebind when server corrected slot.
+            final int slot = GreetingDayPartHelper.currentSlot();
+            final String want = GreetingDayPartHelper.slotLabel(slot);
+            if (seal != null && !seal.trim().isEmpty()
+                    && slot != GreetingDayPartHelper.SLOT_NONE
+                    && want.equalsIgnoreCase(seal.trim())
+                    && prevSeal != null && !prevSeal.trim().isEmpty()
+                    && !want.equalsIgnoreCase(prevSeal.trim())) {
+                changed = true;
+            }
+        } catch (Exception ignored) {
         }
         appliedGreetingPostId = pid;
         appliedGreetingArtUrl = url;
@@ -17263,7 +17330,42 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 convertListOfArticles(cached, reqPos, true);
                 keepDailyUpdatesCovered();
                 paintedFromDisk = list != null && !list.isEmpty();
-                if (paintedFromDisk) {
+                // Warm OpenPath can still hold afternoon Madhyahnam after night
+                // starts (same post_id). Discard that frame and always hit network.
+                if (paintedFromDisk && openPathGreetingStaleForCurrentSlot()) {
+                    showLog("OpenPath: discard stale greeting seal for IST slot "
+                            + GreetingDayPartHelper.slotLabel(
+                                    GreetingDayPartHelper.currentSlot()));
+                    try {
+                        OpenPathCache.clearFeed(this);
+                        OpenPathCache.forceNextFeedNetwork(this);
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        softMergeOnNextPage0 = false;
+                        forceGreetingArtRebindOnNextConvert = true;
+                        hardClearFlipFeedImmediate();
+                    } catch (Exception ignored) {
+                        try {
+                            if (list != null) {
+                                list.clear();
+                            }
+                        } catch (Exception ignored2) {
+                        }
+                    }
+                    paintedFromDisk = false;
+                    paintedSkip = 0;
+                    paintedActualSkip = 0;
+                    paintedLastPostId = 0;
+                    last_post_id = 0;
+                    skip = 0;
+                    actual_skip = 0;
+                } else if (paintedFromDisk) {
+                    // Stamp applied* from disk so network night vs afternoon rebinds.
+                    try {
+                        noteGreetingArtFromPayload(list);
+                    } catch (Exception ignored) {
+                    }
                     try {
                         LanguageFeedInvalidator.markFeedLanguageApplied(
                                 HomePage.this,
@@ -17271,10 +17373,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                         HomePage.this, Constants.LanguageID, Constants.PREF_NAME));
                     } catch (Exception ignored) {
                     }
+                    paintedSkip = skip;
+                    paintedActualSkip = actual_skip;
+                    paintedLastPostId = last_post_id;
                 }
-                paintedSkip = skip;
-                paintedActualSkip = actual_skip;
-                paintedLastPostId = last_post_id;
             }
             // Online with no warm cache: keep grey shimmer; list fills only from network.
         }
