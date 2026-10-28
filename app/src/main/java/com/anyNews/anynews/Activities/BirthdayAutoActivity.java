@@ -298,11 +298,33 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         }
 
         refreshLiveTexts();
+        // Eager-paint only when prefs already name the admin celebration URL.
+        // Applying bundled template A first caused a ~3s flash before birthday_config
+        // (or the B download) swapped in the admin banner. Soft placeholder until then.
+        maybeApplyCachedCelebrationTemplate();
+        loadConfig();
+        loadMyPosts();
+    }
+
+    /**
+     * If splash/session already saved template B + URL, start that load immediately
+     * (disk cache → instant; otherwise soft placeholder — never bundled A).
+     */
+    private void maybeApplyCachedCelebrationTemplate() {
+        String id = ProfileHubConfigHelper.getBirthdayTemplateId(this);
+        String url = ProfileHubConfigHelper.getBirthdayTemplateImageUrl(this);
+        if (!"b".equalsIgnoreCase(id == null ? "" : id.trim())) return;
+        if (url == null) return;
+        String trimmed = url.trim();
+        if (!(trimmed.startsWith("http://") || trimmed.startsWith("https://"))) return;
+        applyBirthdayTemplate(id, trimmed);
+    }
+
+    /** Prefs / last-known artwork when birthday_config did not supply a template. */
+    private void applyCachedBirthdayTemplate() {
         applyBirthdayTemplate(
                 ProfileHubConfigHelper.getBirthdayTemplateId(this),
                 ProfileHubConfigHelper.getBirthdayTemplateImageUrl(this));
-        loadConfig();
-        loadMyPosts();
     }
 
     private void setupRotationButtons() {
@@ -733,6 +755,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                             || !root.has("success")
                                             || !root.get("success").getAsBoolean()) {
                                         applyFallbackDates();
+                                        runOnUiThread(
+                                                BirthdayAutoActivity.this
+                                                        ::applyCachedBirthdayTemplate);
                                         return;
                                     }
                                     JsonObject data =
@@ -792,6 +817,10 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                         final String shownUrl = templateUrl;
                                         runOnUiThread(
                                                 () -> applyBirthdayTemplate(shownId, shownUrl));
+                                    } else {
+                                        runOnUiThread(
+                                                BirthdayAutoActivity.this
+                                                        ::applyCachedBirthdayTemplate);
                                     }
                                     if (data.has("fonts") && data.get("fonts").isJsonArray()) {
                                         try {
@@ -847,12 +876,16 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                     }
                                 } catch (Exception e) {
                                     applyFallbackDates();
+                                    runOnUiThread(
+                                            BirthdayAutoActivity.this::applyCachedBirthdayTemplate);
                                 }
                             }
 
                             @Override
                             public void onFailure(Call<JsonObject> call, Throwable t) {
                                 applyFallbackDates();
+                                runOnUiThread(
+                                        BirthdayAutoActivity.this::applyCachedBirthdayTemplate);
                             }
                         });
     }

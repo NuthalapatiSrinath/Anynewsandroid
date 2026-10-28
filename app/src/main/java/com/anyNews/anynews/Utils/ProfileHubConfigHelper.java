@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.anyNews.anynews.Services.Config;
+import com.anyNews.anynews.Ui.BirthdayPosterPreviewView;
 
 /**
  * Caches and reads Profile hub / More / Home footer / Settings panel admin flags from splash.
@@ -309,9 +310,17 @@ public final class ProfileHubConfigHelper {
         String id = "b".equalsIgnoreCase(templateId.trim()) ? "b" : "a";
         Context app = context.getApplicationContext();
         SharedPrefsData.putStringImmediate(app, Constants.BIRTHDAY_TEMPLATE_ID, id, Constants.PREF_NAME);
+        String url = imageUrl == null ? null : imageUrl.trim();
         if (imageUrl != null) {
             SharedPrefsData.putStringImmediate(
-                    app, Constants.BIRTHDAY_TEMPLATE_IMAGE_URL, imageUrl.trim(), Constants.PREF_NAME);
+                    app, Constants.BIRTHDAY_TEMPLATE_IMAGE_URL, url, Constants.PREF_NAME);
+        }
+        // Prefetch celebration art so Birthday Special does not flash bundled A.
+        if ("b".equals(id) && url != null && !url.isEmpty()) {
+            try {
+                BirthdayPosterPreviewView.prefetchCelebrationTemplate(app, id, url);
+            } catch (Exception ignored) {
+            }
         }
     }
 
