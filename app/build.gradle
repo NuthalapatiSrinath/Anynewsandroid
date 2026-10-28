@@ -57,9 +57,9 @@ android {
         minSdkVersion 24
         targetSdk 35
         multiDexEnabled true
-        // Play 364: Device and Network Abuse (WebView SSL). Ship 365 cancel-only SSL + WA share handoff.
-        versionCode 365
-        versionName "3.42.37"
+        // Play 500: WA share handoff + cancel-only SSL; Play-like TTS (install prompt reverted).
+        versionCode 500
+        versionName "3.42.38"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
