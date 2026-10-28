@@ -39,7 +39,7 @@ android {
         }
     }
     namespace "com.anyNews.anynews"
-    compileSdk 35
+    compileSdk 36
 
 //    compileSdkVersion 31
 //   // buildToolsVersion "30.0.3"
@@ -55,9 +55,9 @@ android {
     defaultConfig {
         applicationId "com.anyNews.anynews"
         minSdkVersion 24
-        targetSdk 35
+        targetSdk 36
         multiDexEnabled true
-        // Play 500: WA share handoff + cancel-only SSL; Play-like TTS (install prompt reverted).
+        // Play 500: WA share handoff + cancel-only SSL; Play-like TTS (install prompt reverted). Target API 36.
         versionCode 500
         versionName "3.42.38"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
