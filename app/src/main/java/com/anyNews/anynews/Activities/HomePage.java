@@ -660,8 +660,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Debounce duplicate greeting slot refreshes. */
     private long lastGreetingSlotRefreshAtMs = 0L;
     private static final long GREETING_SLOT_REFRESH_MIN_INTERVAL_MS = 60_000L;
-    /** While Home is resumed, re-check day-part (app left open all day). */
-    private static final long GREETING_SLOT_POLL_MS = 10 * 60_000L;
+    /** Fallback while Home is resumed if boundary scheduling fails. */
+    private static final long GREETING_SLOT_POLL_MAX_MS = 10 * 60_000L;
+    /** Do not spin denser than this between boundary checks. */
+    private static final long GREETING_SLOT_POLL_MIN_MS = 15_000L;
     private final Handler greetingSlotHandler = new Handler(Looper.getMainLooper());
     private final Runnable greetingSlotPollRunnable = new Runnable() {
         @Override
@@ -672,7 +674,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             try {
                 if (homeActivityResumed) {
-                    greetingSlotHandler.postDelayed(this, GREETING_SLOT_POLL_MS);
+                    greetingSlotHandler.postDelayed(this, nextGreetingSlotPollDelayMs());
                 }
             } catch (Exception ignored) {
             }
@@ -16335,6 +16337,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             // Soft-merge would keep the same greetings post_id with the old image.
             softMergeOnNextPage0 = false;
+            // Position-keep must not skip the forced network page-0.
+            skipFeedNetworkForPositionKeep = false;
+            // Drop warm OpenPath morning JSON so nothing paints sealed prior art.
+            OpenPathCache.clearFeed(this);
             OpenPathCache.forceNextFeedNetwork(this);
             last_post_id = 0;
             skip = 0;
@@ -16348,10 +16354,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    /** Wake near the next IST slot/gap edge (clamped), else the 10-minute fallback. */
+    private long nextGreetingSlotPollDelayMs() {
+        try {
+            long until = GreetingDayPartHelper.msUntilNextBoundary() + 1_500L;
+            if (until < GREETING_SLOT_POLL_MIN_MS) {
+                return GREETING_SLOT_POLL_MIN_MS;
+            }
+            if (until > GREETING_SLOT_POLL_MAX_MS) {
+                return GREETING_SLOT_POLL_MAX_MS;
+            }
+            return until;
+        } catch (Exception ignored) {
+            return GREETING_SLOT_POLL_MAX_MS;
+        }
+    }
+
     private void startGreetingSlotPoll() {
         try {
             greetingSlotHandler.removeCallbacks(greetingSlotPollRunnable);
-            greetingSlotHandler.postDelayed(greetingSlotPollRunnable, GREETING_SLOT_POLL_MS);
+            greetingSlotHandler.postDelayed(
+                    greetingSlotPollRunnable, nextGreetingSlotPollDelayMs());
         } catch (Exception ignored) {
         }
     }
@@ -17255,9 +17278,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             response.body(),
                             openPathMode);
                     try {
-                        // Record IST day-part so a long-lived session can detect
-                        // morning→evening / gap without waiting for process death.
-                        if (categoryAtEnqueue != -1 && !localFeedFromDailyUpdates) {
+                        // Main News only (cat 0). Category tabs do not inject
+                        // greetings — stamping them left Main stuck after a slot
+                        // change while the user was browsing Sports/etc.
+                        if (categoryAtEnqueue == 0 && !localFeedFromDailyUpdates) {
                             appliedGreetingSlotKey = GreetingDayPartHelper.currentSlotKey();
                         }
                     } catch (Exception ignored) {

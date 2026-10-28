@@ -97,4 +97,32 @@ public final class GreetingDayPartHelper {
                 return "none";
         }
     }
+
+    /**
+     * Milliseconds until the next IST slot/gap boundary (exclusive end or next
+     * window start). Used to wake long-lived sessions near 11:00 / 12:00 / …
+     * instead of waiting for the 10-minute poll alone.
+     */
+    public static long msUntilNextBoundary() {
+        Calendar cal = Calendar.getInstance(IST);
+        int mins = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE);
+        int withinMinMs =
+                cal.get(Calendar.SECOND) * 1000 + cal.get(Calendar.MILLISECOND);
+        final int[] bounds = {
+                MORNING_END_MIN,
+                AFTERNOON_START_MIN,
+                AFTERNOON_END_MIN,
+                EVENING_START_MIN,
+                EVENING_END_MIN,
+                NIGHT_START_MIN,
+                NIGHT_END_MIN
+        };
+        for (int b : bounds) {
+            if (mins < b) {
+                long ms = (long) (b - mins) * 60_000L - withinMinMs;
+                return Math.max(1L, ms);
+            }
+        }
+        return 60_000L;
+    }
 }
