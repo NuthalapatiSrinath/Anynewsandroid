@@ -512,12 +512,36 @@ public final class BirthdayFonts {
         return 1;
     }
 
+    /** Readable on Birthday form light surfaces even when the app is in dark mode. */
+    private static final int FORM_ON_LIGHT_TEXT = 0xFF1F2937;
+
     @NonNull
     public static ArrayAdapter<CharSequence> sizeAdapter(@NonNull Context context) {
-        return new ArrayAdapter<>(
+        return new ArrayAdapter<CharSequence>(
                 context,
                 android.R.layout.simple_spinner_dropdown_item,
-                new String[] {"Small", "Medium", "Large"});
+                new String[] {"Small", "Medium", "Large"}) {
+            @NonNull
+            @Override
+            public android.view.View getView(
+                    int position,
+                    @Nullable android.view.View convertView,
+                    @NonNull android.view.ViewGroup parent) {
+                TextView tv = (TextView) super.getView(position, convertView, parent);
+                if (tv != null) tv.setTextColor(FORM_ON_LIGHT_TEXT);
+                return tv;
+            }
+
+            @Override
+            public android.view.View getDropDownView(
+                    int position,
+                    @Nullable android.view.View convertView,
+                    @NonNull android.view.ViewGroup parent) {
+                TextView tv = (TextView) super.getDropDownView(position, convertView, parent);
+                if (tv != null) tv.setTextColor(FORM_ON_LIGHT_TEXT);
+                return tv;
+            }
+        };
     }
 
     public interface SampleTextProvider {
@@ -566,6 +590,7 @@ public final class BirthdayFonts {
                 tv.setText(sample);
                 tv.setTypeface(typefaceForText(ctx, id, false, sample));
                 tv.setTextSize(18f);
+                tv.setTextColor(FORM_ON_LIGHT_TEXT);
                 tv.setPadding(24, 18, 24, 18);
                 tv.setContentDescription(spec != null ? spec.label : sample);
             }

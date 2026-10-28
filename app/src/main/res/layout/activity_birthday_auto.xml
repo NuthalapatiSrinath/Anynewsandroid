@@ -226,7 +226,9 @@
                 android:layout_height="wrap_content"
                 android:hint="@string/birthday_auto_name"
                 android:inputType="textPersonName|textCapWords"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:textColor="#1F2937"
+                android:textColorHint="#9CA3AF" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -269,7 +271,9 @@
                 android:layout_height="wrap_content"
                 android:hint="@string/birthday_hint_location"
                 android:inputType="textCapWords"
-                android:maxLines="2" />
+                android:maxLines="2"
+                android:textColor="#1F2937"
+                android:textColorHint="#9CA3AF" />
 
             <TextView
                 android:id="@+id/birthday_auto_address_note"
@@ -318,14 +322,16 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/birthday_auto_name_bold" />
+                    android:text="@string/birthday_auto_name_bold"
+                    android:textColor="#1F2937" />
 
                 <CheckBox
                     android:id="@+id/birthday_auto_addr_bold"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/birthday_auto_addr_bold" />
+                    android:text="@string/birthday_auto_addr_bold"
+                    android:textColor="#1F2937" />
             </LinearLayout>
 
             <TextView
@@ -345,7 +351,9 @@
                 android:hint="@string/birthday_auto_special"
                 android:inputType="textMultiLine"
                 android:maxLength="160"
-                android:minLines="3" />
+                android:minLines="3"
+                android:textColor="#1F2937"
+                android:textColorHint="#9CA3AF" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -362,7 +370,9 @@
                 android:layout_height="wrap_content"
                 android:hint="@string/birthday_auto_post_title"
                 android:inputType="textCapWords"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:textColor="#1F2937"
+                android:textColorHint="#9CA3AF" />
 
             <TextView
                 android:layout_width="match_parent"

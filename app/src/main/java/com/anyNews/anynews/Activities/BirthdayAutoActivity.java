@@ -187,6 +187,10 @@ public class BirthdayAutoActivity extends AppCompatActivity {
         rot270 = findViewById(R.id.birthday_auto_rot_270);
 
         setupFontSpinners();
+        // Form keeps a light peach canvas; night-mode theme text is white — force
+        // readable on-surface colors so typed name/district/spinners/checkboxes
+        // stay visible (preview/banner drawing unchanged).
+        applyReadableFormFieldColors();
         setupRotationButtons();
         autofillAddress();
         // Address field must also paint Telugu (not Latin script face).
@@ -376,6 +380,28 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                     return WindowInsetsCompat.CONSUMED;
                 });
         ViewCompat.requestApplyInsets(root);
+    }
+
+    /**
+     * Birthday Special UI is intentionally light (#FFF8F0). Dark-mode
+     * {@code textColorPrimary} is white, which made EditText/Spinner/CheckBox
+     * text unreadable. Hard-tint form controls; live poster preview is separate.
+     */
+    private void applyReadableFormFieldColors() {
+        final int onLight = 0xFF1F2937;
+        final int hint = 0xFF9CA3AF;
+        applyEditReadable(nameInput, onLight, hint);
+        applyEditReadable(addressInput, onLight, hint);
+        applyEditReadable(specialInput, onLight, hint);
+        applyEditReadable(titleInput, onLight, hint);
+        if (nameBold != null) nameBold.setTextColor(onLight);
+        if (addrBold != null) addrBold.setTextColor(onLight);
+    }
+
+    private static void applyEditReadable(EditText edit, int text, int hint) {
+        if (edit == null) return;
+        edit.setTextColor(text);
+        edit.setHintTextColor(hint);
     }
 
     private void setupFontSpinners() {

@@ -649,10 +649,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Soft-merge feed when network returns while user stays on the current card. */
     private boolean softMergeOnNextPage0 = false;
     /**
-     * IST greeting day-part key applied on the last successful main page-0
-     * ({@link GreetingDayPartHelper#currentSlotKey()}). When the process stays
-     * alive across morning→afternoon, resume/periodic check forces a quiet
-     * page-0 so the same greetings post_id swaps to the afternoon image.
+     * IST greeting day-part key stamped only after a successful Main/Special
+     * page-0 network response ({@link GreetingDayPartHelper#currentSlotKey()}).
+     * When the process stays alive across morning→evening (or into a gap),
+     * resume/periodic check forces a real network page-0 so the greeting
+     * image swaps — or drops off entirely in gaps. Never stamp from OpenPath
+     * warm paint alone.
      */
     @Nullable private String appliedGreetingSlotKey = null;
     /** Debounce duplicate greeting slot refreshes. */
@@ -16257,8 +16259,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     /**
      * Quiet page-0 when IST greeting day-part changed while the process stayed
-     * alive (tester: morning image still showing in the afternoon on one phone).
-     * Keeps flip seat; does not switch tabs or show Reload chrome.
+     * alive (tester: morning image still showing after evening starts / into a
+     * gap). Applies on Main and Special. Forces a real network page-0 via
+     * {@link OpenPathCache#forceNextFeedNetwork}; keeps flip seat; does not
+     * switch tabs, show Reload chrome, or break continuum/seen_ids.
      */
     private void maybeRefreshFeedForGreetingSlotChange(String reason) {
         if (!homeActivityResumed || isFinishing()) {
@@ -16267,12 +16271,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (!isDeviceOnline()) {
             return;
         }
-        // Main News only — Special/Video/Local/search/bookmarks have their own lists.
-        if (isSpecialFeedMode() || isVideoFeedMode() || isCalendarMode()
+        // Main + Special inject IST greetings. Skip feeds that never show them.
+        if (isVideoFeedMode() || isCalendarMode()
                 || isDailyUpdatesMode() || bookmarksModeSelected || searchFeedActive) {
             return;
         }
-        if (category_id == -1 || localFeedFromDailyUpdates) {
+        // Local tab is district-only — no greeting inject.
+        if (!isSpecialFeedMode() && (category_id == -1 || localFeedFromDailyUpdates)) {
             return;
         }
         if (isOnlineReadFlipMode()) {
@@ -16284,18 +16289,22 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         final int slot = GreetingDayPartHelper.currentSlot();
-        if (slot == GreetingDayPartHelper.SLOT_NONE) {
-            return;
-        }
         final String nowKey = GreetingDayPartHelper.currentSlotKey();
+        // Never stamp the key from warm paint / first glance alone — that left
+        // a stale morning greeting after evening (or gap) when OpenPath skipped
+        // network. Only a successful page-0 stamps appliedGreetingSlotKey.
         if (appliedGreetingSlotKey == null) {
-            // First observation this process — wait until a page-0 lands, then compare.
-            appliedGreetingSlotKey = nowKey;
+            if (list == null || list.isEmpty()) {
+                // Still loading; page-0 success will stamp.
+                return;
+            }
+            // Feed already on screen (warm disk / process memory) without a
+            // stamped slot — force a real network page-0 once.
+        } else if (nowKey.equals(appliedGreetingSlotKey)) {
             return;
         }
-        if (nowKey.equals(appliedGreetingSlotKey)) {
-            return;
-        }
+        // SLOT_NONE (gap) intentionally falls through so an on-screen greeting
+        // is removed when the server omits the row.
         final long now = System.currentTimeMillis();
         if (now - lastGreetingSlotRefreshAtMs < GREETING_SLOT_REFRESH_MIN_INTERVAL_MS) {
             return;
@@ -16313,7 +16322,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("greeting slot refresh reason=" + reason
                 + " was=" + appliedGreetingSlotKey
                 + " now=" + nowKey
-                + " (" + GreetingDayPartHelper.slotLabel(slot) + ")");
+                + " (" + GreetingDayPartHelper.slotLabel(slot) + ")"
+                + " special=" + isSpecialFeedMode());
         try {
             int flipIndex = resolveCurrentFlipIndexForSave();
             long postId = resolvePostIdForFlipIndex(flipIndex);
@@ -16323,12 +16333,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         try {
+            // Soft-merge would keep the same greetings post_id with the old image.
+            softMergeOnNextPage0 = false;
             OpenPathCache.forceNextFeedNetwork(this);
             last_post_id = 0;
             skip = 0;
             actual_skip = 0;
             isApiRequested = true;
-            appliedGreetingSlotKey = nowKey;
+            // Stamp only after successful page-0 (see feed callback).
             ShowNews_Data_Values(category_id, 0);
         } catch (Exception e) {
             isApiRequested = false;
@@ -17244,7 +17256,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             openPathMode);
                     try {
                         // Record IST day-part so a long-lived session can detect
-                        // morning→afternoon without waiting for process death.
+                        // morning→evening / gap without waiting for process death.
                         if (categoryAtEnqueue != -1 && !localFeedFromDailyUpdates) {
                             appliedGreetingSlotKey = GreetingDayPartHelper.currentSlotKey();
                         }
@@ -17268,6 +17280,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     // Special/sticky still timestamps success so plain reopens can soft-skip later,
                     // but do not overwrite main disk cache with special payloads.
                     OpenPathCache.markFeedNetworkSuccess(HomePage.this);
+                    try {
+                        // Special also injects greetings — stamp slot so Special
+                        // warm sessions refresh on IST change like Main.
+                        if (special && !isStickyFeedOpen() && !searchMode) {
+                            appliedGreetingSlotKey = GreetingDayPartHelper.currentSlotKey();
+                        }
+                    } catch (Exception ignored) {
+                    }
                 }
                 // isFirstPage → replace (reload/special/open + network over disk paint).
                 // Held next page (reqPos=-1 apply of dummy held at 3) uses Response overload: append.
