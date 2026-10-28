@@ -5,9 +5,4 @@
     <string name="rewards_primary_earn">అన్‌లిమిటెడ్ సంపాదన</string>
     <string name="rewards_watch_title">యాడ్స్ చూడండి</string>
     <string name="rewards_also_earn">ఇంకా సంపాదించండి</string>
-
-    <string name="tts_language_missing">%1$s వాయిస్ ఇన్‌స్టాల్ కాలేదు. డౌన్‌లోడ్ కోసం Text-to-speech సెట్టింగ్స్ తెరుస్తున్నాం.</string>
-    <string name="tts_language_missing_te">తెలుగు వాయిస్ ఇన్‌స్టాల్ కాలేదు / Telugu voice not installed. Opening TTS settings…</string>
-    <string name="tts_engine_missing">వాయిస్ ఇంజిన్ లేదు. Google TTS ఇన్‌స్టాల్ కోసం సెట్టింగ్స్ తెరుస్తున్నాం.</string>
-    <string name="tts_engine_missing_te">వాయిస్ ఇంజిన్ లేదు / TTS engine missing. Opening settings…</string>
 </resources>
