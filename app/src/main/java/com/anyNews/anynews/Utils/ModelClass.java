@@ -112,6 +112,29 @@ public class ModelClass implements Serializable {
         @SerializedName("background_image")
         @Expose
         private String backgroundImage;
+        /** Server-sealed greeting hero (same as images[0] after seal). */
+        @SerializedName("full_image")
+        @Expose
+        private String fullImage;
+        /** Active IST slot name stamped by server seal (morning/afternoon/…). */
+        @SerializedName("greeting_seal_slot")
+        @Expose
+        private String greetingSealSlot;
+        /** Slot-start epoch ms for the sealed art (changes each IST window). */
+        @SerializedName("greeting_seal_epoch")
+        @Expose
+        private Long greetingSealEpoch;
+        /** Hash of sealed art URL — same post_id, different etag ⇒ replace card art. */
+        @SerializedName("greeting_art_etag")
+        @Expose
+        private String greetingArtEtag;
+        /** Bundle/slot end so client can still recognize greeting feed cards. */
+        @SerializedName("greeting_slot_end")
+        @Expose
+        private Long greetingSlotEnd;
+        @SerializedName("greeting_slot")
+        @Expose
+        private String greetingSlot;
         @SerializedName("post_id")
         @Expose
         private Long postId;
@@ -640,6 +663,54 @@ public class ModelClass implements Serializable {
 
         public void setBackgroundImage(String backgroundImage) {
             this.backgroundImage = backgroundImage;
+        }
+
+        public String getFullImage() {
+            return fullImage;
+        }
+
+        public void setFullImage(String fullImage) {
+            this.fullImage = fullImage;
+        }
+
+        public String getGreetingSealSlot() {
+            return greetingSealSlot;
+        }
+
+        public void setGreetingSealSlot(String greetingSealSlot) {
+            this.greetingSealSlot = greetingSealSlot;
+        }
+
+        public Long getGreetingSealEpoch() {
+            return greetingSealEpoch;
+        }
+
+        public void setGreetingSealEpoch(Long greetingSealEpoch) {
+            this.greetingSealEpoch = greetingSealEpoch;
+        }
+
+        public String getGreetingArtEtag() {
+            return greetingArtEtag;
+        }
+
+        public void setGreetingArtEtag(String greetingArtEtag) {
+            this.greetingArtEtag = greetingArtEtag;
+        }
+
+        public Long getGreetingSlotEnd() {
+            return greetingSlotEnd;
+        }
+
+        public void setGreetingSlotEnd(Long greetingSlotEnd) {
+            this.greetingSlotEnd = greetingSlotEnd;
+        }
+
+        public String getGreetingSlot() {
+            return greetingSlot;
+        }
+
+        public void setGreetingSlot(String greetingSlot) {
+            this.greetingSlot = greetingSlot;
         }
 
         public Long getPostId() {

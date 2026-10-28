@@ -57,9 +57,9 @@ android {
         minSdkVersion 24
         targetSdk 36
         multiDexEnabled true
-        // Play 501: next free after used 500; versionName below 3.45.0. Target API 36.
-        versionCode 501
-        versionName "3.42.39"
+        // Play 502: greeting art URL/etag replace without clear-data. Target API 36.
+        versionCode 502
+        versionName "3.42.40"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
