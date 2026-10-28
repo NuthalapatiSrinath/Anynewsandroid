@@ -5,6 +5,8 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -17,6 +19,7 @@ import android.text.TextUtils;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -206,7 +209,13 @@ public final class ArticleTtsHelper {
                             || (postId != null && !postId.equals(speakingPostId))) {
                         return;
                     }
-                    applyVoiceConfig(app);
+                    // Happy path unchanged: same applyVoiceConfig + speak API.
+                    // Only abort (toast + install/settings) when locale/voice data is missing.
+                    if (!applyVoiceConfig(app)) {
+                        stopSpeaking(true);
+                        promptMissingLanguageData(app);
+                        return;
+                    }
                     int result;
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                         Bundle params = new Bundle();
@@ -256,7 +265,13 @@ public final class ArticleTtsHelper {
                     List<Runnable> queued = new ArrayList<>(pendingReady);
                     pendingReady.clear();
                     if (!ttsReady) {
+                        // User tapped speak (speakingPostId set); warmUp never sets it.
+                        boolean userSpeak =
+                                speakingPostId != null && activeUtteranceId != null;
                         stopSpeaking(true);
+                        if (userSpeak) {
+                            promptMissingEngine(app);
+                        }
                         return;
                     }
                     tts.setOnUtteranceProgressListener(
@@ -308,8 +323,13 @@ public final class ArticleTtsHelper {
         }
     }
 
-    private static void applyVoiceConfig(@NonNull Context app) {
-        if (tts == null) return;
+    /**
+     * Apply admin/app locale + voice. Returns {@code false} only when the reader's
+     * language is LANG_MISSING_DATA / LANG_NOT_SUPPORTED (no silent wrong-language
+     * speak). Success path timing and voice selection are unchanged.
+     */
+    private static boolean applyVoiceConfig(@NonNull Context app) {
+        if (tts == null) return false;
         try {
             String localeTag = ArticleTtsConfigHelper.getLocale(app);
             String voiceWanted = ArticleTtsConfigHelper.getVoice(app);
@@ -322,7 +342,7 @@ public final class ArticleTtsHelper {
                             + "|"
                             + languageId(app);
             if (key.equals(appliedVoiceKey) && voicesPreloaded) {
-                return;
+                return true;
             }
             Locale appLocale = localeForAppLanguage(app);
             Locale configured =
@@ -334,7 +354,11 @@ public final class ArticleTtsHelper {
                     configured != null && sameLanguage(configured, appLocale)
                             ? configured
                             : appLocale;
-            applyEngineLanguage(locale);
+            if (!applyEngineLanguage(locale)) {
+                // Do not cache — retry after user installs voice data.
+                appliedVoiceKey = "";
+                return false;
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 Set<Voice> voices = tts.getVoices();
                 voicesPreloaded = voices != null;
@@ -370,7 +394,10 @@ public final class ArticleTtsHelper {
             tts.setSpeechRate(1.0f);
             tts.setPitch(1.0f);
             appliedVoiceKey = key;
+            return true;
         } catch (Exception ignored) {
+            appliedVoiceKey = "";
+            return false;
         }
     }
 
@@ -453,24 +480,102 @@ public final class ArticleTtsHelper {
     /**
      * Speak digits in the selected language. If that locale has no voice data,
      * try the language alone, then the device locale only when it is the same
-     * language. Never substitute Telugu ({@code te-IN} / a Telugu device default).
+     * language. Never substitute another language (e.g. English) silently.
+     *
+     * @return true when the engine accepted the reader's language
      */
-    private static void applyEngineLanguage(@NonNull Locale locale) {
-        if (tts == null) return;
-        if (isLanguageSet(tts.setLanguage(locale))) return;
+    private static boolean applyEngineLanguage(@NonNull Locale locale) {
+        if (tts == null) return false;
+        if (isLanguageSet(tts.setLanguage(locale))) return true;
         String lang = locale.getLanguage();
         if (!TextUtils.isEmpty(lang) && !TextUtils.isEmpty(locale.getCountry())) {
-            if (isLanguageSet(tts.setLanguage(new Locale(lang)))) return;
+            if (isLanguageSet(tts.setLanguage(new Locale(lang)))) return true;
         }
         Locale device = Locale.getDefault();
         if (sameLanguage(device, locale)) {
-            tts.setLanguage(device);
+            return isLanguageSet(tts.setLanguage(device));
         }
+        return false;
     }
 
     private static boolean isLanguageSet(int result) {
         return result != TextToSpeech.LANG_MISSING_DATA
                 && result != TextToSpeech.LANG_NOT_SUPPORTED;
+    }
+
+    /** Toast + open install/settings when the reader's language voice pack is missing. */
+    private static void promptMissingLanguageData(@NonNull Context app) {
+        Locale locale = localeForAppLanguage(app);
+        String lang = locale.getLanguage() == null ? "" : locale.getLanguage();
+        final String msg;
+        if ("te".equalsIgnoreCase(lang)) {
+            msg = app.getString(R.string.tts_language_missing_te);
+        } else {
+            String label = locale.getDisplayLanguage(locale);
+            if (TextUtils.isEmpty(label)) {
+                label = lang.isEmpty() ? "App" : lang;
+            }
+            msg = app.getString(R.string.tts_language_missing, label);
+        }
+        showTtsToast(app, msg);
+        openTtsInstallOrSettings(app);
+    }
+
+    /** Toast + open engine install when TextToSpeech onInit fails (ENGINE_MISSING). */
+    private static void promptMissingEngine(@NonNull Context app) {
+        Locale locale = localeForAppLanguage(app);
+        String lang = locale.getLanguage() == null ? "" : locale.getLanguage();
+        String msg =
+                "te".equalsIgnoreCase(lang)
+                        ? app.getString(R.string.tts_engine_missing_te)
+                        : app.getString(R.string.tts_engine_missing);
+        showTtsToast(app, msg);
+        openTtsInstallOrSettings(app);
+    }
+
+    private static void showTtsToast(@NonNull Context app, @NonNull String msg) {
+        MAIN.post(
+                () -> {
+                    try {
+                        Toast.makeText(app, msg, Toast.LENGTH_LONG).show();
+                    } catch (Exception ignored) {
+                    }
+                });
+    }
+
+    /**
+     * Prefer language-pack installer, then system TTS settings, then Play Store
+     * Google TTS. Never falls back to speaking a different language.
+     */
+    private static void openTtsInstallOrSettings(@NonNull Context app) {
+        Intent install = new Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA);
+        if (tryStartActivity(app, install)) return;
+        Intent settings = new Intent("com.android.settings.TTS_SETTINGS");
+        if (tryStartActivity(app, settings)) return;
+        Intent market =
+                new Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("market://details?id=" + ArticleTtsConfigHelper.GOOGLE_TTS_PACKAGE));
+        if (tryStartActivity(app, market)) return;
+        Intent web =
+                new Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse(
+                                "https://play.google.com/store/apps/details?id="
+                                        + ArticleTtsConfigHelper.GOOGLE_TTS_PACKAGE));
+        tryStartActivity(app, web);
+    }
+
+    private static boolean tryStartActivity(@NonNull Context app, @NonNull Intent intent) {
+        try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (intent.resolveActivity(app.getPackageManager()) != null) {
+                app.startActivity(intent);
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     @NonNull

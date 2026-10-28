@@ -500,4 +500,10 @@
     <string name="rewards_primary_earn">Earn unlimited</string>
     <string name="rewards_watch_title">Watch ads</string>
     <string name="rewards_also_earn">Also earn</string>
+
+    <!-- Article TTS: only shown when language/engine voice data is missing (happy path unchanged). -->
+    <string name="tts_language_missing">%1$s voice not installed. Opening Text-to-speech settings to download it.</string>
+    <string name="tts_language_missing_te">తెలుగు వాయిస్ ఇన్‌స్టాల్ కాలేదు / Telugu voice not installed. Opening TTS settings…</string>
+    <string name="tts_engine_missing">Text-to-speech engine missing. Opening settings to install Google TTS…</string>
+    <string name="tts_engine_missing_te">వాయిస్ ఇంజిన్ లేదు / TTS engine missing. Opening settings…</string>
 </resources>
