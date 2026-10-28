@@ -282,15 +282,41 @@ public class MatchCenterActivity extends AppCompatActivity {
         }
 
         // Equation / status pill (e.g. "… need 1 runs in 4.4 overs"). Hidden when
-        // the only status is the plain "Live" flag that the badge already shows.
+        // the only status is the plain "Live" flag that the badge already shows,
+        // or when CREX leaked encoded junk (e.g. "&21ONw").
         TextView equation = findViewById(R.id.mc_equation);
         String eq = liveStatusText();
-        if (TextUtils.isEmpty(eq) || eq.equalsIgnoreCase("live")) {
+        if (TextUtils.isEmpty(eq) || eq.equalsIgnoreCase("live") || isJunkStatusText(eq)) {
             equation.setVisibility(View.GONE);
         } else {
             equation.setVisibility(View.VISIBLE);
             equation.setText(eq);
         }
+    }
+
+    /**
+     * CREX over-field / HTML-entity leftovers that must never appear in the
+     * hero equation pill (server also scrubs these; guard for older payloads).
+     */
+    private static boolean isJunkStatusText(String raw) {
+        if (TextUtils.isEmpty(raw)) return true;
+        String t = raw.trim();
+        if (t.indexOf('&') >= 0) return true;
+        if (t.matches("(?i).*(font-family|style\\s*=|</?[a-z]).*")) return true;
+        if (!t.contains(" ") && t.length() <= 14
+                && t.matches("[A-Za-z0-9&;]+")
+                && !t.matches("(?i)live|completed?|tea|lunch|drinks|stumps|rain|delayed|tied|draw")) {
+            return !t.matches("(?i).*(need|won|lost|break|innings|target|toss|start|yet|over).*");
+        }
+        return false;
+    }
+
+    /** Never show a bare numeric CREX player id as a name. */
+    private static String displayPlayerName(String raw) {
+        if (TextUtils.isEmpty(raw)) return "—";
+        String t = raw.trim();
+        if (t.matches("\\d{1,8}")) return "—";
+        return t;
     }
 
     private void stopLiveBadgeBlink() {
@@ -1042,7 +1068,7 @@ public class MatchCenterActivity extends AppCompatActivity {
             String sr = !TextUtils.isEmpty(b.getStrike_rate()) ? b.getStrike_rate()
                     : (sc != null ? sc.getStrike_rate() : "");
             String[] vals = {rb, fours, sixes, TextUtils.isEmpty(sr) ? "-" : sr};
-            cardView.addView(statRow(b.getName(), b.isOn_strike(), vals, weights, nameWeight));
+            cardView.addView(statRow(displayPlayerName(b.getName()), b.isOn_strike(), vals, weights, nameWeight));
         }
         return cardView;
     }
@@ -1051,6 +1077,7 @@ public class MatchCenterActivity extends AppCompatActivity {
                                   CricketMatchDetailResponse.Innings inn) {
         CricketMatchDetailResponse.Bowler bowler = live != null ? live.getBowler() : null;
         if (bowler == null || TextUtils.isEmpty(bowler.getName())) return null;
+        if ("—".equals(displayPlayerName(bowler.getName()))) return null;
 
         float nameWeight = 3.4f;
         String[] cols = {"O", "M", "R", "W", "Eco"};
@@ -1067,7 +1094,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         LinearLayout cardView = card();
         cardView.addView(statHeader(R.drawable.ic_cmp_ball, "Bowling (1)", cols, weights, nameWeight));
         String[] vals = {TextUtils.isEmpty(o) ? "-" : o, "-", r, w, TextUtils.isEmpty(eco) ? "-" : eco};
-        cardView.addView(statRow(bowler.getName() + " (Bowling)", false, vals, weights, nameWeight));
+        cardView.addView(statRow(displayPlayerName(bowler.getName()) + " (Bowling)", false, vals, weights, nameWeight));
         return cardView;
     }
 
@@ -1550,8 +1577,10 @@ public class MatchCenterActivity extends AppCompatActivity {
         if (batting != null) {
             for (CricketMatchDetailResponse.Batting b : batting) {
                 if (b.isDid_not_bat()) {
+                    String yn = displayPlayerName(b.getName());
+                    if ("—".equals(yn)) continue;
                     if (yetToBat.length() > 0) yetToBat.append(", ");
-                    yetToBat.append(b.getName());
+                    yetToBat.append(yn);
                     continue;
                 }
                 card.addView(thinDivider());
@@ -1664,7 +1693,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         int dark = color(R.color.cmp_text_primary);
 
         boolean striker = isStrikerInScorecard(b.getName());
-        String name = b.getName() + (striker ? " *" : "");
+        String name = displayPlayerName(b.getName()) + (striker ? " *" : "");
         row.addView(scCell(name, 3.6f, Gravity.START, dark, 13f, striker));
         row.addView(scCell(String.valueOf(b.getRuns()), 1.0f, Gravity.CENTER, dark, 13f, true));
         row.addView(scCell(String.valueOf(b.getBalls()), 1.0f, Gravity.CENTER, dark, 13f, false));
@@ -1705,7 +1734,7 @@ public class MatchCenterActivity extends AppCompatActivity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(0, dp(9), 0, dp(9));
         int dark = color(R.color.cmp_text_primary);
-        row.addView(scCell(bw.getName(), 3.6f, Gravity.START, dark, 13f, false));
+        row.addView(scCell(displayPlayerName(bw.getName()), 3.6f, Gravity.START, dark, 13f, false));
         row.addView(scCell(TextUtils.isEmpty(bw.getOvers()) ? "-" : bw.getOvers(),
                 1.2f, Gravity.CENTER, dark, 13f, false));
         row.addView(scCell(String.valueOf(bw.getRuns()), 1.0f, Gravity.CENTER, dark, 13f, false));
@@ -1731,7 +1760,8 @@ public class MatchCenterActivity extends AppCompatActivity {
         for (CricketMatchDetailResponse.FallOfWicket f : fow) {
             if (sb.length() > 0) sb.append("   ");
             sb.append(f.getScore());
-            if (!TextUtils.isEmpty(f.getBatsman())) sb.append(" (").append(f.getBatsman()).append(')');
+            String bn = displayPlayerName(f.getBatsman());
+            if (!TextUtils.isEmpty(bn) && !"—".equals(bn)) sb.append(" (").append(bn).append(')');
         }
         TextView val = new TextView(this);
         val.setText(sb.toString());
