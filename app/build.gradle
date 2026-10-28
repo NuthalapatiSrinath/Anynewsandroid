@@ -20,22 +20,26 @@ def signingProps = loadSigningProps()
 android {
     signingConfigs {
         release {
-            def releaseKeystore = file("${projectDir}/../anyNews.jks")
-            if (!releaseKeystore.exists()) {
-                releaseKeystore = file('R:\\work\\AndroidStudioProjects\\anynews\\gitLab\\AnyNews\\anyNews.jks')
+            // Play upload key (SHA1 5C:16:B8:0A:... — same as accepted 501). Never fall back to debug.
+            def releaseKeystoreCandidates = [
+                    signingProps['storeFile'] ? file(signingProps['storeFile']) : null,
+                    signingProps['KEYSTORE_FILE'] ? file(signingProps['KEYSTORE_FILE']) : null,
+                    rootProject.file("anyNews.jks"),
+                    rootProject.file("../production/jks/cred/anyNews.jks"),
+                    file("${projectDir}/../anyNews.jks"),
+                    file('R:\\work\\AndroidStudioProjects\\anynews\\gitLab\\AnyNews\\anyNews.jks'),
+            ].findAll { it != null }
+            def releaseKeystore = releaseKeystoreCandidates.find { it.exists() }
+            if (releaseKeystore == null) {
+                throw new GradleException(
+                        "Release keystore anyNews.jks not found. Place the Play upload keystore at " +
+                        "android/anyNews.jks or production/jks/cred/anyNews.jks (do not use debug.keystore).")
             }
-            if (releaseKeystore.exists()) {
-                storeFile releaseKeystore
-                // Prefer keystore.properties / local.properties; fallback keeps local assembleRelease working.
-                storePassword signingProps['storePassword'] ?: signingProps['KEYSTORE_STORE_PASSWORD'] ?: 'sagiam123'
-                keyAlias signingProps['keyAlias'] ?: signingProps['KEYSTORE_KEY_ALIAS'] ?: 'anyNews'
-                keyPassword signingProps['keyPassword'] ?: signingProps['KEYSTORE_KEY_PASSWORD'] ?: '123sagiam'
-            } else {
-                storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
-                storePassword 'android'
-                keyAlias 'androiddebugkey'
-                keyPassword 'android'
-            }
+            storeFile releaseKeystore
+            // Prefer keystore.properties / local.properties; hardcoded fallback matches historical upload key.
+            storePassword signingProps['storePassword'] ?: signingProps['KEYSTORE_STORE_PASSWORD'] ?: 'sagiam123'
+            keyAlias signingProps['keyAlias'] ?: signingProps['KEYSTORE_KEY_ALIAS'] ?: 'anyNews'
+            keyPassword signingProps['keyPassword'] ?: signingProps['KEYSTORE_KEY_PASSWORD'] ?: '123sagiam'
         }
     }
     namespace "com.anyNews.anynews"
