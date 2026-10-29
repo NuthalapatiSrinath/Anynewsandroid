@@ -13884,6 +13884,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     public static void resetPlaybackOnFeedReload() {
         discardSavedPlaybackUntilNextStart = true;
         try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
+        try {
             if (exoPlayer != null) {
                 exoPlayer.setPlayWhenReady(false);
                 try {

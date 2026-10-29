@@ -10070,6 +10070,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performDailyUpdatesOpen() {
         showLog("performDailyUpdatesOpen");
+        // Leave article context (hub covers flip) — same as Special / Profile.
+        try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
         localFeedFromDailyUpdates = false;
         hideLocalFeedChrome();
         if (!ProfileHubConfigHelper.isFooterShowVideos(this) || !isDeviceOnline()) {
@@ -10249,6 +10254,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("performCalendarOpen raasi=" + openRaasi + " fromDu=" + fromDailyUpdates);
         if (!isDeviceOnline()) {
             return;
+        }
+        // Leaving the article flip for calendar/Panchangam/Rashi.
+        try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
         }
         calendarFromDailyUpdates = fromDailyUpdates;
         bumpHomeModeChromeAutoHideOnInteraction();
@@ -16706,6 +16716,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void performFeedReload() {
         showLog("performFeedReload initialCall=" + initialCall);
+        // News re-tap / refresh leaves the current article context — stop read-aloud.
+        // Video reset below does not touch TTS; Special open already stops in its path.
+        try {
+            ArticleTtsHelper.stopAll();
+        } catch (Exception ignored) {
+        }
         skipFeedNetworkForPositionKeep = false;
         try {
             FeedPositionKeepConfig.clear(this);
