@@ -61,9 +61,9 @@ android {
         minSdkVersion 24
         targetSdk 36
         multiDexEnabled true
-        // Play 504: greeting art refresh must not seat FlipView onto Shubodayam. Target API 36.
-        versionCode 504
-        versionName "3.42.42"
+        // Play 505: TTS fail-only Google engine + install help (happy path unchanged). Target API 36.
+        versionCode 505
+        versionName "3.42.43"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
