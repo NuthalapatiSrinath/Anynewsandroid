@@ -16340,16 +16340,34 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Nullable
     private ModelClass.Datum findGreetingInList(
             @Nullable java.util.List<ModelClass.Datum> rows) {
-        if (rows == null || rows.isEmpty()) {
+        int idx = findGreetingIndexInList(rows);
+        if (idx < 0 || rows == null) {
             return null;
         }
-        for (int i = 0; i < rows.size(); i++) {
-            ModelClass.Datum d = rows.get(i);
-            if (isGreetingFeedDatum(d)) {
-                return d;
+        return rows.get(idx);
+    }
+
+    /** Index of the sealed/remembered greeting card, or -1. */
+    private int findGreetingIndexInList(
+            @Nullable java.util.List<ModelClass.Datum> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return -1;
+        }
+        if (appliedGreetingPostId > 0L) {
+            for (int i = 0; i < rows.size(); i++) {
+                ModelClass.Datum d = rows.get(i);
+                if (d != null && d.getPostId() != null
+                        && d.getPostId() == appliedGreetingPostId) {
+                    return i;
+                }
             }
         }
-        return null;
+        for (int i = 0; i < rows.size(); i++) {
+            if (isGreetingFeedDatum(rows.get(i))) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -16506,31 +16524,37 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return changed;
     }
 
+    /**
+     * Refresh greeting scrap only when the user is already on that card.
+     * {@link FlipView#rebindSettledPage(int)} seats FlipView onto {@code page} —
+     * calling it with the greeting index opened Shubodayam on every art/slot
+     * refresh (502/503 OpenPath / onResume / poll). Never navigate to greeting.
+     */
     private void rebindGreetingCardIfVisible(String reason) {
         if (mFlipView == null || list == null || list.isEmpty()) {
             return;
         }
         try {
-            int target = -1;
-            if (appliedGreetingPostId > 0L) {
-                for (int i = 0; i < list.size(); i++) {
-                    ModelClass.Datum d = list.get(i);
-                    if (d != null && d.getPostId() != null
-                            && d.getPostId() == appliedGreetingPostId) {
-                        target = i;
-                        break;
-                    }
+            int target = findGreetingIndexInList(list);
+            if (target < 0) {
+                return;
+            }
+            int current = -1;
+            try {
+                current = mFlipView.getCurrentPage();
+            } catch (Exception ignored) {
+            }
+            if (current < 0) {
+                try {
+                    current = resolveCurrentFlipIndexForSave();
+                } catch (Exception ignored) {
                 }
             }
-            if (target < 0) {
-                for (int i = 0; i < list.size(); i++) {
-                    if (isGreetingFeedDatum(list.get(i))) {
-                        target = i;
-                        break;
-                    }
-                }
-            }
-            if (target < 0) {
+            if (current != target) {
+                showLog("greeting art keep seat reason=" + reason
+                        + " greetingAt=" + target
+                        + " current=" + current
+                        + " post=" + appliedGreetingPostId);
                 return;
             }
             showLog("greeting art rebind reason=" + reason + " at=" + target
@@ -17326,11 +17350,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 keepDailyUpdatesCovered();
                 paintedFromDisk = list != null && !list.isEmpty();
                 // Warm OpenPath can still hold afternoon Madhyahnam after night
-                // starts (same post_id). Discard that frame and always hit network.
+                // starts (same post_id). Keep the painted news seat and force
+                // network — do NOT hardClear + rebindSettledPage(greeting) (that
+                // opened Shubodayam after 1–3s on 502/503).
                 if (paintedFromDisk && openPathGreetingStaleForCurrentSlot()) {
-                    showLog("OpenPath: discard stale greeting seal for IST slot "
+                    showLog("OpenPath: stale greeting seal for IST slot "
                             + GreetingDayPartHelper.slotLabel(
-                                    GreetingDayPartHelper.currentSlot()));
+                                    GreetingDayPartHelper.currentSlot())
+                            + " — keep seat, force network art");
                     try {
                         OpenPathCache.clearFeed(this);
                         OpenPathCache.forceNextFeedNetwork(this);
@@ -17339,22 +17366,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     try {
                         softMergeOnNextPage0 = false;
                         forceGreetingArtRebindOnNextConvert = true;
-                        hardClearFlipFeedImmediate();
+                        int flipIndex = resolveCurrentFlipIndexForSave();
+                        long postId = resolvePostIdForFlipIndex(flipIndex);
+                        pendingRestoreFlipIndex = flipIndex;
+                        pendingRestorePostId = postId;
+                        pendingFlipRestore = flipIndex > 0 || postId > 0;
                     } catch (Exception ignored) {
-                        try {
-                            if (list != null) {
-                                list.clear();
-                            }
-                        } catch (Exception ignored2) {
-                        }
                     }
-                    paintedFromDisk = false;
-                    paintedSkip = 0;
-                    paintedActualSkip = 0;
-                    paintedLastPostId = 0;
-                    last_post_id = 0;
-                    skip = 0;
-                    actual_skip = 0;
+                    // Keep paintedFromDisk / cursors so FlipView stays on news
+                    // until page-0 swaps greeting art in place.
                 } else if (paintedFromDisk) {
                     // Stamp applied* from disk so network night vs afternoon rebinds.
                     try {
@@ -18718,15 +18738,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
                         // Soft reconnect merges are main-feed only. Special/Video/Local always
                         // replace so My Feed offline pack never bleeds into those tabs.
-                        // Greeting media URL/etag change must NOT soft-merge quietly —
-                        // FlipView would keep prior-slot art for the same post_id.
+                        // Greeting art URL/etag change: prefer in-place soft replace at the
+                        // same index. Only bust soft-merge when the greeting must leave
+                        // (gap / omitted). Never seat FlipView onto Shubodayam.
                         try {
                             if (!fromCache && (replacePage0 || softMergeOnNextPage0)) {
                                 // OpenPath already saved this page-0 body in onResponse —
                                 // do not clearFeed here (that wiped the fresh night seal).
                                 if (noteGreetingArtFromPayload(validateUserOtp.getData())) {
                                     forceGreetingArtRebindOnNextConvert = true;
-                                    softMergeOnNextPage0 = false;
+                                    if (findGreetingInList(validateUserOtp.getData()) == null) {
+                                        softMergeOnNextPage0 = false;
+                                    }
                                 }
                             }
                         } catch (Exception ignored) {
@@ -18735,14 +18758,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 && listSizeBeforeAppend > 0 && isDeviceOnline()
                                 && !specialNow && !videoNow
                                 && category_id != -1
-                                && !searchFeedActive
-                                && !forceGreetingArtRebindOnNextConvert;
+                                && !searchFeedActive;
                         if (softMerge) {
                             softMergeOnNextPage0 = false;
                             addUniqueArticles(validateUserOtp.getData());
                             // Soft-merge must not reintroduce half posts in Special.
                             if (isSpecialFeedMode()) {
                                 filterListStripHalfPosts(list);
+                            }
+                            // Same-index greeting art swap: refresh scrap only if the
+                            // user is already on that card (never flipTo greeting).
+                            if (forceGreetingArtRebindOnNextConvert) {
+                                forceGreetingArtRebindOnNextConvert = false;
+                                rebindGreetingCardIfVisible("art_changed_soft");
                             }
                             try {
                                 // Shared list already mutated — grow FlipView quietly
@@ -19185,12 +19213,41 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                         mFlipView.beginForcedPage0Seat();
                                     }
                                 }
-                                // Greeting art URL/etag change: immediate rebind so
+                                // Greeting art URL/etag change: refresh list data so
                                 // same post_id cannot keep prior-slot Madhyahnam scrap.
+                                // Never seat FlipView onto the greeting card — only
+                                // rebindSettledPage when the user is already on it.
                                 if (!fromCache && forceGreetingArtRebindOnNextConvert) {
                                     forceGreetingArtRebindOnNextConvert = false;
+                                    int keepSeat = -1;
+                                    long keepPostId = 0L;
+                                    try {
+                                        keepSeat = mFlipView != null
+                                                ? mFlipView.getCurrentPage() : -1;
+                                        if (keepSeat < 0) {
+                                            keepSeat = resolveCurrentFlipIndexForSave();
+                                        }
+                                        keepPostId = resolvePostIdForFlipIndex(keepSeat);
+                                    } catch (Exception ignored) {
+                                    }
                                     adapter.setDataImmediate(list);
                                     rebindGreetingCardIfVisible("art_changed");
+                                    // Belt: if notify/rebind drifted off the article
+                                    // the user was reading, restore that seat (never
+                                    // leave them on Shubodayam after an art-only swap).
+                                    try {
+                                        int greetingAt = findGreetingIndexInList(list);
+                                        int nowSeat = mFlipView != null
+                                                ? mFlipView.getCurrentPage() : -1;
+                                        if (keepPostId > 0L && greetingAt >= 0
+                                                && nowSeat == greetingAt
+                                                && keepSeat != greetingAt) {
+                                            pendingRestoreFlipIndex = keepSeat;
+                                            pendingRestorePostId = keepPostId;
+                                            pendingFlipRestore = true;
+                                        }
+                                    } catch (Exception ignored) {
+                                    }
                                 } else {
                                     adapter.setData(list);
                                 }
