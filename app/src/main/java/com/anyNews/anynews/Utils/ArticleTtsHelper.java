@@ -86,6 +86,11 @@ public final class ArticleTtsHelper {
     private static final AtomicBoolean helpPromptedThisSpeak = new AtomicBoolean(false);
     /** Transient: next {@link #ensureTts} must bind {@code com.google.android.tts}. */
     private static boolean forceGoogleNextInit;
+    /**
+     * Bumped on every {@link #stopAll}/{@link #stopIfNotCurrent} so a late Google-engine
+     * {@code onInit} / fail-path retry cannot resume speak after the user left the article.
+     */
+    private static int speakEpoch;
 
     private ArticleTtsHelper() {}
 
@@ -175,11 +180,15 @@ public final class ArticleTtsHelper {
     public static void stopIfNotCurrent(@Nullable Long currentPostId) {
         if (speakingPostId == null) return;
         if (currentPostId != null && speakingPostId.equals(currentPostId)) return;
-        stopSpeaking(true);
+        stopSpeaking(true, true);
     }
 
+    /**
+     * Hard stop: leave article / Daily Updates / News reload / Profile / background.
+     * Cancels in-flight engine init callbacks so audio cannot restart after navigation.
+     */
     public static void stopAll() {
-        stopSpeaking(true);
+        stopSpeaking(true, true);
     }
 
     private static void toggle(
@@ -194,7 +203,7 @@ public final class ArticleTtsHelper {
         }
         final boolean thisSpeaking = isSpeakingPost(postId) && isSpeaking();
         if (thisSpeaking) {
-            stopSpeaking(true);
+            stopSpeaking(true, false);
             return;
         }
         speak(app, postId, text, speakerBtn, pulseView, style);
@@ -207,15 +216,23 @@ public final class ArticleTtsHelper {
             @NonNull ImageView speakerBtn,
             @Nullable View pulseView,
             int style) {
-        stopSpeaking(false);
+        stopSpeaking(false, false);
         speakingPostId = postId;
         googleTriedThisSpeak = false;
         helpPromptedThisSpeak.set(false);
+        final int epoch = speakEpoch;
         final String utteranceId = UTTERANCE_PREFIX + (++utteranceSeq);
         activeUtteranceId = utteranceId;
         registerOrUpdateSlot(speakerBtn, pulseView, style, postId);
         applyAllSlotsUi(true);
-        ensureTts(app, () -> continueSpeakAfterReady(app, postId, text, utteranceId));
+        ensureTts(
+                app,
+                () -> {
+                    if (epoch != speakEpoch) {
+                        return;
+                    }
+                    continueSpeakAfterReady(app, postId, text, utteranceId);
+                });
     }
 
     /**
@@ -285,13 +302,13 @@ public final class ArticleTtsHelper {
                             return;
                         }
                         if (!applyVoiceConfig(app)) {
-                            stopSpeaking(true);
+                            stopSpeaking(true, false);
                             promptMissingLanguageData(app);
                             return;
                         }
                         int result = enqueueSpeak(text, utteranceId);
                         if (result != TextToSpeech.SUCCESS) {
-                            stopSpeaking(true);
+                            stopSpeaking(true, false);
                             if (languageMissing) {
                                 promptMissingLanguageData(app);
                             } else {
@@ -304,7 +321,7 @@ public final class ArticleTtsHelper {
                     });
             return;
         }
-        stopSpeaking(true);
+        stopSpeaking(true, false);
         if (languageMissing) {
             promptMissingLanguageData(app);
         } else {
@@ -372,7 +389,7 @@ public final class ArticleTtsHelper {
                                                     }));
                             return;
                         }
-                        stopSpeaking(true);
+                        stopSpeaking(true, false);
                         if (userSpeak) {
                             promptMissingEngine(app);
                         }
@@ -392,7 +409,7 @@ public final class ArticleTtsHelper {
                                 public void onDone(String utteranceId) {
                                     MAIN.post(() -> {
                                         if (!isActiveUtterance(utteranceId)) return;
-                                        stopSpeaking(true);
+                                        stopSpeaking(true, false);
                                     });
                                 }
 
@@ -400,7 +417,7 @@ public final class ArticleTtsHelper {
                                 public void onError(String utteranceId) {
                                     MAIN.post(() -> {
                                         if (!isActiveUtterance(utteranceId)) return;
-                                        stopSpeaking(true);
+                                        stopSpeaking(true, false);
                                     });
                                 }
 
@@ -730,17 +747,32 @@ public final class ArticleTtsHelper {
         return TtsLanguageLocales.forLanguageId(languageId(context));
     }
 
-    private static void stopSpeaking(boolean resetUi) {
+    /**
+     * @param resetUi speaker pulse / icon
+     * @param cancelPending when true (leave article / stopAll), bump epoch, drop
+     *     queued {@code ensureTts} runnables, stop + shutdown engine so Google-retry
+     *     audio cannot keep playing after Daily Updates / News reload
+     */
+    private static void stopSpeaking(boolean resetUi, boolean cancelPending) {
         // Drop the active id before tts.stop() so a synchronous onDone cannot
         // clear a read that starts immediately afterwards.
         activeUtteranceId = null;
+        speakingPostId = null;
+        if (cancelPending) {
+            speakEpoch++;
+            pendingReady.clear();
+            ttsInitializing = false;
+            forceGoogleNextInit = false;
+        }
         try {
-            if (tts != null && ttsReady) {
+            if (tts != null) {
                 tts.stop();
             }
         } catch (Exception ignored) {
         }
-        speakingPostId = null;
+        if (cancelPending) {
+            shutdownTtsEngine();
+        }
         if (resetUi) {
             applyAllSlotsUi(false);
         }
@@ -750,6 +782,7 @@ public final class ArticleTtsHelper {
 
     private static void shutdownTtsEngine() {
         ttsReady = false;
+        ttsInitializing = false;
         appliedVoiceKey = "";
         voicesPreloaded = false;
         try {
