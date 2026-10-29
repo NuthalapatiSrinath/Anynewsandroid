@@ -3728,7 +3728,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     suppressBottomNavCallbacks = false;
                 }
                 if (tabId == R.id.navigation_home) {
-                    performFeedReload();
+                    // Profile/deep-link → News: warm OpenPath when possible.
+                    final boolean leavingOther = isCalendarMode()
+                            || isDailyUpdatesMode()
+                            || specialFeedModeActive
+                            || explicitSpecialOpen;
+                    performFeedReload(!leavingOther);
                 } else if (tabId == R.id.navigation_catagiries) {
                     performSpecialFeedOpen();
                 } else if (tabId == R.id.navigation_status) {
@@ -15877,6 +15882,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * {@link Constants#isUnreadPostsSelected}.
      */
     private void prepareFreshPage0FeedCursors() {
+        prepareFreshPage0FeedCursors(true, true);
+    }
+
+    /**
+     * @param wipeFlip when true, {@link #hardClearFlipFeedImmediate()} (Special / cold Reload).
+     *                 when false, keep the current FlipView / warm paint on screen.
+     * @param forceNetwork when true, {@link OpenPathCache#forceNextFeedNetwork} (zeros main
+     *                     NET_AT). Special must pass false so returning to News can still use
+     *                     a warm main OpenPath TTL — Special already forces network via its mode flag.
+     */
+    private void prepareFreshPage0FeedCursors(boolean wipeFlip, boolean forceNetwork) {
         // Invalidate any in-flight list response from a previous feed mode.
         feedModeEpoch++;
         clearPendingFlipRestore();
@@ -15898,9 +15914,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Fresh feed mode page-0: reset soft-empty skip streak (shared News/Special/Video cap).
         onlineNewsAllReadSkipStreak = 0;
         no_article_message = FEED_LOADING_MESSAGE;
-        // Sync-clear FlipView adapter data BEFORE nulling HomePage.adapter (prior bug:
-        // adapter=null skipped setData clear, so FlipView kept News half posts).
-        hardClearFlipFeedImmediate();
+        if (wipeFlip) {
+            // Sync-clear FlipView adapter data BEFORE nulling HomePage.adapter (prior bug:
+            // adapter=null skipped setData clear, so FlipView kept News half posts).
+            hardClearFlipFeedImmediate();
+            try {
+                hasSavedOnlineNewsSession = false;
+                savedOnlineNewsList.clear();
+            } catch (Exception ignored) {
+            }
+        }
         pruneImpressedNativeAdsKeepWarm();
         // Keep shared warm pool; top up only when empty while page-0 is in flight.
         try {
@@ -15909,13 +15932,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception ignored) {
         }
-        OpenPathCache.forceNextFeedNetwork(this);
-        category_id = 0;
-        try {
-            hasSavedOnlineNewsSession = false;
-            savedOnlineNewsList.clear();
-        } catch (Exception ignored) {
+        if (forceNetwork) {
+            OpenPathCache.forceNextFeedNetwork(this);
         }
+        category_id = 0;
     }
 
     /**
@@ -15933,7 +15953,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         softMergeOnNextPage0 = false;
         explicitSpecialOpen = true;
         setFeedModeFlags(true, false);
-        prepareFreshPage0FeedCursors();
+        // Wipe FlipView so Special never flashes News cards, but do NOT
+        // forceNextFeedNetwork / zero main OpenPath NET_AT — Special already
+        // networks via isSpecialFeedMode, and News return needs warm TTL.
+        prepareFreshPage0FeedCursors(true, false);
         // prepareFresh also bumps epoch again after mode flag (stale News responses die).
         try {
             OfflinePackPrefetcher.get().resetSession();
@@ -16713,9 +16736,24 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * <p>
      * Offline: re-paint OfflineFeedStore / OpenPathCache without blanking the
      * adapter first (same reliable path as cold offline open after rebind).
+     * <p>
+     * Default forces a network page-0 (explicit Reload). Prefer
+     * {@link #performFeedReload(boolean)} with {@code false} when returning from
+     * Special / Daily Updates / Calendar so warm OpenPath can paint instantly.
      */
     private void performFeedReload() {
-        showLog("performFeedReload initialCall=" + initialCall);
+        performFeedReload(true);
+    }
+
+    /**
+     * @param forceNetworkRefresh true = explicit Reload (warm paint if possible, then
+     *                            always soft-refresh network). false = tab return
+     *                            (Special→News etc.): warm OpenPath / disk immediately;
+     *                            network only when main OpenPath TTL is stale.
+     */
+    private void performFeedReload(boolean forceNetworkRefresh) {
+        showLog("performFeedReload initialCall=" + initialCall
+                + " forceNet=" + forceNetworkRefresh);
         // News re-tap / refresh leaves the current article context — stop read-aloud.
         // Video reset below does not touch TTS; Special open already stops in its path.
         try {
@@ -16798,8 +16836,53 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         // Hold the middle column across the empty-list gap. Hiding it rebuilds
         // the footer and a fast second tap is delivered to Profile.
         footerCenterSlotFrozenForReload = true;
-        // Online: full page-0 reset then network inlist (same as cold soft restart).
-        prepareFreshPage0FeedCursors();
+
+        // Warm OpenPath page-0 first (Special→News / Reload) — same idea as Flash
+        // paintCachedFlashFeed. Avoid blank skeleton when disk is still warm.
+        final boolean haveWarm = OpenPathCache.loadFeedForInstantPaint(
+                this, 0, OpenPathCache.FEED_MODE_MAIN) != null;
+        if (haveWarm) {
+            // Keep FlipView; do not force-network yet (would skip inlist warm path
+            // and zero NET_AT). Explicit Reload sets force after paint below.
+            prepareFreshPage0FeedCursors(false, false);
+            OpenPathCache.clearForceFeedNetwork();
+            boolean warmed = paintWarmMainFeedFromOpenPath();
+            if (warmed) {
+                try {
+                    if (comment_page != null) {
+                        comment_page.setVisibility(View.GONE);
+                    }
+                } catch (Exception ignored) {
+                }
+                final boolean needNet = forceNetworkRefresh
+                        || OpenPathCache.shouldNetworkRefreshFeed(this, false);
+                if (!needNet) {
+                    showLog("performFeedReload: warm OpenPath only (TTL fresh)");
+                    footerCenterSlotFrozenForReload = false;
+                    try {
+                        updateCenterFab();
+                    } catch (Exception ignored) {
+                    }
+                    return;
+                }
+                // Soft-refresh over the already-painted seat (no hardClear).
+                softMergeOnNextPage0 = !forceNetworkRefresh;
+                if (forceNetworkRefresh) {
+                    OpenPathCache.forceNextFeedNetwork(this);
+                }
+                try {
+                    last_post_id = 0;
+                    skip = 0;
+                    actual_skip = 0;
+                } catch (Exception ignored) {
+                }
+                inlist(0);
+                return;
+            }
+        }
+
+        // Cold path: no warm main OpenPath — wipe + skeleton + forced network.
+        prepareFreshPage0FeedCursors(true, true);
         try {
             showHomeFeedLoadingReveal();
             layout_with_data.setVisibility(View.GONE);
@@ -16807,6 +16890,46 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         inlist(0);
+    }
+
+    /**
+     * Instant main My Feed paint from warm OpenPath page-0 (≤{@link OpenPathCache#FEED_DISK_TTL_MS}).
+     * Never paints Special / Flash / Local. Mirrors {@link #paintCachedFlashFeed()}.
+     *
+     * @return true when at least one item was painted
+     */
+    private boolean paintWarmMainFeedFromOpenPath() {
+        try {
+            EncreptionRequest cached = OpenPathCache.loadFeedForInstantPaint(
+                    this, 0, OpenPathCache.FEED_MODE_MAIN);
+            if (cached == null || TextUtils.isEmpty(cached.getData())) {
+                return false;
+            }
+            convertListOfArticles(cached, 0, true);
+            if (list == null || list.isEmpty()
+                    || ReadArticleStore.countPaintableArticles(list) <= 0) {
+                return false;
+            }
+            try {
+                rebindFlipperAdapterWithCurrentList();
+            } catch (Exception ignored) {
+            }
+            hideHomeFeedLoadingReveal(true);
+            if (txtNoData != null) {
+                txtNoData.setVisibility(View.GONE);
+            }
+            if (mFlipView != null) {
+                mFlipView.setVisibility(View.VISIBLE);
+            }
+            if (layout_with_data != null) {
+                layout_with_data.setVisibility(View.VISIBLE);
+            }
+            showLog("OpenPath: warm main paint size=" + list.size());
+            return true;
+        } catch (Exception e) {
+            Logone.w(e, "paintWarmMainFeedFromOpenPath");
+            return false;
+        }
     }
 
     /**
@@ -22758,12 +22881,19 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     showLog(" layout_with_out_data:::" + layout_with_out_data.getVisibility());
                     showLog(" layout_with_data:::" + layout_with_data.getVisibility());
                     showLog(" txtNoData:::" + txtNoData.getVisibility());
-                    if (initialCall || isCalendarMode() || isDailyUpdatesMode()) {
+                    // Capture before performFeedReload clears Special / overlay modes.
+                    final boolean leavingOtherSurface = isCalendarMode()
+                            || isDailyUpdatesMode()
+                            || specialFeedModeActive
+                            || explicitSpecialOpen;
+                    if (initialCall || leavingOtherSurface) {
                         // Soft restart: clear push sticky + flip restore + fetch skip=0.
                         // Leaves Special/Calendar/Daily Updates if open and reloads My Feed page 0.
                         // Avoid activity CLEAR_TASK recreate (re-applied flip-restore prefs
                         // and could re-land with stale state).
-                        performFeedReload();
+                        // Tab return → warm OpenPath first (no blank skeleton). Explicit
+                        // News-only path still forces network via performFeedReload().
+                        performFeedReload(!leavingOtherSurface);
                     }
                     return true;
                 case R.id.navigation_catagiries:
