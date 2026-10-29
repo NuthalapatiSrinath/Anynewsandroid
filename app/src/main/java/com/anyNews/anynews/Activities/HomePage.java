@@ -16895,6 +16895,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /**
      * Instant main My Feed paint from warm OpenPath page-0 (≤{@link OpenPathCache#FEED_DISK_TTL_MS}).
      * Never paints Special / Flash / Local. Mirrors {@link #paintCachedFlashFeed()}.
+     * <p>
+     * Always seats at the <b>first</b> card (index 0). Tab return from Special / Daily
+     * Updates / Calendar / Profile must not resume the prior mid-feed flip position —
+     * FlipView's dataset restore would otherwise keep article N after a warm rebind.
      *
      * @return true when at least one item was painted
      */
@@ -16905,13 +16909,47 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (cached == null || TextUtils.isEmpty(cached.getData())) {
                 return false;
             }
+            // Lock FlipView to page 0 before convert/setData so dataSetChanged cannot
+            // clamp onto the Special/DU leftover mid-feed seat (same article still in
+            // warm page-0).
+            positionx = 0;
+            lastSettledFlipIndex = -1;
+            clearPendingFlipRestore();
+            try {
+                if (mFlipView != null) {
+                    mFlipView.resetSeatForNewFeed();
+                    mFlipView.beginForcedPage0Seat();
+                }
+            } catch (Exception ignored) {
+            }
             convertListOfArticles(cached, 0, true);
             if (list == null || list.isEmpty()
                     || ReadArticleStore.countPaintableArticles(list) <= 0) {
+                try {
+                    if (mFlipView != null) {
+                        mFlipView.releaseForcedPage0Seat();
+                    }
+                } catch (Exception ignored) {
+                }
                 return false;
             }
             try {
                 rebindFlipperAdapterWithCurrentList();
+            } catch (Exception ignored) {
+            }
+            // Belt: setData / setAdapter can still leave a deferred restore on N.
+            try {
+                positionx = 0;
+                lastSettledFlipIndex = -1;
+                if (adapter != null) {
+                    adapter.setCurrentFlipPage(0);
+                }
+                if (mFlipView != null) {
+                    mFlipView.beginForcedPage0Seat();
+                    if (mFlipView.getPageCount() > 0) {
+                        mFlipView.flipTo(0);
+                    }
+                }
             } catch (Exception ignored) {
             }
             hideHomeFeedLoadingReveal(true);
@@ -16924,7 +16962,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (layout_with_data != null) {
                 layout_with_data.setVisibility(View.VISIBLE);
             }
-            showLog("OpenPath: warm main paint size=" + list.size());
+            showLog("OpenPath: warm main paint size=" + list.size()
+                    + " seat0 forced");
             return true;
         } catch (Exception e) {
             Logone.w(e, "paintWarmMainFeedFromOpenPath");
