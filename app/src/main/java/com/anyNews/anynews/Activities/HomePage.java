@@ -97,6 +97,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
@@ -631,6 +632,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Article the open comments sheet was loaded for. Send must use this, not a later flip-page lookup. */
     private long commentsSheetPostId = 0L;
     private long commentsSheetSubPostId = 0L;
+    /** MIUI / Android 13+ predictive back: gesture must close comments before any exit path. */
+    private OnBackPressedCallback commentsPredictiveBackCallback;
     public  boolean adImpress=false;
     public  String adError="";
 
@@ -1376,6 +1379,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
 
         incomment();
+        registerHomePredictiveBack();
 
         //inpostarticales();
 
@@ -8276,16 +8280,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         commet_close.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                comment_page.setVisibility(View.GONE);
-                commentsSheetPostId = 0L;
-                commentsSheetSubPostId = 0L;
-                leave_comment_white.setText("");
-                clearReplyContext();
-                refreshVisibleCommentCountChrome();
-                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (imm != null) {
-                    imm.hideSoftInputFromWindow(leave_comment_white.getWindowToken(), 0);
-                }
+                closeCommentsOverlay();
             }
         });
 
@@ -19653,9 +19648,64 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     }
 
+    /**
+     * Close comments overlay and restore article chrome. Used by X button and system/gesture back.
+     * Must run before double-tap-exit so MIUI edge swipe never finishes the feed Activity.
+     */
+    private boolean closeCommentsOverlay() {
+        if (comment_page == null || !comment_page.isShown()) {
+            return false;
+        }
+        comment_page.setVisibility(View.GONE);
+        commentsSheetPostId = 0L;
+        commentsSheetSubPostId = 0L;
+        if (leave_comment_white != null) {
+            leave_comment_white.setText("");
+        }
+        clearReplyContext();
+        refreshVisibleCommentCountChrome();
+        try {
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null && leave_comment_white != null) {
+                imm.hideSoftInputFromWindow(leave_comment_white.getWindowToken(), 0);
+            }
+        } catch (Exception ignored) {
+        }
+        return true;
+    }
+
+    /**
+     * Predictive back (Android 13+ / MIUI gesture): intercept system back so Comments → article,
+     * never Activity finish / launcher while the overlay is open.
+     */
+    private void registerHomePredictiveBack() {
+        if (commentsPredictiveBackCallback != null) {
+            return;
+        }
+        commentsPredictiveBackCallback = new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                handleHomeBackNavigation();
+            }
+        };
+        getOnBackPressedDispatcher().addCallback(this, commentsPredictiveBackCallback);
+    }
+
+    @Override
     public void onBackPressed() {
+        // Legacy path; dispatcher + OnBackPressedCallback is primary for gesture / predictive back.
+        handleHomeBackNavigation();
+    }
+
+    private void handleHomeBackNavigation() {
         showLog("isPlayingVideoInFullScreen"+FlipperAdapter.fullscreen);
         showLog("isPlayingVideoInFullScreen"+isPlayingVideoInFullScreen);
+
+        // 1) Comments overlay ALWAYS first — never subject to double-tap-exit window.
+        if (closeCommentsOverlay()) {
+            return;
+        }
+
         // Nested magazine / Special gallery FlipView: back = previous page (not exit).
         // Also covers News-tab magazines if a nested FlipView is present.
         if (mFlipView != null) {
@@ -19689,6 +19739,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             }
             if (mBackPressed + 2000 > System.currentTimeMillis()) {
+                // Minimize to launcher — never finishAffinity / finish HomePage from gesture back.
                 Intent setIntent = new Intent(Intent.ACTION_MAIN);
                 setIntent.addCategory(Intent.CATEGORY_HOME);
                 setIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -19697,67 +19748,60 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
                 return;
 
+            } else if (txtNoData != null && txtNoData.getVisibility() == View.VISIBLE) {
+                showLog("Check Point #2 : HomePage.setOnClickListener ");
+                Intent intent = new Intent(HomePage.this, HomePage.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+                    startActivity(intent);
+                }
+                finish();
+            } else if (FlipperAdapter.fullscreen) {
+                try {
+                    if (mFlipView != null && ppi >= 0 && ppi < mFlipView.getChildCount()) {
+                        View flipChild = mFlipView.getChildAt(ppi);
+                        if (flipChild != null) {
+                            PlayerView simpleExoPlayerView = flipChild.findViewById(R.id.normal_video_player);
+                            ConstraintLayout layoutParentTop;
+                            LinearLayout layoutParentTitle;
+                            LinearLayout layoutParentReportDetails;
+                            LinearLayout layoutParentMiddle;
+                            layoutParentTop = flipChild.findViewById(R.id.layoutParentTop);
+                            layoutParentTitle = flipChild.findViewById(R.id.layoutParentTitle);
+                            layoutParentReportDetails = flipChild.findViewById(R.id.ll_footer_layout);
+                            layoutParentMiddle = flipChild.findViewById(R.id.layoutParentMiddle);
+                            adapter.showExoPlayerInFullScreen(FlipperAdapter.fullscreen, simpleExoPlayerView, layoutParentTop, layoutParentMiddle, layoutParentReportDetails, layoutParentTitle);
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+            } else if (isPlayingVideoInFullScreen) {
+                try {
+                    if (adapter.customPlayerUiController != null) {
+                        adapter.customPlayerUiController.onYouTubePlayerExitFullScreen();
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
             } else {
+                if (isCenterPlusMenuOpen()) {
+                    closeCenterPlusMenu(true);
+                } else {
 
-                if (comment_page.isShown()) {
-                    comment_page.setVisibility(View.GONE);
-
-                } else if(txtNoData.getVisibility()==View.VISIBLE){
-                    showLog("Check Point #2 : HomePage.setOnClickListener ");
-                    Intent intent = new Intent(HomePage.this, HomePage.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                        startActivity(intent);
+                    if (languageModelResponse != null && languageModelResponse.getData() != null
+                            && languageModelResponse.getData().getTapToExit() != null) {
+                        Toast.makeText(getBaseContext(), languageModelResponse.getData().getTapToExit(), Toast.LENGTH_SHORT).show();
                     }
-                    finish();
-                }else if(FlipperAdapter.fullscreen){
-                    try{
-                        if (mFlipView != null && ppi >= 0 && ppi < mFlipView.getChildCount()) {
-                            View flipChild = mFlipView.getChildAt(ppi);
-                            if (flipChild != null) {
-                                PlayerView simpleExoPlayerView = flipChild.findViewById(R.id.normal_video_player);
-                                ConstraintLayout layoutParentTop;
-                                LinearLayout layoutParentTitle;
-                                LinearLayout layoutParentReportDetails;
-                                LinearLayout layoutParentMiddle;
-                                layoutParentTop = flipChild.findViewById(R.id.layoutParentTop);
-                                layoutParentTitle = flipChild.findViewById(R.id.layoutParentTitle);
-                                layoutParentReportDetails = flipChild.findViewById(R.id.ll_footer_layout);
-                                layoutParentMiddle = flipChild.findViewById(R.id.layoutParentMiddle);
-                                adapter.showExoPlayerInFullScreen(FlipperAdapter.fullscreen, simpleExoPlayerView, layoutParentTop, layoutParentMiddle, layoutParentReportDetails, layoutParentTitle);
-                            }
-                        }
-                    }catch (Exception e){
-                        e.printStackTrace();
-                    }
-
-                }else if(isPlayingVideoInFullScreen){
-                    try{
-                        if(adapter.customPlayerUiController!=null){
-                            adapter.customPlayerUiController.onYouTubePlayerExitFullScreen();
-                        }
-
-                    }catch (Exception e){
-                        e.printStackTrace();
-                    }
-
+                    mBackPressed = System.currentTimeMillis();
                 }
-                else{
-                    if (isCenterPlusMenuOpen()) {
-                        closeCenterPlusMenu(true);
-                    } else {
-
-                        if (languageModelResponse != null && languageModelResponse.getData() != null
-                                && languageModelResponse.getData().getTapToExit() != null) {
-                            Toast.makeText(getBaseContext(), languageModelResponse.getData().getTapToExit(), Toast.LENGTH_SHORT).show();
-                        }
-                        mBackPressed = System.currentTimeMillis();
-                    }
-                }
-
             }
         } else {
-            super.onBackPressed();
+            // Fragment back stack present: pop it; do not finish the feed Activity.
+            getSupportFragmentManager().popBackStack();
         }
 
     }
