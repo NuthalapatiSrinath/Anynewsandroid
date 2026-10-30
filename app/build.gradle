@@ -62,8 +62,8 @@ android {
         targetSdk 36
         multiDexEnabled true
         // Play 506: stop article TTS on Daily Updates / News reload / leave article. Target API 36.
-        versionCode 508
-        versionName "3.42.46"
+        versionCode 509
+        versionName "3.42.47"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true

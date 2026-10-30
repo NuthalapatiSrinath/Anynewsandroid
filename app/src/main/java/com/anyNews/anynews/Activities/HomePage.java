@@ -67,6 +67,7 @@ import android.util.Log;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
@@ -3699,6 +3700,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Profile footer / post-login: open News, Daily Updates, Special, or Profile
      * without leaving the HomePage process (CLEAR_TOP + SINGLE_TOP).
      * Legacy Panchangam EXTRA still opens calendar in-host; footer tab is product-hidden.
+     * <p>
+     * News is applied <b>synchronously</b>: a deferred {@code post()} left Daily
+     * Updates / Special visible for ~1s after Profile {@code REORDER_TO_FRONT}
+     * because hosts and Special flags were cleared only after the first paint.
      */
     private void handleFooterTabExtra(@Nullable Intent intent) {
         if (intent == null || bottomNavigationView == null) {
@@ -3710,6 +3715,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         final int tabId = intent.getIntExtra(EXTRA_FOOTER_TAB, 0);
         intent.removeExtra(EXTRA_FOOTER_TAB);
         if (tabId == 0) {
+            return;
+        }
+        if (tabId == R.id.navigation_home) {
+            applyFooterNewsReturnFromProfileOrDeepLink();
             return;
         }
         bottomNavigationView.post(() -> {
@@ -3727,14 +3736,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 } finally {
                     suppressBottomNavCallbacks = false;
                 }
-                if (tabId == R.id.navigation_home) {
-                    // Profile/deep-link → News: warm OpenPath when possible.
-                    final boolean leavingOther = isCalendarMode()
-                            || isDailyUpdatesMode()
-                            || specialFeedModeActive
-                            || explicitSpecialOpen;
-                    performFeedReload(!leavingOther);
-                } else if (tabId == R.id.navigation_catagiries) {
+                if (tabId == R.id.navigation_catagiries) {
                     performSpecialFeedOpen();
                 } else if (tabId == R.id.navigation_status) {
                     performDailyUpdatesOpen();
@@ -3745,6 +3747,63 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 e.printStackTrace();
             }
         });
+    }
+
+    /**
+     * Profile / deep-link → News: clear DU / Special / calendar before the first
+     * frame, then warm OpenPath seat-0 (507/508). Must not defer via {@code post()}.
+     */
+    private void applyFooterNewsReturnFromProfileOrDeepLink() {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        try {
+            final boolean leavingOther = isCalendarMode()
+                    || isDailyUpdatesMode()
+                    || specialFeedModeActive
+                    || explicitSpecialOpen;
+            clearOverlaySurfacesForNewsReturn();
+            selectFooterTabWithoutMotion(R.id.navigation_home);
+            // Warm OpenPath when leaving DU/Special/Calendar; seat first card (508).
+            performFeedReload(!leavingOther);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Sync-hide Daily Updates / calendar hosts and drop Special mode flags so
+     * Profile→News never paints the previous surface for a frame. Safe to call
+     * before {@link #performFeedReload(boolean)} (reload clears again).
+     */
+    private void clearOverlaySurfacesForNewsReturn() {
+        final boolean wasSpecial = specialFeedModeActive || explicitSpecialOpen;
+        try {
+            restoreDailyUpdatesOnCreate = false;
+        } catch (Exception ignored) {
+        }
+        try {
+            hideHomeCalendarMode();
+        } catch (Exception ignored) {
+        }
+        try {
+            hideHomeDailyUpdatesMode();
+        } catch (Exception ignored) {
+        }
+        explicitSpecialOpen = false;
+        if (specialFeedModeActive || videoFeedModeActive) {
+            setFeedModeFlags(false, false);
+        }
+        // Leaving Special: FlipView still holds Special cards until warm News
+        // rebind — hide until paintWarm / cold skeleton shows News.
+        if (wasSpecial) {
+            try {
+                if (layout_with_data != null) {
+                    layout_with_data.setVisibility(View.GONE);
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     /** Process-once guard so feed cache refreshes cannot re-ask wave in the same session. */
@@ -10100,6 +10159,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         persistDailyUpdatesDestination(true);
         feedModeEpoch++;
         clearPendingFlipRestore();
+        // One footer check only — never Special orange + DU red together.
+        try {
+            enforceExclusiveFooterSelection(R.id.navigation_status);
+        } catch (Exception ignored) {
+        }
         try {
             bookmarksModeSelected = false;
             applyHomeModeContentVisibility();
@@ -10108,6 +10172,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             hideHomeFeedLoadingReveal(true);
+            // Abort mid-flip scrap under the hub (half Special + DU list).
+            if (mFlipView != null) {
+                mFlipView.resetSeatForNewFeed();
+                mFlipView.setVisibility(View.GONE);
+            }
             if (layout_with_data != null) {
                 layout_with_data.setVisibility(View.GONE);
             }
@@ -10128,6 +10197,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             if (homeDailyUpdatesHost != null) {
                 homeDailyUpdatesHost.setVisibility(View.VISIBLE);
+                homeDailyUpdatesHost.bringToFront();
                 homeDailyUpdatesHost.post(() -> {
                     if (isFinishing() || isDestroyed() || !isDailyUpdatesMode()) {
                         return;
@@ -12156,16 +12226,122 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         endFooterSelectionTransition();
-        if (bottomNavigationView.getSelectedItemId() == itemId) {
+        if (bottomNavigationView.getSelectedItemId() != itemId) {
+            final boolean prev = suppressBottomNavCallbacks;
+            suppressBottomNavCallbacks = true;
+            try {
+                bottomNavigationView.setSelectedItemId(itemId);
+            } catch (Exception ignored) {
+            } finally {
+                suppressBottomNavCallbacks = prev;
+            }
+            endFooterSelectionTransition();
+        }
+        // Always collapse dual orange (Special blink + another checked tab).
+        enforceExclusiveFooterSelection(itemId);
+    }
+
+    /**
+     * After Profile back / resume: footer highlight must match the live surface
+     * (never Profile check over Special content, never Special+DU dual orange).
+     */
+    private void syncFooterHighlightToActiveSurface() {
+        if (bottomNavigationView == null || isFinishing() || isDestroyed()) {
             return;
         }
-        final boolean prev = suppressBottomNavCallbacks;
-        suppressBottomNavCallbacks = true;
         try {
-            bottomNavigationView.setSelectedItemId(itemId);
+            Intent intent = getIntent();
+            if (intent != null && intent.hasExtra(EXTRA_FOOTER_TAB)) {
+                return;
+            }
         } catch (Exception ignored) {
-        } finally {
-            suppressBottomNavCallbacks = prev;
+        }
+        final int want;
+        if (isCalendarMode() && isFooterCalendarTabWanted()) {
+            want = R.id.navigation_stricker;
+        } else if (isDailyUpdatesMode() || isCalendarMode()) {
+            want = R.id.navigation_status;
+        } else if (specialFeedModeActive || explicitSpecialOpen) {
+            want = R.id.navigation_catagiries;
+        } else {
+            want = R.id.navigation_home;
+        }
+        try {
+            selectFooterTabWithoutMotion(want);
+        } catch (Exception ignored) {
+            enforceExclusiveFooterSelection(want);
+        }
+    }
+
+    /**
+     * Exactly one footer tab may look selected. 507 warm / blink / quiet-card
+     * rebuilds left Special orange while Daily Updates or Profile was also red
+     * (Material check + leftover color filter / overlay).
+     */
+    private void enforceExclusiveFooterSelection(int wantId) {
+        if (bottomNavigationView == null || wantId == 0) {
+            return;
+        }
+        try {
+            if (wantId != R.id.navigation_catagiries) {
+                // Drop blink overlay / orange filter so Special cannot look
+                // selected beside News / DU / Profile.
+                stopSpecialTabBlinkAnimation();
+                if (specialTabBulbOverlay != null) {
+                    specialTabBulbOverlay.setVisibility(View.GONE);
+                    specialTabBulbOverlay.clearColorFilter();
+                    specialTabBulbOverlay.setAlpha(1f);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            Menu menu = bottomNavigationView.getMenu();
+            for (int i = 0; i < menu.size(); i++) {
+                MenuItem mi = menu.getItem(i);
+                if (mi == null) {
+                    continue;
+                }
+                final boolean want = mi.getItemId() == wantId;
+                if (mi.isChecked() != want) {
+                    mi.setChecked(want);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            BottomNavigationMenuView menuView =
+                    (BottomNavigationMenuView) bottomNavigationView.getChildAt(0);
+            if (menuView != null) {
+                for (int i = 0; i < menuView.getChildCount(); i++) {
+                    View child = menuView.getChildAt(i);
+                    if (!(child instanceof BottomNavigationItemView)) {
+                        continue;
+                    }
+                    BottomNavigationItemView itemView = (BottomNavigationItemView) child;
+                    MenuItem data = itemView.getItemData();
+                    if (data == null) {
+                        continue;
+                    }
+                    final boolean want = data.getItemId() == wantId;
+                    if (itemView.isSelected() != want) {
+                        itemView.setSelected(want);
+                    }
+                    View icon = itemView.findViewById(
+                            com.google.android.material.R.id.navigation_bar_item_icon_view);
+                    if (icon instanceof ImageView) {
+                        ImageView iv = (ImageView) icon;
+                        iv.clearColorFilter();
+                        iv.clearAnimation();
+                        iv.setAlpha(1f);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            applyFooterTabIconTints();
+        } catch (Exception ignored) {
         }
         endFooterSelectionTransition();
     }
@@ -16754,6 +16930,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void performFeedReload(boolean forceNetworkRefresh) {
         showLog("performFeedReload initialCall=" + initialCall
                 + " forceNet=" + forceNetworkRefresh);
+        // Capture before flags/hosts clear — Special FlipView must not stay visible
+        // for a frame while warm OpenPath converts main page-0.
+        final boolean leavingSpecialSurface =
+                specialFeedModeActive || explicitSpecialOpen;
         // News re-tap / refresh leaves the current article context — stop read-aloud.
         // Video reset below does not touch TTS; Special open already stops in its path.
         try {
@@ -16798,6 +16978,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 draft_id_firebase, device_id_firebase, button_name_home);
         showLog("isUnreadPostsSelected set to false #5");
         setFeedModeFlags(false, false);
+        if (leavingSpecialSurface) {
+            try {
+                if (layout_with_data != null) {
+                    layout_with_data.setVisibility(View.GONE);
+                }
+            } catch (Exception ignored) {
+            }
+        }
         try {
             OfflinePackPrefetcher.get().resetSession();
         } catch (Exception ignored) {
@@ -16817,6 +17005,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         showLog("Check Point #3 : HomePage performFeedReload soft");
+        try {
+            enforceExclusiveFooterSelection(R.id.navigation_home);
+        } catch (Exception ignored) {
+        }
         if (!isDeviceOnline()) {
             // Offline Reload: keep prior list until disk paint rebinds adapter with setData.
             // Do NOT clear list/adapter first (that left a permanent white FlipView before).
@@ -16842,9 +17034,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         final boolean haveWarm = OpenPathCache.loadFeedForInstantPaint(
                 this, 0, OpenPathCache.FEED_MODE_MAIN) != null;
         if (haveWarm) {
-            // Keep FlipView; do not force-network yet (would skip inlist warm path
-            // and zero NET_AT). Explicit Reload sets force after paint below.
-            prepareFreshPage0FeedCursors(false, false);
+            // Leaving Special MUST wipe FlipView scrap (507 kept it → half-stuck
+            // Birthday card over next page). Still skip forceNetwork so warm
+            // OpenPath paints News at page 0 without zeroing main TTL.
+            prepareFreshPage0FeedCursors(leavingSpecialSurface, false);
             OpenPathCache.clearForceFeedNetwork();
             boolean warmed = paintWarmMainFeedFromOpenPath();
             if (warmed) {
@@ -16994,6 +17187,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         softMergeOnNextPage0 = false;
         // Mode flag FIRST (before any clear/paint/network): first News→Special transition.
         setFeedModeFlags(true, false);
+        try {
+            enforceExclusiveFooterSelection(R.id.navigation_catagiries);
+        } catch (Exception ignored) {
+        }
         // Special is feed-mode (not bookmarks list) — hide panel only, do not paint main offline.
         try {
             bookmarksModeSelected = false;
@@ -22343,6 +22540,9 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                 dailyUpdatesController.onHostResume();
             }
             keepDailyUpdatesCovered();
+            // Back from Profile (no EXTRA): collapse dual orange and match
+            // footer to the surface still under Profile (Special / DU / News).
+            syncFooterHighlightToActiveSurface();
         } catch (Exception ignored) {
         }
         // If create-menu was left open while backgrounded, collapse so feed + icon match.
@@ -23008,6 +23208,21 @@ lbm.unregisterReceiver(CURRENT_LOCATION);
                     // during the Activity hand-off (especially warm REORDER_TO_FRONT).
                     if (isCenterPlusMenuOpen()) {
                         closeCenterPlusMenu(false);
+                    }
+                    // Collapse dual orange before hand-off (Special blink must not
+                    // stay lit beside Profile on the Profile activity footer clone).
+                    try {
+                        int under = bottomNavigationView != null
+                                ? bottomNavigationView.getSelectedItemId()
+                                : R.id.navigation_home;
+                        if (under == 0 || under == R.id.navigation_profile) {
+                            under = isDailyUpdatesMode() ? R.id.navigation_status
+                                    : (specialFeedModeActive || explicitSpecialOpen)
+                                    ? R.id.navigation_catagiries
+                                    : R.id.navigation_home;
+                        }
+                        enforceExclusiveFooterSelection(under);
+                    } catch (Exception ignored) {
                     }
                     // Start Profile first (instant); analytics after so it never delays open.
                     openProfileInstant();
