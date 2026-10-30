@@ -208,7 +208,7 @@ public class BirthdayPosterPreviewView extends View {
                                 Bitmap overlay = punchCelebrationHole(bmp);
                                 writeBitmapJpeg(rawFile, bmp);
                                 if (overlay != null) {
-                                    writeBitmapPng(new File(dir, key + "_overlay_v2.png"), overlay);
+                                    writeBitmapPng(new File(dir, key + "_overlay_v3.png"), overlay);
                                     recycleBitmap(overlay);
                                 }
                                 recycleBitmap(bmp);
@@ -415,8 +415,8 @@ public class BirthdayPosterPreviewView extends View {
         if (dir == null) return null;
         String key = celebrationCacheKey(url);
         File rawFile = new File(dir, key + ".jpg");
-        // v2: punch clears any placeholder fill (white/black/cream), not only near-white.
-        File overlayFile = new File(dir, key + "_overlay_v2.png");
+        // v3: punch clears any placeholder fill; never keeps dark pixels near the stroke.
+        File overlayFile = new File(dir, key + "_overlay_v3.png");
         if (!rawFile.isFile() || rawFile.length() < 64) return null;
         try {
             BitmapFactory.Options opts = new BitmapFactory.Options();
@@ -449,7 +449,7 @@ public class BirthdayPosterPreviewView extends View {
         String key = celebrationCacheKey(url);
         writeBitmapJpeg(new File(dir, key + ".jpg"), raw);
         if (overlay != null && !overlay.isRecycled()) {
-            writeBitmapPng(new File(dir, key + "_overlay_v2.png"), overlay);
+            writeBitmapPng(new File(dir, key + "_overlay_v3.png"), overlay);
         }
     }
 
@@ -520,9 +520,11 @@ public class BirthdayPosterPreviewView extends View {
             for (int x = x0; x <= x1; x++) {
                 if (!hitRoundRect(x + 0.5f, y + 0.5f, left, top, right, bottom, rad)) continue;
                 int c = px[row + x];
-                // Keep ribbon orange (and bright folds near it); clear everything else
-                // in the window — including solid black placeholders from admin banners.
-                if (isRibbonOrange(c) || nearRibbonOrange(px, bw, bh, x, y)) continue;
+                // Keep real ribbon paint. Never keep dark placeholder fills — even when
+                // they sit next to the orange frame stroke (nearRibbonOrange alone used
+                // to preserve solid black and hide the user photo).
+                if (isRibbonOrange(c)) continue;
+                if (isBrightRibbonFold(c) && nearRibbonOrange(px, bw, bh, x, y)) continue;
                 px[row + x] = 0;
             }
         }
@@ -537,7 +539,17 @@ public class BirthdayPosterPreviewView extends View {
         return r > 200 && g < 180 && b < 110 && (r - g) > 50 && (r - b) > 80;
     }
 
-    /** Keep bright folds on the ribbon; they sit on orange, not in the white hole. */
+    /** Light highlight on a ribbon — not a black/gray photo-hole fill. */
+    private static boolean isBrightRibbonFold(int c) {
+        int r = (c >> 16) & 0xff;
+        int g = (c >> 8) & 0xff;
+        int b = c & 0xff;
+        int max = Math.max(r, Math.max(g, b));
+        int min = Math.min(r, Math.min(g, b));
+        return max >= 200 && (max - min) <= 40;
+    }
+
+    /** Keep bright folds on the ribbon; they sit on orange, not in the photo hole. */
     private static boolean nearRibbonOrange(int[] px, int bw, int bh, int x, int y) {
         int yStart = Math.max(0, y - 2);
         int yEnd = Math.min(bh - 1, y + 2);
@@ -947,7 +959,10 @@ public class BirthdayPosterPreviewView extends View {
         boolean hasPhoto = photo != null && !photo.isRecycled();
         boolean ribbonsOnTop =
                 hasPhoto && frameOverlay != null && !frameOverlay.isRecycled();
-        if (!ribbonsOnTop && template != null && !template.isRecycled()) {
+        // Always paint the full banner first so art is present even before the
+        // ribbon overlay. Photo (next) covers the placeholder hole; overlay then
+        // puts ribbons/border above the photo where the hole was punched clear.
+        if (template != null && !template.isRecycled()) {
             destRect.set(0, 0, w, h);
             canvas.drawBitmap(template, null, destRect, bitmapPaint);
         }
