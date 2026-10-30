@@ -99,7 +99,7 @@ public class BirthdayPosterPreviewView extends View {
 
     @Nullable private Bitmap template;
     /**
-     * Template B artwork with the white photo hole transparent, so the ribbons
+     * Template B artwork with the photo window transparent, so the ribbons
      * and orange border paint over the photo. Null for template A.
      */
     @Nullable private Bitmap frameOverlay;
@@ -208,7 +208,7 @@ public class BirthdayPosterPreviewView extends View {
                                 Bitmap overlay = punchCelebrationHole(bmp);
                                 writeBitmapJpeg(rawFile, bmp);
                                 if (overlay != null) {
-                                    writeBitmapPng(new File(dir, key + "_overlay.png"), overlay);
+                                    writeBitmapPng(new File(dir, key + "_overlay_v2.png"), overlay);
                                     recycleBitmap(overlay);
                                 }
                                 recycleBitmap(bmp);
@@ -415,7 +415,8 @@ public class BirthdayPosterPreviewView extends View {
         if (dir == null) return null;
         String key = celebrationCacheKey(url);
         File rawFile = new File(dir, key + ".jpg");
-        File overlayFile = new File(dir, key + "_overlay.png");
+        // v2: punch clears any placeholder fill (white/black/cream), not only near-white.
+        File overlayFile = new File(dir, key + "_overlay_v2.png");
         if (!rawFile.isFile() || rawFile.length() < 64) return null;
         try {
             BitmapFactory.Options opts = new BitmapFactory.Options();
@@ -448,7 +449,7 @@ public class BirthdayPosterPreviewView extends View {
         String key = celebrationCacheKey(url);
         writeBitmapJpeg(new File(dir, key + ".jpg"), raw);
         if (overlay != null && !overlay.isRecycled()) {
-            writeBitmapPng(new File(dir, key + "_overlay.png"), overlay);
+            writeBitmapPng(new File(dir, key + "_overlay_v2.png"), overlay);
         }
     }
 
@@ -486,8 +487,9 @@ public class BirthdayPosterPreviewView extends View {
     }
 
     /**
-     * Copy of the celebration artwork with the white photo window transparent.
-     * Orange ribbons and the border stay opaque so they sit on the photo.
+     * Copy of the celebration artwork with the photo window transparent.
+     * Clears any placeholder fill (white, black, cream) inside the frame so
+     * the user's photo is visible. Orange ribbons and border stay opaque.
      */
     @Nullable
     private static Bitmap punchCelebrationHole(@Nullable Bitmap src) {
@@ -518,22 +520,14 @@ public class BirthdayPosterPreviewView extends View {
             for (int x = x0; x <= x1; x++) {
                 if (!hitRoundRect(x + 0.5f, y + 0.5f, left, top, right, bottom, rad)) continue;
                 int c = px[row + x];
-                if (!isPhotoHoleWhite(c) || nearRibbonOrange(px, bw, bh, x, y)) continue;
+                // Keep ribbon orange (and bright folds near it); clear everything else
+                // in the window — including solid black placeholders from admin banners.
+                if (isRibbonOrange(c) || nearRibbonOrange(px, bw, bh, x, y)) continue;
                 px[row + x] = 0;
             }
         }
         out.setPixels(px, 0, bw, 0, 0, bw, bh);
         return out;
-    }
-
-    /** Flat white placeholder inside the frame. Ribbon orange is not this. */
-    private static boolean isPhotoHoleWhite(int c) {
-        int r = (c >> 16) & 0xff;
-        int g = (c >> 8) & 0xff;
-        int b = c & 0xff;
-        int max = Math.max(r, Math.max(g, b));
-        int min = Math.min(r, Math.min(g, b));
-        return (max - min) <= 18 && max >= 230;
     }
 
     private static boolean isRibbonOrange(int c) {
