@@ -224,23 +224,24 @@ public final class LocalUpdatesConfigHelper {
     }
 
     /**
-     * Petrol ₹/L from splash fuel blob. Tries common key aliases, then cities[0].
-     * Returns 0 when absent (UI should show — not invent prices).
+     * Petrol ₹/L for the Daily Updates hub. Prefers the user's selected
+     * district in {@code places[]} (same as FuelDetailActivity), then
+     * top-level splash keys / cities[0]. Returns 0 when absent.
      */
     public static double fuelPetrol(@Nullable Context context) {
-        return resolveFuelPrice(fuelJson(context), true);
+        return resolveHubFuelPrice(context, true);
     }
 
     public static double fuelDiesel(@Nullable Context context) {
-        return resolveFuelPrice(fuelJson(context), false);
+        return resolveHubFuelPrice(context, false);
     }
 
     public static double fuelPetrolChange(@Nullable Context context) {
-        return resolveFuelChange(fuelJson(context), true);
+        return resolveHubFuelChange(context, true);
     }
 
     public static double fuelDieselChange(@Nullable Context context) {
-        return resolveFuelChange(fuelJson(context), false);
+        return resolveHubFuelChange(context, false);
     }
 
     /**
@@ -259,6 +260,89 @@ public final class LocalUpdatesConfigHelper {
             return (comma > 0 ? region.substring(0, comma) : region).trim();
         }
         return "";
+    }
+
+    private static double resolveHubFuelPrice(@Nullable Context context, boolean petrol) {
+        JSONObject f = fuelJson(context);
+        JSONObject place = findPlaceForSelectedDistrict(context, f);
+        if (place != null) {
+            double v = optDouble(place, petrol ? "petrol" : "diesel", 0);
+            if (v <= 0) {
+                v = optDouble(place, petrol ? "petrol_price" : "diesel_price", 0);
+            }
+            if (v > 0) return v;
+        }
+        return resolveFuelPrice(f, petrol);
+    }
+
+    private static double resolveHubFuelChange(@Nullable Context context, boolean petrol) {
+        JSONObject f = fuelJson(context);
+        JSONObject place = findPlaceForSelectedDistrict(context, f);
+        if (place != null) {
+            if (petrol) {
+                if (place.has("change") && !place.isNull("change")) {
+                    return optDouble(place, "change", 0);
+                }
+            } else if (place.has("diesel_change") && !place.isNull("diesel_change")) {
+                return optDouble(place, "diesel_change", 0);
+            } else if (place.has("change") && !place.isNull("change")) {
+                return optDouble(place, "change", 0);
+            }
+        }
+        return resolveFuelChange(f, petrol);
+    }
+
+    /**
+     * Same district match as {@code FuelDetailActivity.resolveInitialCity}:
+     * {@code Selected_Distric_Id} on places[].district_id, then name match.
+     */
+    @Nullable
+    private static JSONObject findPlaceForSelectedDistrict(
+            @Nullable Context context, @Nullable JSONObject f) {
+        if (context == null || f == null) return null;
+        JSONArray places = f.optJSONArray("places");
+        if (places == null || places.length() == 0) return null;
+        Context app = context.getApplicationContext();
+        int distId = SharedPrefsData.getInt(app, Constants.Selected_Distric_Id, Constants.PREF_NAME);
+        String nameA = SharedPrefsData.getString(
+                app, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
+        String nameB = SharedPrefsData.getString(
+                app, Constants.Selected_Distric_Name, Constants.PREF_NAME);
+        JSONObject byName = null;
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null) continue;
+            double petrol = optDouble(row, "petrol", 0);
+            double diesel = optDouble(row, "diesel", 0);
+            if (!(petrol > 0) || !(diesel > 0)) continue;
+            int rowDist = row.optInt("district_id", 0);
+            if (distId > 0 && rowDist == distId) return row;
+            if (byName == null && (fuelNamesMatch(nameA, row) || fuelNamesMatch(nameB, row))) {
+                byName = row;
+            }
+        }
+        return byName;
+    }
+
+    private static boolean fuelNamesMatch(@Nullable String districtName, @NonNull JSONObject row) {
+        if (TextUtils.isEmpty(districtName)) return false;
+        return fuelNameKey(districtName).equals(fuelNameKey(row.optString("city", "")))
+                || fuelNameKey(districtName).equals(fuelNameKey(row.optString("city_en", "")))
+                || fuelNameKey(districtName).equals(fuelNameKey(row.optString("lookup_title", "")));
+    }
+
+    @NonNull
+    private static String fuelNameKey(@Nullable String s) {
+        if (s == null) return "";
+        StringBuilder b = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            i += Character.charCount(cp);
+            if (Character.isLetterOrDigit(cp) || (cp >= 0x0C00 && cp <= 0x0C7F)) {
+                b.appendCodePoint(Character.toLowerCase(cp));
+            }
+        }
+        return b.toString();
     }
 
     private static double resolveFuelPrice(@Nullable JSONObject f, boolean petrol) {

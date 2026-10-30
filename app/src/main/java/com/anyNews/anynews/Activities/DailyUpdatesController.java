@@ -1579,6 +1579,8 @@ public final class DailyUpdatesController {
         applyManaTitles(null, null);
         bindManaLabels();
         fetchManaHeadlines(true);
+        // Petrol hub must follow the new district immediately (same places[] as detail).
+        bindFuelCard();
 
         try {
             LanguageSelectionRequest requestModel = new LanguageSelectionRequest();
