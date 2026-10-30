@@ -17047,7 +17047,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                 } catch (Exception ignored) {
                 }
+                // 507 warm OpenPath can restore sealed morning JSON after noon while
+                // NET_AT is still fresh (Special markFeedNetworkSuccess / recent
+                // page-0). Never treat TTL alone as "done" when seal ≠ IST slot.
+                final boolean greetingStale = openPathGreetingStaleForCurrentSlot();
+                if (greetingStale) {
+                    showLog("performFeedReload: warm OpenPath greeting seal stale for IST "
+                            + GreetingDayPartHelper.slotLabel(
+                                    GreetingDayPartHelper.currentSlot())
+                            + " — force network");
+                    try {
+                        OpenPathCache.clearFeed(this);
+                        OpenPathCache.forceNextFeedNetwork(this);
+                    } catch (Exception ignored) {
+                    }
+                    softMergeOnNextPage0 = false;
+                    forceGreetingArtRebindOnNextConvert = true;
+                }
                 final boolean needNet = forceNetworkRefresh
+                        || greetingStale
                         || OpenPathCache.shouldNetworkRefreshFeed(this, false);
                 if (!needNet) {
                     showLog("performFeedReload: warm OpenPath only (TTL fresh)");
@@ -17058,9 +17076,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                     return;
                 }
-                // Soft-refresh over the already-painted seat (no hardClear).
-                softMergeOnNextPage0 = !forceNetworkRefresh;
-                if (forceNetworkRefresh) {
+                // Soft-refresh over the already-painted seat (no hardClear),
+                // except wrong-slot greeting — must hard-replace art in place.
+                softMergeOnNextPage0 = !forceNetworkRefresh && !greetingStale;
+                if (forceNetworkRefresh || greetingStale) {
                     OpenPathCache.forceNextFeedNetwork(this);
                 }
                 try {
@@ -17154,6 +17173,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             if (layout_with_data != null) {
                 layout_with_data.setVisibility(View.VISIBLE);
+            }
+            // Keep seat-0 paint for continuity, but never leave sealed prior-slot
+            // art as the final frame when IST has moved (morning after noon).
+            if (openPathGreetingStaleForCurrentSlot()) {
+                showLog("OpenPath: warm main paint has stale greeting seal for IST "
+                        + GreetingDayPartHelper.slotLabel(
+                                GreetingDayPartHelper.currentSlot())
+                        + " — clear disk, force network");
+                try {
+                    OpenPathCache.clearFeed(this);
+                    OpenPathCache.forceNextFeedNetwork(this);
+                } catch (Exception ignored) {
+                }
+                softMergeOnNextPage0 = false;
+                forceGreetingArtRebindOnNextConvert = true;
+            } else {
+                try {
+                    noteGreetingArtFromPayload(list);
+                } catch (Exception ignored) {
+                }
             }
             showLog("OpenPath: warm main paint size=" + list.size()
                     + " seat0 forced");
@@ -17993,16 +18032,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             response.body(),
                             openPathMode);
                     try {
-                        // Main News only (cat 0). Category tabs do not inject
-                        // greetings — stamping them left Main stuck after a slot
-                        // change while the user was browsing Sports/etc.
-                        // Greeting art URL/etag is noted after decrypt in convert.
-                        if (categoryAtEnqueue == 0 && !localFeedFromDailyUpdates) {
-                            appliedGreetingSlotKey = GreetingDayPartHelper.currentSlotKey();
-                        }
-                    } catch (Exception ignored) {
-                    }
-                    try {
                         LanguageFeedInvalidator.markFeedLanguageApplied(
                                 HomePage.this,
                                 SharedPrefsData.getInt(
@@ -18020,20 +18049,25 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     // Special/sticky still timestamps success so plain reopens can soft-skip later,
                     // but do not overwrite main disk cache with special payloads.
                     OpenPathCache.markFeedNetworkSuccess(HomePage.this);
-                    try {
-                        // Special also injects greetings — stamp slot so Special
-                        // warm sessions refresh on IST change like Main.
-                        // Greeting art URL/etag is noted after decrypt in convert.
-                        if (special && !isStickyFeedOpen() && !searchMode) {
-                            appliedGreetingSlotKey = GreetingDayPartHelper.currentSlotKey();
-                        }
-                    } catch (Exception ignored) {
-                    }
                 }
                 // isFirstPage → replace (reload/special/open + network over disk paint).
                 // Held next page (reqPos=-1 apply of dummy held at 3) uses Response overload: append.
                 convertListOfArticles(response, articlesReqPos, isFirstPage);
                 keepDailyUpdatesCovered();
+                // Stamp slot only AFTER convert/rebind so a soft-merge that left
+                // prior-slot scrap cannot mark afternoon while morning still shows.
+                try {
+                    if (response != null && response.body() != null && isFirstPage
+                            && !isStickyFeedOpen() && !searchMode) {
+                        if ((categoryAtEnqueue == 0 && !localFeedFromDailyUpdates
+                                && !special && !videoFeed)
+                                || special) {
+                            appliedGreetingSlotKey =
+                                    GreetingDayPartHelper.currentSlotKey();
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
             }
 
             @Override
@@ -18495,13 +18529,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         && (d.getStickyPosition() == null || d.getStickyPosition() < 0)) {
                     d.setStickyPosition(kept.getStickyPosition());
                 }
-                // Same greeting post_id with a new hero URL/etag must rebind FlipView —
-                // quiet soft-merge left afternoon Madhyahnam on screen at night.
+                // Same greeting post_id with a new hero URL/etag/seal must rebind
+                // FlipView — quiet soft-merge left morning art after noon.
                 if (isGreetingFeedDatum(kept) || isGreetingFeedDatum(d)) {
                     String oldUrl = primaryGreetingArtUrl(kept);
                     String newUrl = primaryGreetingArtUrl(d);
                     String oldEtag = null;
                     String newEtag = null;
+                    String oldSeal = null;
+                    String newSeal = null;
                     try {
                         oldEtag = kept != null ? kept.getGreetingArtEtag() : null;
                     } catch (Exception ignored) {
@@ -18510,9 +18546,20 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         newEtag = d.getGreetingArtEtag();
                     } catch (Exception ignored) {
                     }
+                    try {
+                        oldSeal = kept != null ? kept.getGreetingSealSlot() : null;
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        newSeal = d.getGreetingSealSlot();
+                    } catch (Exception ignored) {
+                    }
                     if ((oldUrl != null && newUrl != null && !oldUrl.equals(newUrl))
                             || (oldEtag != null && newEtag != null && !oldEtag.isEmpty()
-                            && !oldEtag.equals(newEtag))) {
+                            && !oldEtag.equals(newEtag))
+                            || (oldSeal != null && newSeal != null
+                            && !oldSeal.trim().isEmpty() && !newSeal.trim().isEmpty()
+                            && !oldSeal.trim().equalsIgnoreCase(newSeal.trim()))) {
                         forceGreetingArtRebindOnNextConvert = true;
                     }
                 }
@@ -19141,19 +19188,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             if (isSpecialFeedMode()) {
                                 filterListStripHalfPosts(list);
                             }
-                            // Same-index greeting art swap: refresh scrap only if the
-                            // user is already on that card (never flipTo greeting).
+                            // Greeting seal/URL change: quiet page-count grow keeps the
+                            // prior-slot full_image scrap bound (morning after noon) even
+                            // after list.set replaced the Datum. Force immediate rebind.
                             if (forceGreetingArtRebindOnNextConvert) {
                                 forceGreetingArtRebindOnNextConvert = false;
-                                rebindGreetingCardIfVisible("art_changed_soft");
-                            }
-                            try {
-                                // Shared list already mutated — grow FlipView quietly
-                                // (no notifyDataSetChanged / forceRebind blink).
-                                if (adapter != null) {
-                                    adapter.notifyFeedAppendedQuietly();
+                                try {
+                                    if (adapter != null) {
+                                        adapter.setDataImmediate(list);
+                                    }
+                                } catch (Exception ignored) {
                                 }
-                            } catch (Exception ignored) {
+                                rebindGreetingCardIfVisible("art_changed_soft");
+                            } else {
+                                try {
+                                    // Shared list already mutated — grow FlipView quietly
+                                    // (no notifyDataSetChanged / forceRebind blink).
+                                    if (adapter != null) {
+                                        adapter.notifyFeedAppendedQuietly();
+                                    }
+                                } catch (Exception ignored) {
+                                }
                             }
                             // Do not rebuild adapter / do not jump flip — capture offline store.
                             try {
