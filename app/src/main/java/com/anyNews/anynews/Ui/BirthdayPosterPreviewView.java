@@ -24,14 +24,9 @@ import androidx.annotation.Nullable;
 
 import com.anyNews.anynews.Utils.BirthdayFonts;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 
 /**
  * Live Birthday Special poster preview matching admin/server geometry
@@ -99,7 +94,7 @@ public class BirthdayPosterPreviewView extends View {
 
     @Nullable private Bitmap template;
     /**
-     * Template B artwork with the photo window transparent, so the ribbons
+     * Template B artwork with the white photo hole transparent, so the ribbons
      * and orange border paint over the photo. Null for template A.
      */
     @Nullable private Bitmap frameOverlay;
@@ -120,20 +115,14 @@ public class BirthdayPosterPreviewView extends View {
     private int photoRotation = 0;
     /**
      * False = drawing template A (circle). True only after celebration artwork
-     * has actually decoded (or a disk-cached copy was installed).
+     * has actually decoded. A missing or in-flight URL stays on A.
      */
     private boolean templateB;
-    /**
-     * True while template B is expected but celebration pixels are not ready yet.
-     * Holds B aspect / hints without painting the bundled circle poster.
-     */
-    private boolean pendingCelebration;
     private int templateLoadGen;
     /** Generation whose celebration bitmap is installed. -1 until a download wins. */
     private int celebrationGen = -1;
     @Nullable private String loadedCelebrationUrl = "";
     @Nullable private ArtworkListener artworkListener;
-    private final Paint placeholderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private float lastTouchX;
     private float lastTouchY;
@@ -168,16 +157,13 @@ public class BirthdayPosterPreviewView extends View {
         setWillNotDraw(false);
         setClickable(true);
         circlePaint.setColor(Color.WHITE);
-        // Soft peach — matches Birthday Special canvas; never the bundled circle.
-        placeholderPaint.setColor(0xFFFFF1E6);
         namePaint.setColor(TEXT_COLOR);
         namePaint.setTextAlign(Paint.Align.CENTER);
         addressPaint.setColor(TEXT_COLOR);
         addressPaint.setTextAlign(Paint.Align.LEFT);
         specialPaint.setColor(SPECIAL_COLOR);
         specialPaint.setTextAlign(Paint.Align.LEFT);
-        // Do not paint the bundled circle here. Activity applies the admin /
-        // cached template; painting A first caused a visible swap to B.
+        showBundledCircle(0);
     }
 
     public void setArtworkListener(@Nullable ArtworkListener listener) {
@@ -185,45 +171,10 @@ public class BirthdayPosterPreviewView extends View {
     }
 
     /**
-     * Warm the celebration disk cache when splash/session learns the admin banner
-     * URL, so Birthday Special can paint it on first open without a default flash.
-     */
-    public static void prefetchCelebrationTemplate(
-            @Nullable Context context, @Nullable String templateId, @Nullable String imageUrl) {
-        if (context == null) return;
-        if (!"b".equalsIgnoreCase(templateId == null ? "" : templateId.trim())) return;
-        final String url = imageUrl == null ? "" : imageUrl.trim();
-        if (!(url.startsWith("http://") || url.startsWith("https://"))) return;
-        final Context app = context.getApplicationContext();
-        new Thread(
-                        () -> {
-                            try {
-                                File dir = celebrationCacheDir(app);
-                                if (dir == null) return;
-                                String key = celebrationCacheKey(url);
-                                File rawFile = new File(dir, key + ".jpg");
-                                if (rawFile.isFile() && rawFile.length() > 64) return;
-                                Bitmap bmp = decodeUrl(url);
-                                if (bmp == null) return;
-                                Bitmap overlay = punchCelebrationHole(bmp);
-                                writeBitmapJpeg(rawFile, bmp);
-                                if (overlay != null) {
-                                    writeBitmapPng(new File(dir, key + "_overlay_v3.png"), overlay);
-                                    recycleBitmap(overlay);
-                                }
-                                recycleBitmap(bmp);
-                            } catch (Exception ignored) {
-                            }
-                        })
-                .start();
-    }
-
-    /**
-     * Switch artwork. Template A uses the bundled circle asset.
-     * Template B is not packaged: show a neutral placeholder (or a disk-cached
-     * last admin banner) until {@code birthday_template_image_url} is ready —
-     * never flash the circle poster while celebration art is expected. Download
-     * failure still falls back to the bundled circle so the composer stays usable.
+     * Switch artwork. Template A keeps the circle asset and geometry.
+     * Template B is not packaged. Until {@code birthday_template_image_url}
+     * decodes, and whenever that URL is empty or the download fails, the
+     * preview stays on the bundled circle poster — never an empty canvas.
      */
     public void applyTemplate(@Nullable String templateId, @Nullable String imageUrl) {
         final boolean wantB = "b".equalsIgnoreCase(templateId == null ? "" : templateId.trim());
@@ -231,103 +182,58 @@ public class BirthdayPosterPreviewView extends View {
         final int gen = ++templateLoadGen;
         final boolean http = url.startsWith("http://") || url.startsWith("https://");
         if (wantB && http && TextUtils.equals(url, loadedCelebrationUrl) && showingCelebration()) {
-            pendingCelebration = false;
             notifyArtwork();
             requestLayout();
             invalidate();
             return;
         }
-        if (wantB && http) {
-            // Instant path: last admin banner already on disk — no default flash.
-            Bitmap[] cached = loadCelebrationCache(url);
-            if (cached != null && cached[0] != null) {
-                pendingCelebration = false;
-                loadedCelebrationUrl = url;
-                celebrationGen = gen;
-                templateB = true;
-                replaceArtwork(cached[0], cached[1]);
-                notifyArtwork();
-                requestLayout();
-                invalidate();
-                // Refresh in the background so an admin swap still updates.
-                fetchCelebration(gen, url, /* installEvenIfCached */ true);
-                return;
-            }
-            showCelebrationPlaceholder(gen);
-            fetchCelebration(gen, url, /* installEvenIfCached */ false);
-            return;
-        }
-        pendingCelebration = false;
+        // Circle immediately. Do not flip into B geometry with a null bitmap.
         showBundledCircle(gen);
+        if (wantB && http) {
+            final String fetchUrl = url;
+            new Thread(
+                    () -> {
+                        Bitmap bmp = decodeUrl(fetchUrl);
+                        Bitmap overlay = bmp != null ? punchCelebrationHole(bmp) : null;
+                        post(
+                                () -> {
+                                    if (gen != templateLoadGen) {
+                                        recycleBitmap(bmp);
+                                        recycleBitmap(overlay);
+                                        return;
+                                    }
+                                    if (bmp == null) {
+                                        recycleBitmap(overlay);
+                                        showBundledCircle(gen);
+                                        return;
+                                    }
+                                    loadedCelebrationUrl = fetchUrl;
+                                    celebrationGen = gen;
+                                    templateB = true;
+                                    replaceArtwork(bmp, overlay);
+                                    requestLayout();
+                                    invalidate();
+                                    notifyArtwork();
+                                });
+                    })
+                    .start();
+        }
         requestLayout();
         invalidate();
     }
 
-    /**
-     * True while the celebration poster is showing, or while we are waiting for
-     * it (so submit / hints use template B geometry, not the circle).
-     */
+    /** True only while the celebration bitmap is what this view is drawing. */
     public boolean isTemplateB() {
-        return showingCelebration() || pendingCelebration;
+        return showingCelebration();
     }
 
     private boolean showingCelebration() {
         return templateB && template != null && !template.isRecycled();
     }
 
-    /** B aspect + soft fill; clears any prior circle bitmap so it cannot flash. */
-    private void showCelebrationPlaceholder(int gen) {
-        if (gen != templateLoadGen) return;
-        pendingCelebration = true;
-        templateB = false;
-        celebrationGen = -1;
-        loadedCelebrationUrl = "";
-        replaceArtwork(null, null);
-        notifyArtwork();
-        requestLayout();
-        invalidate();
-    }
-
-    private void fetchCelebration(int gen, String fetchUrl, boolean refreshOnly) {
-        new Thread(
-                        () -> {
-                            Bitmap bmp = decodeUrl(fetchUrl);
-                            Bitmap overlay = bmp != null ? punchCelebrationHole(bmp) : null;
-                            if (bmp != null) {
-                                saveCelebrationCache(fetchUrl, bmp, overlay);
-                            }
-                            post(
-                                    () -> {
-                                        if (gen != templateLoadGen) {
-                                            recycleBitmap(bmp);
-                                            recycleBitmap(overlay);
-                                            return;
-                                        }
-                                        if (bmp == null) {
-                                            recycleBitmap(overlay);
-                                            if (!refreshOnly) {
-                                                pendingCelebration = false;
-                                                showBundledCircle(gen);
-                                            }
-                                            return;
-                                        }
-                                        pendingCelebration = false;
-                                        loadedCelebrationUrl = fetchUrl;
-                                        celebrationGen = gen;
-                                        templateB = true;
-                                        replaceArtwork(bmp, overlay);
-                                        requestLayout();
-                                        invalidate();
-                                        notifyArtwork();
-                                    });
-                        })
-                .start();
-    }
-
     /**
      * Bundled circle banner. Runs on the UI thread so the first draw already
-     * has artwork. Only used for template A or as a last-resort fallback when
-     * celebration art cannot be loaded — never while B is still in flight.
+     * has artwork. Never clears the bitmap to paint an empty poster.
      */
     private void showBundledCircle(int gen) {
         Runnable job =
@@ -336,7 +242,7 @@ public class BirthdayPosterPreviewView extends View {
                     if (gen == 0 && templateLoadGen != 0) return;
                     // This generation already installed celebration art (download won).
                     if (celebrationGen == gen && showingCelebration()) return;
-                    if (!templateB && !pendingCelebration && template != null && !template.isRecycled()) {
+                    if (!templateB && template != null && !template.isRecycled()) {
                         notifyArtwork();
                         return;
                     }
@@ -357,7 +263,6 @@ public class BirthdayPosterPreviewView extends View {
                             return;
                         }
                         if (bmp == null) return;
-                        pendingCelebration = false;
                         templateB = false;
                         celebrationGen = -1;
                         loadedCelebrationUrl = "";
@@ -370,101 +275,6 @@ public class BirthdayPosterPreviewView extends View {
                 };
         if (Looper.myLooper() == Looper.getMainLooper()) job.run();
         else post(job);
-    }
-
-    @Nullable
-    private File celebrationCacheDir() {
-        return celebrationCacheDir(getContext());
-    }
-
-    @Nullable
-    private static File celebrationCacheDir(@Nullable Context context) {
-        if (context == null) return null;
-        try {
-            File dir =
-                    new File(
-                            context.getApplicationContext().getCacheDir(), "birthday_templates");
-            if (!dir.exists() && !dir.mkdirs()) return null;
-            return dir;
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private static String celebrationCacheKey(String url) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] dig = md.digest(url.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(24);
-            for (int i = 0; i < 12; i++) {
-                sb.append(String.format("%02x", dig[i]));
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            return Integer.toHexString(url.hashCode()) + "_" + url.length();
-        }
-    }
-
-    /**
-     * @return [raw, overlay] or null when nothing usable is cached. Overlay may
-     *     be null (caller punches). Bitmaps are newly decoded; caller owns them.
-     */
-    @Nullable
-    private Bitmap[] loadCelebrationCache(String url) {
-        File dir = celebrationCacheDir();
-        if (dir == null) return null;
-        String key = celebrationCacheKey(url);
-        File rawFile = new File(dir, key + ".jpg");
-        // v3: punch clears any placeholder fill; never keeps dark pixels near the stroke.
-        File overlayFile = new File(dir, key + "_overlay_v3.png");
-        if (!rawFile.isFile() || rawFile.length() < 64) return null;
-        try {
-            BitmapFactory.Options opts = new BitmapFactory.Options();
-            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
-            Bitmap raw;
-            try (FileInputStream fis = new FileInputStream(rawFile)) {
-                raw = BitmapFactory.decodeStream(fis, null, opts);
-            }
-            if (raw == null) return null;
-            Bitmap overlay = null;
-            if (overlayFile.isFile() && overlayFile.length() > 64) {
-                try (FileInputStream fis = new FileInputStream(overlayFile)) {
-                    overlay = BitmapFactory.decodeStream(fis, null, opts);
-                }
-            }
-            if (overlay == null) {
-                overlay = punchCelebrationHole(raw);
-                if (overlay != null) writeBitmapPng(overlayFile, overlay);
-            }
-            return new Bitmap[] {raw, overlay};
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private void saveCelebrationCache(String url, @Nullable Bitmap raw, @Nullable Bitmap overlay) {
-        if (raw == null || raw.isRecycled()) return;
-        File dir = celebrationCacheDir();
-        if (dir == null) return;
-        String key = celebrationCacheKey(url);
-        writeBitmapJpeg(new File(dir, key + ".jpg"), raw);
-        if (overlay != null && !overlay.isRecycled()) {
-            writeBitmapPng(new File(dir, key + "_overlay_v3.png"), overlay);
-        }
-    }
-
-    private static void writeBitmapJpeg(File file, Bitmap bmp) {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            bmp.compress(Bitmap.CompressFormat.JPEG, 92, fos);
-        } catch (Exception ignored) {
-        }
-    }
-
-    private static void writeBitmapPng(File file, Bitmap bmp) {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            bmp.compress(Bitmap.CompressFormat.PNG, 100, fos);
-        } catch (Exception ignored) {
-        }
     }
 
     private void notifyArtwork() {
@@ -487,9 +297,8 @@ public class BirthdayPosterPreviewView extends View {
     }
 
     /**
-     * Copy of the celebration artwork with the photo window transparent.
-     * Clears any placeholder fill (white, black, cream) inside the frame so
-     * the user's photo is visible. Orange ribbons and border stay opaque.
+     * Copy of the celebration artwork with the white photo window transparent.
+     * Orange ribbons and the border stay opaque so they sit on the photo.
      */
     @Nullable
     private static Bitmap punchCelebrationHole(@Nullable Bitmap src) {
@@ -520,16 +329,22 @@ public class BirthdayPosterPreviewView extends View {
             for (int x = x0; x <= x1; x++) {
                 if (!hitRoundRect(x + 0.5f, y + 0.5f, left, top, right, bottom, rad)) continue;
                 int c = px[row + x];
-                // Keep real ribbon paint. Never keep dark placeholder fills — even when
-                // they sit next to the orange frame stroke (nearRibbonOrange alone used
-                // to preserve solid black and hide the user photo).
-                if (isRibbonOrange(c)) continue;
-                if (isBrightRibbonFold(c) && nearRibbonOrange(px, bw, bh, x, y)) continue;
+                if (!isPhotoHoleWhite(c) || nearRibbonOrange(px, bw, bh, x, y)) continue;
                 px[row + x] = 0;
             }
         }
         out.setPixels(px, 0, bw, 0, 0, bw, bh);
         return out;
+    }
+
+    /** Flat white placeholder inside the frame. Ribbon orange is not this. */
+    private static boolean isPhotoHoleWhite(int c) {
+        int r = (c >> 16) & 0xff;
+        int g = (c >> 8) & 0xff;
+        int b = c & 0xff;
+        int max = Math.max(r, Math.max(g, b));
+        int min = Math.min(r, Math.min(g, b));
+        return (max - min) <= 18 && max >= 230;
     }
 
     private static boolean isRibbonOrange(int c) {
@@ -539,17 +354,7 @@ public class BirthdayPosterPreviewView extends View {
         return r > 200 && g < 180 && b < 110 && (r - g) > 50 && (r - b) > 80;
     }
 
-    /** Light highlight on a ribbon — not a black/gray photo-hole fill. */
-    private static boolean isBrightRibbonFold(int c) {
-        int r = (c >> 16) & 0xff;
-        int g = (c >> 8) & 0xff;
-        int b = c & 0xff;
-        int max = Math.max(r, Math.max(g, b));
-        int min = Math.min(r, Math.min(g, b));
-        return max >= 200 && (max - min) <= 40;
-    }
-
-    /** Keep bright folds on the ribbon; they sit on orange, not in the photo hole. */
+    /** Keep bright folds on the ribbon; they sit on orange, not in the white hole. */
     private static boolean nearRibbonOrange(int[] px, int bw, int bh, int x, int y) {
         int yStart = Math.max(0, y - 2);
         int yEnd = Math.min(bh - 1, y + 2);
@@ -675,10 +480,7 @@ public class BirthdayPosterPreviewView extends View {
         }
         // Always the full card width. Shrinking width to honor maxHeightPx left
         // the poster start-aligned with an empty gap on the right.
-        float aspect =
-                (showingCelebration() || pendingCelebration)
-                        ? (B_H / B_W)
-                        : (TEMPLATE_H / TEMPLATE_W);
+        float aspect = showingCelebration() ? (B_H / B_W) : (TEMPLATE_H / TEMPLATE_W);
         int height = Math.max(1, Math.round(width * aspect));
         setMeasuredDimension(width, height);
     }
@@ -749,16 +551,15 @@ public class BirthdayPosterPreviewView extends View {
             drawTemplateB(canvas, w, h);
             return;
         }
-        if (pendingCelebration || template == null || template.isRecycled()) {
-            // Soft placeholder — never the bundled circle while admin B is loading.
-            canvas.drawRect(0, 0, w, h, placeholderPaint);
-            return;
-        }
         float sx = w / TEMPLATE_W;
         float sy = h / TEMPLATE_H;
 
-        destRect.set(0, 0, w, h);
-        canvas.drawBitmap(template, null, destRect, bitmapPaint);
+        if (template != null && !template.isRecycled()) {
+            destRect.set(0, 0, w, h);
+            canvas.drawBitmap(template, null, destRect, bitmapPaint);
+        } else {
+            return;
+        }
 
         if (photo != null && !photo.isRecycled()) {
             float cx = CIRCLE_CX * sx;
@@ -959,10 +760,7 @@ public class BirthdayPosterPreviewView extends View {
         boolean hasPhoto = photo != null && !photo.isRecycled();
         boolean ribbonsOnTop =
                 hasPhoto && frameOverlay != null && !frameOverlay.isRecycled();
-        // Always paint the full banner first so art is present even before the
-        // ribbon overlay. Photo (next) covers the placeholder hole; overlay then
-        // puts ribbons/border above the photo where the hole was punched clear.
-        if (template != null && !template.isRecycled()) {
+        if (!ribbonsOnTop && template != null && !template.isRecycled()) {
             destRect.set(0, 0, w, h);
             canvas.drawBitmap(template, null, destRect, bitmapPaint);
         }

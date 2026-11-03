@@ -7,6 +7,10 @@ import androidx.annotation.Nullable;
 
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -29,6 +33,11 @@ import java.nio.charset.StandardCharsets;
  * <p>
  * Main vs Special vs Video vs Local page-0 snapshots are stored under separate
  * feedMode keys so a main payload can never paint Local (and vice versa).
+ * <p>
+ * July-style greeting policy: warm OpenPath never persists or restores IST
+ * greeting cards. Live page-0 / Special still deliver greetings from network;
+ * only the disk snapshot is news-only so a sealed morning row cannot paint
+ * after noon from cache.
  */
 public final class OpenPathCache {
 
@@ -264,7 +273,10 @@ public final class OpenPathCache {
     @Nullable
     public static EncreptionRequest loadFeedForInstantPaint(
             Context context, int categoryId, String feedMode) {
-        return loadFeed(context, categoryId, feedMode);
+        // Warm online paint only — strip greeting so stale morning cannot seat.
+        // Offline {@link #loadFeedForOffline} is unchanged (may still hold old rows
+        // until the next online save rewrites disk without greeting).
+        return payloadWithoutGreeting(loadFeed(context, categoryId, feedMode));
     }
 
     /**
@@ -368,6 +380,10 @@ public final class OpenPathCache {
     /**
      * Persist first-page feed for a mode. Callers must pass the active feed mode so
      * Special/Video never overwrite main page-0 JSON.
+     * <p>
+     * Main/Local disk never stores greeting rows (clone + strip). The live
+     * {@code payload} passed by callers is not mutated — network convert still
+     * receives the greeting.
      */
     public static void saveFeed(
             Context context, int categoryId, EncreptionRequest payload, String feedMode) {
@@ -388,7 +404,13 @@ public final class OpenPathCache {
             String dist = SharedPrefsData.getString(context, Constants.Selected_Distric_Name1, Constants.PREF_NAME);
             snap.district = dist != null ? dist : "";
             snap.feedMode = mode;
-            snap.payload = payload;
+            // Video Flash has no IST greeting inject — leave body as-is.
+            snap.payload = FEED_MODE_VIDEO.equals(mode)
+                    ? payload
+                    : payloadWithoutGreeting(payload);
+            if (snap.payload == null || TextUtils.isEmpty(snap.payload.getData())) {
+                return;
+            }
             File file = new File(
                     context.getApplicationContext().getCacheDir(), feedFileName(mode));
             writeUtf8(file, GSON.toJson(snap));
@@ -396,6 +418,99 @@ public final class OpenPathCache {
         } catch (Exception e) {
             Logone.w(e, TAG + " saveFeed failed");
         }
+    }
+
+    /**
+     * July-dumb OpenPath: drop sealed / typed greeting cards from a page-0 body.
+     * Returns {@code payload} unchanged when nothing to strip; otherwise a Gson
+     * clone with re-encrypted {@code data} so the live network object is untouched.
+     */
+    @Nullable
+    static EncreptionRequest payloadWithoutGreeting(@Nullable EncreptionRequest payload) {
+        if (payload == null || TextUtils.isEmpty(payload.getData())) {
+            return payload;
+        }
+        try {
+            String plain = MyUtils.decrypt(payload.getData());
+            if (TextUtils.isEmpty(plain) || plain.length() < 8) {
+                return payload;
+            }
+            JsonElement rootEl = new JsonParser().parse(plain);
+            if (rootEl == null || !rootEl.isJsonObject()) {
+                return payload;
+            }
+            JsonObject root = rootEl.getAsJsonObject();
+            JsonElement dataEl = root.get("data");
+            if (dataEl == null || !dataEl.isJsonArray()) {
+                return payload;
+            }
+            JsonArray data = dataEl.getAsJsonArray();
+            JsonArray kept = new JsonArray();
+            boolean stripped = false;
+            for (int i = 0; i < data.size(); i++) {
+                JsonElement row = data.get(i);
+                if (row != null && row.isJsonObject() && isGreetingJsonRow(row.getAsJsonObject())) {
+                    stripped = true;
+                    continue;
+                }
+                kept.add(row);
+            }
+            if (!stripped) {
+                return payload;
+            }
+            root.add("data", kept);
+            EncreptionRequest copy = GSON.fromJson(GSON.toJson(payload), EncreptionRequest.class);
+            if (copy == null) {
+                return payload;
+            }
+            copy.setData(MyUtils.encrypt(GSON.toJson(root)));
+            return copy;
+        } catch (Exception e) {
+            Logone.w(e, TAG + " payloadWithoutGreeting failed");
+            return payload;
+        }
+    }
+
+    /** Match HomePage greeting identity without depending on applied* memory. */
+    private static boolean isGreetingJsonRow(@Nullable JsonObject o) {
+        if (o == null) {
+            return false;
+        }
+        try {
+            JsonElement seal = o.get("greeting_seal_slot");
+            if (seal != null && seal.isJsonPrimitive() && !seal.isJsonNull()) {
+                String s = seal.getAsString();
+                if (s != null && !s.trim().isEmpty()) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        String pt = null;
+        try {
+            JsonElement ptEl = o.get("post_type");
+            if (ptEl != null && ptEl.isJsonPrimitive() && !ptEl.isJsonNull()) {
+                pt = ptEl.getAsString();
+            }
+        } catch (Exception ignored) {
+        }
+        if (pt != null && ("greetings".equalsIgnoreCase(pt)
+                || "greeting".equalsIgnoreCase(pt))) {
+            return true;
+        }
+        try {
+            JsonElement end = o.get("greeting_slot_end");
+            if (end != null && end.isJsonPrimitive() && !end.isJsonNull()
+                    && end.getAsLong() > 0L
+                    && pt != null
+                    && ("full_image".equalsIgnoreCase(pt)
+                    || "greetings".equalsIgnoreCase(pt)
+                    || "greeting".equalsIgnoreCase(pt))) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     public static void clearFeed(Context context) {
