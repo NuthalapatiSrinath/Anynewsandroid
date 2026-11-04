@@ -44,8 +44,8 @@ public final class OfflineImageStore {
     private static final String DIR_NAME = "offline_article_images";
     /** Cap concurrent downloads — thrifty against image CDN. */
     private static final int MAX_CONCURRENT = 2;
-    /** Per-article images: primary + a couple of gallery/extras. */
-    private static final int MAX_URLS_PER_POST = 3;
+    /** Per-article images: primary + gallery extras (admin gallery max 20). */
+    private static final int MAX_URLS_PER_POST = 20;
     private static final int CONNECT_TIMEOUT_MS = 15_000;
     private static final int READ_TIMEOUT_MS = 45_000;
     private static final long MIN_BYTES = 64L;
