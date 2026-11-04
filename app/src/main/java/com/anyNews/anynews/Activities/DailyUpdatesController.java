@@ -90,6 +90,12 @@ public final class DailyUpdatesController {
 
         /** Open the existing Crex match page. Score polling starts only there. */
         void openCricketFromDailyUpdates();
+
+        /**
+         * After district change: leave Daily Updates / Special overlays and land
+         * on main News with the existing L→R loading reveal + feed reload.
+         */
+        void openMainNewsAfterDistrictChange();
     }
 
     @NonNull
@@ -818,6 +824,13 @@ public final class DailyUpdatesController {
                         String plain = decrypt(response.body().getData());
                         ModelClass model = new Gson().fromJson(plain, ModelClass.class);
                         String[] titles = pickTwoTitles(model);
+                        final boolean hasTitles = !TextUtils.isEmpty(titles[0])
+                                || !TextUtils.isEmpty(titles[1]);
+                        // Never wipe splash / cached Mana headlines with an empty
+                        // Local List (redisOnly cold district pack). Keep prior paint.
+                        if (!hasTitles) {
+                            return;
+                        }
                         int distId = DistrictLabelHelper.getStoredDistId(host);
                         saveManaCache(titles[0], titles[1], distId);
                         host.runOnUiThread(() -> {
@@ -1195,13 +1208,28 @@ public final class DailyUpdatesController {
             }
         };
         View manaCard = root.findViewById(R.id.du_mana_zilla);
-        if (manaCard != null) manaCard.setOnClickListener(openLocal);
+        if (manaCard != null) {
+            manaCard.setClickable(true);
+            manaCard.setFocusable(true);
+            manaCard.setOnClickListener(openLocal);
+        }
+        // Background art must not eat the card tap.
+        View manaBg = root.findViewById(R.id.du_mana_bg);
+        if (manaBg != null) {
+            manaBg.setClickable(false);
+            manaBg.setFocusable(false);
+            manaBg.setOnClickListener(null);
+        }
+        View manaNewsBlock = root.findViewById(R.id.du_mana_news_block);
+        if (manaNewsBlock != null) manaNewsBlock.setOnClickListener(openLocal);
         View n1 = root.findViewById(R.id.du_mana_news1);
         if (n1 != null) n1.setOnClickListener(openLocal);
         View n2 = root.findViewById(R.id.du_mana_news2);
         if (n2 != null) n2.setOnClickListener(openLocal);
         View headline = root.findViewById(R.id.du_mana_headline_label);
         if (headline != null) headline.setOnClickListener(openLocal);
+        View manaLive = root.findViewById(R.id.du_mana_live);
+        if (manaLive != null) manaLive.setOnClickListener(openLocal);
 
         View change = root.findViewById(R.id.du_mana_change);
         View changeRow = root.findViewById(R.id.du_mana_change_row);
@@ -1616,6 +1644,14 @@ public final class DailyUpdatesController {
                     // Prefs already updated locally; server sync can retry later.
                 }
             });
+        } catch (Exception ignored) {
+        }
+
+        // District change = land on main News (not stay on DU / Special), with L→R load.
+        try {
+            if (callbacks != null) {
+                callbacks.openMainNewsAfterDistrictChange();
+            }
         } catch (Exception ignored) {
         }
     }
