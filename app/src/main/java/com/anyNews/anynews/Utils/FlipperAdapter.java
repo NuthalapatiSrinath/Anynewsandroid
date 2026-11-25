@@ -6700,7 +6700,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         half_youTubePlayerHolder.ll_refer_and_earn_halfy = convertView.findViewById(R.id.ll_refer_and_earn_half);
         half_youTubePlayerHolder.iv_share_and_earn = convertView.findViewById(R.id.iv_share_and_earn);
         half_youTubePlayerHolder.my_feed = convertView.findViewById(R.id.my_feed);
-        parent_layout.setOnClickListener(null);
+        if (parent_layout != null) {
+            parent_layout.setOnClickListener(null);
+        }
         hideFeedVideoWriterFooter(convertView);
         showLog("showNormalVideo"+ "after thubnails");
         TextView textViewWebUrl = convertView.findViewById(R.id.textViewWebUrl);
@@ -6798,9 +6800,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             imageViewItems.setVisibility(View.VISIBLE);
         }
 
-        isYoutubeVideoIsInitialized=false;
-        imageViewYoutubePlayVideo.setImageResource(R.drawable.ic_way2_play_circle);
-        imageViewYoutubePlayVideo.setVisibility(View.VISIBLE);
+        isYoutubeVideoIsInitialized = false;
+        if (imageViewYoutubePlayVideo != null) {
+            imageViewYoutubePlayVideo.setImageResource(R.drawable.ic_way2_play_circle);
+            imageViewYoutubePlayVideo.setVisibility(View.VISIBLE);
+        }
 
         //....................................................Upload video..............................
         layoutParentTitle.setVisibility(View.VISIBLE);
@@ -6816,6 +6820,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             //youTubePlayerViewHalf=null;
         }
         showLog("showNormalVideo"+ "after thubnails 3");
+        if (imageViewYoutubePlayVideo != null) {
         imageViewYoutubePlayVideo.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -6892,6 +6897,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             }
         });
+        }
         //....................................................DONE........................................
 
         applyWriterFollowState(
