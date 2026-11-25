@@ -31,7 +31,9 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -58,7 +60,10 @@ public class VideoShareHelper {
         }
     }
 
-    private static final OkHttpClient CLIENT = new OkHttpClient.Builder().build();
+    private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .build();
     private static final ConcurrentHashMap<String, Object> DOWNLOAD_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Boolean> STAMP_RUNNING = new ConcurrentHashMap<>();
     /** How long a share will wait for a logo that is already being stamped. */
@@ -588,6 +593,10 @@ public class VideoShareHelper {
             return new PreparedShare(uri, resolveMimeType(localFile, sourceUrl), localFile);
         }
 
+        if (isHlsPlaylistUrl(sourceUrl)) {
+            return null;
+        }
+
         File cachedFile = getCacheFile(context, sourceUrl);
 
         // Cache hit — share immediately, no progress UI
@@ -633,10 +642,25 @@ public class VideoShareHelper {
         return new PreparedShare(uri, resolveMimeType(cachedFile, sourceUrl), cachedFile);
     }
 
+    private static boolean isHlsPlaylistUrl(String sourceUrl) {
+        if (sourceUrl == null) {
+            return false;
+        }
+        String u = sourceUrl.trim().toLowerCase(Locale.US);
+        return u.contains(".m3u8") || u.contains(".m3u") || u.contains("manifest.mpd");
+    }
+
     private static void downloadToCache(String sourceUrl, File cachedFile) throws Exception {
+        if (isHlsPlaylistUrl(sourceUrl)) {
+            throw new Exception("HLS stream is not downloadable for share");
+        }
         File partFile = new File(cachedFile.getParentFile(), cachedFile.getName() + ".part");
         try {
-            Request request = new Request.Builder().url(sourceUrl).build();
+            Request request = new Request.Builder()
+                    .url(sourceUrl)
+                    .header("User-Agent", "AnyNews-Android VideoShare")
+                    .header("Accept", "*/*")
+                    .build();
             try (Response response = CLIENT.newCall(request).execute()) {
                 if (!response.isSuccessful() || response.body() == null) {
                     throw new Exception("Download failed");

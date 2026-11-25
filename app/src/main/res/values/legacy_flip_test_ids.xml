@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- compile-only ids for legacy HomePage/FlipperAdapter (303c32b3) on 528 layouts -->
+<resources>
+    <item name="youtube_view_half_video" type="id" />
+    <item name="editTextAppReview" type="id" />
+    <item name="ratingBarApp" type="id" />
+</resources>

@@ -492,6 +492,11 @@ public class Constants {
      * In-feed native ad after every N real articles (splash/runtime; default 4, 2–10).
      */
     public static String FEED_AD_EVERY_N = "feed_ad_every_n";
+    /**
+     * Optional single quiet default-ad seat ({@code ad_req_position}). 0 = never
+     * (skip all no-fills). Admin Root_Settings.default_ad_position.
+     */
+    public static String DEFAULT_AD_POSITION = "default_ad_position";
     /** Between-news format: native | interstitial (splash/session). */
     public static String FEED_AD_FORMAT = "feed_ad_format";
     /** Between-news AdMob unit ID (splash/session; Root_Settings.ad_code). */
@@ -649,6 +654,11 @@ public class Constants {
     public static String UPDATE_BANNER_SUBTITLE = "update_banner_subtitle";
     /** Full jatakam WhatsApp digits (country code) from admin; empty = CTA disabled. */
     public static String FULL_JATAKAM_WHATSAPP = "full_jatakam_whatsapp";
+    /**
+     * Offline Advertise / jatakam WhatsApp (no splash/server needed).
+     * Last admin Configuration value (2026-09-24); prefs/splash may still update cache.
+     */
+    public static final String FULL_JATAKAM_WHATSAPP_HARDCODED = "9346532339";
     /**
      * Default raasi for calendar flip page (0-based 0–11 after parse).
      * Splash {@code default_rashi_id}: 1–12, 0–11, or mesha…meena.
@@ -881,7 +891,10 @@ public class Constants {
     public static String PROFILE_CACHE_KEY = "reporter_profile_cache_key";
 
     // Open-path / push-stampede client cache (epoch ms stamps + disk feed file).
-    /** Last successful Splash_Screen apply. */
+    /**
+     * Last successful Splash_Screen apply (epoch ms). Used by
+     * {@link OpenPathCache#shouldRefreshSplashConfig} (~24h lean background refresh).
+     */
     public static String OPEN_PATH_SPLASH_AT = "open_path_splash_at";
     /** Last successful get_static_data apply. */
     public static String OPEN_PATH_STATIC_AT = "open_path_static_at";

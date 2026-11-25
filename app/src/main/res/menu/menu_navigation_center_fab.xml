@@ -26,11 +26,14 @@
     <!-- Middle column between Special and Daily Updates.
          Magazine / special: empty slot under the blinking Share control.
          Every other article: empty slot under the WhatsApp control.
-         Id stays navigation_stricker. Not the Special tab. -->
+         Id stays navigation_stricker. Not the Special tab.
+         Product-hidden Panchangam: no icon/title here (Java may restore if
+         footer_show_calendar ever turns on). Empty chrome avoids "Panchangam"
+         flashing behind the center WhatsApp / Share overlay. -->
     <item
         android:id="@+id/navigation_stricker"
-        android:icon="@drawable/ic_footer_panchangam"
-        android:title="@string/calendar_seg_panchangam"
+        android:icon="@android:color/transparent"
+        android:title=""
         android:visible="false" />
 
     <!-- Daily Updates. Id stays navigation_status for menu / admin-flag stability. -->

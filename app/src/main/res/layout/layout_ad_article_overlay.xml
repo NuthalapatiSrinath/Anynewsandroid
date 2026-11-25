@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Temp surface over main FlipView: article slides up; flip up returns to same ad. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ad_article_overlay_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF121212"
+    android:clickable="true"
+    android:focusable="true">
+
+    <com.anyNews.anynews.flipview.FlipView
+        android:id="@+id/ad_article_overlay_flip"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF121212" />
+
+</FrameLayout>

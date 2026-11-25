@@ -30,6 +30,7 @@ import com.anyNews.anynews.Utils.Allsharedpreference;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
+import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
 import com.anyNews.anynews.models.LanguageModel;
@@ -167,9 +168,14 @@ public class AreaSelectionAdopter extends RecyclerView.Adapter<AreaSelectionAdop
                     Intent intent = new Intent(context, HomePage.class);
                     // Region onboarding name is the display label (not always a district id).
                     DistrictLabelHelper.saveName(context, name);
+                    try {
+                        LanguageFeedInvalidator.onDistrictChanged(context);
+                    } catch (Exception ignored) {
+                    }
 
                     intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
                     intent.putExtra("EXTRA_SESSION_ID", "0");
+                    intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_home);
                     if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                         context.startActivity(intent);
                     }

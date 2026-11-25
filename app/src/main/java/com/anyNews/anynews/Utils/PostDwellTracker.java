@@ -79,7 +79,8 @@ public final class PostDwellTracker {
     public synchronized void flush(Context context, boolean critical) {
         if (postId <= 0 || startedAtMs <= 0) {
             // No dwell to add. Do not POST /views/batch unless something is already queued.
-            if (critical && ViewsBatchTracker.get().hasPending()) {
+            if (critical && ViewsBatchTracker.isServerBatchEnabled()
+                    && ViewsBatchTracker.get().hasPending()) {
                 ViewsBatchTracker.get().flush(context, true);
             }
             return;
@@ -91,13 +92,14 @@ public final class PostDwellTracker {
         // Minimum 1s if they actually saw it briefly (avoids noise of 0)
         if (elapsedSec < 1) elapsedSec = 1;
         enqueueDwell(context.getApplicationContext(), pid, elapsedSec, type);
-        if (critical) {
+        if (critical && ViewsBatchTracker.isServerBatchEnabled()) {
             ViewsBatchTracker.get().flush(context.getApplicationContext(), true);
         }
     }
 
     private void enqueueDwell(
             Context context, long pid, long durationSeconds, @Nullable String type) {
+        if (!ViewsBatchTracker.isServerBatchEnabled()) return;
         try {
             Context appCtx = context.getApplicationContext();
             int draftId = SharedPrefsData.getInt(appCtx, Constants.DraftID, Constants.PREF_NAME);

@@ -471,11 +471,127 @@ public final class DailyUpdatesController {
                     ? View.VISIBLE : View.GONE);
         }
         if (!DailyUpdatesConfigHelper.isManaZillaEnabled(host)) {
+            // Still refresh hub chrome via CF public GET (stock/gold/weather/flash).
+            refreshChromeFromPublicEdge();
             return;
         }
         bindManaLabels();
         paintCachedManaTitles();
-        fetchManaHeadlines(false);
+        // Prefer Cloudflare public/daily_updates; soft-fall to List only if needed.
+        refreshChromeFromPublicEdge();
+    }
+
+    /**
+     * Single CF-cacheable GET for DU hub chrome. Avoids stock_market + List POSTs
+     * for paint. Soft-falls to legacy origin calls when the edge body is unusable.
+     */
+    private void refreshChromeFromPublicEdge() {
+        try {
+            int languageId = SharedPrefsData.getInt(host, Constants.LanguageID, Constants.PREF_NAME);
+            int stateId = SharedPrefsData.getInt(host, Constants.StateID, Constants.PREF_NAME);
+            int distId = DistrictLabelHelper.getStoredDistId(host);
+            APIService api = RestApiClient.getClient().create(APIService.class);
+            api.Public_Daily_Updates(
+                    "v3",
+                    Math.max(0, languageId),
+                    stateId > 0 ? stateId : null,
+                    distId > 0 ? distId : null
+            ).enqueue(new Callback<JsonObject>() {
+                @Override
+                public void onResponse(@NonNull Call<JsonObject> call,
+                                       @NonNull Response<JsonObject> response) {
+                    JsonObject body = response.body();
+                    if (!response.isSuccessful() || body == null
+                            || (body.has("success") && body.get("success").isJsonPrimitive()
+                            && !body.get("success").getAsBoolean())) {
+                        softFallOriginDuChrome();
+                        return;
+                    }
+                    try {
+                        if (body.has("stock_market")) {
+                            DailyUpdatesConfigHelper.saveStockSummaryFromSplash(
+                                    host, body.get("stock_market"));
+                        }
+                        if (body.has("flash_news")) {
+                            DailyUpdatesConfigHelper.saveFlashHeadlinesFromSplash(
+                                    host, body.get("flash_news"));
+                        }
+                        if (body.has("local_headlines")) {
+                            DailyUpdatesConfigHelper.saveLocalHeadlinesFromSplash(
+                                    host, body.get("local_headlines"));
+                        }
+                        if (body.has("gold")) {
+                            LocalUpdatesConfigHelper.saveGoldFromSplash(host, body.get("gold"));
+                        }
+                        if (body.has("weather")) {
+                            LocalUpdatesConfigHelper.saveWeatherFromSplash(
+                                    host, body.get("weather"));
+                        }
+                        if (body.has("fuel")) {
+                            LocalUpdatesConfigHelper.saveFuelFromSplash(host, body.get("fuel"));
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    host.runOnUiThread(() -> {
+                        paintStockSummary(DailyUpdatesConfigHelper.stockSummaryJson(host));
+                        bindFlashStripVisibility();
+                        paintCachedManaTitles();
+                        bindWeatherCard();
+                        bindGoldCard();
+                        bindFuelCard();
+                        // Only List-fallback when mana still empty after edge.
+                        if (DailyUpdatesConfigHelper.isManaZillaEnabled(host)
+                                && manaTitlesMissingForCurrentDistrict()) {
+                            fetchManaHeadlines(true);
+                        }
+                    });
+                }
+
+                @Override
+                public void onFailure(@NonNull Call<JsonObject> call, @NonNull Throwable t) {
+                    softFallOriginDuChrome();
+                }
+            });
+        } catch (Exception e) {
+            softFallOriginDuChrome();
+        }
+    }
+
+    private void softFallOriginDuChrome() {
+        refreshStockSummaryLive();
+        if (DailyUpdatesConfigHelper.isManaZillaEnabled(host)) {
+            if (manaTitlesMissingForCurrentDistrict()) {
+                fetchManaHeadlines(true);
+            } else {
+                fetchManaHeadlines(false);
+            }
+        }
+    }
+
+    /** True when Mana Zilla has no splash/cache headlines for the selected district. */
+    private boolean manaTitlesMissingForCurrentDistrict() {
+        try {
+            int distId = DistrictLabelHelper.getStoredDistId(host);
+            TextView n1 = root.findViewById(R.id.du_mana_news1);
+            TextView n2 = root.findViewById(R.id.du_mana_news2);
+            boolean visible = (n1 != null && n1.getVisibility() == View.VISIBLE
+                    && !TextUtils.isEmpty(n1.getText()))
+                    || (n2 != null && n2.getVisibility() == View.VISIBLE
+                    && !TextUtils.isEmpty(n2.getText()));
+            if (visible) return false;
+            int cachedDist = SharedPrefsData.getInt(host, CACHE_DIST, Constants.PREF_NAME);
+            String t1 = SharedPrefsData.getString(host, CACHE_T1, Constants.PREF_NAME);
+            String t2 = SharedPrefsData.getString(host, CACHE_T2, Constants.PREF_NAME);
+            if (distId > 0 && cachedDist == distId
+                    && (!TextUtils.isEmpty(t1) || !TextUtils.isEmpty(t2))) {
+                return false;
+            }
+            String[] splash = DailyUpdatesConfigHelper.localHeadlines(host);
+            return splash == null || splash.length == 0
+                    || (splash[0] == null || splash[0].trim().isEmpty());
+        } catch (Exception e) {
+            return true;
+        }
     }
 
     private void bindFlashStripVisibility() {
@@ -550,7 +666,8 @@ public final class DailyUpdatesController {
         }
 
         paintStockSummary(DailyUpdatesConfigHelper.stockSummaryJson(host));
-        refreshStockSummaryLive();
+        // Live stock refresh is owned by refreshChromeFromPublicEdge (CF GET).
+        // Origin stock_market POST only runs via softFallOriginDuChrome.
     }
 
     private void paintStockSummary(@Nullable org.json.JSONObject o) {

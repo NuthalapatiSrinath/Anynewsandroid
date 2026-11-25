@@ -101,7 +101,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="@string/birthday_pick_photo" />
+                android:backgroundTint="#E5E7EB"
+                android:text="@string/birthday_pick_photo"
+                android:textColor="#1F2937" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -228,7 +230,7 @@
                 android:inputType="textPersonName|textCapWords"
                 android:maxLines="1"
                 android:textColor="#1F2937"
-                android:textColorHint="#9CA3AF" />
+                android:textColorHint="#6B7280" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -241,7 +243,9 @@
             <Spinner
                 android:id="@+id/birthday_auto_name_font"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:popupBackground="#FFFFFF"
+                android:spinnerMode="dropdown" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -254,7 +258,9 @@
             <Spinner
                 android:id="@+id/birthday_auto_name_size"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:popupBackground="#FFFFFF"
+                android:spinnerMode="dropdown" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -273,7 +279,7 @@
                 android:inputType="textCapWords"
                 android:maxLines="2"
                 android:textColor="#1F2937"
-                android:textColorHint="#9CA3AF" />
+                android:textColorHint="#6B7280" />
 
             <TextView
                 android:id="@+id/birthday_auto_address_note"
@@ -296,6 +302,8 @@
                 android:id="@+id/birthday_auto_addr_font"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:popupBackground="#FFFFFF"
+                android:spinnerMode="dropdown"
                 android:visibility="gone" />
 
             <TextView
@@ -309,7 +317,9 @@
             <Spinner
                 android:id="@+id/birthday_auto_addr_size"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:popupBackground="#FFFFFF"
+                android:spinnerMode="dropdown" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -322,6 +332,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:buttonTint="#1F2937"
                     android:text="@string/birthday_auto_name_bold"
                     android:textColor="#1F2937" />
 
@@ -330,6 +341,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:buttonTint="#1F2937"
                     android:text="@string/birthday_auto_addr_bold"
                     android:textColor="#1F2937" />
             </LinearLayout>
@@ -353,7 +365,7 @@
                 android:maxLength="160"
                 android:minLines="3"
                 android:textColor="#1F2937"
-                android:textColorHint="#9CA3AF" />
+                android:textColorHint="#6B7280" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -372,7 +384,7 @@
                 android:inputType="textCapWords"
                 android:maxLines="1"
                 android:textColor="#1F2937"
-                android:textColorHint="#9CA3AF" />
+                android:textColorHint="#6B7280" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -387,7 +399,9 @@
                 android:id="@+id/birthday_auto_pick_date"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/birthday_auto_pick_date" />
+                android:backgroundTint="#E5E7EB"
+                android:text="@string/birthday_auto_pick_date"
+                android:textColor="#1F2937" />
 
             <TextView
                 android:id="@+id/birthday_auto_schedule_info"

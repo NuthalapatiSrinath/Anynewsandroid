@@ -7,7 +7,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.anyNews.anynews.Services.Config;
-import com.anyNews.anynews.Ui.BirthdayPosterPreviewView;
 
 /**
  * Caches and reads Profile hub / More / Home footer / Settings panel admin flags from splash.
@@ -315,13 +314,9 @@ public final class ProfileHubConfigHelper {
             SharedPrefsData.putStringImmediate(
                     app, Constants.BIRTHDAY_TEMPLATE_IMAGE_URL, url, Constants.PREF_NAME);
         }
-        // Prefetch celebration art so Birthday Special does not flash bundled A.
-        if ("b".equals(id) && url != null && !url.isEmpty()) {
-            try {
-                BirthdayPosterPreviewView.prefetchCelebrationTemplate(app, id, url);
-            } catch (Exception ignored) {
-            }
-        }
+        // Instant banner: BirthdayAutoActivity applies cached template B URL on
+        // open (disk decode via applyTemplate). Do not pre-punch overlays here —
+        // that path caused black photo frames after 361/364.
     }
 
     /** Missing or unknown values stay on template A. */
@@ -522,8 +517,9 @@ public final class ProfileHubConfigHelper {
         }
     }
 
+    /** Bookmarks removed from product — always hidden. */
     public static boolean isBookmarksVisible(@Nullable Context context) {
-        return readBool(context, Constants.PROFILE_SHOW_BOOKMARKS, true);
+        return false;
     }
 
     public static boolean isReferralVisible(@Nullable Context context) {
@@ -576,11 +572,7 @@ public final class ProfileHubConfigHelper {
         return readBool(context, Constants.FOOTER_SHOW_VIDEOS, true);
     }
 
-    /**
-     * Home footer Bookmarks tab.
-     * Product: always hidden — Bookmarks live in the top News|Bookmarks pill
-     * (online + offline). Admin footer_show_bookmarks is ignored.
-     */
+    /** Bookmarks footer tab removed — always hidden. */
     public static boolean isFooterShowBookmarks(@Nullable Context context) {
         return false;
     }
@@ -659,18 +651,8 @@ public final class ProfileHubConfigHelper {
 
     @NonNull
     public static String getFullJatakamWhatsapp(@Nullable Context context) {
-        if (context == null) return "";
-        try {
-            String v = SharedPrefsData.getString(
-                    context.getApplicationContext(),
-                    Constants.FULL_JATAKAM_WHATSAPP,
-                    Constants.PREF_NAME);
-            if (TextUtils.isEmpty(v)) return "";
-            String digits = v.replaceAll("[^0-9]", "");
-            return digits.length() >= 10 ? digits : "";
-        } catch (Exception ignored) {
-            return "";
-        }
+        // Hardcoded: Advertise / ContactUs / calendar CTA work offline; ignore empty prefs.
+        return Constants.FULL_JATAKAM_WHATSAPP_HARDCODED;
     }
 
     /**

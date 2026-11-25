@@ -46,6 +46,14 @@ public final class ContactUsChooser {
     }
 
     public static void openWhatsApp(@NonNull Context context) {
+        openWhatsApp(context, null);
+    }
+
+    /**
+     * Opens admin Configuration WhatsApp ({@code full_jatakam_whatsapp}).
+     * @param prefill optional message; null uses contact default.
+     */
+    public static void openWhatsApp(@NonNull Context context, @Nullable String prefill) {
         String number = ProfileHubConfigHelper.getFullJatakamWhatsapp(context);
         if (TextUtils.isEmpty(number)) {
             number =
@@ -61,14 +69,17 @@ public final class ContactUsChooser {
             Toast.makeText(context, R.string.ad_center_whatsapp_missing, Toast.LENGTH_LONG).show();
             return;
         }
+        String text = prefill;
+        if (TextUtils.isEmpty(text)) {
+            text = context.getString(R.string.contact_whatsapp_prefill);
+        }
         try {
             Uri uri =
                     Uri.parse(
                             "https://wa.me/"
                                     + digits
                                     + "?text="
-                                    + Uri.encode(
-                                            context.getString(R.string.contact_whatsapp_prefill)));
+                                    + Uri.encode(text));
             context.startActivity(new Intent(Intent.ACTION_VIEW, uri));
         } catch (Exception e) {
             Toast.makeText(context, R.string.ad_center_whatsapp_missing, Toast.LENGTH_SHORT).show();

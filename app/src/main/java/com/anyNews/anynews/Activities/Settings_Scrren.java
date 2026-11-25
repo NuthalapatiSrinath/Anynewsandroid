@@ -250,7 +250,6 @@ public class Settings_Scrren extends AppCompatActivity {
                         d != null ? d.getLocal() : null, getString(R.string.settings_local_stories)));
         setText(R.id.label_rewards, getString(R.string.settings_rewards));
 
-        setText(R.id.label_bookmarks, getString(R.string.settings_bookmarks));
         setText(R.id.label_clear_cache, getString(R.string.settings_clear_cache));
 
         bindLinkRow(
@@ -271,6 +270,7 @@ public class Settings_Scrren extends AppCompatActivity {
                 R.id.row_contact,
                 firstNonEmpty(
                         d != null ? d.getContactUs() : null, getString(R.string.settings_contact)));
+        bindLinkRow(R.id.row_origin_calls, "Server / CF calls");
 
         TextView section = findViewById(R.id.section_contact);
         if (section != null) {
@@ -469,10 +469,7 @@ public class Settings_Scrren extends AppCompatActivity {
 
         View btnBookmarks = findViewById(R.id.btn_bookmarks);
         if (btnBookmarks != null) {
-            btnBookmarks.setOnClickListener(
-                    v ->
-                            startActivity(
-                                    new Intent(Settings_Scrren.this, BookmarksActivity.class)));
+            btnBookmarks.setVisibility(View.GONE);
         }
 
         View btnClear = findViewById(R.id.btn_clear_cache);
@@ -488,6 +485,11 @@ public class Settings_Scrren extends AppCompatActivity {
         if (rowPrivacy != null) rowPrivacy.setOnClickListener(v -> openLegalWeb("2"));
         View rowContact = findViewById(R.id.row_contact);
         if (rowContact != null) rowContact.setOnClickListener(v -> openContactDialog());
+        View rowOrigin = findViewById(R.id.row_origin_calls);
+        if (rowOrigin != null) {
+            rowOrigin.setOnClickListener(
+                    v -> startActivity(new Intent(Settings_Scrren.this, OriginCallsDebugActivity.class)));
+        }
     }
 
     private void openPlayStoreRate() {

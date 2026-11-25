@@ -1,5 +1,7 @@
 package com.anyNews.anynews.Utils;
 
+import com.anyNews.anynews.Utils.MyUtils;
+
 import android.content.Context;
 
 import com.anyNews.anynews.Pojo.EncreptionRequest;
@@ -61,7 +63,7 @@ public final class WalletHistoryPrefetcher {
 
     private static boolean isNetworkFree(Context app) {
         try {
-            if (!BookmarkStore.isNetworkAvailable(app)) return false;
+            if (!MyUtils.isNetworkAvailable(app)) return false;
         } catch (Exception e) {
             try {
                 if (!MyUtils.isNetworkAvailable(app)) return false;

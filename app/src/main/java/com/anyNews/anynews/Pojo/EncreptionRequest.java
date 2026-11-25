@@ -638,6 +638,11 @@ public class EncreptionRequest {
     @Expose
     private String ad_code_secondary;
 
+    /** Optional quiet default seat (Root_Settings); 0 = skip all no-fills. */
+    @SerializedName("default_ad_position")
+    @Expose
+    private Integer default_ad_position;
+
     @SerializedName("views_batch_flush_interval_seconds")
     @Expose
     private Integer views_batch_flush_interval_seconds;
@@ -692,6 +697,10 @@ public class EncreptionRequest {
 
     public String getAd_code_secondary() {
         return ad_code_secondary;
+    }
+
+    public Integer getDefault_ad_position() {
+        return default_ad_position;
     }
 
     public Integer getViews_batch_flush_interval_seconds() {

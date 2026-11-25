@@ -254,6 +254,11 @@ public class LanguageAdopter extends RecyclerView.Adapter<LanguageAdopter.ViewHo
 
                             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_CLEAR_TASK| Intent.FLAG_ACTIVITY_NEW_TASK);
                             intent.putExtra("EXTRA_SESSION_ID", "0");
+                            if (returningUser) {
+                                // Language pick → main News (not stale Daily Updates hub).
+                                LanguageFeedInvalidator.clearDailyUpdatesHubRestore(context);
+                                intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_home);
+                            }
                             if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                                 context.startActivity(intent);
                             }

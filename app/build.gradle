@@ -61,9 +61,11 @@ android {
         minSdkVersion 24
         targetSdk 36
         multiDexEnabled true
-        // Play 516: July-style OpenPath — never cache/restore greeting; network inject only.
-        versionCode 516
-        versionName "3.42.54"
+        // 527: empty CF/public feed national geo (TE) + never end-only FlipView
+        // after CF→List miss; black-ad strip-before-paint retained from 526.
+        // legacy-flip-test: HomePage+FlipperAdapter from 303c32b3 on current deps
+        versionCode 529
+        versionName "3.42.66-legacy-flip-test"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         renderscriptTargetApi 33
         renderscriptSupportModeEnabled true
@@ -105,6 +107,8 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             proguardFiles 'proguard-rules.pro'
             buildConfigField "String", "API_BASE_URL", "\"https://anynewsdevelopmentapi.anynews.co.in/\""
+            // Dev/debug: Firebase post_view on flip; no POST /app/v3/views/batch
+            buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "false"
         }
         release {
 // 3999 0336 2591    155115
@@ -115,6 +119,8 @@ android {
             proguardFiles 'proguard-rules.pro'
             signingConfig signingConfigs.release
             buildConfigField "String", "API_BASE_URL", "\"https://api.anynews.co.in/\""
+            // Dev/release test builds: Firebase post_view (same as debug); no POST /views/batch
+            buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "false"
             ndk {
                 debugSymbolLevel 'FULL'
             }

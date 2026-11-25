@@ -33,8 +33,8 @@ import java.util.List;
  * this path only runs AdLoader — no FlipView bind. On seat open, callers
  * {@link #takeReady(String)} if a creative is ready <b>or</b> HomePage settle
  * {@code ensureFeedNativeAdLoaded} starts a seat load — never both for the same
- * seat moment. Each warm/replenish uses primary then optional secondary on
- * no-fill only (max 2 AdMob requests).
+ * seat moment. Each warm/replenish uses the July single primary unit only
+ * (one AdMob request; no secondary waterfall).
  */
 public final class AdPreloader {
     private static final String TAG = "ANYNEWS_ADS";
@@ -235,34 +235,21 @@ public final class AdPreloader {
     }
 
     private void startLoadIfNeeded(@Nullable Context appContext) {
-        startLoadIfNeeded(appContext, null);
-    }
-
-    private void startLoadIfNeeded(
-            @Nullable Context appContext, @Nullable String unitOverride) {
         if (appContext == null) {
             return;
         }
         final String unit;
-        final boolean isSecondaryAttempt;
         synchronized (this) {
             int room = MAX_READY - readySlots.size() - loadsInFlight;
             if (room <= 0 || loadsInFlight >= MAX_PARALLEL_LOADS) {
                 return;
             }
             long now = SystemClock.uptimeMillis();
-            if (TextUtils.isEmpty(unitOverride)
-                    && lastFailUptimeMs > 0L
-                    && (now - lastFailUptimeMs) < FAIL_BACKOFF_MS) {
+            if (lastFailUptimeMs > 0L && (now - lastFailUptimeMs) < FAIL_BACKOFF_MS) {
                 return;
             }
-            if (!TextUtils.isEmpty(unitOverride)) {
-                unit = unitOverride.trim();
-                isSecondaryAttempt = true;
-            } else {
-                unit = resolveUnit(appContext);
-                isSecondaryAttempt = false;
-            }
+            // July one-unit: always primary ad_code (no secondary override).
+            unit = resolveUnit(appContext);
             if (TextUtils.isEmpty(unit)) {
                 return;
             }
@@ -271,7 +258,6 @@ public final class AdPreloader {
         mainHandler.post(() -> {
             try {
                 Log.d(TAG, "AdPreloader LOAD START unit=" + unit
-                        + (isSecondaryAttempt ? " (secondary)" : "")
                         + " inFlight=" + loadsInFlight
                         + " pool=" + readySlots.size());
                 AdLoader adLoader = new AdLoader.Builder(appContext, unit)
@@ -307,6 +293,7 @@ public final class AdPreloader {
                                     if (loadsInFlight > 0) {
                                         loadsInFlight--;
                                     }
+                                    lastFailUptimeMs = SystemClock.uptimeMillis();
                                 }
                                 boolean noFill = loadAdError != null
                                         && loadAdError.getCode() == AdRequest.ERROR_CODE_NO_FILL;
@@ -315,22 +302,7 @@ public final class AdPreloader {
                                 Log.d(TAG, "AdPreloader LOAD FAIL " + detail
                                         + " noFill=" + noFill
                                         + " unit=" + unit);
-                                // Primary no-fill → try secondary once (admin toggle).
-                                if (noFill && !isSecondaryAttempt) {
-                                    String secondary =
-                                            FeedAdConfig.resolveFallbackUnitAfterNoFill(
-                                                    appContext, unit);
-                                    if (!TextUtils.isEmpty(secondary)) {
-                                        Log.d(TAG, "AdPreloader waterfall → secondary="
-                                                + secondary);
-                                        startLoadIfNeeded(appContext, secondary);
-                                        return;
-                                    }
-                                }
-                                synchronized (AdPreloader.this) {
-                                    lastFailUptimeMs = SystemClock.uptimeMillis();
-                                }
-                                // Never stop for the session — resume warm after backoff.
+                                // July one-unit: no secondary waterfall on no-fill.
                                 scheduleRecoverPrefetch(appContext);
                             }
                         })

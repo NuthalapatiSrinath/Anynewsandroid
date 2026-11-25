@@ -202,6 +202,8 @@ public class DistricsAdopter extends RecyclerView.Adapter<DistricsAdopter.ViewHo
                     Intent intent=new Intent(context,HomePage.class);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                     intent.putExtra("EXTRA_SESSION_ID", "0");
+                    // Profile / picker district change → footer News + feed load, not DU.
+                    intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_home);
                     if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                         context.startActivity(intent);
                         if (context instanceof Districs) {

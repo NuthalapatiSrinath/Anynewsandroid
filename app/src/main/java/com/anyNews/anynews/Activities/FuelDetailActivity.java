@@ -996,6 +996,7 @@ public class FuelDetailActivity extends AppCompatActivity {
         JSONArray places = placesOf(root);
         String first = null;
         String firstEn = null;
+        String firstSort = null;
         int firstDist = 0;
         for (int i = 0; i < places.length(); i++) {
             JSONObject row = places.optJSONObject(i);
@@ -1003,9 +1004,13 @@ public class FuelDetailActivity extends AppCompatActivity {
             if (!(row.optDouble("petrol", 0) > 0) || !(row.optDouble("diesel", 0) > 0)) continue;
             String city = displayCityName(row);
             if (city.isEmpty()) continue;
-            if (first == null || city.compareToIgnoreCase(first) < 0) {
+            // city_en sort — same default as DU hub outside card (outside === inside).
+            String sort = row.optString("city_en", "").trim();
+            if (sort.isEmpty()) sort = city;
+            if (firstSort == null || sort.compareToIgnoreCase(firstSort) < 0) {
                 first = city;
                 firstEn = row.optString("city_en", "");
+                firstSort = sort;
                 firstDist = row.optInt("district_id", 0);
             }
         }

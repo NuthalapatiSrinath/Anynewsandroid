@@ -476,24 +476,29 @@ public final class ReadArticleStore {
     }
 
     /**
-     * Real-article cadence for client-side ad re-placement after unread strip.
-     * Matches server {@code feed_ad_every_n} (default 4 → seats at 4, 9, 14, …).
-     * Prefer {@link #getAdEveryNReal()} — admin may override via splash/session.
+     * @deprecated Seats use {@link FeedAdConfig#FIXED_AD_POSITIONS}. Kept as a
+     * spacing hint for share/ratings only (=4).
      */
+    @Deprecated
     public static final int DEFAULT_AD_EVERY_N_REAL = FeedAdConfig.DEFAULT_EVERY_N;
 
     /**
-     * @deprecated Use {@link #getAdEveryNReal()} so admin overrides apply.
-     * Kept as compile-time default (=4) for javadoc / legacy references.
+     * @deprecated Seats use {@link FeedAdConfig#FIXED_AD_POSITIONS}.
      */
     @Deprecated
     public static final int AD_EVERY_N_REAL = DEFAULT_AD_EVERY_N_REAL;
 
-    /** Admin-driven cadence (default 4). Safe without Context after splash. */
+    /**
+     * @deprecated Inert for ad seats — use {@link FeedAdConfig#FIXED_AD_POSITIONS}.
+     * Still returns splash every-N for share/ratings spacing hints.
+     */
+    @Deprecated
     public static int getAdEveryNReal() {
         return FeedAdConfig.getEveryN();
     }
 
+    /** @deprecated Seats use {@link FeedAdConfig#FIXED_AD_POSITIONS}. */
+    @Deprecated
     public static int getAdEveryNReal(@Nullable Context context) {
         return FeedAdConfig.getEveryN(context);
     }
@@ -506,7 +511,7 @@ public final class ReadArticleStore {
 
     /**
      * In-feed "Rate AnyNews" stars card: place after this many real articles.
-     * With ads every {@link #getAdEveryNReal()}, that lands around flip index ~10
+     * With fixed ad seats at 1/5/9/14/19, that lands around flip index ~10
      * (still early in the feed). Server historic inject used brittle
      * {@code overallSkip + postIndex == 23} and often never surfaced early.
      */
@@ -745,7 +750,7 @@ public final class ReadArticleStore {
     }
 
     /**
-     * Ads at every {@link #getAdEveryNReal()} reals + share_app throttle in one pass.
+     * Ads at {@link FeedAdConfig#FIXED_AD_POSITIONS} + share_app throttle in one pass.
      * Prefer this after unread strip / soft-remove / tab restore.
      * Does not place ratings — callers should use {@link #ensureRatingsSlot} after
      * (needs Context for rated / daily-seen prefs).
@@ -805,9 +810,8 @@ public final class ReadArticleStore {
         }
 
         int paintableTotal = countPaintableArticles(items);
-        // Need at least one full ad-block of stories before showing the rate card.
-        final int adEveryN = getAdEveryNReal(context);
-        final int minPaintables = Math.min(RATING_AFTER_N_REAL, adEveryN);
+        // Need a few stories before showing the rate card (not tied to ad seats).
+        final int minPaintables = Math.min(RATING_AFTER_N_REAL, 4);
         if (paintableTotal < minPaintables) {
             // Not enough content yet — put any server row back (before feed_end)
             // so pagination can move it to the target once paintables grow.
@@ -983,8 +987,8 @@ public final class ReadArticleStore {
             }
         }
         // Ensure one promo when we had shares but never hit the window yet.
-        final int adEveryN = getAdEveryNReal();
-        if (sharesPlaced == 0 && !shares.isEmpty() && realTotal >= adEveryN) {
+        final int shareAfterHint = 4;
+        if (sharesPlaced == 0 && !shares.isEmpty() && realTotal >= shareAfterHint) {
             int r = 0;
             int insertAt = rebuilt.size();
             for (int i = 0; i < rebuilt.size(); i++) {
@@ -995,7 +999,7 @@ public final class ReadArticleStore {
                         && d.getPostId() != null
                         && d.getPostId() > 0) {
                     r++;
-                    if (r >= adEveryN) {
+                    if (r >= shareAfterHint) {
                         insertAt = i + 1;
                         break;
                     }
@@ -1025,12 +1029,11 @@ public final class ReadArticleStore {
     }
 
     /**
-     * After unread filter / soft strip collapses the list, re-insert ad slots at the
-     * product cadence (every {@link #getAdEveryNReal()} real cards → first ad at
-     * index N).
+     * After unread filter / soft strip collapses the list, re-insert ad slots at
+     * {@link FeedAdConfig#FIXED_AD_POSITIONS} (1-based flip indices 1/5/9/14/19).
      * Keeps original ad metadata ({@code ad_req_position}, codes) so already-loaded
      * native ads still match. Clones the template when needed so skip-ahead pages
-     * that discarded later ads still get a full cadence.
+     * that discarded later ads still get the fixed seats.
      * Used by online News and Video News flip feeds.
      *
      * @param items       feed list to mutate in place
@@ -1077,56 +1080,45 @@ public final class ReadArticleStore {
             return false;
         }
 
-        int realCount = countRealArticles(content);
-        final int adEveryN = context != null
-                ? getAdEveryNReal(context)
-                : getAdEveryNReal();
-        // Need at least one full block of reals to place an ad (every-N pattern).
-        if (realCount < adEveryN) {
-            // Still drop stacked leading/trailing ads if strip left only clumped ads.
-            if (adPool.isEmpty() && items.size() == content.size()) {
-                return false;
-            }
-            // Fewer than N reals: keep content only (no ad first on a tiny feed).
-            if (content.size() == items.size() && adPool.isEmpty()) {
+        // Empty content after strip: drop clumped ads.
+        if (content.isEmpty()) {
+            if (adPool.isEmpty() && items.isEmpty()) {
                 return false;
             }
             items.clear();
-            items.addAll(content);
-            return true;
+            return !adPool.isEmpty();
         }
 
-        ArrayList<ModelClass.Datum> rebuilt = new ArrayList<>(content.size() + realCount / adEveryN + 2);
-        int realsSeen = 0;
+        final int[] fixed = FeedAdConfig.FIXED_AD_POSITIONS;
+        ArrayList<ModelClass.Datum> rebuilt =
+                new ArrayList<>(content.size() + fixed.length + 2);
+        int contentIdx = 0;
         int adUsed = 0;
-        for (ModelClass.Datum d : content) {
-            rebuilt.add(d);
-            // Every N normal non-sticky articles — do not let stickies displace ad cadence.
-            if (d != null && !isSyntheticFeedSlot(d) && !isStickyArticle(d)
-                    && d.getPostId() != null && d.getPostId() > 0) {
-                realsSeen++;
-                if (realsSeen % adEveryN == 0) {
-                    ModelClass.Datum slot;
-                    if (adUsed < adPool.size()) {
-                        slot = adPool.get(adUsed);
-                    } else {
-                        slot = cloneAdShell(template);
-                        if (slot == null) slot = template;
-                    }
-                    if (slot != null) {
-                        // Align position metadata with list index so native preload
-                        // and Flipper matching hit this shell (not stale 6/14 seeds).
-                        try {
-                            int at = rebuilt.size();
-                            slot.setAd_req_position(at);
-                            slot.setNext_ad_req_position(at + adEveryN + 1);
-                        } catch (Exception ignored) {
-                        }
-                        rebuilt.add(slot);
-                        adUsed++;
-                    }
+        while (contentIdx < content.size()) {
+            final int nextOneBased = rebuilt.size() + 1;
+            if (FeedAdConfig.isFixedAdPosition(nextOneBased)
+                    && adUsed < fixed.length) {
+                ModelClass.Datum slot;
+                if (adUsed < adPool.size()) {
+                    slot = adPool.get(adUsed);
+                } else {
+                    slot = cloneAdShell(template);
+                    if (slot == null) slot = template;
                 }
+                if (slot != null) {
+                    try {
+                        slot.setAd_req_position(nextOneBased);
+                        slot.setNext_ad_req_position(
+                                FeedAdConfig.nextFixedAdPosition(nextOneBased));
+                    } catch (Exception ignored) {
+                    }
+                    rebuilt.add(slot);
+                    adUsed++;
+                }
+                continue;
             }
+            rebuilt.add(content.get(contentIdx));
+            contentIdx++;
         }
 
         // Unchanged length+order of non-ad content and same ad count/placement → skip churn.

@@ -13,6 +13,7 @@ import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.EncreptionRequest;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Pojo.ListAllArticlesRequest;
+import com.anyNews.anynews.Pojo.PublicEdgeFeedResponse;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.google.gson.Gson;
@@ -27,13 +28,21 @@ import retrofit2.Response;
 import static com.anyNews.anynews.Utils.MyUtils.encrypt;
 
 /**
- * Fires main page-0 {@code List_All_Articles} as early as splash can leave, so Home's
- * open call usually coalesces or hits a just-saved warm OpenPath snapshot — without
- * painting offline packs online.
+ * Optional early main page-0 before Home binds.
+ * <p>
+ * <b>StartingActivity must not prefetch</b> ({@link #PREFETCH_FROM_STARTING_DISABLED}):
+ * with {@link OpenPathCache#FEED_DISK_DISABLED}, a splash prefetch only duplicates Home's
+ * page-0 for every cold open (~300k users). HomePage remains the single feed owner;
+ * NetworkCallDeduper still coalesces if another caller enqueues the same key.
+ * <p>
+ * Prefers Cloudflare {@code GET /public/feed}; soft-falls back to encrypted
+ * {@code List_All_Articles}.
  */
 public final class OpenPathFeedPrefetcher {
 
     private static final String TAG = "OpenPathFeedPrefetcher";
+  /** When true, {@link #maybePrefetchFromStartingActivity} is a no-op (Way2-style lean open). */
+    public static final boolean PREFETCH_FROM_STARTING_DISABLED = true;
     private static final AtomicBoolean launched = new AtomicBoolean(false);
 
     private OpenPathFeedPrefetcher() {
@@ -45,10 +54,24 @@ public final class OpenPathFeedPrefetcher {
     }
 
     /**
+     * Historical StartingActivity entry point — disabled so Home owns the one page-0 fetch.
+     */
+    public static void maybePrefetchFromStartingActivity(
+            @Nullable Context context,
+            @Nullable String pushTitle,
+            @Nullable String sharePostId) {
+        if (PREFETCH_FROM_STARTING_DISABLED) {
+            Logone.v(TAG, "skip StartingActivity prefetch (Home owns page-0)");
+            return;
+        }
+        maybePrefetchMainPage0(context, pushTitle, sharePostId);
+    }
+
+    /**
      * Best-effort early main page-0. Skips when offline, no identity, sticky
      * push/share, or feed is already inside the network min-interval window.
      * Uses the same {@link NetworkCallDeduper} key as Home page-0 so Home joins
-     * the in-flight call instead of doubling traffic.
+     * the in-flight call instead of doubling traffic (POST fallback path).
      */
     public static void maybePrefetchMainPage0(@Nullable Context context) {
         maybePrefetchMainPage0(context, null, null);
@@ -87,6 +110,73 @@ public final class OpenPathFeedPrefetcher {
                 // Already minutes-fresh online success — warm paint covers Home.
                 return;
             }
+            final int langId = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+            Logone.v(TAG, "early main page-0 public edge lang=" + langId);
+            Call<PublicEdgeFeedResponse> edgeCall =
+                    PublicEdgeFeedHelper.enqueuePublicFeedCoalesced(
+                            app, 0, 0L, 0L, new Callback<PublicEdgeFeedResponse>() {
+                    @Override
+                    public void onResponse(
+                            @NonNull Call<PublicEdgeFeedResponse> c,
+                            @NonNull Response<PublicEdgeFeedResponse> response) {
+                        try {
+                            int langNow = SharedPrefsData.getInt(
+                                    app, Constants.LanguageID, Constants.PREF_NAME);
+                            if (langNow != langId) {
+                                Logone.v(TAG, "early edge dropped lang enq="
+                                        + langId + " now=" + langNow);
+                                return;
+                            }
+                            // Empty CF page-0 must not warm OpenPath — soft-fall to List.
+                            if (!response.isSuccessful()
+                                    || !PublicEdgeFeedHelper.isAcceptableEdgeResponse(
+                                            response.body(), 0L)) {
+                                enqueuePostFallback(app, langId);
+                                return;
+                            }
+                            EncreptionRequest wrapped =
+                                    PublicEdgeFeedHelper.toEncreptionRequest(
+                                            app, response.body(), 0L);
+                            if (wrapped != null
+                                    && wrapped.getData() != null
+                                    && !wrapped.getData().isEmpty()) {
+                                OpenPathCache.saveFeed(
+                                        app, 0, wrapped, OpenPathCache.FEED_MODE_MAIN);
+                                try {
+                                    LanguageFeedInvalidator.markFeedLanguageApplied(
+                                            app, langNow);
+                                } catch (Exception ignored) {
+                                }
+                                Logone.v(TAG, "early main page-0 edge saved to OpenPath");
+                                return;
+                            }
+                        } catch (Exception e) {
+                            Logone.w(e, TAG + " edge save failed");
+                        }
+                        // Soft-fail → encrypted POST.
+                        enqueuePostFallback(app, langId);
+                    }
+
+                    @Override
+                    public void onFailure(
+                            @NonNull Call<PublicEdgeFeedResponse> c,
+                            @NonNull Throwable t) {
+                        Logone.w(t, TAG + " early edge failed");
+                        enqueuePostFallback(app, langId);
+                    }
+                });
+            if (edgeCall != null) {
+                return;
+            }
+            enqueuePostFallback(app, langId);
+        } catch (Exception e) {
+            Logone.w(e, TAG + " enqueue failed");
+            launched.set(false);
+        }
+    }
+
+    private static void enqueuePostFallback(@NonNull Context app, int langId) {
+        try {
             final JsonObject body = buildMainPage0Body(app);
             if (body == null) {
                 launched.set(false);
@@ -94,10 +184,8 @@ public final class OpenPathFeedPrefetcher {
             }
             APIService api = RestApiClient.getClient().create(APIService.class);
             Call<EncreptionRequest> call = api.List_All_Articles("v3", body);
-            // Match HomePage plain page-0 dedupe key (includes language_id).
-            final int langId = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
             final String dedupeKey = "articles_v3_" + langId + "_0_0_0_0_0_false_false";
-            Logone.v(TAG, "early main page-0 enqueue lang=" + langId);
+            Logone.v(TAG, "early main page-0 POST fallback lang=" + langId);
             NetworkCallDeduper.enqueueUnique(dedupeKey, call, new Callback<EncreptionRequest>() {
                 @Override
                 public void onResponse(
@@ -123,7 +211,7 @@ public final class OpenPathFeedPrefetcher {
                                                 app, Constants.LanguageID, Constants.PREF_NAME));
                             } catch (Exception ignored) {
                             }
-                            Logone.v(TAG, "early main page-0 saved to OpenPath");
+                            Logone.v(TAG, "early main page-0 POST saved to OpenPath");
                         }
                     } catch (Exception e) {
                         Logone.w(e, TAG + " save failed");
@@ -134,12 +222,11 @@ public final class OpenPathFeedPrefetcher {
                 public void onFailure(
                         @NonNull Call<EncreptionRequest> c, @NonNull Throwable t) {
                     Logone.w(t, TAG + " early page-0 failed");
-                    // Allow a later open to try again if this process stays up.
                     launched.set(false);
                 }
             });
         } catch (Exception e) {
-            Logone.w(e, TAG + " enqueue failed");
+            Logone.w(e, TAG + " POST fallback failed");
             launched.set(false);
         }
     }
@@ -212,7 +299,6 @@ public final class OpenPathFeedPrefetcher {
             requestModel.setDatafrom2g("0");
             requestModel.setSpecial_posts(false);
             requestModel.setVideo_posts(false);
-            // Full chronological List_All_Articles — no exclude_post_ids densify.
             DisplayMetrics dm = app.getResources().getDisplayMetrics();
             requestModel.setScreenHeight(dm.heightPixels);
             requestModel.setScreenWidth(dm.widthPixels);
@@ -249,9 +335,11 @@ public final class OpenPathFeedPrefetcher {
                         || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
                         || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN));
             }
-            return BookmarkStore.isNetworkAvailable(context);
+            @SuppressWarnings("deprecation")
+            android.net.NetworkInfo info = cm.getActiveNetworkInfo();
+            return info != null && info.isConnected();
         } catch (Exception e) {
-            return BookmarkStore.isNetworkAvailable(context);
+            return false;
         }
     }
 }

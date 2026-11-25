@@ -259,6 +259,13 @@ public class TermsAndCondition extends AppCompatActivity {
         }
 
         @Override
+        public boolean onRenderProcessGone(WebView view,
+                android.webkit.RenderProcessGoneDetail detail) {
+            return com.anyNews.anynews.Utils.SafeWebViewClient
+                    .handleRenderProcessGone(view, detail);
+        }
+
+        @Override
         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
             if (handler != null) {
                 handler.cancel();

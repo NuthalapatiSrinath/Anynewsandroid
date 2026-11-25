@@ -3,6 +3,7 @@ package com.anyNews.anynews.Services;
 import static com.anyNews.anynews.Utils.AppHelper.showLog;
 
 import com.anyNews.anynews.BuildConfig;
+import com.anyNews.anynews.Utils.EdgeOriginWatchInterceptor;
 import com.anyNews.anynews.Utils.ServerAvailabilityInterceptor;
 import com.google.gson.Gson;
 
@@ -36,6 +37,8 @@ public class RestApiClient
                 .connectTimeout(8, TimeUnit.SECONDS)
                 .writeTimeout(15, TimeUnit.SECONDS)
                 .addInterceptor(new ServerAvailabilityInterceptor())
+                // New APK only: report unexpected origin List/Flash/etc. to Admin Edge/DB watch.
+                .addInterceptor(new EdgeOriginWatchInterceptor())
                 .addNetworkInterceptor(interceptor)
                 .readTimeout(15, TimeUnit.SECONDS)
                 .callTimeout(20, TimeUnit.SECONDS);

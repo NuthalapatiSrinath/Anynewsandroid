@@ -24,18 +24,14 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 /**
- * Team-APK only (versionCode &gt; 520 → {@link #MIN_VERSION_CODE}) fire-and-forget
- * reporting when the client hits Node/Mongo for routes that should use Cloudflare
- * public edge — or other unexpected origin calls. Old / Play Store builds
- * (versionCode ≤ 520) are never instrumented.
+ * Debug APK only ({@link BuildConfig#DEBUG}) fire-and-forget reporting when the
+ * client hits Node/Mongo for routes that should use Cloudflare public edge — or
+ * other unexpected origin calls. Play Store / release builds send no beacons.
  *
  * <p>Wired via {@link EdgeOriginWatchInterceptor} on {@link RestApiClient}. Manual beacons
  * (Main/Local List fallback, push CF fail) also go through {@link #report}.
  */
 public final class EdgeOriginCallWatch {
-
-    /** Floor inclusive: versionCode &gt; 520 only (521+). */
-    public static final int MIN_VERSION_CODE = 521;
     public static final String HEADER_SKIP = "X-Edge-Origin-Watch-Skip";
     public static final String HEADER_DETAIL = "X-Edge-Origin-Watch-Detail";
 
@@ -57,10 +53,11 @@ public final class EdgeOriginCallWatch {
             // Public edge (correct CF path) + this beacon
             "public/feed",
             "public/splash_config",
+            "public/daily_updates",
             "public/edge_origin_event",
             // Splash draft still needed for first open
             "splash_screen",
-            // Likes / comments / bookmarks
+            // Likes / comments
             "update_like",
             "add_like",
             "add_comment",
@@ -68,10 +65,6 @@ public final class EdgeOriginCallWatch {
             "comments/like",
             "comments/report",
             "comments/report-problems/list",
-            "add_bookmark",
-            "remove_bookmark",
-            "list_bookmarks",
-            "list_user_bookmarks",
             // Share / open counts (intentional writes)
             "update_post_count",
             "daily_updates_share",
@@ -215,7 +208,7 @@ public final class EdgeOriginCallWatch {
     }
 
     public static boolean isInstrumentedBuild() {
-        return BuildConfig.VERSION_CODE >= MIN_VERSION_CODE;
+        return BuildConfig.DEBUG;
     }
 
     /**
@@ -238,7 +231,9 @@ public final class EdgeOriginCallWatch {
             if (TextUtils.isEmpty(route)) return;
 
             // Correct CF attempts — server records A/B/C/E on Node miss; do not beacon.
-            if ("public/feed".equals(route) || "public/splash_config".equals(route)) {
+            if ("public/feed".equals(route)
+                    || "public/splash_config".equals(route)
+                    || "public/daily_updates".equals(route)) {
                 return;
             }
 
@@ -252,6 +247,10 @@ public final class EdgeOriginCallWatch {
                     detail = pending;
                 } else {
                     detail = defaultUnexpectedDetail(route);
+                }
+                // Special / video / search / flash List_All_Articles are intentional origin.
+                if (isExpectedIntentionalListDetail(detail)) {
+                    return;
                 }
                 reason = reasonForDetail(detail);
             } else if (isAllowedRoute(route)) {
@@ -421,6 +420,30 @@ public final class EdgeOriginCallWatch {
         // calendar year packs
         if (route.startsWith("calendar/")) return true;
         return false;
+    }
+
+    /** Product-intentional List/Flash reads — do not spam edge_origin_event. */
+    static boolean isExpectedIntentionalListDetail(@Nullable String detail) {
+        if (TextUtils.isEmpty(detail)) return false;
+        switch (detail.trim()) {
+            case "expected_special_posts":
+            case "expected_video_posts":
+            case "expected_search_feed":
+            case "expected_flash_feed":
+            case "expected_category_feed":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Call before an intentional {@code List_All_Articles} POST (not CF soft-fallback).
+     */
+    public static void annotateExpectedListOrigin(@Nullable String detail) {
+        if (!isInstrumentedBuild()) return;
+        if (TextUtils.isEmpty(detail)) return;
+        annotateNextUnexpected("list_all_articles", detail.trim());
     }
 
     @NonNull

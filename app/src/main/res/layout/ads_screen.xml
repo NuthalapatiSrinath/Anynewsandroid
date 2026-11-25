@@ -1,45 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/layoutParent"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:layout_gravity="center"
-    android:gravity="center"
-    android:background="@color/form_surface_elevated"
-    android:id="@+id/layoutParent"
+    android:background="#FF121212"
+    android:gravity="center_horizontal"
     tools:context=".Activities.HomePage">
 
-
-    <FrameLayout
-        android:id="@+id/fl_adplaceholder"
-        android:layout_width="match_parent"
+    <TextView
+        android:id="@+id/ad_feed_advertise_link"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:visibility="visible"/>
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="14dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:text="@string/ad_center_advertise"
+        android:textColor="#FF5B9BD5"
+        android:textSize="13sp"
+        android:textStyle="bold" />
 
-  <!--  <com.google.android.ads.nativetemplates.TemplateView
-        android:id="@+id/mediumTemplate"
-        android:layout_width="match_parent"
-        android:layout_height="380dp"
-        android:visibility="gone"
-        app:anynews_template_type="@layout/anynews_ad_medium_template_view">
-
-    </com.google.android.ads.nativetemplates.TemplateView>
-
-    <com.google.android.ads.nativetemplates.TemplateView
-        android:id="@+id/regularTemplate"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone"
-        app:anynews_template_type="@layout/anynews_custom_ad_native">
-
-    </com.google.android.ads.nativetemplates.TemplateView>
-
-    <com.google.android.ads.nativetemplates.TemplateView
-        android:id="@+id/fullTemplate"
+    <ScrollView
+        android:id="@+id/ad_feed_scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone"
-        app:anynews_template_type="@layout/anynews_ad_full_template_view">
+        android:layout_above="@+id/ad_flip_up_skip"
+        android:layout_below="@id/ad_feed_advertise_link"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:scrollbars="none">
 
-    </com.google.android.ads.nativetemplates.TemplateView>-->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingBottom="12dp">
+
+            <!-- Flash / push slots ABOVE NativeAd (inverted vs Way2News). No section title. -->
+            <LinearLayout
+                android:id="@+id/ad_recommended_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginEnd="12dp"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <FrameLayout
+                android:id="@+id/fl_adplaceholder"
+                android:layout_width="match_parent"
+                android:layout_height="300dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="12dp"
+                android:background="#FF1A1A1A"
+                android:visibility="visible" />
+
+            <!-- Kept for id stability; always GONE — no "Recommended News" header. -->
+            <TextView
+                android:id="@+id/ad_recommended_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/ad_recommended_news"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+
+    <TextView
+        android:id="@+id/ad_flip_up_skip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="22dp"
+        android:background="@drawable/bg_ad_flip_up_skip"
+        android:paddingStart="22dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="22dp"
+        android:paddingBottom="10dp"
+        android:text="@string/ad_flip_up_to_skip"
+        android:textAllCaps="true"
+        android:textColor="#CCFFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
 </RelativeLayout>

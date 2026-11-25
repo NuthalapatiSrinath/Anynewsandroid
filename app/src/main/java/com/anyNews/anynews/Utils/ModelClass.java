@@ -84,7 +84,10 @@ public class ModelClass implements Serializable {
         @SerializedName("shares")
         @Expose
         private Integer shares;
-        /** WhatsApp-button shares only (distinct from normal Share sheet). */
+        /**
+         * Alias of Total Shares for older payloads. Feed/API now set this equal
+         * to {@link #shares} (shares + historical whatsapp_shares).
+         */
         @SerializedName("whatsapp_shares")
         @Expose
         private Integer whatsappShares;

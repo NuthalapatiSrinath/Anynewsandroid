@@ -1,5 +1,7 @@
 package com.anyNews.anynews.rewards;
 
+import com.anyNews.anynews.Utils.MyUtils;
+
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -15,7 +17,6 @@ import androidx.lifecycle.ProcessLifecycleOwner;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.AnalyticsBatchConfig;
-import com.anyNews.anynews.Utils.BookmarkStore;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictPinVisibilityConfig;
 import com.anyNews.anynews.Utils.SharedPrefsData;
@@ -230,7 +231,7 @@ public final class RewardsEngagementBatcher {
         Context c = ctx != null ? ctx : appContext;
         if (c == null) return false;
         try {
-            return BookmarkStore.isNetworkAvailable(c);
+            return MyUtils.isNetworkAvailable(c);
         } catch (Exception ignored) {
             return false;
         }

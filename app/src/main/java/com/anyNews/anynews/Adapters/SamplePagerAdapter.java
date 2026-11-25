@@ -26,7 +26,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.anyNews.anynews.R;
+import com.anyNews.anynews.Utils.SafeBitmapDecode;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DecodeFormat;
 import com.nostra13.universalimageloader.core.DisplayImageOptions;
 import com.nostra13.universalimageloader.core.ImageLoader;
 import com.nostra13.universalimageloader.core.ImageLoaderConfiguration;
@@ -152,6 +154,7 @@ public class SamplePagerAdapter extends PagerAdapter {
                             oh = 1920;
                         }
                     }
+                    int[] capped = SafeBitmapDecode.clampFlipOverride(context, ow, oh);
                     final ImageView targetView = imageView;
                     final String loadUrl = pageUrl;
                     imageView.setTag(R.id.tag_gallery_image_url, loadUrl);
@@ -160,7 +163,8 @@ public class SamplePagerAdapter extends PagerAdapter {
                             .load(pageUrl)
                             .priority(com.bumptech.glide.Priority.IMMEDIATE)
                             .dontAnimate()
-                            .override(ow, oh)
+                            .format(DecodeFormat.PREFER_RGB_565)
+                            .override(capped[0], capped[1])
                             .placeholder(R.drawable.trasparent_background)
                             .error(R.drawable.trasparent_background)
                             .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {
@@ -299,6 +303,7 @@ public class SamplePagerAdapter extends PagerAdapter {
                 ow = parent.getWidth() > 0 ? parent.getWidth() : 1080;
                 oh = parent.getHeight() > 0 ? parent.getHeight() : 1920;
             }
+            int[] capped = SafeBitmapDecode.clampFlipOverride(context, ow, oh);
             final ImageView targetView = page0View;
             final String loadUrl = pageUrl;
             page0View.setTag(R.id.tag_gallery_image_url, loadUrl);
@@ -306,7 +311,8 @@ public class SamplePagerAdapter extends PagerAdapter {
                     .load(pageUrl)
                     .priority(com.bumptech.glide.Priority.IMMEDIATE)
                     .dontAnimate()
-                    .override(Math.max(1, ow), Math.max(1, oh))
+                    .format(DecodeFormat.PREFER_RGB_565)
+                    .override(capped[0], capped[1])
                     .placeholder(R.drawable.trasparent_background)
                     .error(R.drawable.trasparent_background)
                     .listener(new com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable>() {

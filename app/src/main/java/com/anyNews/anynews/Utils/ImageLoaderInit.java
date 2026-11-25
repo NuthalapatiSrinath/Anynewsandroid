@@ -17,23 +17,26 @@ public final class ImageLoaderInit {
         if (loader.isInited()) {
             return;
         }
+        Context app = context.getApplicationContext();
         DisplayImageOptions defaultOpts = new DisplayImageOptions.Builder()
                 .bitmapConfig(Bitmap.Config.RGB_565)
                 .cacheInMemory(true)
                 .cacheOnDisk(true)
                 .imageScaleType(ImageScaleType.EXACTLY)
                 .build();
-        ImageLoaderConfiguration config;
+        // Cap UIL memory cache — default can balloon on feed scroll and OOM low-end.
+        int memMb = SafeBitmapDecode.memoryClassMb(app);
+        int memoryCachePercent = SafeBitmapDecode.isLowRam(app) || memMb <= 64
+                ? 8 : (memMb <= 128 ? 10 : 12);
+        ImageLoaderConfiguration.Builder builder =
+                new ImageLoaderConfiguration.Builder(app)
+                        .defaultDisplayImageOptions(defaultOpts)
+                        .memoryCacheSizePercentage(memoryCachePercent)
+                        .diskCacheSize(24 * 1024 * 1024)
+                        .threadPoolSize(SafeBitmapDecode.isLowRam(app) ? 2 : 3);
         if (BuildConfig.DEBUG) {
-            config = new ImageLoaderConfiguration.Builder(context.getApplicationContext())
-                    .defaultDisplayImageOptions(defaultOpts)
-                    .imageDownloader(new DebugSslImageDownloader(context.getApplicationContext()))
-                    .build();
-        } else {
-            config = new ImageLoaderConfiguration.Builder(context.getApplicationContext())
-                    .defaultDisplayImageOptions(defaultOpts)
-                    .build();
+            builder.imageDownloader(new DebugSslImageDownloader(app));
         }
-        loader.init(config);
+        loader.init(builder.build());
     }
 }

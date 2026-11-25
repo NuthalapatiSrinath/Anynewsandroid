@@ -9,8 +9,8 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 /**
- * Observes Retrofit/OkHttp traffic for unexpected origin API calls on team APKs
- * (versionCode &gt; 520 / &gt;= {@link EdgeOriginCallWatch#MIN_VERSION_CODE}).
+ * Observes Retrofit/OkHttp traffic for unexpected origin API calls on debug APKs
+ * ({@link BuildConfig#DEBUG} via {@link EdgeOriginCallWatch#isInstrumentedBuild()}).
  * Never alters requests/responses; beacons are fire-and-forget.
  */
 public final class EdgeOriginWatchInterceptor implements Interceptor {
@@ -19,6 +19,12 @@ public final class EdgeOriginWatchInterceptor implements Interceptor {
     @Override
     public Response intercept(@NonNull Chain chain) throws IOException {
         Request request = chain.request();
+        try {
+            // Always log for the footer Origin Calls page (in-memory only).
+            OriginCallLog.record(request.url(), request.method());
+        } catch (Exception ignored) {
+            /* never break the call path */
+        }
         try {
             if (!"1".equals(request.header(EdgeOriginCallWatch.HEADER_SKIP))) {
                 String detailHint = request.header(EdgeOriginCallWatch.HEADER_DETAIL);

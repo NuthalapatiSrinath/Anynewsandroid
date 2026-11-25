@@ -31,6 +31,7 @@ import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.DistrictLabelHelper;
 import com.anyNews.anynews.Utils.FontSettingsHelper;
+import com.anyNews.anynews.Utils.LanguageFeedInvalidator;
 import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.ThemeColorHelper;
@@ -335,9 +336,14 @@ public class StatesAdopter extends RecyclerView.Adapter<StatesAdopter.ViewHolder
                     DistrictLabelHelper.saveName(context, languageModel.getDist_name());
                     SharedPrefsData.putString(context, Constants.MOVE_NEXT_SCREEN, "main", Constants.PREF_NAME);
                     SharedPrefsData.putBool(context, Constants.IS_LANGUAGE_SELECTED, true, Constants.PREF_NAME);
+                    try {
+                        LanguageFeedInvalidator.onDistrictChanged(context);
+                    } catch (Exception ignored) {
+                    }
 
                     Intent intent=new Intent(context, HomePage.class);
-                     intent.putExtra("EXTRA_SESSION_ID", "0");
+                    intent.putExtra("EXTRA_SESSION_ID", "0");
+                    intent.putExtra(HomePage.EXTRA_FOOTER_TAB, R.id.navigation_home);
                     if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)){
                         context.startActivity(intent);
                     }

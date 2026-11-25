@@ -15,10 +15,12 @@ import androidx.annotation.Nullable;
 
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Utils.GalleryImageUrls;
+import com.anyNews.anynews.Utils.SafeBitmapDecode;
 import com.anyNews.anynews.flipview.FlipView;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.Priority;
 import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.DecodeFormat;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.request.RequestListener;
@@ -165,11 +167,13 @@ public final class GalleryImageFlipAdapter extends BaseAdapter {
 
         Priority priority = position == 0 ? Priority.IMMEDIATE : Priority.NORMAL;
         int[] size = resolveLoadSize(imageView, parent);
+        int[] capped = SafeBitmapDecode.clampFlipOverride(context, size[0], size[1]);
         RequestOptions opts = new RequestOptions()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .priority(priority)
                 .dontAnimate()
-                .override(size[0], size[1])
+                .format(DecodeFormat.PREFER_RGB_565)
+                .override(capped[0], capped[1])
                 // Transparent while loading — never paint splash orange-N as the poster.
                 .placeholder(R.drawable.trasparent_background)
                 .error(R.drawable.trasparent_background)

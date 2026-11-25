@@ -434,13 +434,6 @@
 
                 </LinearLayout>
 
-                <!-- In-place Bookmarks list (top toggle right segment). Above feed. -->
-                <include
-                    android:id="@+id/include_home_bookmarks_panel"
-                    layout="@layout/layout_home_bookmarks_panel"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-
                 <!-- Footer Calendar mode: Telugu calendar FlipView (2 pages) above bottom nav. -->
                 <FrameLayout
                     android:id="@+id/home_calendar_host"
@@ -461,6 +454,15 @@
                     android:focusable="true"
                     android:visibility="gone" />
 
+                <!-- Ad-screen recommend tap: temp article surface (does not splice FlipView). -->
+                <FrameLayout
+                    android:id="@+id/home_ad_article_overlay_host"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:visibility="gone" />
+
                 <!-- Panchangam | Raasi top chrome retired — separate Daily Updates tiles open each page. -->
                 <include
                     android:id="@+id/include_home_calendar_ttd_toggle"
@@ -469,14 +471,6 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="top"
                     android:visibility="gone" />
-
-                <!-- Offline-only Offline News | Bookmarks toggle (hidden online). -->
-                <include
-                    android:id="@+id/include_home_news_bookmarks_toggle"
-                    layout="@layout/layout_home_news_bookmarks_toggle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="top" />
 
                 <!-- Local Varthalu | district chrome (Mana Zilla → local-only path). -->
                 <include

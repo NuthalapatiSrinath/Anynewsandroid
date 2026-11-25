@@ -512,12 +512,45 @@ public final class BirthdayFonts {
         return 1;
     }
 
+    /** On-surface text for the light Birthday form (#FFF8F0) under night mode. */
+    private static final int FORM_TEXT_ON_LIGHT = 0xFF1F2937;
+
     @NonNull
     public static ArrayAdapter<CharSequence> sizeAdapter(@NonNull Context context) {
-        return new ArrayAdapter<>(
+        return new ArrayAdapter<CharSequence>(
                 context,
                 android.R.layout.simple_spinner_dropdown_item,
-                new String[] {"Small", "Medium", "Large"});
+                new String[] {"Small", "Medium", "Large"}) {
+            @NonNull
+            @Override
+            public android.view.View getView(
+                    int position,
+                    @Nullable android.view.View convertView,
+                    @NonNull android.view.ViewGroup parent) {
+                TextView tv = (TextView) super.getView(position, convertView, parent);
+                paintFormSpinnerRow(tv, false);
+                return tv;
+            }
+
+            @Override
+            public android.view.View getDropDownView(
+                    int position,
+                    @Nullable android.view.View convertView,
+                    @NonNull android.view.ViewGroup parent) {
+                TextView tv = (TextView) super.getDropDownView(position, convertView, parent);
+                paintFormSpinnerRow(tv, true);
+                return tv;
+            }
+        };
+    }
+
+    private static void paintFormSpinnerRow(@Nullable TextView tv, boolean dropDown) {
+        if (tv == null) return;
+        // Night-mode textColorPrimary is white; birthday canvas stays peach/light.
+        tv.setTextColor(FORM_TEXT_ON_LIGHT);
+        if (dropDown) {
+            tv.setBackgroundColor(0xFFFFFFFF);
+        }
     }
 
     public interface SampleTextProvider {
@@ -554,6 +587,7 @@ public final class BirthdayFonts {
                     @NonNull android.view.ViewGroup parent) {
                 TextView tv = (TextView) super.getDropDownView(position, convertView, parent);
                 bindSample(context, tv, getItem(position));
+                paintFormSpinnerRow(tv, true);
                 return tv;
             }
 
@@ -567,6 +601,7 @@ public final class BirthdayFonts {
                 tv.setTypeface(typefaceForText(ctx, id, false, sample));
                 tv.setTextSize(18f);
                 tv.setPadding(24, 18, 24, 18);
+                tv.setTextColor(FORM_TEXT_ON_LIGHT);
                 tv.setContentDescription(spec != null ? spec.label : sample);
             }
         };

@@ -355,7 +355,10 @@ public class CustomPlayerUiController extends AbstractYouTubePlayerListener impl
             panel.setBackgroundColor(ContextCompat.getColor(context, android.R.color.transparent));
             progressbar.setVisibility(View.GONE);
             showFullScreenVideo.showProgressOnMainPage(false);
+            // Match Play Store / fat: show play when paused/idle (never leave pause glyph stuck).
             playPauseButton.setImageResource(R.drawable.ic_way2_play_circle);
+            playPauseButton.setVisibility(View.VISIBLE);
+            isClicked = false;
         } else {
             if (state == PlayerConstants.PlayerState.BUFFERING) {
                 progressbar.setVisibility(View.VISIBLE);

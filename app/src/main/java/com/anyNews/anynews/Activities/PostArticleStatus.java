@@ -1,5 +1,7 @@
 package com.anyNews.anynews.Activities;
 
+import com.anyNews.anynews.Utils.MyUtils;
+
 import android.app.DatePickerDialog;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -27,7 +29,6 @@ import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
-import com.anyNews.anynews.Utils.BookmarkStore;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.PostStatusListCache;
 import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
@@ -714,7 +715,7 @@ public class PostArticleStatus extends AppCompatActivity {
             }
         }
 
-        boolean online = BookmarkStore.isNetworkAvailable(this);
+        boolean online = MyUtils.isNetworkAvailable(this);
         if (!online) {
             stopRefreshing();
             if (!hasCache) {
@@ -892,7 +893,7 @@ public class PostArticleStatus extends AppCompatActivity {
             swipeRefresh.setRefreshing(true);
         }
 
-        if (!BookmarkStore.isNetworkAvailable(this)) {
+        if (!MyUtils.isNetworkAvailable(this)) {
             if (isVisible) {
                 loadingPage = false;
             } else {

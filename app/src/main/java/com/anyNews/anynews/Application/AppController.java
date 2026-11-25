@@ -24,8 +24,6 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.HurlStack;
 import com.android.volley.toolbox.ImageLoader;
 import com.android.volley.toolbox.Volley;
-import com.anyNews.anynews.Activities.BookmarkReaderActivity;
-import com.anyNews.anynews.Activities.BookmarksActivity;
 import com.anyNews.anynews.Activities.HomePage;
 import com.anyNews.anynews.Activities.StartingActivity;
 import com.anyNews.anynews.BuildConfig;
@@ -35,28 +33,19 @@ import com.anyNews.anynews.Utils.AppHelper;
 import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.ImageLoaderInit;
-import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.anyNews.anynews.Utils.Logone;
-import com.anyNews.anynews.Utils.PostDwellTracker;
 import com.anyNews.anynews.Utils.ScreenCaptureHelper;
-import com.anyNews.anynews.Utils.MediaAccessReporter;
-import com.anyNews.anynews.Utils.AdImpressionReporter;
-import com.anyNews.anynews.Utils.ArticleTtsHelper;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
-import com.facebook.ads.AdSettings;
-import com.facebook.ads.AudienceNetworkAds;
-import com.google.android.gms.ads.MobileAds;
-import com.google.android.gms.ads.initialization.AdapterStatus;
-import com.google.android.gms.ads.initialization.InitializationStatus;
-import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
 import com.google.firebase.FirebaseApp;
+import com.rollbar.android.Rollbar;
 
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
-import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -67,13 +56,17 @@ public class AppController extends MultiDexApplication {
 
     public static final String TAG = AppController.class.getSimpleName();
     private static AppController mInstance;
+    private static final ExecutorService startupExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "app-startup");
+        t.setPriority(Thread.NORM_PRIORITY - 1);
+        return t;
+    });
+
     LruBitmapCache mLruBitmapCache;
     private RequestQueue mRequestQueue;
     private ImageLoader mImageLoader;
-    private AppLanguagesFonts appLanguagesFonts;
 
-    public static synchronized AppController getInstance()
-    {
+    public static synchronized AppController getInstance() {
         return mInstance;
     }
 
@@ -84,60 +77,51 @@ public class AppController extends MultiDexApplication {
         // Manual night mode only (pref) — never follow system / battery-saver auto DayNight.
         try {
             com.anyNews.anynews.Utils.NightModeHelper.applyStoredPreference(this);
-        } catch (Exception ignored) { }
-        FirebaseApp.initializeApp(this);
-        mInstance = this;
-        ImageLoaderInit.ensureInitialized(this);
-        createNotificationChannel(getApplicationContext());
-        appLanguagesFonts=AppLanguagesFonts.getInstance(getApplicationContext());
-
-       // MobileAds.initialize(this, new adsLoadingInit());
-        //AudienceNetworkAds.initialize(this);
-        MobileAds.initialize(this, initializationStatus -> {
-        });
-
-        // Session time: ProcessLifecycle + screen off/on + activity callbacks.
-        SessionAnalyticsTracker.get().init(this);
-        // Batched views/dwell — flip settle enqueues; flush ~60s or on background.
-        ViewsBatchTracker.get().init(this);
-        // Soft-accounting for public OCI / object URL opens (admin App→OCI dashboard).
-        MediaAccessReporter.get().init(this);
-        // Real native-ad display counts (Google/FB painted) — one batched flush.
-        AdImpressionReporter.get().init(this);
-        // Article TTS: stop on process background; warm engine when already enabled.
-        ArticleTtsHelper.init(this);
-
-        // One-shot per process: previous session's flip views → permanent Read before News loads.
-        try {
-            com.anyNews.anynews.Utils.ReadArticleStore.commitSessionViewedToReadOncePerProcess(this);
         } catch (Exception ignored) {
         }
+        FirebaseApp.initializeApp(this);
+        SessionAnalyticsTracker.get().init(this);
+        ViewsBatchTracker.get().init(this);
+        mInstance = this;
+        // Must run on main thread before any activity loads images (fast splash → Home).
+        ImageLoaderInit.ensureInitialized(this);
+        createNotificationChannel(getApplicationContext());
+
+        startupExecutor.execute(() -> {
+            try {
+                Rollbar.init(AppController.this);
+            } catch (Exception e) {
+                Log.w(TAG, "Rollbar init skipped", e);
+            }
+            try {
+                AppLanguagesFonts.getInstance(getApplicationContext());
+            } catch (Exception ignored) {
+            }
+        });
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override
             public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle bundle) {
                 // Splash keeps its own full-screen look; HomePage / Login re-apply after this.
-                // Bookmarks / reader paint brand-orange status bars and keep content below them.
-                if (!(activity instanceof StartingActivity)
-                        && !(activity instanceof BookmarksActivity)
-                        && !(activity instanceof BookmarkReaderActivity)) {
+                if (!(activity instanceof StartingActivity)) {
                     applyThemeSystemBars(activity);
                 }
 
-                if(activity instanceof HomePage && !ScreenCaptureHelper.isCaptureAllowed(activity)){
-                    activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
-                }else{
+                if (activity instanceof HomePage && !ScreenCaptureHelper.isCaptureAllowed(activity)) {
+                    activity.getWindow().setFlags(
+                            WindowManager.LayoutParams.FLAG_SECURE,
+                            WindowManager.LayoutParams.FLAG_SECURE);
+                } else {
                     activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
                 }
             }
+
             @Override
             public void onActivityStarted(@NonNull Activity activity) {
-                SessionAnalyticsTracker.get().onActivityStarted(activity);
             }
 
             @Override
             public void onActivityResumed(@NonNull Activity activity) {
-                SessionAnalyticsTracker.get().onActivityResumed(activity);
             }
 
             @Override
@@ -146,7 +130,6 @@ public class AppController extends MultiDexApplication {
 
             @Override
             public void onActivityStopped(@NonNull Activity activity) {
-                SessionAnalyticsTracker.get().onActivityStopped(activity);
             }
 
             @Override
@@ -155,61 +138,32 @@ public class AppController extends MultiDexApplication {
 
             @Override
             public void onActivityDestroyed(@NonNull Activity activity) {
-                SessionAnalyticsTracker.get().onActivityFinishingDestroyed(activity);
             }
         });
-
-
-
-    }
-
-    @Override
-    public void onTerminate() {
-        try {
-            SessionAnalyticsTracker.get().onAppTerminate(this);
-        } catch (Exception ignored) {
-        }
-        try {
-            ViewsBatchTracker.get().flush(this, true);
-        } catch (Exception ignored) {
-        }
-        try {
-            AdImpressionReporter.get().flush(this, true);
-        } catch (Exception ignored) {
-        }
-        super.onTerminate();
     }
 
     @Override
     public void onTrimMemory(int level) {
         super.onTrimMemory(level);
-        if (level >= TRIM_MEMORY_UI_HIDDEN) {
+        // Drop image caches under pressure so low-end devices recover instead of OOM-kill.
+        if (level >= TRIM_MEMORY_RUNNING_MODERATE) {
             try {
-                PostDwellTracker.get().flush(this, true);
-            } catch (Exception ignored) {
+                if (mLruBitmapCache != null) {
+                    mLruBitmapCache.evictAll();
+                }
+            } catch (Throwable ignored) {
             }
             try {
-                ViewsBatchTracker.get().flush(this, true);
-            } catch (Exception ignored) {
+                com.nostra13.universalimageloader.core.ImageLoader uil =
+                        com.nostra13.universalimageloader.core.ImageLoader.getInstance();
+                if (uil.isInited()) {
+                    uil.clearMemoryCache();
+                }
+            } catch (Throwable ignored) {
             }
             try {
-                AdImpressionReporter.get().flush(this, true);
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
-    class adsLoadingInit implements OnInitializationCompleteListener {
-        adsLoadingInit() {
-        }
-
-        public void onInitializationComplete(InitializationStatus initializationStatus) {
-            Map<String, AdapterStatus> statusMap = initializationStatus.getAdapterStatusMap();
-            for (String adapterClass : statusMap.keySet()) {
-                AdapterStatus status = statusMap.get(adapterClass);
-                AppHelper.showLog("MyApp" +String.format(
-                        "Adapter name: %s, Description: %s, Latency: %d",
-                        adapterClass, status.getDescription(), status.getLatency()));
+                com.bumptech.glide.Glide.get(getApplicationContext()).clearMemory();
+            } catch (Throwable ignored) {
             }
         }
     }
@@ -253,22 +207,25 @@ public class AppController extends MultiDexApplication {
         return sslSocketFactory;
     }
 
-
-    public  void createNotificationChannel(@NonNull Context context) {
-        if (Build.VERSION.SDK_INT  >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(Constants.Channel_ID, "Any News", NotificationManager.IMPORTANCE_HIGH);
-//            channel.setLightColor(R.color.colorAccent);
-//            channel.enableVibration(true);
-            NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-            notificationManager.createNotificationChannel(channel);
+    public void createNotificationChannel(@NonNull Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    Constants.Channel_ID, "Any News", NotificationManager.IMPORTANCE_HIGH);
+            NotificationManager notificationManager =
+                    (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (notificationManager != null) {
+                notificationManager.createNotificationChannel(channel);
+            }
         }
     }
+
     public RequestQueue getRequestQueue() {
         if (mRequestQueue == null) {
             if (BuildConfig.DEBUG) {
                 SSLSocketFactory sslSocketFactory = createSslSocketFactory();
                 if (sslSocketFactory != null) {
-                    mRequestQueue = Volley.newRequestQueue(getApplicationContext(), new HurlStack(null, sslSocketFactory));
+                    mRequestQueue = Volley.newRequestQueue(getApplicationContext(),
+                            new HurlStack(null, sslSocketFactory));
                 } else {
                     mRequestQueue = Volley.newRequestQueue(getApplicationContext());
                 }
@@ -291,8 +248,9 @@ public class AppController extends MultiDexApplication {
     }
 
     public LruBitmapCache getLruBitmapCache() {
-        if (mLruBitmapCache == null)
+        if (mLruBitmapCache == null) {
             mLruBitmapCache = new LruBitmapCache();
+        }
         return this.mLruBitmapCache;
     }
 

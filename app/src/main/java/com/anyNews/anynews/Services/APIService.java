@@ -2,7 +2,6 @@ package com.anyNews.anynews.Services;
 
 import com.anyNews.anynews.Pojo.BaseResponse;
 import com.anyNews.anynews.Pojo.AddArticleResponse;
-import com.anyNews.anynews.Pojo.AddBookmarkResponse;
 import com.anyNews.anynews.Pojo.AddLikeResponse;
 import com.anyNews.anynews.Pojo.CategoriesResponse;
 import com.anyNews.anynews.Pojo.CategorySearchResponse;
@@ -14,12 +13,10 @@ import com.anyNews.anynews.Pojo.HelpResponse;
 import com.anyNews.anynews.Pojo.LanguageDisply;
 import com.anyNews.anynews.Pojo.LanguagesCategoriesResponse;
 import com.anyNews.anynews.Pojo.ListAllArticlesResponse;
-import com.anyNews.anynews.Pojo.ListOfBookmarksResponse;
 import com.anyNews.anynews.Pojo.ListOfCommentsResponse;
 import com.anyNews.anynews.Pojo.ListOfUserArticlesResponse;
 import com.anyNews.anynews.Pojo.LoginDetailesResponse;
 import com.anyNews.anynews.Pojo.NotificationAllNotificationsResponse;
-import com.anyNews.anynews.Pojo.RemoveBookmarkResponse;
 import com.anyNews.anynews.Pojo.ReportResponse;
 import com.anyNews.anynews.Pojo.SingleArticleResponse;
 import com.anyNews.anynews.Pojo.StartActivityReqModel;
@@ -159,9 +156,6 @@ public interface APIService {
     //Like
     @POST("app/Add_Like")
     Call<AddLikeResponse> likess(@Body JsonObject likessss);
-    //Bookmarks
-    @POST("app/List_User_Bookmarks")
-    Call<ListOfBookmarksResponse> bookmarkslist(@Body JsonObject remove);
     //Advertisements
     @POST("app/Fetch_Advertisement")
     Call<JsonObject> fetchAdvertisements(@Body JsonObject jsonObject);
@@ -180,15 +174,6 @@ public interface APIService {
     public static final String GENERATE_USER_OTP = "app/v1/Generate_User_OTP";
 
 
-
-    //Bookmark
-    @POST("app/Add_Bookmark")
-    Call<AddBookmarkResponse> mark(@Body JsonObject markss);
-
-
-    //RemoveBookmark
-    @POST("app/Remove_Bookmark")
-    Call<RemoveBookmarkResponse> remove(@Body JsonObject removed);
 
     //UpdateProfile
     @POST("app/List_All_Help_Data")
@@ -276,17 +261,6 @@ public interface APIService {
     @POST("app/{version}/update_like")                  //  ok
     Call<EncreptionRequest> update_like(@Path("version") String version, @Body JsonObject shop);
 
-    // Bookmarks (encrypted v3 — draft_id + post_id)
-    @POST("app/{version}/add_bookmark")
-    Call<EncreptionRequest> add_bookmark(@Path("version") String version, @Body JsonObject body);
-
-    @POST("app/{version}/remove_bookmark")
-    Call<EncreptionRequest> remove_bookmark(@Path("version") String version, @Body JsonObject body);
-
-    @POST("app/{version}/list_bookmarks")
-    Call<EncreptionRequest> list_bookmarks(@Path("version") String version, @Body JsonObject body);
-
-
     //Shops
     @POST("app/{version}/update_post_count")                  //  ok
     Call<EncreptionRequest> update_post_count(@Path("version") String version, @Body JsonObject shop);
@@ -304,6 +278,46 @@ public interface APIService {
 
     @POST("app/{version}/List_All_Articles")
     Call<EncreptionRequest> List_All_Articles(@Path("version") String version, @Body JsonObject newsss);
+
+    /**
+     * Cloudflare-cacheable anonymous feed (snapshot engagement counts).
+     * Prefer for main/local flip reads; keep List_All_Articles for search/special/flash
+     * and as soft fallback when this misses.
+     */
+    @GET("app/{version}/public/feed")
+    Call<com.anyNews.anynews.Pojo.PublicEdgeFeedResponse> Public_Feed(
+            @Path("version") String version,
+            @Query("language_id") int languageId,
+            @Query("state_id") Integer stateId,
+            @Query("dist_id") Integer distId,
+            @Query("skip") Integer skip,
+            @Query("post_id") Integer postId);
+
+    /** Shared splash shell (no draft) — edge-cacheable. */
+    @GET("app/{version}/public/splash_config")
+    Call<com.anyNews.anynews.Pojo.PublicEdgeSplashResponse> Public_Splash_Config(
+            @Path("version") String version,
+            @Query("language_id") int languageId);
+
+    /**
+     * Daily Updates hub chrome (gold/weather/stock/flash/local/cricket) —
+     * Cloudflare-cacheable anonymous GET. Prefer over stock_market / List for paint.
+     */
+    @GET("app/{version}/public/daily_updates")
+    Call<com.google.gson.JsonObject> Public_Daily_Updates(
+            @Path("version") String version,
+            @Query("language_id") int languageId,
+            @Query("state_id") Integer stateId,
+            @Query("dist_id") Integer distId);
+
+    /**
+     * Lightweight new-APK beacon when CF-intended open fell back (Main/Local List
+     * soft fallback, or push CF fail without List). Fire-and-forget; 204.
+     */
+    @POST("app/{version}/public/edge_origin_event")
+    Call<Void> Public_Edge_Origin_Event(
+            @Path("version") String version,
+            @Body JsonObject body);
 
     /** Dedicated Flash / push feed — Redis-backed; same envelope as List_All_Articles. */
     @POST("app/{version}/Flash_News")

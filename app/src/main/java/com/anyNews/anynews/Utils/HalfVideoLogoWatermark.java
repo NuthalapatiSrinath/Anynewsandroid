@@ -606,7 +606,10 @@ public final class HalfVideoLogoWatermark {
             }
             BitmapFactory.Options opts = new BitmapFactory.Options();
             opts.inSampleSize = sample;
+            opts.inPreferredConfig = Bitmap.Config.RGB_565;
             return BitmapFactory.decodeFile(file.getAbsolutePath(), opts);
+        } catch (OutOfMemoryError oom) {
+            return null;
         } catch (Exception ignored) {
             return null;
         }

@@ -51,10 +51,16 @@ public final class FooterTabLabels {
                 // Prefer localized Special; pack "Events" / आयोजन is legacy wording.
                 special.setTitle(specialLabel(context, d != null ? d.getEvents() : null));
             }
-            // Hidden product slot: Panchangam. Id stays navigation_stricker.
-            MenuItem panchangamTab = menu.findItem(R.id.navigation_stricker);
-            if (panchangamTab != null) {
-                panchangamTab.setTitle(panchangam(context));
+            // Middle column id stays navigation_stricker. Product-hidden Panchangam
+            // (open from Daily Updates) uses this slot as an empty spacer under
+            // WhatsApp / magazine Share — never paint "Panchangam" behind the FAB.
+            MenuItem centerSlot = menu.findItem(R.id.navigation_stricker);
+            if (centerSlot != null) {
+                if (ProfileHubConfigHelper.isFooterShowCalendar(context)) {
+                    centerSlot.setTitle(panchangam(context));
+                } else {
+                    centerSlot.setTitle("");
+                }
             }
             MenuItem profile = menu.findItem(R.id.navigation_profile);
             if (profile != null) {

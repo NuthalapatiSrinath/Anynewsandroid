@@ -1,5 +1,7 @@
 package com.anyNews.anynews.Utils;
 
+import com.anyNews.anynews.Utils.MyUtils;
+
 import android.app.Application;
 import android.content.ComponentCallbacks2;
 import android.content.Context;
@@ -13,6 +15,7 @@ import androidx.lifecycle.LifecycleObserver;
 import androidx.lifecycle.OnLifecycleEvent;
 import androidx.lifecycle.ProcessLifecycleOwner;
 
+import com.anyNews.anynews.BuildConfig;
 import com.anyNews.anynews.Pojo.EncritonRequestData;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
@@ -95,6 +98,34 @@ public final class ViewsBatchTracker {
         return INSTANCE;
     }
 
+    /** When false (debug), impressions go to Firebase only — no POST /views/batch. */
+    public static boolean isServerBatchEnabled() {
+        return BuildConfig.IMPRESSIONS_SERVER_BATCH_ENABLED;
+    }
+
+    /**
+     * Flip settled on an article. Debug → {@link PostViewAnalytics}; release → local queue.
+     */
+    public void onFlipSettled(
+            Context context,
+            long postId,
+            int draftId,
+            int position,
+            @Nullable String postType) {
+        Context appCtx = context != null ? context.getApplicationContext() : appContext;
+        if (appCtx == null) return;
+        if (isServerBatchEnabled()) {
+            PostDwellTracker.get().onPostShown(appCtx, postId, postType);
+            if (postId > 0 && draftId > 0 && PostViewAnalytics.isArticleType(postType)) {
+                String sessionId = SessionAnalyticsTracker.get().getActiveSessionId();
+                enqueueImpression(appCtx, postId, draftId, sessionId, postType);
+            }
+        } else {
+            PostDwellTracker.get().onPostShown(appCtx, postId, postType);
+            PostViewAnalytics.logPostView(appCtx, postId, draftId, postType, position);
+        }
+    }
+
     /**
      * Home onResume → true (start timer only while the process is foreground).
      * Home onPause → false (stop timer). Does not POST by itself.
@@ -122,6 +153,10 @@ public final class ViewsBatchTracker {
     public void init(Application application) {
         if (!initialized.compareAndSet(false, true)) return;
         appContext = application.getApplicationContext();
+        if (!isServerBatchEnabled()) {
+            SharedPrefsData.putString(appContext, PREF_PENDING, "[]", Constants.PREF_NAME);
+            return;
+        }
         AnalyticsBatchConfig.warmFromPrefs(appContext);
         restoreFromPrefs(appContext);
 
@@ -221,6 +256,7 @@ public final class ViewsBatchTracker {
             int draftId,
             @Nullable String sessionId,
             @Nullable String postType) {
+        if (!isServerBatchEnabled()) return;
         if (postId <= 0 || draftId <= 0) return;
         try {
             JSONObject e = new JSONObject();
@@ -232,7 +268,7 @@ public final class ViewsBatchTracker {
             if (postType != null) e.put("post_type", postType);
             boolean offline = false;
             try {
-                offline = context != null && !BookmarkStore.isNetworkAvailable(context);
+                offline = context != null && !MyUtils.isNetworkAvailable(context);
             } catch (Exception ignored) {
             }
             if (offline) {
@@ -258,6 +294,7 @@ public final class ViewsBatchTracker {
             int draftId,
             @Nullable String sessionId,
             @Nullable String postType) {
+        if (!isServerBatchEnabled()) return;
         if (postId <= 0 || draftId <= 0 || durationSeconds < 0) return;
         try {
             JSONObject e = new JSONObject();
@@ -267,7 +304,7 @@ public final class ViewsBatchTracker {
             if (sessionId != null) e.put("session_id", sessionId);
             if (postType != null) e.put("post_type", postType);
             try {
-                if (context != null && !BookmarkStore.isNetworkAvailable(context)) {
+                if (context != null && !MyUtils.isNetworkAvailable(context)) {
                     e.put("offline", true);
                     e.put("offline_at", System.currentTimeMillis());
                 }
@@ -294,6 +331,7 @@ public final class ViewsBatchTracker {
      * worker (awaits only off the main thread) so background / kill paths can land.
      */
     public void flush(@Nullable Context context, boolean critical) {
+        if (!isServerBatchEnabled()) return;
         final Context appCtx = context != null
                 ? context.getApplicationContext()
                 : appContext;
@@ -305,7 +343,7 @@ public final class ViewsBatchTracker {
         // Offline: keep the local queue. Next online tick / return-to-app sends
         // only if it is still non-empty. Never POST from here while offline.
         try {
-            if (!BookmarkStore.isNetworkAvailable(appCtx)) {
+            if (!MyUtils.isNetworkAvailable(appCtx)) {
                 synchronized (lock) {
                     persistBackupLocked(appCtx);
                 }

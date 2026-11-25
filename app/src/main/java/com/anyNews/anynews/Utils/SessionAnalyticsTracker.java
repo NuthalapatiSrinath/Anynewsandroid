@@ -820,14 +820,6 @@ public final class SessionAnalyticsTracker {
                         } catch (Exception ignored) {
                         }
                     }
-                    if (resBody.has("offline_news_pack_max")
-                            && !resBody.get("offline_news_pack_max").isJsonNull()) {
-                        try {
-                            OfflineFeedStore.savePackMaxFromServer(
-                                    context, resBody.get("offline_news_pack_max").getAsInt());
-                        } catch (Exception ignored) {
-                        }
-                    }
                     if (resBody.has("home_mode_chrome_auto_hide_seconds")
                             && !resBody.get("home_mode_chrome_auto_hide_seconds").isJsonNull()) {
                         try {
@@ -1233,6 +1225,15 @@ public final class SessionAnalyticsTracker {
                                 useSecondNative,
                                 feedAdUnitSecondary,
                                 feedNativeAdUnitMode);
+                    }
+                    if (resBody.has("default_ad_position")
+                            && !resBody.get("default_ad_position").isJsonNull()) {
+                        try {
+                            FeedAdConfig.saveDefaultAdPositionFromServer(
+                                    context,
+                                    resBody.get("default_ad_position").getAsInt());
+                        } catch (Exception ignored) {
+                        }
                     }
                     Integer viewsFlushSec = null;
                     Integer viewsFlushAt = null;

@@ -225,8 +225,8 @@ public final class LocalUpdatesConfigHelper {
 
     /**
      * Petrol ₹/L for the Daily Updates hub. Prefers the user's selected
-     * district in {@code places[]} (same as FuelDetailActivity), then
-     * top-level splash keys / cities[0]. Returns 0 when absent.
+     * district in {@code places[]} (same as FuelDetailActivity); if missing,
+     * the same first-in-state default FuelDetail selects; else top-level.
      */
     public static double fuelPetrol(@Nullable Context context) {
         return resolveHubFuelPrice(context, true);
@@ -264,7 +264,7 @@ public final class LocalUpdatesConfigHelper {
 
     private static double resolveHubFuelPrice(@Nullable Context context, boolean petrol) {
         JSONObject f = fuelJson(context);
-        JSONObject place = findPlaceForSelectedDistrict(context, f);
+        JSONObject place = findHubPlace(context, f);
         if (place != null) {
             double v = optDouble(place, petrol ? "petrol" : "diesel", 0);
             if (v <= 0) {
@@ -277,7 +277,7 @@ public final class LocalUpdatesConfigHelper {
 
     private static double resolveHubFuelChange(@Nullable Context context, boolean petrol) {
         JSONObject f = fuelJson(context);
-        JSONObject place = findPlaceForSelectedDistrict(context, f);
+        JSONObject place = findHubPlace(context, f);
         if (place != null) {
             if (petrol) {
                 if (place.has("change") && !place.isNull("change")) {
@@ -290,6 +290,18 @@ public final class LocalUpdatesConfigHelper {
             }
         }
         return resolveFuelChange(f, petrol);
+    }
+
+    /**
+     * Hub place: selected district when present in {@code places[]}, else the same
+     * first-in-state default FuelDetail uses (never orphan top-level primary ₹).
+     */
+    @Nullable
+    private static JSONObject findHubPlace(
+            @Nullable Context context, @Nullable JSONObject f) {
+        JSONObject matched = findPlaceForSelectedDistrict(context, f);
+        if (matched != null) return matched;
+        return findDefaultPlaceForUserState(context, f);
     }
 
     /**
@@ -322,6 +334,64 @@ public final class LocalUpdatesConfigHelper {
             }
         }
         return byName;
+    }
+
+    /**
+     * Same default as {@code FuelDetailActivity.firstCityInState}: alphabetically
+     * first {@code city_en} in the user's state with real petrol/diesel.
+     */
+    @Nullable
+    private static JSONObject findDefaultPlaceForUserState(
+            @Nullable Context context, @Nullable JSONObject f) {
+        if (context == null || f == null) return null;
+        JSONArray places = f.optJSONArray("places");
+        if (places == null || places.length() == 0) return null;
+        Context app = context.getApplicationContext();
+        String stateKey = resolveUserFuelStateKey(app, f, places);
+        if (TextUtils.isEmpty(stateKey)) return null;
+        JSONObject best = null;
+        String bestSort = null;
+        for (int i = 0; i < places.length(); i++) {
+            JSONObject row = places.optJSONObject(i);
+            if (row == null) continue;
+            if (!stateKey.equalsIgnoreCase(row.optString("state_key", ""))) continue;
+            double petrol = optDouble(row, "petrol", 0);
+            double diesel = optDouble(row, "diesel", 0);
+            if (!(petrol > 0) || !(diesel > 0)) continue;
+            String sort = row.optString("city_en", "").trim();
+            if (sort.isEmpty()) sort = row.optString("city", "").trim();
+            if (sort.isEmpty()) continue;
+            if (bestSort == null || sort.compareToIgnoreCase(bestSort) < 0) {
+                best = row;
+                bestSort = sort;
+            }
+        }
+        return best;
+    }
+
+    @NonNull
+    private static String resolveUserFuelStateKey(
+            @NonNull Context app, @NonNull JSONObject f, @NonNull JSONArray places) {
+        int stateId = SharedPrefsData.getInt(app, Constants.StateID, Constants.PREF_NAME);
+        if (stateId <= 0) {
+            int lang = SharedPrefsData.getInt(app, Constants.LanguageID, Constants.PREF_NAME);
+            if (lang > 0) {
+                stateId = SharedPrefsData.getInt(
+                        app, Constants.StateID + "_lang_" + lang, Constants.PREF_NAME);
+            }
+        }
+        if (stateId > 0) {
+            for (int i = 0; i < places.length(); i++) {
+                JSONObject row = places.optJSONObject(i);
+                if (row == null || row.optInt("state_id", 0) != stateId) continue;
+                String key = row.optString("state_key", "").trim();
+                if (!TextUtils.isEmpty(key)) return key;
+            }
+        }
+        String key = optStr(f, "state_key", "").trim();
+        if ("ts".equalsIgnoreCase(key)) return "tg";
+        if (!TextUtils.isEmpty(key)) return key;
+        return "ap";
     }
 
     private static boolean fuelNamesMatch(@Nullable String districtName, @NonNull JSONObject row) {

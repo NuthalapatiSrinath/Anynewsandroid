@@ -109,6 +109,70 @@ public final class StatusVideoMedia {
         return null;
     }
 
+    /** Primary + fallback URLs for {@link VideoShareHelper} OkHttp downloads. */
+    public static final class ShareUrlPair {
+        @Nullable public final String primary;
+        @Nullable public final String alternate;
+
+        public ShareUrlPair(@Nullable String primary, @Nullable String alternate) {
+            this.primary = primary;
+            this.alternate = alternate;
+        }
+    }
+
+    /**
+     * Prefer direct progressive files ({@code downloadUrl}, mp4 in {@code videos[]}) over
+     * HLS {@code video_url} play URLs that Exo can stream but cannot be shared as one file.
+     */
+    public static ShareUrlPair resolveShareFileUrls(@Nullable ModelClass.Datum item) {
+        if (item == null) {
+            return new ShareUrlPair(null, null);
+        }
+        java.util.ArrayList<String> direct = new java.util.ArrayList<>();
+        java.util.ArrayList<String> streamOnly = new java.util.ArrayList<>();
+        maybeAddShareCandidate(direct, streamOnly, item.getDownloadUrl());
+        maybeAddShareCandidate(direct, streamOnly, item.getVideoUrl());
+        if (item.getVideos() != null) {
+            for (Object o : item.getVideos()) {
+                if (o instanceof String) {
+                    maybeAddShareCandidate(direct, streamOnly, (String) o);
+                } else if (o != null) {
+                    maybeAddShareCandidate(direct, streamOnly, String.valueOf(o));
+                }
+            }
+        }
+        String primary = !direct.isEmpty() ? direct.get(0)
+                : (!streamOnly.isEmpty() ? streamOnly.get(0) : null);
+        String alternate = null;
+        if (!direct.isEmpty() && direct.size() > 1) {
+            alternate = direct.get(1);
+        } else if (!direct.isEmpty() && !streamOnly.isEmpty()) {
+            alternate = streamOnly.get(0);
+        } else if (direct.isEmpty() && streamOnly.size() > 1) {
+            alternate = streamOnly.get(1);
+        }
+        return new ShareUrlPair(primary, alternate);
+    }
+
+    private static void maybeAddShareCandidate(java.util.List<String> direct,
+                                               java.util.List<String> streamOnly,
+                                               @Nullable String url) {
+        String c = cleanUrl(url);
+        if (c == null || !isHttpUrl(c) || isYoutubeish(c)) {
+            return;
+        }
+        c = ensureHttps(c);
+        java.util.List<String> bucket = isHlsOrManifest(c) ? streamOnly : direct;
+        if (!bucket.contains(c)) {
+            bucket.add(c);
+        }
+    }
+
+    private static boolean isHlsOrManifest(String url) {
+        String u = url.toLowerCase(Locale.US);
+        return u.contains(".m3u8") || u.contains(".m3u") || u.contains("manifest.mpd");
+    }
+
     @Nullable
     public static String resolveYoutubeId(@Nullable ModelClass.Datum item) {
         if (item == null) {

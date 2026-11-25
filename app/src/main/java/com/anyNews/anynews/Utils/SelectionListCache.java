@@ -365,6 +365,31 @@ public final class SelectionListCache {
         return snap.payloadJson.equals(GSON.toJson(fresh));
     }
 
+    /** Defer picker warm-up after a lean open so Home page-0 is not contended. */
+    public static final long LEAN_OPEN_PREFETCH_DELAY_MS = 45_000L;
+
+    /**
+     * Lean cold open: delay picker prefetch until Home has had time to load feed.
+     */
+    public static void prefetchDeferredForLeanOpen(@Nullable Context context) {
+        if (context == null) return;
+        try {
+            final Context app = context.getApplicationContext();
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    if (!OpenPathCache.canFastOpenHome(app)) {
+                        return;
+                    }
+                    prefetchInBackground(app);
+                } catch (Exception e) {
+                    Logone.w(e, TAG + " lean deferred prefetch failed");
+                }
+            }, LEAN_OPEN_PREFETCH_DELAY_MS);
+        } catch (Exception e) {
+            Logone.w(e, TAG + " prefetchDeferredForLeanOpen schedule failed");
+        }
+    }
+
     /**
      * After splash/home: warm languages + current-language states (and districts if state set)
      * so profile language/location pickers open fully painted.

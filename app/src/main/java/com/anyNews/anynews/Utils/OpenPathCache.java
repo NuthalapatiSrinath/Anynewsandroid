@@ -20,29 +20,25 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Client-side cache for cold/warm open under push stampede.
+ * Client-side cache for splash / identity / static open-path.
  * <p>
- * Goals: thrash-reduce open-path network via short TTLs + dedupe, and allow
- * a same-session warm page-0 paint only when the last online fetch is
- * minutes-old and matches identity/mode. Never paint multi-hour stale feed
- * or offline packs as an online first frame — show shimmer until network
- * (or true offline mode) instead.
+ * <b>Article feed disk is permanently disabled</b> ({@link #FEED_DISK_DISABLED}):
+ * no page-0 save, no warm instant paint, no offline feed paint. Cold/reopen
+ * always shimmer until live List/page-0. Splash draft / static TTLs stay.
  * <p>
  * MUST NOT alter Reload / Special / push-share sticky semantics: those paths
- * always hit the feed network and never paint page-0 disk as “done”.
- * <p>
- * Main vs Special vs Video vs Local page-0 snapshots are stored under separate
- * feedMode keys so a main payload can never paint Local (and vice versa).
- * <p>
- * July-style greeting policy: warm OpenPath never persists or restores IST
- * greeting cards. Live page-0 / Special still deliver greetings from network;
- * only the disk snapshot is news-only so a sealed morning row cannot paint
- * after noon from cache.
+ * always hit the feed network.
  */
 public final class OpenPathCache {
 
     private static final String TAG = "OpenPathCache";
     private static final Gson GSON = new Gson();
+
+    /**
+     * Kill switch: never pack or paint article list from OpenPath feed disk.
+     * Splash / translator / identity caches are unaffected.
+     */
+    public static final boolean FEED_DISK_DISABLED = true;
 
     /** Feed mode for page-0 disk snapshots — never collide main/special/video/local. */
     public static final String FEED_MODE_MAIN = "main";
@@ -53,6 +49,12 @@ public final class OpenPathCache {
 
     /** Splash / identity refresh (draft, fonts, update flags). */
     public static final long SPLASH_TTL_MS = 15 * 60 * 1000L;
+    /**
+     * Way2-style lean open: refresh Splash_Screen config (fonts / admin prefs)
+     * in the background about once per day — not on every cold/push open.
+     * Does not block first paint; see {@link #shouldRefreshSplashConfig}.
+     */
+    public static final long SPLASH_CONFIG_REFRESH_TTL_MS = 24 * 60 * 60 * 1000L;
     /** Translator JSON from get_static_data — rarely changes. */
     public static final long STATIC_TTL_MS = 24 * 60 * 60 * 1000L;
     /**
@@ -79,6 +81,8 @@ public final class OpenPathCache {
 
     /** One-shot force: set by Reload; cleared when the forced network call is enqueued. */
     private static volatile boolean pendingForceFeedNetwork = false;
+    /** One-shot purge of legacy page-0 feed files after FEED_DISK_DISABLED. */
+    private static volatile boolean legacyFeedDiskPurged = false;
 
     private OpenPathCache() {
     }
@@ -116,13 +120,18 @@ public final class OpenPathCache {
      */
     public static boolean canFastOpenHome(Context context) {
         if (!hasUsableIdentity(context)) return false;
-        // Prefer translator, but page-0 disk alone is enough to leave splash (~2s target)
-        // and paint Home immediately; static/translator can soft-refresh after.
-        // OfflineFeedStore main pack (capped, no special offline) also counts for cold open with data off.
+        // Feed disk / OfflineFeedStore no longer count — leave splash on identity
+        // + translator (or language-selected route). Home always waits on network
+        // for the article list.
         if (!hasTranslator(context)
-                && !hasFeedDisk(context)
-                && !OfflineFeedStore.hasAny(context)) {
-            return false;
+                && !SharedPrefsData.getBool(
+                        context, Constants.IS_LANGUAGE_SELECTED, Constants.PREF_NAME)) {
+            // Still allow when MOVE_NEXT_SCREEN already says main (checked below).
+            String peek = SharedPrefsData.getString(
+                    context, Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
+            if (peek == null || !"main".equalsIgnoreCase(peek)) {
+                return false;
+            }
         }
         String next = SharedPrefsData.getString(context, Constants.MOVE_NEXT_SCREEN, Constants.PREF_NAME);
         if (next == null || next.isEmpty()) {
@@ -157,10 +166,32 @@ public final class OpenPathCache {
         return (System.currentTimeMillis() - last) > SPLASH_TTL_MS;
     }
 
+    /**
+     * Returning user with identity whose last successful splash is inside {@link #SPLASH_TTL_MS}.
+     * {@link com.anyNews.anynews.Activities.StartingActivity} uses {@link #canFastOpenHome}
+     * for zero Retrofit on lean opens; this flag only documents TTL freshness.
+     */
+    public static boolean isLeanReturningOpen(Context context) {
+        return canFastOpenHome(context) && !shouldBlockOnSplash(context);
+    }
+
     public static void markSplashSuccess(Context context) {
         if (context == null) return;
         SharedPrefsData.putLong(context, Constants.OPEN_PATH_SPLASH_AT,
                 System.currentTimeMillis(), Constants.PREF_NAME);
+    }
+
+    /**
+     * True when a returning lean user should soft-refresh Splash_Screen for
+     * fonts / admin config. Uses {@link #SPLASH_CONFIG_REFRESH_TTL_MS} (~24h).
+     * First install / incomplete identity must still use the blocking splash path.
+     */
+    public static boolean shouldRefreshSplashConfig(Context context) {
+        if (context == null) return false;
+        if (!hasUsableIdentity(context)) return false;
+        long last = SharedPrefsData.getLong(context, Constants.OPEN_PATH_SPLASH_AT, Constants.PREF_NAME);
+        if (last <= 0) return true;
+        return (System.currentTimeMillis() - last) > SPLASH_CONFIG_REFRESH_TTL_MS;
     }
 
     public static boolean shouldRefreshStatic(Context context) {
@@ -180,6 +211,7 @@ public final class OpenPathCache {
      * @param forceAlways when true (push/share sticky, special, explicit reload), never skip.
      */
     public static boolean shouldNetworkRefreshFeed(Context context, boolean forceAlways) {
+        if (FEED_DISK_DISABLED) return true;
         if (forceAlways || pendingForceFeedNetwork) return true;
         if (context == null) return true;
         if (!hasFeedDisk(context)) return true;
@@ -239,11 +271,11 @@ public final class OpenPathCache {
     }
 
     public static boolean hasFeedDisk(Context context) {
+        if (FEED_DISK_DISABLED) return false;
         // Offline cold open / mid-session drop: any matching main identity payload counts,
         // even past FEED_DISK_TTL (paint-only; network refresh still TTL-gated).
         // Special/video are online-only and never count as Offline News pack identity.
-        return loadFeed(context, 0, FEED_MODE_MAIN) != null
-                || loadFeedForOffline(context, 0, FEED_MODE_MAIN) != null;
+        return loadFeed(context, 0, FEED_MODE_MAIN) != null;
     }
 
     /**
@@ -257,13 +289,13 @@ public final class OpenPathCache {
 
     @Nullable
     public static EncreptionRequest loadFeed(Context context, int categoryId, String feedMode) {
+        if (FEED_DISK_DISABLED) return null;
         return loadFeedInternal(context, categoryId, feedMode, /*maxAgeMs*/ FEED_DISK_TTL_MS);
     }
 
     /**
-     * Online first-paint / soft-refresh continuity: only the short warm window
-     * ({@link #FEED_DISK_TTL_MS}). No multi-hour stale dump — callers keep shimmer
-     * until a live network response when this returns null.
+     * Online first-paint — permanently disabled ({@link #FEED_DISK_DISABLED}).
+     * Always null so Home keeps shimmer until live page-0.
      */
     @Nullable
     public static EncreptionRequest loadFeedForInstantPaint(Context context, int categoryId) {
@@ -273,26 +305,21 @@ public final class OpenPathCache {
     @Nullable
     public static EncreptionRequest loadFeedForInstantPaint(
             Context context, int categoryId, String feedMode) {
+        if (FEED_DISK_DISABLED) return null;
         // Warm online paint only — strip greeting so stale morning cannot seat.
-        // Offline {@link #loadFeedForOffline} is unchanged (may still hold old rows
-        // until the next online save rewrites disk without greeting).
         return payloadWithoutGreeting(loadFeed(context, categoryId, feedMode));
     }
 
-    /**
-     * Offline-only paint fallback: identity match without FEED_DISK_TTL so a saved
-     * page-0 JSON can still open Offline News when Wi‑Fi/data is off past the warm TTL.
-     */
+    /** Offline feed paint removed — always null. */
     @Nullable
     public static EncreptionRequest loadFeedForOffline(Context context, int categoryId) {
-        return loadFeedForOffline(context, categoryId, FEED_MODE_MAIN);
+        return null;
     }
 
     @Nullable
     public static EncreptionRequest loadFeedForOffline(
             Context context, int categoryId, String feedMode) {
-        // Long.MAX_VALUE: any age, identity match only (true offline policy).
-        return loadFeedInternal(context, categoryId, feedMode, Long.MAX_VALUE);
+        return null;
     }
 
     /**
@@ -388,6 +415,15 @@ public final class OpenPathCache {
     public static void saveFeed(
             Context context, int categoryId, EncreptionRequest payload, String feedMode) {
         if (context == null || payload == null || TextUtils.isEmpty(payload.getData())) return;
+        if (FEED_DISK_DISABLED) {
+            // Never pack article list; purge legacy page-0 files once.
+            if (!legacyFeedDiskPurged) {
+                legacyFeedDiskPurged = true;
+                clearFeed(context);
+            }
+            markFeedNetworkSuccess(context);
+            return;
+        }
         // Only cache non-push-specific first pages (caller should pass page-0 only).
         try {
             final String mode = TextUtils.isEmpty(feedMode) ? FEED_MODE_MAIN : feedMode;

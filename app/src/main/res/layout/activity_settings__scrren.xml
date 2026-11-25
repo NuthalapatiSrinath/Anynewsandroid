@@ -324,6 +324,7 @@
                     android:layout_height="54dp"
                     android:layout_marginEnd="7dp"
                     android:layout_weight="1"
+                    android:visibility="gone"
                     android:background="@drawable/bg_settings_action_ripple"
                     android:clickable="true"
                     android:elevation="3dp"
@@ -451,6 +452,19 @@
 
                 <include
                     android:id="@+id/row_contact"
+                    layout="@layout/item_settings_link_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:background="@color/settings_divider" />
+
+                <include
+                    android:id="@+id/row_origin_calls"
                     layout="@layout/item_settings_link_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />

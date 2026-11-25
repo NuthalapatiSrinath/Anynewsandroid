@@ -8,7 +8,7 @@ import com.anyNews.anynews.R;
 
 /**
  * Profile hub chrome labels keyed by {@link Constants#LanguageID}
- * (same pattern as {@link ProfilePhotoLabels} / {@link HomeOfflineModeLabels}).
+ * (same pattern as {@link ProfilePhotoLabels} / {@link HomeOnlineModeLabels}).
  *
  * <p>Layout {@code @string/…} defaults stay English for inflation; Profile rebinds
  * Guest / login prompt / Status Videos from these helpers. Language and location
@@ -111,7 +111,7 @@ public final class ProfileHubLabels {
         switch (languageId(context)) {
             case 1: return "AnyNews-ൽ പരസ്യം ചെയ്യുക";
             case 2: return "AnyNews में विज्ञापन करें";
-            case 3: return "ఎనీన్యూస్‌లో ప్రకటన ఇవ్వండి";
+            case 3: return "ఎనీన్యూస్‌లో యాడ్స్ ఇవ్వండి";
             case 4: return "AnyNews-இல் விளம்பரம் செய்யுங்கள்";
             case 5: return "AnyNewsನಲ್ಲಿ ಜಾಹೀರಾತು ಮಾಡಿ";
             case 6: return "AnyNewsରେ ବିଜ୍ଞାପନ କରନ୍ତୁ";

@@ -37,6 +37,12 @@ public final class FontSettingsHelper {
     public static final String TAG = "AnyNewsFont";
     /** CSS Regular — matches historical applyTypeface (Typeface.NORMAL) behavior. */
     public static final int DEFAULT_FONT_WEIGHT = 400;
+    /**
+     * When false (default), Home typography uses baked {@link LanguageFontConfig#productionFor}
+     * for every language — no splash prefs, no custom-font HTTP downloads, stable layout.
+     * Flip to true only if admin remote fonts must drive the feed again.
+     */
+    public static final boolean APPLY_REMOTE_FONT_SETTINGS = false;
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, LanguageFontConfig>>() {}.getType();
     private static final Type URL_MAP_TYPE = new TypeToken<Map<String, String>>() {}.getType();
@@ -47,6 +53,10 @@ public final class FontSettingsHelper {
     }
 
     public static void saveLanguageFontSettings(Context context, Map<String, LanguageFontConfig> settings) {
+        if (!APPLY_REMOTE_FONT_SETTINGS) {
+            Log.d(TAG, "saveLanguageFontSettings skipped: APPLY_REMOTE_FONT_SETTINGS=false");
+            return;
+        }
         if (context == null || settings == null || settings.isEmpty()) {
             Log.w(TAG, "saveLanguageFontSettings skipped: context/settings empty");
             return;
@@ -66,6 +76,10 @@ public final class FontSettingsHelper {
 
     /** Persist admin-uploaded font key → URL map from splash. */
     public static void saveCustomFontUrls(Context context, Map<String, String> urls) {
+        if (!APPLY_REMOTE_FONT_SETTINGS) {
+            Log.d(TAG, "saveCustomFontUrls skipped: APPLY_REMOTE_FONT_SETTINGS=false");
+            return;
+        }
         if (context == null) {
             return;
         }
@@ -103,6 +117,12 @@ public final class FontSettingsHelper {
     }
 
     public static LanguageFontConfig getForLanguage(Context context, int languageId) {
+        if (!APPLY_REMOTE_FONT_SETTINGS) {
+            LanguageFontConfig baked = productionDefault(languageId);
+            Log.d(TAG, "getForLanguage lang=" + languageId
+                    + " source=productionDefault(remoteOff) config=" + describeConfig(baked));
+            return baked;
+        }
         Map<String, LanguageFontConfig> all = loadAll(context);
         LanguageFontConfig stored = all.get(String.valueOf(languageId));
         LanguageFontConfig resolved = stored != null ? sanitizeConfig(stored, languageId) : productionDefault(languageId);
@@ -496,6 +516,10 @@ public final class FontSettingsHelper {
 
     /** Best-effort prefetch so the first feed paint does not block on network. */
     public static void prefetchCustomFonts(Context context) {
+        if (!APPLY_REMOTE_FONT_SETTINGS) {
+            Log.d(TAG, "prefetchCustomFonts skipped: APPLY_REMOTE_FONT_SETTINGS=false");
+            return;
+        }
         if (context == null) {
             return;
         }

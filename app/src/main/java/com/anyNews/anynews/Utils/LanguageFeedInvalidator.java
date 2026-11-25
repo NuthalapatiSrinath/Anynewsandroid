@@ -60,6 +60,9 @@ public final class LanguageFeedInvalidator {
                     .putString(Constants.FLIP_RESTORE_AT, "0")
                     .putInt(Constants.FLIP_RESTORE_LANGUAGE_ID, 0)
                     .putBoolean(Constants.LANGUAGE_SWITCH_RESET_FLIP, true)
+                    // Preference change → main News, never reopen Daily Updates hub.
+                    .putBoolean(Constants.DAILY_UPDATES_RESTORE, false)
+                    .putString(Constants.DAILY_UPDATES_RESTORE_AT, "0")
                     .commit();
         } catch (Exception ignored) {
         }
@@ -74,10 +77,6 @@ public final class LanguageFeedInvalidator {
         try {
             OpenPathCache.clearFeed(app);
             OpenPathCache.forceNextFeedNetwork(app);
-        } catch (Exception ignored) {
-        }
-        try {
-            OfflineFeedStore.clearMain(app);
         } catch (Exception ignored) {
         }
         try {
@@ -149,7 +148,6 @@ public final class LanguageFeedInvalidator {
         try {
             OpenPathCache.clearFeed(app);
             OpenPathCache.forceNextFeedNetwork(app);
-            OfflineFeedStore.clearMain(app);
             OpenPathFeedPrefetcher.resetForLanguageChange();
         } catch (Exception ignored) {
         }
@@ -172,23 +170,40 @@ public final class LanguageFeedInvalidator {
      * After a district change: drop warm OpenPath / offline page-0 so the next
      * Home open cannot paint the previous district's feed, force network, and
      * clear reporter profile disk so Profile does not re-apply a stale location.
+     * Also clears Daily Updates hub restore so Profile/location pick lands on News.
      */
     public static void onDistrictChanged(@Nullable Context context) {
         if (context == null) {
             return;
         }
         final Context app = context.getApplicationContext();
+        clearDailyUpdatesHubRestore(app);
         try {
             OpenPathCache.clearFeed(app);
             OpenPathCache.forceNextFeedNetwork(app);
         } catch (Exception ignored) {
         }
         try {
-            OfflineFeedStore.clearMain(app);
+            ReporterProfileCache.clear(app);
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Drop the durable Daily Updates reopen flag so the next Home create paints
+     * main News (language / district / region preference changes).
+     */
+    public static void clearDailyUpdatesHubRestore(@Nullable Context context) {
+        if (context == null) {
+            return;
+        }
         try {
-            ReporterProfileCache.clear(app);
+            context.getApplicationContext()
+                    .getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(Constants.DAILY_UPDATES_RESTORE, false)
+                    .putString(Constants.DAILY_UPDATES_RESTORE_AT, "0")
+                    .commit();
         } catch (Exception ignored) {
         }
     }

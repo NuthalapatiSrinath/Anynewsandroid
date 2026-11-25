@@ -837,6 +837,14 @@ public class StartActivityReqModel implements Serializable {
         @Expose
         private String adCodeSecondary;
 
+        /**
+         * Optional single quiet default-ad seat (Root_Settings.default_ad_position).
+         * 0 / null = skip all no-fills (recommended). Matches feed ad_req_position.
+         */
+        @SerializedName("default_ad_position")
+        @Expose
+        private Integer defaultAdPosition;
+
         // Profile hub / More (null = old server; keep cached defaults).
         @SerializedName("categories_in_footer")
         @Expose
@@ -1493,6 +1501,14 @@ public class StartActivityReqModel implements Serializable {
         /** Null → old server; derive from {@link #getUseSecondNativeAdUnit()}. */
         public String getFeedNativeAdUnitMode() {
             return feedNativeAdUnitMode;
+        }
+
+        /**
+         * Null → old server; keep cached. 0 = skip all no-fills; &gt;0 = quiet
+         * default only at that {@code ad_req_position}.
+         */
+        public Integer getDefaultAdPosition() {
+            return defaultAdPosition;
         }
 
         public Integer getViewsBatchFlushIntervalSeconds() {

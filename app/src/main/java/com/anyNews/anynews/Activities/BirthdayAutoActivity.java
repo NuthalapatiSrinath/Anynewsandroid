@@ -3,7 +3,9 @@ package com.anyNews.anynews.Activities;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -411,19 +413,69 @@ public class BirthdayAutoActivity extends AppCompatActivity {
      */
     private void applyReadableFormFieldColors() {
         final int onLight = 0xFF1F2937;
-        final int hint = 0xFF9CA3AF;
-        applyEditReadable(nameInput, onLight, hint);
-        applyEditReadable(addressInput, onLight, hint);
-        applyEditReadable(specialInput, onLight, hint);
-        applyEditReadable(titleInput, onLight, hint);
-        if (nameBold != null) nameBold.setTextColor(onLight);
-        if (addrBold != null) addrBold.setTextColor(onLight);
+        final int hint = 0xFF6B7280;
+        final int secondaryBtnBg = 0xFFE5E7EB;
+        final ColorStateList onLightCsl = ColorStateList.valueOf(onLight);
+        final ColorStateList hintCsl = ColorStateList.valueOf(hint);
+        applyEditReadable(nameInput, onLightCsl, hintCsl);
+        applyEditReadable(addressInput, onLightCsl, hintCsl);
+        applyEditReadable(specialInput, onLightCsl, hintCsl);
+        applyEditReadable(titleInput, onLightCsl, hintCsl);
+        paintCheckReadable(nameBold, onLightCsl);
+        paintCheckReadable(addrBold, onLightCsl);
+        paintSpinnerReadable(nameFontSpinner);
+        paintSpinnerReadable(nameSizeSpinner);
+        paintSpinnerReadable(addrFontSpinner);
+        paintSpinnerReadable(addrSizeSpinner);
+        if (scheduleInfo != null) scheduleInfo.setTextColor(0xFF6B7280);
+        if (myListEmpty != null) myListEmpty.setTextColor(0xFF9CA3AF);
+        Button pickPhoto = findViewById(R.id.birthday_auto_pick_photo);
+        paintSecondaryFormButton(pickPhoto, onLight, secondaryBtnBg);
+        paintSecondaryFormButton(pickDateBtn, onLight, secondaryBtnBg);
+        // Submit keeps white-on-brand-red from layout.
+        if (submitBtn != null) {
+            submitBtn.setTextColor(0xFFFFFFFF);
+            submitBtn.setBackgroundTintList(ColorStateList.valueOf(0xFFE63B19));
+        }
     }
 
-    private static void applyEditReadable(EditText edit, int text, int hint) {
+    private static void applyEditReadable(
+            EditText edit, ColorStateList text, ColorStateList hint) {
         if (edit == null) return;
         edit.setTextColor(text);
         edit.setHintTextColor(hint);
+        // Night mode can leave a near-white underline; keep a visible gray stroke.
+        edit.setBackgroundTintList(ColorStateList.valueOf(0xFF9CA3AF));
+    }
+
+    private static void paintCheckReadable(CheckBox box, ColorStateList onLight) {
+        if (box == null) return;
+        box.setTextColor(onLight);
+        box.setButtonTintList(onLight);
+    }
+
+    private static void paintSpinnerReadable(@Nullable Spinner spinner) {
+        if (spinner == null) return;
+        spinner.setPopupBackgroundDrawable(new ColorDrawable(0xFFFFFFFF));
+        // Selected closed-state row (system layout inherits night white text).
+        View selected = spinner.getSelectedView();
+        if (selected instanceof TextView) {
+            ((TextView) selected).setTextColor(0xFF1F2937);
+        }
+        spinner.post(
+                () -> {
+                    View again = spinner.getSelectedView();
+                    if (again instanceof TextView) {
+                        ((TextView) again).setTextColor(0xFF1F2937);
+                    }
+                });
+    }
+
+    private static void paintSecondaryFormButton(
+            @Nullable Button btn, int text, int background) {
+        if (btn == null) return;
+        btn.setTextColor(text);
+        btn.setBackgroundTintList(ColorStateList.valueOf(background));
     }
 
     private void setupFontSpinners() {
@@ -443,6 +495,9 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                 new AdapterView.OnItemSelectedListener() {
                     @Override
                     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                        if (view instanceof TextView) {
+                            ((TextView) view).setTextColor(0xFF1F2937);
+                        }
                         hideServerPreview();
                         refreshLiveTexts();
                         scheduleServerPreview();
@@ -477,6 +532,11 @@ public class BirthdayAutoActivity extends AppCompatActivity {
             addrSizeSpinner.setSelection(BirthdayFonts.defaultSizeTierIndex());
             addrSizeSpinner.setOnItemSelectedListener(styleListener);
         }
+        // Adapters recreate selected rows with theme colors — re-assert light-form tint.
+        paintSpinnerReadable(nameFontSpinner);
+        paintSpinnerReadable(nameSizeSpinner);
+        paintSpinnerReadable(addrFontSpinner);
+        paintSpinnerReadable(addrSizeSpinner);
     }
 
     private void beginNormalizePhoto(Uri uri) {
@@ -842,6 +902,7 @@ public class BirthdayAutoActivity extends AppCompatActivity {
                                                             addrFontSpinner.setSelection(
                                                                     BirthdayFonts.indexOf(addrId));
                                                         }
+                                                        applyReadableFormFieldColors();
                                                         BirthdayFonts.ensureFontsDownloaded(
                                                                 BirthdayAutoActivity.this,
                                                                 () -> {

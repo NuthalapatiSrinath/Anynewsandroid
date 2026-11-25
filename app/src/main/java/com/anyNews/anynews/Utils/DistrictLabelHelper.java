@@ -358,21 +358,6 @@ public final class DistrictLabelHelper {
             return fromCache.trim();
         }
 
-        // Offline snapshot: only when it was captured for this language.
-        String offline = OfflineFeedStore.loadDistrictLabelForLanguage(app, lang);
-        if (isUsable(offline) && labelCompatibleWithLanguage(offline, lang)
-                && !needsNativeScriptUpgrade(offline, lang)
-                && !isClearScriptConflict(offline, lang)) {
-            if (!isUsable(d1) && !isUsable(d0)) {
-                saveFromServer(app, lang, getStoredDistId(app), offline);
-            }
-            return offline.trim();
-        }
-
-        if (isUsable(offline) && !isClearScriptConflict(offline, lang)
-                && !needsNativeScriptUpgrade(offline, lang)) {
-            return offline.trim();
-        }
         if (isUsable(d1) && !isClearScriptConflict(d1, lang)
                 && !needsNativeScriptUpgrade(d1, lang)) {
             return d1.trim();

@@ -37,8 +37,10 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.CardAdapter;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Constants;
+import com.anyNews.anynews.Utils.SafeBitmapDecode;
 import com.anyNews.anynews.Utils.SharedPrefsData;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DecodeFormat;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -387,11 +389,13 @@ public class CardPagerAdapter extends PagerAdapter implements CardAdapter {
                     oh = 1920;
                 }
             }
+            int[] capped = SafeBitmapDecode.clampFlipOverride(context, ow, oh);
             Glide.with(context)
                     .load(url)
                     .priority(priority)
                     .dontAnimate()
-                    .override(ow, oh)
+                    .format(DecodeFormat.PREFER_RGB_565)
+                    .override(capped[0], capped[1])
                     .placeholder(R.drawable.trasparent_background)
                     .error(R.drawable.trasparent_background)
                     .fallback(R.drawable.trasparent_background)

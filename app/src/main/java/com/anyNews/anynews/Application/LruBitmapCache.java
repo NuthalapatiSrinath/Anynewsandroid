@@ -23,9 +23,21 @@ public class LruBitmapCache extends LruCache<String, Bitmap> implements
 
     public static int getDefaultLruCacheSize() {
         final int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
-        final int cacheSize = maxMemory / 8;
-
-        return cacheSize;
+        // /8 is aggressive on 64–128MB heaps; keep a smaller share to avoid OOM.
+        int divisor = 8;
+        try {
+            if (com.anyNews.anynews.Utils.SafeBitmapDecode.isLowRam(
+                    com.anyNews.anynews.Application.AppController.getInstance())) {
+                divisor = 16;
+            } else if (maxMemory < 96 * 1024) {
+                divisor = 12;
+            }
+        } catch (Throwable ignored) {
+            if (maxMemory < 96 * 1024) {
+                divisor = 12;
+            }
+        }
+        return Math.max(1024, maxMemory / divisor);
     }
 
     @Override

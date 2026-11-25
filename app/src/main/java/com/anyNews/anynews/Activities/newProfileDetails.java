@@ -105,7 +105,6 @@ import com.anyNews.anynews.Utils.Logone;
 import com.anyNews.anynews.Utils.MediaUrl;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
 import com.anyNews.anynews.Utils.FooterTabLabels;
-import com.anyNews.anynews.Utils.HomeOfflineModeLabels;
 import com.anyNews.anynews.Utils.ProfileHubConfigHelper;
 import com.anyNews.anynews.Utils.ProfileHubLabels;
 import com.anyNews.anynews.Utils.TranslatorPackHelper;
@@ -711,13 +710,6 @@ public class newProfileDetails extends AppCompatActivity {
         if (neo_settings != null) {
             neo_settings.setOnClickListener(v ->
                     startActivity(new Intent(newProfileDetails.this, Settings_Scrren.class)));
-        }
-
-        View layoutBookmarks = findViewById(R.id.layout_bookmarks);
-        if (layoutBookmarks != null) {
-            layoutBookmarks.setOnClickListener(v -> {
-                startActivity(new Intent(newProfileDetails.this, BookmarksActivity.class));
-            });
         }
 
         View completeProfile = findViewById(R.id.layout_complete_profile);
@@ -2293,11 +2285,6 @@ public class newProfileDetails extends AppCompatActivity {
         if (contactLabel != null) {
             contactLabel.setText(packString(
                     d != null ? d.getContactUs() : null, ProfileHubLabels.contactUs(this)));
-        }
-
-        TextView bmLabel = findViewById(R.id.profile_bookmarks_label);
-        if (bmLabel != null) {
-            bmLabel.setText(HomeOfflineModeLabels.bookmarks(this));
         }
 
         if (textViewFollowingUser != null) {
@@ -4432,13 +4419,9 @@ public class newProfileDetails extends AppCompatActivity {
                     });
         }
 
-        // Bookmarks visibility
         View layoutBookmarks = findViewById(R.id.layout_bookmarks);
         if (layoutBookmarks != null) {
-            layoutBookmarks.setVisibility(
-                    ProfileHubConfigHelper.isBookmarksVisible(this) ? View.VISIBLE : View.GONE);
-            TextView bmLabel = findViewById(R.id.profile_bookmarks_label);
-            if (bmLabel != null) bmLabel.setTextSize(menuSp);
+            layoutBookmarks.setVisibility(View.GONE);
         }
 
         // Legacy Share-to-Earn grid tile stays hidden; hub Share App row is the entry.

@@ -14,13 +14,10 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
@@ -49,12 +46,9 @@ import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.MyFirebaseMessagingService;
 import com.anyNews.anynews.Services.RestApiClient;
 import com.anyNews.anynews.Utils.Allsharedpreference;
-import com.anyNews.anynews.Utils.AdMobInitializer;
-import com.anyNews.anynews.Utils.AdPreloader;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.CricketMiniPlayerPositionHelper;
 import com.anyNews.anynews.Utils.CricketSurfaceConfigHelper;
-import com.anyNews.anynews.Utils.OfflineFeedStore;
 import com.anyNews.anynews.Utils.FeedPositionKeepConfig;
 import com.anyNews.anynews.Utils.HomeModeChromeConfig;
 import com.anyNews.anynews.Utils.NewsTapModeConfig;
@@ -64,7 +58,6 @@ import com.anyNews.anynews.Utils.ReporterPaymentAppConfig;
 import com.anyNews.anynews.Utils.ReadHistoryConfig;
 import com.anyNews.anynews.Utils.StatusVideosDaysConfig;
 import com.anyNews.anynews.Utils.FeedAdConfig;
-import com.anyNews.anynews.Utils.FestivalSplashHelper;
 import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.ArticleTtsConfigHelper;
 import com.anyNews.anynews.Utils.ArticleTtsHelper;
@@ -103,7 +96,6 @@ import com.facebook.appevents.AppEventsLogger;
 import com.facebook.applinks.AppLinkData;
 import com.facebook.applinks.AppLinks;
 import com.google.android.gms.ads.identifier.AdvertisingIdClient;
-import com.google.android.gms.analytics.CampaignTrackingReceiver;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -185,9 +177,10 @@ public class StartingActivity extends AppCompatActivity {
      */
     private String resolvedShareShortCode;
     String scrren;
-    // firebase storage
-    FirebaseDatabase database = FirebaseDatabase.getInstance();
-    DatabaseReference myRef = database.getReference();
+    @Nullable
+    private FirebaseDatabase database;
+    @Nullable
+    private DatabaseReference myRef;
     String type_firebase = "app_open";
     String type_firebase_open = "push_open";
     String type_firebase_share = "share_open";
@@ -208,52 +201,38 @@ public class StartingActivity extends AppCompatActivity {
     private int splashNetworkFailCount = 0;
     /** Avoid re-running getOSandDeviceId on every CONNECTIVITY_ACTION. */
     private boolean startupDeviceStarted = false;
-    /**
-     * Festival splash gate: when true, {@link #openHomeFromSplash} defers until
-     * the admin duration elapses. OFF / no cache → false (zero OpenPath cost).
-     */
-    private boolean festivalHoldHome = false;
-    private boolean pendingHomeAfterFestival = false;
-    /** True while downloading banner (theme-color splash kept; never show logo). */
-    private boolean festivalAwaitingDownload = false;
-    /**
-     * Keep AndroidX splash only while waiting for a cold banner download.
-     * When the image is already cached, dismiss ASAP and paint the ImageView.
-     */
-    private boolean splashKeepUntilReady = true;
+
+    private boolean isActivityAlive() {
+        if (isFinishing()) {
+            return false;
+        }
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR1 || !isDestroyed();
+    }
+
+    @Nullable
+    private DatabaseReference eventsRef() {
+        try {
+            if (myRef == null) {
+                database = FirebaseDatabase.getInstance();
+                myRef = database.getReference();
+            }
+            return myRef;
+        } catch (Exception e) {
+            Logone.w(TAG, "Firebase RTDB unavailable", e);
+            return null;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Before super + installSplashScreen: Opening Banner ON → theme-color
-        // + blank icon (never logo, never black). Banner OFF keeps Manifest
-        // centered logo (splash_circle_logo / splash_logo_center_plate).
-        // icon_preferred is on the splash theme so share/VIEW cold starts
-        // draw that mark; Android 13+ otherwise leaves only splash_logo_bg.
-        boolean suppressLogoSplash =
-                FestivalSplashHelper.shouldSuppressLogoSplash(this, getIntent());
-        final boolean bannerCached =
-                suppressLogoSplash && FestivalSplashHelper.hasReadyLocalImage(this);
-        if (suppressLogoSplash) {
-            setTheme(R.style.AppThemeSplashOpeningBanner);
-        }
-        // AndroidX requires installSplashScreen before super.onCreate.
+        // Manifest AppThemeSplash — centered logo (splash_circle_logo / splash_logo_center_plate).
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
-        if (suppressLogoSplash) {
-            // Cached → do not hold system splash (theme-color already set; banner paints next).
-            // Cold cache → hold theme-color splash until download/paint or timeout.
-            splashKeepUntilReady = !bannerCached;
-            if (splashKeepUntilReady) {
-                splashScreen.setKeepOnScreenCondition(() -> splashKeepUntilReady);
+        splashScreen.setOnExitAnimationListener(provider -> {
+            try {
+                provider.remove();
+            } catch (Exception ignored) {
             }
-            splashScreen.setOnExitAnimationListener(provider -> {
-                try {
-                    provider.remove();
-                } catch (Exception ignored) {
-                }
-            });
-        } else {
-            splashKeepUntilReady = false;
-        }
+        });
         super.onCreate(savedInstanceState);
         // Ensure previous session's viewed cards are committed before Home News loads
         // (also runs from AppController; once-per-process is a no-op if already done).
@@ -330,56 +309,27 @@ public class StartingActivity extends AppCompatActivity {
 
         OBJECT = "" + intent.getStringExtra("OBJECT");
         TITLE_REWARDS = "" +intent.getStringExtra("TITLE_REWARDS");
-        if (suppressLogoSplash) {
-            // Theme-color (or last sampled banner edge) until banner paints — never logo/black.
-            final int gapColor = FestivalSplashHelper.getGapFillColor(this);
-            try {
-                getWindow().setBackgroundDrawable(new ColorDrawable(gapColor));
-            } catch (Exception ignored) {
+        // Logo splash plate matches the system splash on all cold-start paths.
+        try {
+            getWindow().setBackgroundDrawableResource(R.drawable.splash_logo_center_plate);
+        } catch (Exception ignored) {
+        }
+        try {
+            View root = findViewById(android.R.id.content);
+            if (root != null) {
+                root.setBackgroundResource(R.drawable.splash_logo_center_plate);
             }
-            try {
-                View root = findViewById(android.R.id.content);
-                if (root != null) {
-                    root.setBackgroundColor(gapColor);
-                }
-                // Waiting plate only — paintFestivalBannerAndHold clears this so
-                // the topmost banner ImageView is not covered.
-                if (net_avilable != null) {
-                    net_avilable.setBackgroundColor(gapColor);
-                }
-            } catch (Exception ignored) {
-            }
+        } catch (Exception ignored) {
+        }
+        if (logo_image_server != null) {
             logo_image_server.setImageDrawable(null);
             logo_image_server.setVisibility(View.INVISIBLE);
+        }
+        if (logo_image != null) {
             logo_image.setVisibility(View.GONE);
-            if (splashCenterLogo != null) {
-                splashCenterLogo.setVisibility(View.GONE);
-            }
-            if (welcome != null) {
-                welcome.setVisibility(View.GONE);
-            }
-        } else {
-            // Classic logo (banner OFF). Plate matches the system splash so a
-            // share/job/notification cold start is not a flat gray window while
-            // the link resolves. new_bg_sp sat the mark at the top and left the
-            // center empty (#353535 at night).
-            try {
-                getWindow().setBackgroundDrawableResource(R.drawable.splash_logo_center_plate);
-            } catch (Exception ignored) {
-            }
-            try {
-                View root = findViewById(android.R.id.content);
-                if (root != null) {
-                    root.setBackgroundResource(R.drawable.splash_logo_center_plate);
-                }
-            } catch (Exception ignored) {
-            }
-            logo_image_server.setImageDrawable(null);
-            logo_image_server.setVisibility(View.INVISIBLE);
-            logo_image.setVisibility(View.GONE);
-            if (splashCenterLogo != null) {
-                splashCenterLogo.setVisibility(View.VISIBLE);
-            }
+        }
+        if (splashCenterLogo != null) {
+            splashCenterLogo.setVisibility(View.VISIBLE);
         }
         receiver = new NetworkChangeReceiver();
         networkStatus = (TextView) findViewById(R.id.networkStatus);
@@ -400,51 +350,50 @@ public class StartingActivity extends AppCompatActivity {
             }
         }
 
-        // Opening banner when admin ON for this path (+ wait download if needed).
-        // After intent parse so push/share can apply their own toggles.
-        maybeArmFestivalSplash();
-        // Keep stays true while festivalAwaitingDownload; OFF path already released.
-
         // Instant open for returning users (after intent/deep-link parse so share ids pass through).
-        // Config/FCM soft-refresh continues via getOSandDeviceId on the next tick.
+        // Zero Retrofit/splash from StartingActivity on lean — Home owns feed + throttled
+        // Splash_Screen config refresh (OpenPathSplashConfigRefresher, ~24h).
         // Wait for short-code HTTP resolve so SHARE_REDIRECT_ID is set before Home
         // (otherwise magazines land on feed page-0 / first unrelated news).
         try {
             if (shareShortCodeResolvePending
                     && OpenPathCache.canFastOpenHome(getApplicationContext())) {
                 showLog("OpenPath: defer fast home until share short-code resolves");
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    try {
-                        if (!startupDeviceStarted) {
-                            getOSandDeviceId();
-                        }
-                    } catch (Exception ignored) {
-                    }
-                });
-                // Fail-open: if resolve hangs, still enter Home (PENDING may arrive later).
+                // Do NOT fail-open into Home without a resolved post_id while the
+                // short-code HTTP resolve is still in flight — that painted plain
+                // page-0 (first article) before share_post_id could pin. Resolve
+                // success calls deliverShareRedirectToHome; failure / hang below
+                // opens Home once the pending flag clears (or after hard timeout).
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     try {
-                        if (!homeOpenedFromSplash) {
-                            OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
-                            openHomeFromSplash();
+                        if (!isActivityAlive() || homeOpenedFromSplash) {
+                            return;
                         }
+                        if (shareShortCodeResolvePending) {
+                            showLog("OpenPath: share short-code still pending — wait hard timeout");
+                            return;
+                        }
+                        OpenPathFeedPrefetcher.maybePrefetchFromStartingActivity(this, TITLE, articleId1);
+                        openHomeFromSplash();
                     } catch (Exception ignored) {
                     }
                 }, 2500);
-                return;
-            } else if (OpenPathCache.canFastOpenHome(getApplicationContext())) {
-                showLog("OpenPath: immediate home after intent parse");
-                // Kick List_All_Articles before Home binds — coalesce with Home page-0.
-                OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
-                openHomeFromSplash();
-                new Handler(Looper.getMainLooper()).post(() -> {
+                // Absolute fail-open if resolve hangs (DNS / network) past HTTP timeouts.
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     try {
-                        if (!startupDeviceStarted) {
-                            getOSandDeviceId();
+                        if (!isActivityAlive() || homeOpenedFromSplash) {
+                            return;
                         }
+                        shareShortCodeResolvePending = false;
+                        OpenPathFeedPrefetcher.maybePrefetchFromStartingActivity(this, TITLE, articleId1);
+                        openHomeFromSplash();
                     } catch (Exception ignored) {
                     }
-                });
+                }, 9000);
+                return;
+            } else if (OpenPathCache.canFastOpenHome(getApplicationContext())) {
+                showLog("OpenPath: immediate home after intent parse (zero StartingActivity API)");
+                openHomeFromSplash();
                 return;
             }
         } catch (Exception e) {
@@ -455,7 +404,9 @@ public class StartingActivity extends AppCompatActivity {
         String device_id_firebase =  Settings.Secure.getString(getApplicationContext().getContentResolver(), Settings.Secure.ANDROID_ID);
         long current_time_firebase = System.currentTimeMillis();
 
-        writeAppOpen("User",type_firebase ,current_time_firebase,draft_id_firebase,device_id_firebase);
+        if (!isZeroApiLeanOpen()) {
+            writeAppOpen("User", type_firebase, current_time_firebase, draft_id_firebase, device_id_firebase);
+        }
                showLog("CHECK POINT 2");
         // FDL shut down 2025-08-25 — keep as best-effort only; App Links + extractData are primary
         try {
@@ -571,6 +522,9 @@ public class StartingActivity extends AppCompatActivity {
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
+                        if (!isActivityAlive()) {
+                            return;
+                        }
                         isNetworkAvailable(StartingActivity.this);
                         getUIDs();
                         setAutoLogAppEventsEnabled(true);
@@ -1080,6 +1034,10 @@ public class StartingActivity extends AppCompatActivity {
             final String id = resolvedId;
             final int pageFromJson = resolvedPage;
             new Handler(Looper.getMainLooper()).post(() -> {
+                if (!isActivityAlive()) {
+                    shareShortCodeResolvePending = false;
+                    return;
+                }
                 shareShortCodeResolvePending = false;
                 if (pageFromJson > 0) {
                     shareGalleryPage = pageFromJson;
@@ -1095,6 +1053,13 @@ public class StartingActivity extends AppCompatActivity {
                             + " page=" + shareGalleryPage
                             + " host=" + resolveHost);
                     deliverShareRedirectToHome(id);
+                } else if (!homeOpenedFromSplash) {
+                    // Resolve failed (NXDOMAIN / 404) — enter Home without sticky
+                    // rather than leaving splash hung behind the hard timeout.
+                    showLog("CHECK POINT share short-code resolve miss host=" + resolveHost);
+                    OpenPathFeedPrefetcher.maybePrefetchFromStartingActivity(
+                            StartingActivity.this, TITLE, articleId1);
+                    openHomeFromSplash();
                 }
             });
         });
@@ -1112,7 +1077,7 @@ public class StartingActivity extends AppCompatActivity {
         }
         try {
             if (!homeOpenedFromSplash) {
-                OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, shareId);
+                OpenPathFeedPrefetcher.maybePrefetchFromStartingActivity(this, TITLE, shareId);
                 openHomeFromSplash();
                 return;
             }
@@ -1251,6 +1216,9 @@ public class StartingActivity extends AppCompatActivity {
             if (resolvedId != null && !resolvedId.isEmpty()) {
                 final String id = resolvedId;
                 new Handler(Looper.getMainLooper()).post(() -> {
+                    if (!isActivityAlive()) {
+                        return;
+                    }
                     articleId1 = id;
                     // Share sticky only — never TITLE (push). See extractData.
                     SharedPrefsData.putString(getApplicationContext(),
@@ -1477,7 +1445,7 @@ public class StartingActivity extends AppCompatActivity {
         }
         try {
             if (!homeOpenedFromSplash) {
-                OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, pushPostId, articleId1);
+                OpenPathFeedPrefetcher.maybePrefetchFromStartingActivity(this, pushPostId, articleId1);
                 openHomeFromSplash();
                 return;
             }
@@ -1486,6 +1454,7 @@ public class StartingActivity extends AppCompatActivity {
             intent.putExtra("notification", true);
             intent.putExtra("TITLE", pushPostId.trim());
             intent.putExtra("TITILE", pushPostId.trim());
+            intent.putExtra(MyFirebaseMessagingService.EXTRA_PUSH_POST_ID, pushPostId.trim());
             intent.putExtra("EXTRA_SESSION_ID", "0");
             intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
             intent.putExtra("DATAFROM2G", DATAFROM2G);
@@ -1562,6 +1531,9 @@ public class StartingActivity extends AppCompatActivity {
                             new Handler(Looper.getMainLooper()).post(new Runnable() {
                                 @Override
                                 public void run() {
+                                    if (!isActivityAlive() || isZeroApiLeanOpen()) {
+                                        return;
+                                    }
                                     getOSandDeviceId();
                                 }
                             });
@@ -1583,9 +1555,8 @@ public class StartingActivity extends AppCompatActivity {
             }
         }
         Logone.v(LOG_TAG, "You are not connected to Internet!");
-        // Offline with local identity + OfflineFeedStore / OpenPath / translator:
-        // open Home on the same path as “saved for offline” — do not trap the user
-        // on splash full-screen “No internet!”.
+        // Offline with local identity + OpenPath / translator: open Home — do not trap
+        // the user on splash full-screen “No internet!”.
         if (OpenPathCache.canFastOpenHome(context)) {
             showLog("OpenPath: offline fast home from local cache");
             if (net_avilable != null) {
@@ -1616,6 +1587,35 @@ public class StartingActivity extends AppCompatActivity {
         //   one.setText("You are not connected to Internet!");
         isConnected = false;
         return false;
+    }
+
+    /**
+     * Way2-style lean open: draft+language identity — no blocking Splash_Screen,
+     * static, splash_config, or selection prefetch from StartingActivity.
+     * Throttled Splash_Screen font/admin refresh lives on Home via
+     * {@link com.anyNews.anynews.Utils.OpenPathSplashConfigRefresher}.
+     */
+    private boolean isZeroApiLeanOpen() {
+        try {
+            return OpenPathCache.canFastOpenHome(getApplicationContext());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** First-install / onboarding splash path only — not used on lean fast-home. */
+    private void runLeanOrSplashDeviceBootstrap() {
+        try {
+            if (isZeroApiLeanOpen()) {
+                showLog("OpenPath: skip device bootstrap on lean open");
+                return;
+            }
+            if (!startupDeviceStarted) {
+                getOSandDeviceId();
+            }
+        } catch (Exception e) {
+            showLog("OpenPath: lean device bootstrap failed " + e.getMessage());
+        }
     }
 
     private void getOSandDeviceId() {
@@ -1658,6 +1658,11 @@ public class StartingActivity extends AppCompatActivity {
         String token = SharedPrefsData.getString(getApplicationContext(), Constants.FCM_TOKEN, Constants.PREF_NAME);
         showLog("CHECK POINT 11::" + token);
 
+        if (isZeroApiLeanOpen()) {
+            showLog("OpenPath: lean — skip splash/FCM RTDB from getOSandDeviceId");
+            return;
+        }
+
         int draftForPush = SharedPrefsData.getInt(getApplicationContext(), Constants.DraftID, Constants.PREF_NAME);
         String device_id = SharedPrefsData.getString(getApplicationContext(), Constants.DeviceID, Constants.PREF_NAME);
         int lang_id = SharedPrefsData.getInt(getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
@@ -1673,22 +1678,7 @@ public class StartingActivity extends AppCompatActivity {
          *   Services the Task can hang indefinitely (release users saw an infinite splash).
          * - Use cached token, else a stable ANDROID_ID placeholder; refresh real FCM in bg.
          */
-        if (OpenPathCache.canFastOpenHome(getApplicationContext())) {
-            showLog("OpenPath: fast home (identity+translator local)");
-            OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
-            openHomeFromSplash();
-            final String cachedToken = ensureSplashFcmToken(token);
-            refreshFcmTokenInBackground(cachedToken);
-            // Identity/config soft refresh only if splash TTL expired.
-            if (OpenPathCache.shouldBlockOnSplash(getApplicationContext())) {
-                sendDeviceDetailsBackground(cachedToken);
-            }
-        } else {
-            String resolvedToken = ensureSplashFcmToken(token);
-            showLog("OpenPath: splash with token (non-blocking FCM)::" + resolvedToken);
-            sendDeviceDetails(resolvedToken);
-            refreshFcmTokenInBackground(resolvedToken);
-        }
+        routeSplashAfterDeviceReady(token);
 
         try {
             FirebaseDynamicLinks.getInstance()
@@ -1716,6 +1706,36 @@ public class StartingActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
 
+    }
+
+    private void routeSplashAfterDeviceReady(@Nullable String token) {
+        try {
+            if (isZeroApiLeanOpen()) {
+                showLog("OpenPath: lean — skip Splash_Screen/splash_config/static/FCM upload");
+                return;
+            }
+            final String cachedToken = ensureSplashFcmToken(token);
+            refreshFcmTokenInBackground(cachedToken);
+            if (OpenPathCache.isLeanReturningOpen(getApplicationContext())) {
+                showLog("OpenPath: lean return — skip Splash_Screen/splash_config/static");
+                return;
+            }
+            if (OpenPathCache.canFastOpenHome(getApplicationContext())) {
+                showLog("OpenPath: fast home — no StartingActivity splash refresh");
+                if (!homeOpenedFromSplash) {
+                    openHomeFromSplash();
+                }
+                return;
+            }
+            showLog("OpenPath: blocking splash (first install / incomplete onboarding)::" + cachedToken);
+            sendDeviceDetails(cachedToken);
+        } catch (Exception e) {
+            showLog("OpenPath: routeSplashAfterDeviceReady failed " + e.getMessage());
+            try {
+                sendDeviceDetails(ensureSplashFcmToken(token));
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     /**
@@ -1809,6 +1829,16 @@ public class StartingActivity extends AppCompatActivity {
 
     /** Splash for config only — home already open; never blocks UI. */
     private void sendDeviceDetailsBackground(final String token) {
+        // Lean returning opens use Home → OpenPathSplashConfigRefresher (~24h).
+        // Non-lean / onboarding may still soft-refresh here when TTL expired.
+        if (isZeroApiLeanOpen()) {
+            showLog("OpenPath: lean — defer splash config refresh to Home");
+            return;
+        }
+        if (!OpenPathCache.shouldRefreshSplashConfig(getApplicationContext())) {
+            showLog("OpenPath: skip background splash refresh (fresh)");
+            return;
+        }
         showLog("OpenPath: background splash refresh");
         if (token != null && !token.isEmpty()) {
             SharedPrefsData.putString(getApplicationContext(), Constants.FCM_TOKEN, token, Constants.PREF_NAME);
@@ -1934,6 +1964,16 @@ public class StartingActivity extends AppCompatActivity {
      *                   never re-open Home / onboarding screens unless force-critical.
      */
     public void callSplashRequest(final boolean configOnly){
+        // Lean open: never block UI on Splash_Screen. Soft configOnly refresh is owned by
+        // OpenPathSplashConfigRefresher on Home (throttled); do not re-enter from here.
+        if (isZeroApiLeanOpen()) {
+            showLog("OpenPath: skip Splash_Screen/splash_config on lean open"
+                    + (configOnly ? " (configOnly→Home refresher)" : ""));
+            if (!configOnly) {
+                routeReturningUser();
+            }
+            return;
+        }
         if (splashNetworkInFlight) {
             showLog("OpenPath: splash already in flight");
             return;
@@ -1947,6 +1987,44 @@ public class StartingActivity extends AppCompatActivity {
                 splash = Splash_Scrren_Second_Time();
             }
         }
+        // Warm CF public splash shell on blocking first open only — skip on silent
+        // configOnly refresh (POST Splash_Screen still returns banner/ad flags).
+        if (!configOnly) {
+        try {
+            int lang = SharedPrefsData.getInt(
+                    getApplicationContext(), Constants.LanguageID, Constants.PREF_NAME);
+            APIService edgeApi = RestApiClient.getClient().create(APIService.class);
+            edgeApi.Public_Splash_Config("v3", Math.max(0, lang)).enqueue(
+                    new Callback<com.anyNews.anynews.Pojo.PublicEdgeSplashResponse>() {
+                        @Override
+                        public void onResponse(
+                                Call<com.anyNews.anynews.Pojo.PublicEdgeSplashResponse> call,
+                                Response<com.anyNews.anynews.Pojo.PublicEdgeSplashResponse> response) {
+                            try {
+                                com.anyNews.anynews.Pojo.PublicEdgeSplashResponse body =
+                                        response != null ? response.body() : null;
+                                if (body == null || !Boolean.TRUE.equals(body.getSuccess())) {
+                                    return;
+                                }
+                                if (body.getDefault_ad_position() != null) {
+                                    FeedAdConfig.saveDefaultAdPositionFromServer(
+                                            getApplicationContext(),
+                                            body.getDefault_ad_position());
+                                }
+                            } catch (Exception ignored) {
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(
+                                Call<com.anyNews.anynews.Pojo.PublicEdgeSplashResponse> call,
+                                Throwable t) {
+                            /* soft — POST Splash_Screen remains source of truth */
+                        }
+                    });
+        } catch (Exception ignored) {
+        }
+        }
         splashNetworkInFlight = true;
         APIService apiService = RestApiClient.getClient().create(APIService.class);
         Call<EncreptionRequest> apiResponse = apiService.Splash_Screen("v3", splash);
@@ -1956,12 +2034,15 @@ public class StartingActivity extends AppCompatActivity {
             @Override
             public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
                 splashNetworkInFlight = false;
+                if (!isActivityAlive() && !configOnly) {
+                    return;
+                }
                 if (response.isSuccessful()) {
                     showLog("CHECK POINT 14 REQUEST SUCCESS::");
                     try {
                     EncreptionRequest encreptionRequest = response.body();
                     if (encreptionRequest == null || encreptionRequest.getData() == null) {
-                        if (!configOnly) {
+                        if (!configOnly && isActivityAlive()) {
                             splashNetworkFailCount++;
                             Toast.makeText(StartingActivity.this, "Unable to start app. Please try again.", Toast.LENGTH_LONG).show();
                             routeReturningUser();
@@ -1976,19 +2057,11 @@ public class StartingActivity extends AppCompatActivity {
 
                     if (Boolean.TRUE.equals(startActivityReqModel.getSuccess())) {
 
-                        if (startActivityReqModel.getData().getAdmobAppId() != null
-                                && !startActivityReqModel.getData().getAdmobAppId().isEmpty()) {
-                            AdMobInitializer.initialize(StartingActivity.this, startActivityReqModel.getData().getAdmobAppId());
-                        }
-                        // Warm next share/house-ad seat before the user flips onto it.
-                        try {
-                            AdPreloader.get().prefetch(getApplicationContext());
-                        } catch (Exception ignored) {
-                        }
-
                         // if getting null then uninstall app
 
-                        SharedPrefsData.putInt(getApplicationContext(), Constants.DraftID, startActivityReqModel.getData().getDraftId(), Constants.PREF_NAME);
+                        Integer draftFromServer = startActivityReqModel.getData().getDraftId();
+                        SharedPrefsData.putInt(getApplicationContext(), Constants.DraftID,
+                                draftFromServer != null ? draftFromServer : 0, Constants.PREF_NAME);
                         // Never wipe a returning user's remembered language with server 0 —
                         // that re-forced "Select Content Language" for Play Store devices.
                         int previousLangId = SharedPrefsData.getInt(
@@ -2692,10 +2765,6 @@ public class StartingActivity extends AppCompatActivity {
                                 liveEnabled,
                                 hbSec != null ? Math.max(0, hbSec) : null,
                                 liveWindow);
-                        // Offline News pack max (default 24; hard 8–50).
-                        OfflineFeedStore.savePackMaxFromServer(
-                                getApplicationContext(),
-                                startActivityReqModel.getData().getOfflineNewsPackMax());
                         // News|Read bar first-open auto-hide seconds (default 3; 0 = off).
                         HomeModeChromeConfig.saveAutoHideSecondsFromServer(
                                 getApplicationContext(),
@@ -2746,15 +2815,6 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getReporterPaymentBannerText(),
                                 startActivityReqModel.getData().getReporterPaymentHistoryNoticeActive(),
                                 startActivityReqModel.getData().getReporterPaymentHistoryNoticeText());
-                        FestivalSplashHelper.saveFromServer(
-                                getApplicationContext(),
-                                startActivityReqModel.getData().getFestivalSplashEnabled(),
-                                startActivityReqModel.getData().getFestivalSplashShowOnPush(),
-                                startActivityReqModel.getData().getFestivalSplashShowOnShare(),
-                                startActivityReqModel.getData().getFestivalSplashDurationSeconds(),
-                                startActivityReqModel.getData().getFestivalSplashImageUrl(),
-                                startActivityReqModel.getData().getFestivalSplashUpdatedAt());
-                        FestivalSplashHelper.prefetchInBackground(getApplicationContext());
                         com.anyNews.anynews.rewards.RewardsConfigHelper.saveProgramWindow(
                                 getApplicationContext(),
                                 startActivityReqModel.getData().getRewardsProgramStatus(),
@@ -2829,6 +2889,9 @@ public class StartingActivity extends AppCompatActivity {
                                 startActivityReqModel.getData().getUseSecondNativeAdUnit(),
                                 startActivityReqModel.getData().getAdCodeSecondary(),
                                 startActivityReqModel.getData().getFeedNativeAdUnitMode());
+                        FeedAdConfig.saveDefaultAdPositionFromServer(
+                                getApplicationContext(),
+                                startActivityReqModel.getData().getDefaultAdPosition());
                         FeedAdConfig.warmFromPrefs(getApplicationContext());
                         AnalyticsBatchConfig.saveFromServer(
                                 getApplicationContext(),
@@ -2868,41 +2931,53 @@ public class StartingActivity extends AppCompatActivity {
                                         + " legacy_font_size=" + startActivityReqModel.getData().getFontSize()
                                         + " language_id=" + splashLanguageId
                         );
-                        Map<String, String> splashCustomFonts =
-                                startActivityReqModel.getData().getCustomFontUrls();
-                        if (splashCustomFonts != null) {
-                            FontSettingsHelper.saveCustomFontUrls(
-                                    getApplicationContext(),
-                                    splashCustomFonts
-                            );
-                            FontSettingsHelper.prefetchCustomFonts(getApplicationContext());
-                        }
+                        // Remote fonts soft-off: feed uses baked LanguageFontConfig.productionFor
+                        // for all languages (no prefs thrash / custom-font downloads).
+                        if (FontSettingsHelper.APPLY_REMOTE_FONT_SETTINGS) {
+                            Map<String, String> splashCustomFonts =
+                                    startActivityReqModel.getData().getCustomFontUrls();
+                            if (splashCustomFonts != null) {
+                                FontSettingsHelper.saveCustomFontUrls(
+                                        getApplicationContext(),
+                                        splashCustomFonts
+                                );
+                                FontSettingsHelper.prefetchCustomFonts(getApplicationContext());
+                            }
 
-                        if (splashFontSettings != null && !splashFontSettings.isEmpty()) {
-                            android.util.Log.d(
-                                    FontSettingsHelper.TAG,
-                                    "splash language_font_settings count=" + splashFontSettings.size()
-                                            + " payload=" + new Gson().toJson(splashFontSettings)
-                            );
-                            FontSettingsHelper.saveLanguageFontSettings(
-                                    getApplicationContext(),
-                                    splashFontSettings
-                            );
-                        } else {
-                            android.util.Log.w(
-                                    FontSettingsHelper.TAG,
-                                    "splash language_font_settings missing/empty; font_config only="
-                                            + new Gson().toJson(splashFontConfig)
-                            );
-                            if (splashFontConfig != null && splashLanguageId > 0) {
-                                Map<String, LanguageFontConfig> fallback = new HashMap<>();
-                                fallback.put(String.valueOf(splashLanguageId), splashFontConfig);
-                                FontSettingsHelper.saveLanguageFontSettings(getApplicationContext(), fallback);
+                            if (splashFontSettings != null && !splashFontSettings.isEmpty()) {
                                 android.util.Log.d(
                                         FontSettingsHelper.TAG,
-                                        "saved font_config fallback for language_id=" + splashLanguageId
+                                        "splash language_font_settings count=" + splashFontSettings.size()
+                                                + " payload=" + new Gson().toJson(splashFontSettings)
                                 );
+                                FontSettingsHelper.saveLanguageFontSettings(
+                                        getApplicationContext(),
+                                        splashFontSettings
+                                );
+                            } else {
+                                android.util.Log.w(
+                                        FontSettingsHelper.TAG,
+                                        "splash language_font_settings missing/empty; font_config only="
+                                                + new Gson().toJson(splashFontConfig)
+                                );
+                                if (splashFontConfig != null && splashLanguageId > 0) {
+                                    Map<String, LanguageFontConfig> fallback = new HashMap<>();
+                                    fallback.put(String.valueOf(splashLanguageId), splashFontConfig);
+                                    FontSettingsHelper.saveLanguageFontSettings(
+                                            getApplicationContext(), fallback);
+                                    android.util.Log.d(
+                                            FontSettingsHelper.TAG,
+                                            "saved font_config fallback for language_id="
+                                                    + splashLanguageId
+                                    );
+                                }
                             }
+                        } else {
+                            android.util.Log.d(
+                                    FontSettingsHelper.TAG,
+                                    "splash fonts skipped: APPLY_REMOTE_FONT_SETTINGS=false"
+                                            + " (baked productionDefault)"
+                            );
                         }
 
                         showLog("SplashUpdateMenu::::"+ startActivityReqModel.getData().getUpdateMenuStatus());
@@ -2932,7 +3007,8 @@ public class StartingActivity extends AppCompatActivity {
                         // 0=silenced, 1=up-to-date/disabled, 2=soft, 3=force.
                         // Soft/force no longer block splash with a center dialog — proceed to
                         // onboarding/Home; Home shows the sticky bottom update banner.
-                        int updateMenuStatus = startActivityReqModel.getData().getUpdateMenuStatus();
+                        Integer updateMenuRaw = startActivityReqModel.getData().getUpdateMenuStatus();
+                        int updateMenuStatus = updateMenuRaw != null ? updateMenuRaw : 0;
                         if (updateMenuStatus == 1 || updateMenuStatus == 0
                                 || updateMenuStatus == 2 || updateMenuStatus == 3) {
 
@@ -2961,7 +3037,7 @@ public class StartingActivity extends AppCompatActivity {
                         // Never leave the user stuck on the logo splash — fail-open.
                         showLog("Splash success=false, fail-open route");
                         splashNetworkFailCount++;
-                        if (!configOnly) {
+                        if (!configOnly && isActivityAlive()) {
                             Toast.makeText(StartingActivity.this,
                                     "Something went wrong..please try again after some time  ",
                                     Toast.LENGTH_LONG).show();
@@ -2971,7 +3047,7 @@ public class StartingActivity extends AppCompatActivity {
                     } catch (Exception e) {
                         e.printStackTrace();
                         splashNetworkFailCount++;
-                        if (!configOnly) {
+                        if (!configOnly && isActivityAlive()) {
                             Toast.makeText(StartingActivity.this, "Unable to start app. Please try again.", Toast.LENGTH_LONG).show();
                             routeReturningUser();
                         }
@@ -2979,7 +3055,7 @@ public class StartingActivity extends AppCompatActivity {
 
                 } else {
                     showLog("Splash response unsuccessful, using cached route");
-                    if (!configOnly) {
+                    if (!configOnly && isActivityAlive()) {
                         routeReturningUser();
                     }
                 }
@@ -2991,7 +3067,7 @@ public class StartingActivity extends AppCompatActivity {
                 splashNetworkInFlight = false;
                 splashNetworkFailCount++;
                 showLog("Splash request failed, using cached route::" + t);
-                if (!configOnly) {
+                if (!configOnly && isActivityAlive()) {
                     routeReturningUser();
                 }
             }
@@ -3279,18 +3355,20 @@ public class StartingActivity extends AppCompatActivity {
             showLog("OpenPath: home already launched");
             return;
         }
-        if (festivalHoldHome || festivalAwaitingDownload) {
-            pendingHomeAfterFestival = true;
-            showLog("OpenPath: festival splash hold");
+        if (!isActivityAlive()) {
+            showLog("OpenPath: skip home — activity not alive");
             return;
         }
         homeOpenedFromSplash = true;
         markOnboardingCompleteIfNeeded("main");
         showLog("CHECK POINT HOMEPAGE fallback");
-        // Prefetch pickers as soon as user reaches main (also runs from HomePage).
-        SelectionListCache.prefetchInBackground(getApplicationContext());
-        // Race List_All_Articles while Home inflates (no offline-pack first paint).
-        OpenPathFeedPrefetcher.maybePrefetchMainPage0(this, TITLE, articleId1);
+        try {
+            if (!isZeroApiLeanOpen()) {
+                SelectionListCache.prefetchInBackground(getApplicationContext());
+            }
+        } catch (Exception e) {
+            Logone.w(TAG, "selection prefetch schedule failed", e);
+        }
         Intent intent = new Intent(StartingActivity.this, HomePage.class);
         // Avoid stacking a second HomePage on top of an existing one when a
         // WhatsApp share re-enters via singleTask splash — that made magazine
@@ -3303,13 +3381,19 @@ public class StartingActivity extends AppCompatActivity {
             intent.putExtra("notification", true);
             intent.putExtra("TITLE", TITLE);
             intent.putExtra("TITILE", TITLE);
+            intent.putExtra(MyFirebaseMessagingService.EXTRA_PUSH_POST_ID, TITLE.trim());
             attachPushTrayId(intent, TITLE.trim());
         } else {
             intent.putExtra("TITLE", "0");
         }
         intent.putExtra("TITLE_REWARDS", TITLE_REWARDS);
-        intent.putExtra("SHARE_REDIRECT_ID", articleId1);
-        stampShareGalleryHandoff(intent);
+        // Push sticky uses push_post_id only — never mix in splash share id.
+        if (pushTitle) {
+            intent.putExtra("SHARE_REDIRECT_ID", "");
+        } else {
+            intent.putExtra("SHARE_REDIRECT_ID", articleId1);
+            stampShareGalleryHandoff(intent);
+        }
         intent.putExtra("JOB_REDIRECT_ID", jobId1);
         intent.putExtra("DATAFROM2G", DATAFROM2G);
         if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
@@ -3350,226 +3434,6 @@ public class StartingActivity extends AppCompatActivity {
             absorbSharePageExtra(launch);
         } catch (Exception ignored) {
         }
-    }
-
-    /**
-     * When admin Opening Banner is ON for this launch path and image URL is set,
-     * show ONLY the full-bleed banner stretched FIT_XY (never the orange logo theme splash).
-     * If local cache is cold, keep theme-color splash, download, then paint.
-     * OFF → immediate return (no OpenPath delay).
-     */
-    private void maybeArmFestivalSplash() {
-        try {
-            if (!shouldShowFestivalForThisOpen()) {
-                if (FestivalSplashHelper.isAnyShowPathEnabled(this)
-                        && !FestivalSplashHelper.hasReadyLocalImage(this)) {
-                    FestivalSplashHelper.prefetchInBackground(getApplicationContext());
-                }
-                releaseFestivalSplashKeep();
-                return;
-            }
-            if (FestivalSplashHelper.getImageUrl(this).isEmpty()) {
-                showLog("OpenPath: opening banner ON but empty image url — skip");
-                releaseFestivalSplashKeep();
-                return;
-            }
-            if (FestivalSplashHelper.hasReadyLocalImage(this)) {
-                if (paintFestivalBannerAndHold()) {
-                    releaseFestivalSplashKeep();
-                } else {
-                    // Decode failed — try download once more rather than logo.
-                    beginFestivalDownloadThenArm();
-                }
-                return;
-            }
-            beginFestivalDownloadThenArm();
-        } catch (Exception e) {
-            festivalHoldHome = false;
-            festivalAwaitingDownload = false;
-            releaseFestivalSplashKeep();
-            Logone.w("festival splash arm failed: " + (e.getMessage() != null ? e.getMessage() : e));
-        }
-    }
-
-    private void beginFestivalDownloadThenArm() {
-        festivalAwaitingDownload = true;
-        showLog("OpenPath: opening banner ON — waiting for image (theme-color hold, no logo)");
-        FestivalSplashHelper.ensureLocalImageAsync(
-                this,
-                FestivalSplashHelper.ENSURE_TIMEOUT_MS,
-                this::onFestivalDownloadAttemptFinished);
-    }
-
-    private void onFestivalDownloadAttemptFinished() {
-        try {
-            if (isFinishing() || isDestroyed()) {
-                festivalAwaitingDownload = false;
-                releaseFestivalSplashKeep();
-                return;
-            }
-            festivalAwaitingDownload = false;
-            if (FestivalSplashHelper.hasReadyLocalImage(this)
-                    && paintFestivalBannerAndHold()) {
-                releaseFestivalSplashKeep();
-                return;
-            }
-            showLog("OpenPath: opening banner download/decode failed — theme-color open, no logo");
-            releaseFestivalSplashKeep();
-            if (pendingHomeAfterFestival && !homeOpenedFromSplash) {
-                openHomeFromSplash();
-            }
-        } catch (Exception e) {
-            festivalAwaitingDownload = false;
-            festivalHoldHome = false;
-            releaseFestivalSplashKeep();
-            Logone.w("festival splash after download: "
-                    + (e.getMessage() != null ? e.getMessage() : e));
-            if (pendingHomeAfterFestival && !homeOpenedFromSplash
-                    && !isFinishing() && !isDestroyed()) {
-                openHomeFromSplash();
-            }
-        }
-    }
-
-    /** @return true when banner painted and Home hold armed */
-    private boolean paintFestivalBannerAndHold() {
-        Bitmap banner = FestivalSplashHelper.decodeLocalBitmap(this);
-        if (banner == null || banner.getWidth() < 1 || banner.getHeight() < 1) {
-            showLog("OpenPath: opening banner decode failed");
-            return false;
-        }
-        final int gapColor = FestivalSplashHelper.sampleAndStoreGapColor(this, banner);
-        try {
-            getWindow().setBackgroundDrawable(new ColorDrawable(gapColor));
-        } catch (Exception ignored) {
-        }
-        try {
-            View root = findViewById(android.R.id.content);
-            if (root != null) {
-                root.setBackgroundColor(gapColor);
-            }
-            // Never paint a solid plate over the banner ImageView (z-order).
-            if (net_avilable != null) {
-                net_avilable.setBackgroundColor(Color.TRANSPARENT);
-                net_avilable.setVisibility(View.GONE);
-            }
-        } catch (Exception ignored) {
-        }
-        logo_image_server.setScaleType(ImageView.ScaleType.FIT_XY);
-        logo_image_server.setAdjustViewBounds(false);
-        logo_image_server.setBackgroundColor(gapColor);
-        logo_image_server.setImageBitmap(banner);
-        logo_image_server.setVisibility(View.VISIBLE);
-        try {
-            logo_image_server.bringToFront();
-        } catch (Exception ignored) {
-        }
-        logo_image.setVisibility(View.GONE);
-        if (splashCenterLogo != null) {
-            splashCenterLogo.setVisibility(View.GONE);
-        }
-        if (welcome != null) {
-            welcome.setVisibility(View.GONE);
-        }
-        festivalHoldHome = true;
-        final int durationMs = FestivalSplashHelper.getDurationMs(this);
-        showLog("OpenPath: festival splash armed ms=" + durationMs);
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                festivalHoldHome = false;
-                if (pendingHomeAfterFestival && !homeOpenedFromSplash
-                        && !isFinishing() && !isDestroyed()) {
-                    openHomeFromSplash();
-                }
-            }
-        }, durationMs);
-        return true;
-    }
-
-    private void releaseFestivalSplashKeep() {
-        splashKeepUntilReady = false;
-    }
-
-    /**
-     * Admin path toggles: normal ({@link FestivalSplashHelper#isEnabled}),
-     * push ({@link FestivalSplashHelper#shouldShowOnPush}),
-     * share/deep-link ({@link FestivalSplashHelper#shouldShowOnShare}).
-     */
-    private boolean shouldShowFestivalForThisOpen() {
-        if (isPushOpenForFestival()) {
-            boolean on = FestivalSplashHelper.shouldShowOnPush(this);
-            if (!on) {
-                showLog("OpenPath: festival skip (push; admin show_on_push OFF)");
-            }
-            return on;
-        }
-        if (isShareOrDeepLinkOpenForFestival()) {
-            boolean on = FestivalSplashHelper.shouldShowOnShare(this);
-            if (!on) {
-                showLog("OpenPath: festival skip (share/deep link; admin show_on_share OFF)");
-            }
-            return on;
-        }
-        boolean on = FestivalSplashHelper.isEnabled(this);
-        return on;
-    }
-
-    /** FCM / rewards push sticky (TITLE / TITLE_REWARDS / anynews://push/...). */
-    private boolean isPushOpenForFestival() {
-        if (TITLE != null && !TITLE.isEmpty() && !"null".equalsIgnoreCase(TITLE)
-                && !"0".equals(TITLE)) {
-            return true;
-        }
-        if (TITLE_REWARDS != null && !TITLE_REWARDS.isEmpty()
-                && !"null".equalsIgnoreCase(TITLE_REWARDS)
-                && !"0".equals(TITLE_REWARDS)) {
-            return true;
-        }
-        try {
-            Intent i = getIntent();
-            if (i != null && i.getData() != null) {
-                String host = i.getData().getHost();
-                if (host != null && "push".equalsIgnoreCase(host)) {
-                    return true;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return false;
-    }
-
-    /** Share / App Link / job / DATAFROM2G deep links (not push). */
-    private boolean isShareOrDeepLinkOpenForFestival() {
-        if (isPushOpenForFestival()) {
-            return false;
-        }
-        if (articleId1 != null && !articleId1.isEmpty() && !"null".equalsIgnoreCase(articleId1)
-                && !"0".equals(articleId1)) {
-            return true;
-        }
-        if (jobId1 != null && !jobId1.isEmpty() && !"null".equalsIgnoreCase(jobId1)
-                && !"0".equals(jobId1)) {
-            return true;
-        }
-        if (DATAFROM2G != null && !DATAFROM2G.isEmpty() && !"null".equalsIgnoreCase(DATAFROM2G)) {
-            return true;
-        }
-        try {
-            Intent i = getIntent();
-            if (i != null && i.getData() != null) {
-                String host = i.getData().getHost();
-                String path = i.getData().getPath();
-                if (host != null && "push".equalsIgnoreCase(host)) {
-                    return false;
-                }
-                if (path != null && path.length() > 1) {
-                    return true;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return false;
     }
 
     private JsonObject set_static_data() {
@@ -3833,9 +3697,16 @@ public class StartingActivity extends AppCompatActivity {
     /* firebase */
 
     public void writeAppOpen(String userId,String type_firebase ,long current_time, int draft_id, String device_id) {
-        AppOpen appOpen = new AppOpen(type_firebase , current_time , draft_id,device_id);
-
-        myRef.child("Events").push().setValue(appOpen);
+        try {
+            DatabaseReference ref = eventsRef();
+            if (ref == null) {
+                return;
+            }
+            AppOpen appOpen = new AppOpen(type_firebase , current_time , draft_id,device_id);
+            ref.child("Events").push().setValue(appOpen);
+        } catch (Exception e) {
+            Logone.w(TAG, "writeAppOpen failed", e);
+        }
     }
 
     @IgnoreExtraProperties
@@ -3863,9 +3734,16 @@ public class StartingActivity extends AppCompatActivity {
 
     // fcm open
     public void writePushOpen(String userId,String type_firebase ,String post_id ,int draft_id ,long current_time ,int language_id , String deviceID ) {
-        PushOpen appOpen = new PushOpen(type_firebase ,post_id , draft_id ,current_time , language_id , deviceID);
-
-        myRef.child("Events").push().setValue(appOpen);
+        try {
+            DatabaseReference ref = eventsRef();
+            if (ref == null) {
+                return;
+            }
+            PushOpen appOpen = new PushOpen(type_firebase ,post_id , draft_id ,current_time , language_id , deviceID);
+            ref.child("Events").push().setValue(appOpen);
+        } catch (Exception e) {
+            Logone.w(TAG, "writePushOpen failed", e);
+        }
     }
     @IgnoreExtraProperties
     @Keep
@@ -3896,9 +3774,16 @@ public class StartingActivity extends AppCompatActivity {
 
     // share open
     public void writeShareOpen(String userId,String type_firebase ,String post_id ,int draft_id ,long current_time) {
-        ShareOpen appOpen = new ShareOpen(type_firebase ,post_id ,draft_id, current_time);
-
-        myRef.child("Events").push().setValue(appOpen);
+        try {
+            DatabaseReference ref = eventsRef();
+            if (ref == null) {
+                return;
+            }
+            ShareOpen appOpen = new ShareOpen(type_firebase ,post_id ,draft_id, current_time);
+            ref.child("Events").push().setValue(appOpen);
+        } catch (Exception e) {
+            Logone.w(TAG, "writeShareOpen failed", e);
+        }
     }
     @IgnoreExtraProperties
     @Keep
@@ -3930,7 +3815,8 @@ public class StartingActivity extends AppCompatActivity {
         }
         showLog("checkInstallReferrer");
 
-        InstallReferrerClient referrerClient = InstallReferrerClient.newBuilder(this).build();
+        InstallReferrerClient referrerClient = InstallReferrerClient.newBuilder(
+                getApplicationContext()).build();
         backgroundExecutor.execute(() -> getInstallReferrerFromClient(referrerClient));
     }
 
@@ -3954,8 +3840,6 @@ public class StartingActivity extends AppCompatActivity {
                         final String referrerUrl = response.getInstallReferrer();
                         showLog("referrerUrl:"+referrerUrl);
                         SharedPrefsData.putString(getApplicationContext(), Constants.REFERAL_LINK2, referrerUrl, Constants.PREF_NAME);
-                        // TODO: If you're using GTM, call trackInstallReferrerforGTM instead.
-                        trackInstallReferrer(referrerUrl);
                         trackInstallReferrer(referrerUrl);
                         // Only check this once.
                         getPreferences(MODE_PRIVATE).edit().putBoolean(prefKey, true).commit();
@@ -3980,34 +3864,25 @@ public class StartingActivity extends AppCompatActivity {
         });
     }
 
-    // Tracker for Classic GA (call this if you are using Classic GA only)
-    private void trackInstallReferrer(final String referrerUrl) {
-        new Handler(getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-
-                CampaignTrackingReceiver receiver = new CampaignTrackingReceiver();
-                Intent intent = new Intent("com.android.vending.INSTALL_REFERRER");
-                intent.putExtra("referrer", referrerUrl);
-                receiver.onReceive(getApplicationContext(), intent);
-            }
-        });
+    /** Referrer URL is already stored in prefs; classic GA INSTALL_REFERRER receiver is deprecated. */
+    private void trackInstallReferrer(@Nullable final String referrerUrl) {
+        if (referrerUrl == null || referrerUrl.isEmpty()) {
+            return;
+        }
     }
 
-    void getUIDs()
-    {
-        AsyncTask.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    AdvertisingIdClient.Info adInfo = AdvertisingIdClient.getAdvertisingIdInfo(StartingActivity.this);
-                    String myId = adInfo != null ? adInfo.getId() : null;
+    void getUIDs() {
+        final Context appCtx = getApplicationContext();
+        backgroundExecutor.execute(() -> {
+            try {
+                AdvertisingIdClient.Info adInfo = AdvertisingIdClient.getAdvertisingIdInfo(appCtx);
+                String myId = adInfo != null ? adInfo.getId() : null;
+                if (prefManager != null) {
                     prefManager.setAdvertiserId(Allsharedpreference.ADVERTISER_ID, myId);
-
-                    showLog("UIDMY"+ myId);
-                } catch (Exception e) {
-                    e.printStackTrace();
                 }
+                showLog("UIDMY" + myId);
+            } catch (Exception e) {
+                Logone.w(TAG, "getUIDs failed", e);
             }
         });
     }

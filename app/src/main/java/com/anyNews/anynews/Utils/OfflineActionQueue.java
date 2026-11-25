@@ -1,5 +1,7 @@
 package com.anyNews.anynews.Utils;
 
+import com.anyNews.anynews.Utils.MyUtils;
+
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -144,7 +146,7 @@ public final class OfflineActionQueue {
     public static void flushAll(@Nullable Context context) {
         if (context == null) return;
         final Context app = context.getApplicationContext();
-        if (!BookmarkStore.isNetworkAvailable(app)) return;
+        if (!MyUtils.isNetworkAvailable(app)) return;
         if (!flushInFlight.compareAndSet(false, true)) return;
         IO.execute(
                 () -> {

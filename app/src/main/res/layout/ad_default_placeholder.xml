@@ -1,30 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Default Share-with-friends plate while native creative loads or fails.
-     Dark plate matches MediaView / ads_screen so Share→creative never flashes
-     through empty black or white. Seat stays type "ad"; fill overlays on top. -->
+<!-- Quiet dark plate only. Share-with-friends default banner removed —
+     no-fill seats skip (article → next). Kept for scrap/layout id compat. -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/ad_default_placeholder_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121212">
-
-    <ImageView
-        android:id="@+id/imageViewShare"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_centerInParent="true"
-        android:layout_centerHorizontal="true"
-        android:contentDescription="@string/share_anynews_with_your_friends" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@+id/imageViewShare"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="@dimen/_15sdp"
-        android:text="@string/share_anynews_with_your_friends"
-        android:textColor="@color/anynews_white"
-        android:textSize="@dimen/_14sdp"
-        android:textStyle="bold" />
-
-</RelativeLayout>
+    android:background="#121212"
+    android:importantForAccessibility="no" />

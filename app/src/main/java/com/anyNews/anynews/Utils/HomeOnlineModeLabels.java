@@ -11,7 +11,7 @@ import com.anyNews.anynews.R;
  * {@code News | Read News}.
  *
  * <p>In-app language is {@link Constants#LanguageID}, not device Locale — same
- * pattern as {@link HomeOfflineModeLabels} / {@link NewsFooterLabel}.
+ * pattern as {@link NewsFooterLabel}.
  *
  * Language ids (server): 1 Malayalam · 2 Hindi · 3 Telugu · 4 Tamil ·
  * 5 Kannada · 6 Odia. Anything else falls back to English string resources.

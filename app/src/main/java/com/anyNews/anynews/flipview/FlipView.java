@@ -354,31 +354,26 @@ public class FlipView extends FrameLayout {
                     restore = 0;
                 }
             } else if (restore < 0) {
-                restore = 0;
+                // Unknown seat: prefer a known mid-feed index over inventing home.
+                int keep = bestKnownPageIndex();
+                restore = keep >= 0 ? keep : 0;
             }
             newPosition = restore;
             // Never recycle or snap while the user is still swiping. A recycle here
             // aborted the gesture and the next notify treated the seat as unknown.
-            // Forced page-0 search seats must still apply (cancel peak/fling first).
-            if (driving && !mForcePage0OnDataChange) {
+            // Forced page-0 (search / warm News return / sticky seat) used to
+            // endFlip() mid-gesture and yank restore=0 — that felt like a jump
+            // back to the first article (often a full_image sticky). Defer, and
+            // drop the page-0 lock once the user is deliberately flipping away.
+            if (driving) {
+                if (mForcePage0OnDataChange) {
+                    mForcePage0OnDataChange = false;
+                }
                 rememberFlipAnchor();
                 scheduleRestoreAfterFlip();
                 invalidate();
                 updateEmptyStatus();
                 return;
-            }
-            if (mForcePage0OnDataChange && driving) {
-                try {
-                    endFlip();
-                } catch (Exception ignored) {
-                }
-                try {
-                    if (mPeakAnim != null) {
-                        mPeakAnim.cancel();
-                        mPeakAnim = null;
-                    }
-                } catch (Exception ignored) {
-                }
             }
             // Apply the restored page BEFORE layout. Do not clear index, flip
             // distance, or page id first — that window was the snap-to-first bug.
@@ -548,7 +543,15 @@ public class FlipView extends FrameLayout {
         if (isActuallyOnFirstPage()) {
             return 0;
         }
-        return 0;
+        // Seat unknown and not on home — never invent page 0 (sticky/full post).
+        int fromDistance = pageIndexFromDistance(mFlipDistance);
+        if (fromDistance > 0) {
+            return fromDistance;
+        }
+        if (mCurrentPageIndex > 0) {
+            return mCurrentPageIndex;
+        }
+        return INVALID_PAGE_POSITION;
     }
 
     private int nearestIndexForPageId(long pageId, int origin, int count) {
@@ -2353,6 +2356,8 @@ public class FlipView extends FrameLayout {
         }
         if (mCurrentPageIndex > 0) {
             mCommittedPageIndex = mCurrentPageIndex;
+            // Settled past home — never keep forcing page 0 on later notifies.
+            mForcePage0OnDataChange = false;
             if (mCurrentPageId != 0 && mCurrentPageId != -1) {
                 mCommittedPageId = mCurrentPageId;
             }
@@ -2647,6 +2652,11 @@ public class FlipView extends FrameLayout {
             Log.e("FlipViewCrash", "smoothFlipTo clamp " + page1 + "→" + clamped
                     + " pageCount=" + mPageCount);
             page1 = clamped;
+        }
+        // Finger-up lands here (not flipTo). Leaving page 0 must drop the
+        // search/warm-seat lock or the next notify snaps home mid-feed.
+        if (page1 > 0) {
+            mForcePage0OnDataChange = false;
         }
 //        //Log.e("TRACKING","smoothFlipTo "+page1);
         final int start = (int) mFlipDistance;

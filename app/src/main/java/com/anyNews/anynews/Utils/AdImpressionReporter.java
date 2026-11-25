@@ -1,5 +1,7 @@
 package com.anyNews.anynews.Utils;
 
+import com.anyNews.anynews.Utils.MyUtils;
+
 import android.app.Application;
 import android.content.ComponentCallbacks2;
 import android.content.Context;
@@ -222,7 +224,7 @@ public final class AdImpressionReporter {
                 context != null ? context.getApplicationContext() : appContext;
         if (appCtx == null) return;
         try {
-            if (!BookmarkStore.isNetworkAvailable(appCtx)) {
+            if (!MyUtils.isNetworkAvailable(appCtx)) {
                 synchronized (lock) {
                     persistLocked(appCtx);
                 }
