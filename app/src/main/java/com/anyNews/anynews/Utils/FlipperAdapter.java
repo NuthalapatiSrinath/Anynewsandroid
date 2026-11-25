@@ -6936,26 +6936,28 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
 
         // mute
-        half_youTubePlayerHolder.btnMuteHalf.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                showLog(" b  -->" + isMutedHalf);
-                if (!isMutedHalf) {
-                    AudioManager mAudioManager = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
-                    mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
-                    half_youTubePlayerHolder.btnMuteHalf.setImageResource(ic_volume_off);
-                    isMutedHalf = true;
-                } else {
-                    AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
-                    int maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-                    int seventyVolume = (int) (maxVolume * percent);
-                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, seventyVolume, 0);
-                    half_youTubePlayerHolder.btnMuteHalf.setImageResource(ic__volume_up);
-                    isMutedHalf = false;
-                }
+        if (half_youTubePlayerHolder.btnMuteHalf != null) {
+            half_youTubePlayerHolder.btnMuteHalf.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    showLog(" b  -->" + isMutedHalf);
+                    if (!isMutedHalf) {
+                        AudioManager mAudioManager = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+                        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0);
+                        half_youTubePlayerHolder.btnMuteHalf.setImageResource(ic_volume_off);
+                        isMutedHalf = true;
+                    } else {
+                        AudioManager audio = (AudioManager) getApplicationContext().getSystemService(Context.AUDIO_SERVICE);
+                        int maxVolume = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                        int seventyVolume = (int) (maxVolume * percent);
+                        audio.setStreamVolume(AudioManager.STREAM_MUSIC, seventyVolume, 0);
+                        half_youTubePlayerHolder.btnMuteHalf.setImageResource(ic__volume_up);
+                        isMutedHalf = false;
+                    }
 
-            }
-        });
+                }
+            });
+        }
 
 
         half_youTubePlayerHolder.writer_profile_pic.setOnClickListener(new View.OnClickListener() {
