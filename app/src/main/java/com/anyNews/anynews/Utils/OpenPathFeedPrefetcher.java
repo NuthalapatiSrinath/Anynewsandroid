@@ -114,7 +114,8 @@ public final class OpenPathFeedPrefetcher {
             Logone.v(TAG, "early main page-0 public edge lang=" + langId);
             Call<PublicEdgeFeedResponse> edgeCall =
                     PublicEdgeFeedHelper.enqueuePublicFeedCoalesced(
-                            app, 0, 0L, 0L, new Callback<PublicEdgeFeedResponse>() {
+                            app, 0, 0L, 0L, false, false,
+                            new Callback<PublicEdgeFeedResponse>() {
                     @Override
                     public void onResponse(
                             @NonNull Call<PublicEdgeFeedResponse> c,

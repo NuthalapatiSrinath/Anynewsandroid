@@ -444,10 +444,7 @@ public class StatusVideoPlayerActivity extends AppCompatActivity {
                 reportBtn.setOnClickListener(v -> openReportDialog(datum));
                 commentBtn.setOnClickListener(v -> openCommentsForPost(datum));
                 writerPic.setOnClickListener(v -> {
-                    if (datum.getWriterId() == null) return;
-                    Intent intent = new Intent(StatusVideoPlayerActivity.this, WriterProfileActivity.class);
-                    intent.putExtra("EXTRA_SESSION_ID", datum.getWriterId().toString());
-                    startActivity(intent);
+                    WriterProfileActivity.launchFromFeed(StatusVideoPlayerActivity.this, datum);
                 });
             }
 

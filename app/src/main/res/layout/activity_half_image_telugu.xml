@@ -760,7 +760,7 @@
                             android:layout_marginLeft="@dimen/_2sdp"
                             android:layout_marginRight="@dimen/_2sdp"
                             android:gravity="center"
-                            android:visibility="visible">
+                            android:visibility="gone">
 
                             <TextView
                                 android:id="@+id/second_language_name"

@@ -34,7 +34,6 @@ import com.anyNews.anynews.Utils.AppLanguagesFonts;
 import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.ImageLoaderInit;
 import com.anyNews.anynews.Utils.Logone;
-import com.anyNews.anynews.Utils.ScreenCaptureHelper;
 import com.anyNews.anynews.Utils.SessionAnalyticsTracker;
 import com.anyNews.anynews.Utils.ViewsBatchTracker;
 import com.google.firebase.FirebaseApp;
@@ -107,13 +106,7 @@ public class AppController extends MultiDexApplication {
                     applyThemeSystemBars(activity);
                 }
 
-                if (activity instanceof HomePage && !ScreenCaptureHelper.isCaptureAllowed(activity)) {
-                    activity.getWindow().setFlags(
-                            WindowManager.LayoutParams.FLAG_SECURE,
-                            WindowManager.LayoutParams.FLAG_SECURE);
-                } else {
-                    activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-                }
+                activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
             }
 
             @Override

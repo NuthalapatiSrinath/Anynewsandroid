@@ -156,6 +156,8 @@ import com.anyNews.anynews.Utils.OpenPathCache;
 import com.anyNews.anynews.Utils.OpenPathSplashConfigRefresher;
 import com.anyNews.anynews.Utils.EdgeOriginCallWatch;
 import com.anyNews.anynews.Utils.PublicEdgeFeedHelper;
+import com.anyNews.anynews.Utils.EdgeFeedPostNormalizer;
+import com.anyNews.anynews.Utils.ReadArticleStore;
 import com.anyNews.anynews.Pojo.PublicEdgeFeedResponse;
 import com.anyNews.anynews.Utils.MovementMethodTV;
 import com.anyNews.anynews.Utils.PlayInAppUpdateHelper;
@@ -215,6 +217,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
@@ -293,6 +296,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private boolean isApiRequested = false;
     int positionx=0,requestPostition=1;
     int requestSize=0;
+    /** Trigger next public-feed GET when this many cards from the end (prod ~5). */
+    private static final int FEED_PREFETCH_FROM_END = 5;
     boolean isFromLocalArticles=false;
     FCMTrackingEvents trackingEvents;
     public static boolean isPlayingVideoInFullScreen=false;
@@ -520,8 +525,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private static final long AD_SEAT_REFRESH_MS = 30_000L;
     private final Handler adSeatRefreshHandler = new Handler(Looper.getMainLooper());
     private final Runnable adSeatRefreshRunnable = this::onAdSeatStayRefreshTick;
-    /** Hard cap: at most one AdLoader (seat or stay-refresh) at a time. */
-    private boolean feedNativeAdRequestInFlight = false;
+    /** At most one AdLoader in flight per feed {@code ad_req_position}. */
+    private final HashSet<Integer> feedNativeAdSeatsInFlight = new HashSet<>();
     private boolean homeLifecycleResumed = false;
     private int adSeatRefreshPage = -1;
     private int adSeatRefreshReqPos = -1;
@@ -531,7 +536,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
         this.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         MobileAds.initialize(this, initializationStatus -> {
@@ -1086,8 +1091,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             showLog("loadAds deferred (flip settle)");
             return;
         }
-        if (feedNativeAdRequestInFlight) {
-            showLog("loadAds skip — one AdLoader already in flight");
+        if (ad_req_position == null) {
+            showLog("loadAds skip null reqPos");
+            return;
+        }
+        if (isFeedNativeSeatRequestInFlight(ad_req_position)) {
+            showLog("loadAds skip — AdLoader in flight pos=" + ad_req_position);
             return;
         }
         if (ad_type == null) {
@@ -1097,27 +1106,64 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
        showLog("Ad loading ad_req_position :"+ad_req_position);
         showLog("Ad loading ad_type:"+ad_type);
         if(ad_type.equalsIgnoreCase("google")){
-            if (!replaceExisting
-                    && nativeGoogleAdList != null && nativeGoogleAdArray != null
-                    && nativeGoogleAdList.size() > 0) {
-                if (!nativeGoogleAdArray.contains(positionx)
-                        || !nativeGoogleAdArray.contains(ad_req_position)) {
-                    loadGoogleAds(ad_code, ad_req_position, 0, replaceExisting);
-                }
-            } else {
-                loadGoogleAds(ad_code, ad_req_position, 0, replaceExisting);
+            if (!replaceExisting && isFeedNativeSeatLoaded(ad_req_position)) {
+                showLog("loadAds skip — creative already loaded pos=" + ad_req_position);
+                return;
             }
+            loadGoogleAds(ad_code, ad_req_position, 0, replaceExisting);
         }else{
-            if(nativeFBAdList !=null && nativeFBAdArray !=null && nativeGoogleAdList.size()>0){
-                if (!nativeFBAdArray.contains(positionx) || !nativeFBAdArray.contains(list.get(positionx).getAd_req_position())) {
-                    loadFBAds(ad_code,ad_req_position);
-                }
-            }else{
-                loadFBAds(ad_code,ad_req_position);
+            if (!replaceExisting
+                    && nativeFBAdArray != null
+                    && nativeFBAdArray.contains(ad_req_position)) {
+                showLog("loadAds skip — fb creative already loaded pos=" + ad_req_position);
+                return;
             }
+            loadFBAds(ad_code,ad_req_position);
         }
 
     }
+
+    private boolean isFeedNativeSeatRequestInFlight(int reqPos) {
+        synchronized (feedNativeAdSeatsInFlight) {
+            return feedNativeAdSeatsInFlight.contains(reqPos);
+        }
+    }
+
+    private boolean isFeedNativeSeatLoaded(int reqPos) {
+        return nativeGoogleAdArray != null && nativeGoogleAdArray.contains(reqPos);
+    }
+
+    private void markFeedNativeSeatRequestInFlight(int reqPos) {
+        synchronized (feedNativeAdSeatsInFlight) {
+            feedNativeAdSeatsInFlight.add(reqPos);
+        }
+    }
+
+    private void clearFeedNativeSeatRequestInFlight(int reqPos) {
+        synchronized (feedNativeAdSeatsInFlight) {
+            feedNativeAdSeatsInFlight.remove(reqPos);
+        }
+    }
+
+    /** Full-bleed ad page: bottom nav GONE on ad seats, restored elsewhere. */
+    private void updateHomePageNavigationForSeat() {
+        if (home_page_navigation == null || list == null || positionx < 0
+                || positionx >= list.size()) {
+            return;
+        }
+        try {
+            String pt = list.get(positionx).getPostType();
+            if (pt != null
+                    && (pt.equalsIgnoreCase("share_app")
+                            || pt.equalsIgnoreCase("ratings"))) {
+                home_page_navigation.setVisibility(View.GONE);
+            } else {
+                home_page_navigation.setVisibility(View.VISIBLE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     private void loadGoogleAds(String adCode, Integer ad_req_position, int reqType) {
         loadGoogleAds(adCode, ad_req_position, reqType, false);
     }
@@ -1141,14 +1187,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             showLog("loadAdLoader skip empty unit/pos");
             return;
         }
-        if (feedNativeAdRequestInFlight) {
-            showLog("loadAdLoader skip — one request already in flight pos=" + ad_req_position);
+        if (isFeedNativeSeatRequestInFlight(ad_req_position)) {
+            showLog("loadAdLoader skip — request already in flight pos=" + ad_req_position);
+            return;
+        }
+        if (!replaceExisting && isFeedNativeSeatLoaded(ad_req_position)) {
+            showLog("loadAdLoader skip — seat already filled pos=" + ad_req_position);
             return;
         }
         if (isFinishing() || isDestroyed()) {
             return;
         }
-        feedNativeAdRequestInFlight = true;
+        markFeedNativeSeatRequestInFlight(ad_req_position);
         showLog("loadAdLoader START pos=" + ad_req_position
                 + " replace=" + replaceExisting + " unit=" + adCode);
         AdLoader adLoader = new AdLoader.Builder(context, adCode)
@@ -1168,7 +1218,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     @Override
                     public void onAdFailedToLoad(@NonNull LoadAdError error) {
                         super.onAdFailedToLoad(error);
-                        feedNativeAdRequestInFlight = false;
+                        clearFeedNativeSeatRequestInFlight(ad_req_position);
                         try{
 
                             String errorDomain = error.getDomain();
@@ -1229,7 +1279,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }catch (Exception e){
                             e.printStackTrace();
                         } finally {
-                            feedNativeAdRequestInFlight = false;
+                            clearFeedNativeSeatRequestInFlight(ad_req_position);
                         }
 
                     }
@@ -1239,7 +1289,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
             adLoader.loadAd(new AdRequest.Builder().build());
         } catch (Exception e) {
-            feedNativeAdRequestInFlight = false;
+            clearFeedNativeSeatRequestInFlight(ad_req_position);
             showLog("loadAdLoader exception: " + e.getMessage());
         }
     }
@@ -1347,7 +1397,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         return;
                     }
                     if (adapter != null) {
+                        final int keep = positionx;
                         adapter.notifyDataSetChanged();
+                        syncFlipViewToFeedIndex(keep);
                     }
                 } catch (Exception e) {
                     showLog("rebindAdsScreenAfterNativeLoad: " + e.getMessage());
@@ -1423,7 +1475,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 adSeatRefreshHandler.postDelayed(adSeatRefreshRunnable, wait);
                 return;
             }
-            if (feedNativeAdRequestInFlight) {
+            if (isFeedNativeSeatRequestInFlight(adSeatRefreshReqPos)) {
                 // Do not fan-out; retry shortly after the in-flight fill settles.
                 adSeatRefreshHandler.postDelayed(adSeatRefreshRunnable, 2_000L);
                 return;
@@ -1460,6 +1512,196 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 } catch (Exception ignored) {
                 }
             }
+        }
+    }
+
+    /** Ad shell from feed-level {@code ads_data} / {@code ad_positions} when the page had no ad row. */
+    @Nullable
+    private ModelClass.Datum adShellFromAdsData(@Nullable EncreptionRequest enc) {
+        if (enc == null || !enc.isShow_ads()) return null;
+        java.util.List<AdsPojo> positions = enc.getAd_positions();
+        if (positions == null || positions.isEmpty()) return null;
+        AdsPojo first = positions.get(0);
+        if (first == null || TextUtils.isEmpty(first.getAd_code())) {
+            return null;
+        }
+        try {
+            ModelClass.Datum shell = new ModelClass.Datum();
+            shell.setPostType("ad");
+            shell.setAd_type(first.getAd_type() != null ? first.getAd_type() : "google");
+            String code = first.getAd_code();
+            shell.setAd_code(code);
+            shell.setNext_req_ad_code(code);
+            shell.setAds_from(code != null && code.startsWith("/") ? "admanager" : "admob");
+            shell.setAd_screen_type("native");
+            shell.setAd_view_type("regular");
+            shell.setAd_audio_mute(true);
+            shell.setAd_check(true);
+            if (first.getAd_req_position() != null) {
+                shell.setAd_req_position(first.getAd_req_position());
+            } else {
+                shell.setAd_req_position(FeedAdConfig.firstFixedAdPosition());
+            }
+            shell.setPostId(901012L);
+            shell.setSubPostId(1L);
+            return shell;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Client rebalance template when edge/List payload has articles only (no ad row). */
+    @Nullable
+    private ModelClass.Datum adShellFromFeedAdConfig() {
+        try {
+            String code = FeedAdConfig.getUnitId(this);
+            if (TextUtils.isEmpty(code)) return null;
+            ModelClass.Datum shell = new ModelClass.Datum();
+            shell.setPostType("ad");
+            shell.setAd_type("google");
+            shell.setAd_code(code);
+            shell.setNext_req_ad_code(code);
+            shell.setAds_from(code.startsWith("/") ? "admanager" : "admob");
+            shell.setAd_screen_type("native");
+            shell.setAd_view_type("regular");
+            shell.setAd_audio_mute(true);
+            shell.setAd_check(true);
+            shell.setAd_req_position(FeedAdConfig.firstFixedAdPosition());
+            shell.setPostId(901012L);
+            shell.setSubPostId(1L);
+            return shell;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private ModelClass.Datum resolveFeedAdTemplate(@Nullable EncreptionRequest enc) {
+        ModelClass.Datum t = ReadArticleStore.firstAdTemplate(list);
+        if (t != null) return t;
+        t = adShellFromAdsData(enc);
+        if (t != null) return t;
+        return adShellFromFeedAdConfig();
+    }
+
+    /**
+     * Re-insert seats at {@link FeedAdConfig#FIXED_AD_POSITIONS} after article merge
+     * (public edge ships no {@code post_type=ad} rows).
+     */
+    private void advanceFeedSkipAfterResponse(ModelClass body, int reqPos) {
+        if (body == null) {
+            return;
+        }
+        Integer respSkip = body.getSkip();
+        Long respActual = body.getActualSkip();
+        if (reqPos == 3) {
+            if (respActual != null && respActual > actual_skip) {
+                actual_skip = respActual;
+            } else if (respSkip != null && respSkip > skip) {
+                actual_skip = Math.max(actual_skip, respSkip.longValue());
+            } else {
+                actual_skip = Math.max(actual_skip, list.size());
+            }
+            skip = (int) Math.min(Integer.MAX_VALUE, actual_skip);
+        } else {
+            if (respSkip != null) {
+                skip = respSkip;
+            }
+            if (respActual != null) {
+                actual_skip = respActual;
+            } else if (respSkip != null) {
+                actual_skip = respSkip.longValue();
+            }
+        }
+    }
+
+    /** After list mutation + notify, re-seat FlipView on the same feed index. */
+    private void syncFlipViewToFeedIndex(int index) {
+        if (mFlipView == null || list == null || list.isEmpty()) {
+            return;
+        }
+        int safe = Math.max(0, Math.min(index, list.size() - 1));
+        positionx = safe;
+        if (safe < 2) {
+            ppi = safe;
+        } else {
+            ppi = 1;
+        }
+        try {
+            mFlipView.flipTo(safe);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void shareAnyNewsAppPromotion() {
+        try {
+            Intent sendIntent = new Intent(Intent.ACTION_SEND);
+            sendIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            sendIntent.putExtra(
+                    Intent.EXTRA_TEXT,
+                    "Hey check out my app at: https://play.google.com/store/apps/details?id="
+                            + BuildConfig.APPLICATION_ID);
+            sendIntent.setType("text/plain");
+            startActivity(Intent.createChooser(sendIntent, null));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void rebalanceFeedAdsIfNeeded(@Nullable EncreptionRequest enc) {
+        if (enc == null || !enc.isShow_ads() || list == null || list.isEmpty()) return;
+        if (!isDeviceOnline()) return;
+        try {
+            ModelClass.Datum template = resolveFeedAdTemplate(enc);
+            if (template == null) return;
+            boolean changed =
+                    ReadArticleStore.rebalanceFeedSlots(this, list, template);
+            if (changed) {
+                showLog("feed: rebalanced ad slots listSize=" + list.size());
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** One native preload for the nearest upcoming ad seat (in-flight cap = 1). */
+    private void preloadNativeAdsForFeedSlots() {
+        if (list == null || list.isEmpty() || !isDeviceOnline()) return;
+        if (shouldDeferAdWork()) return;
+        try {
+            int from = Math.max(0, positionx);
+            int end = Math.min(
+                    list.size(),
+                    from + FeedAdConfig.getPrefetchLookahead(this) + 1);
+            for (int i = from; i < end; i++) {
+                ModelClass.Datum d = list.get(i);
+                if (d == null || d.getPostType() == null
+                        || !d.getPostType().equalsIgnoreCase("ad")) {
+                    continue;
+                }
+                String code = d.getAd_code();
+                if (TextUtils.isEmpty(code)) {
+                    code = d.getNext_req_ad_code();
+                }
+                if (TextUtils.isEmpty(code)) {
+                    code = FeedAdConfig.getUnitId(this);
+                }
+                Integer pos = d.getAd_req_position();
+                if (pos == null) {
+                    pos = i + 1;
+                }
+                if (isFeedNativeSeatLoaded(pos)
+                        || isFeedNativeSeatRequestInFlight(pos)) {
+                    showLog("preloadNativeAdsForFeedSlots skip loaded/in-flight reqPos=" + pos);
+                    continue;
+                }
+                String type = d.getAd_type();
+                if (TextUtils.isEmpty(type)) {
+                    type = "google";
+                }
+                showLog("preloadNativeAdsForFeedSlots seatIndex=" + i + " reqPos=" + pos);
+                loadAds(code, pos, type);
+                return;
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -1667,11 +1909,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         new AdScreenArticleOverlay(HomePage.this, homeAdArticleOverlayHost);
             }
             if (adScreenArticleOverlay != null) {
+                if (adapter != null) {
+                    adScreenArticleOverlay.setFeedAdapter(adapter);
+                }
+                // Temp surface only — does not flipTo, splice feed, or change positionx.
                 adScreenArticleOverlay.show(datum);
             }
         } catch (Exception e) {
             showLog("openAdScreenArticleOverlay: " + e.getMessage());
         }
+    }
+
+    @Nullable
+    private ModelClass.Datum resolveAdsScreenOverlayForFlip(int adFeedIndex) {
+        try {
+            if (adapter != null) {
+                return adapter.getAdsScreenOverlayDatum(adFeedIndex);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     /** Engagement / Continue-reading hub — search feed mode not ported; soft News. */
@@ -1869,14 +2126,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("onOverFlip::positionx:"+ positionx);
         showLog("onOverFlip::positionx:"+((list.size()-1)==positionx));
 
-
-
         if(v.getPageCount()==list.size() && (list.size()-1)==positionx && loadingOnOverFlip && overFlipDistance>0){
-            if(!isDataParsed){
-                convertListOfArticles(dummyResponse,-1);
+            boolean showLoadingToast = false;
+            if (!isDataParsed && dummyResponse != null) {
+                convertListOfArticles(dummyResponse, 3);
+            } else if (!isDataParsed && !isApiRequested) {
+                isApiRequested = true;
+                ShowNews_Data_Values(category_id, 3);
+                showLoadingToast = true;
+            } else if (!isDataParsed && isApiRequested && dummyResponse == null) {
+                showLoadingToast = true;
+            } else if (isDataParsed && "No articles to read further".equals(no_article_message)) {
+                Toasty.info(getApplicationContext(), no_article_message, Toast.LENGTH_SHORT, true).show();
             }
-            Toasty.info(getApplicationContext(), no_article_message, Toast.LENGTH_SHORT, true).show();
-            loadingOnOverFlip =false;
+            if (showLoadingToast) {
+                Toasty.info(getApplicationContext(), no_article_message, Toast.LENGTH_SHORT, true).show();
+            }
+            loadingOnOverFlip = false;
         }
         new Handler().postDelayed(new Runnable() {
             @Override
@@ -1891,8 +2157,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void flipfinsh() {
+        // Ad seat: forward flip advances feed — no overlay hijack on over-flip end.
     }
-
 
     @Override
     protected void onRestart() {
@@ -3234,12 +3500,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void closeBottomStrip(boolean closeStrip) {
         showLog("closeBottomStrip:"+closeStrip);
-        if(list.get(positionx).getPostType().equalsIgnoreCase("ad") ||list.get(positionx).getPostType().equalsIgnoreCase("share_app") ||list.get(positionx).getPostType().equalsIgnoreCase("ratings")  ){
-            home_page_navigation.setVisibility(View.GONE);
-        }else{
-            home_page_navigation.setVisibility(View.VISIBLE);
-        }
-
+        updateHomePageNavigationForSeat();
     }
 
     private void openReportPage(int pos) {
@@ -3652,6 +3913,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         adapter = new FlipperAdapter(Activity, HomePage.this, type, category_id, getLifecycle());
         adapter.setCallback(this);
+        if (adScreenArticleOverlay != null) {
+            adScreenArticleOverlay.setFeedAdapter(adapter);
+        }
         mFlipView.setAdapter(adapter);
         mFlipView.setOnFlipListener(this);
         mFlipView.setOverFlipMode(OverFlipMode.GLOW);
@@ -3738,8 +4002,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         boolean video = SharedPrefsData.getBool(
                 HomePage.this, Constants.isVideoPostsSelected, Constants.PREF_NAME);
         boolean search = isSearchFeedActive();
-        boolean useEdge = !flashNewsModeActive
-                && PublicEdgeFeedHelper.canUsePublicEdge(search, special, video, category_id);
+        boolean useEdge = PublicEdgeFeedHelper.canUsePublicEdge(
+                search, special, video, flashNewsModeActive, category_id);
 
         long pinPostId = 0L;
         try {
@@ -3757,6 +4021,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 category_id,
                                 skip,
                                 pinPostId,
+                                special,
+                                flashNewsModeActive,
                                 new Callback<PublicEdgeFeedResponse>() {
                         @Override
                         public void onResponse(
@@ -3927,6 +4193,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         for (ModelClass.Datum d : newData) {
             if (d == null) continue;
+            EdgeFeedPostNormalizer.normalize(d);
             if (d.getPostId() == null) {
                 list.add(d);
                 continue;
@@ -3942,22 +4209,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     public void convertListOfArticles(Response<EncreptionRequest> response,int reqPos){
-        no_article_message="Please wait while loading ...";
+        if (reqPos != -1) {
+            no_article_message = "Please wait while loading ...";
+        }
         showLog("reqPos:::::"+reqPos);
         showLog("isFromLocalArticles:::::"+isFromLocalArticles);
-        if(reqPos==3 && !isFromLocalArticles){
-            isDataParsed=false;
-            dummyResponse=response;
-            showLog("requestPosition::"+requestPostition);
-            requestPostition=1+requestSize;
-            showLog("requestPosition::"+requestPostition);
-            return;
+        if (reqPos == 3 && !isFromLocalArticles) {
+            if (response != null && response != dummyResponse) {
+                isDataParsed = false;
+                dummyResponse = response;
+                showLog("requestPosition::" + requestPostition);
+                requestPostition = 1 + requestSize;
+                showLog("requestPosition::" + requestPostition);
+                return;
+            }
+            dummyResponse = null;
         }
         try {
             if (response!=null && response.body() != null) {
                 showLog("response body not null");
                 dummyResponse=null;
                 isDataParsed=true;
+                isApiRequested = false;
                 SharedPrefsData.putBool(getApplicationContext(), Constants.HOME_SCREEN, true, Constants.PREF_NAME);
                 EncreptionRequest encreptionRequest = response.body();
                 encreptionRequest__=encreptionRequest;
@@ -3991,7 +4264,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (encreptionRequest.isShow_ads() && positionx == 0
                             && encreptionRequest.getAd_positions() != null
                             && !encreptionRequest.getAd_positions().isEmpty()) {
-                        if (!shouldDeferAdWork() && !feedNativeAdRequestInFlight) {
+                        if (!shouldDeferAdWork()) {
                             AdsPojo first = null;
                             for (int i = 0; i < encreptionRequest.getAd_positions().size(); i++) {
                                 AdsPojo p = encreptionRequest.getAd_positions().get(i);
@@ -4011,11 +4284,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
                     }
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
+                        final int listSizeBefore = list.size();
                         addUniqueArticles(validateUserOtp.getData());
-                        requestSize=list.size();
+                        if (encreptionRequest.isShow_ads()) {
+                            rebalanceFeedAdsIfNeeded(encreptionRequest);
+                        }
+                        requestSize = list.size();
                         last_post_id = validateUserOtp.getLastPostId();
-                        skip = validateUserOtp.getSkip();
-                        actual_skip = validateUserOtp.getActualSkip();
+                        advanceFeedSkipAfterResponse(validateUserOtp, reqPos);
                         if (list.get(0).getPostId() != null) {
                             updated_post_id_firebase = list.get(0).getPostId().intValue();
                         }
@@ -4032,10 +4308,32 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         }
                         showLog("response body not null after load data:");
                         adapter.hasStableIds();
-                        //adapter.notifyDataSetChanged();
+                        final int seatBefore =
+                                positionx >= 0 && positionx < list.size() ? positionx : 0;
+                        final int flipCountBefore =
+                                mFlipView != null ? mFlipView.getPageCount() : listSizeBefore;
                         adapter.setData(list);
-                        // N1: page-0 reloads (warm push / soft open) must seat FlipView at 0.
-                        if (reqPos == -1 || positionx < 0 || positionx >= list.size()) {
+                        if (reqPos == 3 && mFlipView != null && list.size() > flipCountBefore) {
+                            mFlipView.pageCountGrewQuietly();
+                        }
+                        if (encreptionRequest.isShow_ads()) {
+                            preloadNativeAdsForFeedSlots();
+                        }
+                        isApiRequested = false;
+                        requestPostition = 1 + list.size();
+                        showLog(
+                                "feed append seat="
+                                        + seatBefore
+                                        + " list="
+                                        + list.size()
+                                        + " skip="
+                                        + skip
+                                        + " actual_skip="
+                                        + actual_skip);
+                        // Append / pagination: keep the user's current card (never snap home).
+                        if (reqPos == 3) {
+                            syncFlipViewToFeedIndex(seatBefore);
+                        } else if (reqPos == -1 || positionx < 0 || positionx >= list.size()) {
                             positionx = 0;
                             ppi = 0;
                             try {
@@ -4044,6 +4342,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 }
                             } catch (Exception ignored) {
                             }
+                        } else {
+                            syncFlipViewToFeedIndex(positionx);
                         }
                         mFlipView.setVisibility(View.VISIBLE);
                         txtNoData.setVisibility(View.GONE);
@@ -4128,19 +4428,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
 
 
-                showReporterLogin=encreptionRequest.isShow_reporter_login();
-                //showReporterLogin=true;
-                showLog("showReporterLogin:"+showReporterLogin);
-                if(!showReporterLogin){
-                    floatingActionButtonHome.setVisibility(View.INVISIBLE);
-                    floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
-                    applyFooterWhatsapp();
-
-                }else{
-                    floatingActionButtonHome.setVisibility(View.VISIBLE);
-                    floatingActionButtonHome.setImageResource(R.drawable.ic_repoter_post);
-                    hideFooterWhatsapp();
-                }
+                showReporterLogin = encreptionRequest.isShow_reporter_login();
+                showLog("showReporterLogin:" + showReporterLogin);
+                // Footer center = WhatsApp only; reporter create lives on Profile (isFooterShowPlus false).
+                floatingActionButtonHome.setVisibility(View.GONE);
+                applyFooterWhatsapp();
                 Boolean pushPermAlert = encreptionRequest.getShow_push_perm_alert();
                 showNotificationAlert(pushPermAlert != null && pushPermAlert);
             }else{
@@ -4150,7 +4442,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
 
             initialCall=true;
-            home_page_navigation.setVisibility(View.VISIBLE);
+            updateHomePageNavigationForSeat();
             try {
                 applyFooterSlotVisibility();
                 ensureSpecialMenuIconAlwaysVisible();
@@ -4397,30 +4689,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             ShowNews_Data_Values(category_id,3);
         }
 
-        if ( positionx == ((list.size() - 2)) || (positionx==list.size())) {
+        if (list != null
+                && !list.isEmpty()
+                && positionx >= Math.max(0, list.size() - FEED_PREFETCH_FROM_END)) {
             showProgress();
-            if(dummyResponse!=null){
-                //Toasty.info(getApplicationContext(), "Please wait while loading data...", Toast.LENGTH_SHORT, true).show();
+            if (dummyResponse != null) {
                 new Handler().postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         showLog("request at position:: convertListOfArticles");
-                        convertListOfArticles(dummyResponse,-1);
+                        convertListOfArticles(dummyResponse, 3);
                         hideProgress();
                     }
-                },100);
-
-
-            }else{
-                showLog("request at position::"+requestSize+isApiRequested);
-
-                //Toasty.info(getApplicationContext(), "Please wait while loading ...", Toast.LENGTH_SHORT, true).show();
-//                if(isApiRequested){
-//                    ShowNews_Data_Values(category_id,0);
-//                }
+                }, 100);
+            } else {
+                showLog("request at position::" + requestSize + isApiRequested);
+                if (!isApiRequested) {
+                    isApiRequested = true;
+                    ShowNews_Data_Values(category_id, 3);
+                }
+                hideProgress();
             }
-
-
         } else {
             bottomNavigationView.getMenu().getItem(0).setIcon(R.drawable.refresh_icon);
             bottomNavigationView.getMenu().getItem(0).setTitle("" + languageModelResponse.getData().getReload());
@@ -4453,6 +4742,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @SuppressLint("SetTextI18n")
     @Override
     public void onFlippedToPage(FlipView view, int position, long id) {
+        final int settledFrom = positionx;
+        try {
+            if (view == mFlipView && adScreenArticleOverlay != null && adScreenArticleOverlay.isShowing()) {
+                if (position != settledFrom) {
+                    view.post(() -> view.flipTo(settledFrom));
+                }
+                return;
+            }
+        } catch (Exception ignored) {
+        }
         // Samsung-critical: stop prior page audio (Exo/YT/native ad/VAST/WebView) + TTS
         // before the delayed settle work runs.
         try {
@@ -4492,11 +4791,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         positionx = position;
         post_type=list.get(position).getPostType();
 
-        if (list.get(positionx).getPostType().equalsIgnoreCase("ad") || list.get(positionx).getPostType().equalsIgnoreCase("share_app") || list.get(positionx).getPostType().equalsIgnoreCase("ratings")) {
-            home_page_navigation.setVisibility(View.INVISIBLE);
-        }else{
-            home_page_navigation.setVisibility(View.VISIBLE);
-        }
+        updateHomePageNavigationForSeat();
         try {
             updated_post_id_firebase = list.get(positionx).getPostId().intValue();
         } catch (NullPointerException e) {
@@ -4509,11 +4804,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } else {
             ppi = 1;
         }
-        if(post_type.equalsIgnoreCase("ad") || post_type.equalsIgnoreCase("web_ads") || post_type.equalsIgnoreCase("web") ){
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        }else{
-            getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
-        }
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
         if(post_type.equalsIgnoreCase("image_gallery")){
             adapter.closeGalleryShareLayout(mFlipView.getChildAt(ppi));
         }
@@ -4613,7 +4904,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void onDestroy() {
         cancelAdSeatStayRefresh();
-        feedNativeAdRequestInFlight = false;
+        synchronized (feedNativeAdSeatsInFlight) {
+            feedNativeAdSeatsInFlight.clear();
+        }
         try {
             cancelListAllArticlesCall();
         } catch (Exception ignored) {
@@ -4949,6 +5242,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_post);
                     showLog("showReporterLogin:"+showReporterLogin);
                     if (!showReporterLogin) {
+                        if (list != null
+                                && positionx >= 0
+                                && positionx < list.size()
+                                && list.get(positionx).getPostType() != null
+                                && (list.get(positionx).getPostType().equalsIgnoreCase("ad")
+                                        || list.get(positionx)
+                                                .getPostType()
+                                                .equalsIgnoreCase("share_app"))) {
+                            shareAnyNewsAppPromotion();
+                            return true;
+                        }
                         showLog("onClick of whatsapp");
                         CallShareListener listener = new CallShareListener();
                         listener.setShareInterfaceListener(adapter);

@@ -35,7 +35,7 @@
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/layoutParentTop"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="@dimen/_272sdp"
                         android:background="#000000">
 
                         <TextView
@@ -709,7 +709,7 @@
                                     android:layout_marginLeft="@dimen/_2sdp"
                                     android:layout_marginRight="@dimen/_2sdp"
                                     android:gravity="center"
-                                    android:visibility="visible">
+                                    android:visibility="gone">
 
                                     <TextView
                                         android:id="@+id/second_language_name"

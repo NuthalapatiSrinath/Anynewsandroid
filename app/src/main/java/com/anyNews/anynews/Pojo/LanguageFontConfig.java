@@ -217,50 +217,50 @@ public class LanguageFontConfig implements Serializable {
         return postSubmitFontSize != null ? postSubmitFontSize : 14f;
     }
 
-    /** Production defaults including onboarding/screen-specific sizes. */
-    public static LanguageFontConfig productionFor(int languageId) {
-        LanguageFontConfig cfg;
-        switch (languageId) {
-            case 1:
-                cfg = of(14, 14, "sans-serif-medium", "mallannaregular", 14, 13f);
-                break;
-            case 2:
-                cfg = of(16, 13, "robotolighttelugu", "robotolighttelugu", 13, 14f);
-                break;
-            case 3:
-                cfg = of(18, 16, "sreekrushnadevaraya_regular", "sreekrushnadevaraya_regular", 13, null);
-                cfg.stateSelectionFontSize = 22f;
-                cfg.districtSelectionFontSize = 18f;
-                break;
-            case 4:
-                cfg = of(13, 13, "mallannaregular", "mallannaregular", 12, 12f);
-                break;
-            case 5:
-            case 6:
-                cfg = of(16, 13, "robotolighttelugu", "robotolighttelugu", 13, null);
-                break;
-            default:
-                cfg = of(14, 14, "robotolighttelugu", "robotolighttelugu", 13, null);
-                break;
-        }
-        if (cfg.stateSelectionFontSize == null) {
-            cfg.stateSelectionFontSize = 21f;
-        }
-        if (cfg.districtSelectionFontSize == null) {
-            cfg.districtSelectionFontSize = 16f;
-        }
-        cfg.districtSelectionBoxHeight = 85f;
-        cfg.areaSelectionFontSize = 16f;
-        cfg.languageSelectionFontSize = 16f;
-        cfg.selectionHeaderFontSize = 20f;
-        cfg.commentsFontSize = 14f;
-        cfg.profileFontSize = 14f;
-        cfg.loginFontSize = 16f;
-        cfg.postSubmitFontSize = 14f;
-        // Explicit defaults so offline productionDefault matches current look
-        // (applyTypeface with Typeface.NORMAL / no weight overlay).
-        cfg.titleFontWeight = 400;
-        cfg.bodyFontWeight = 400;
+    /**
+     * Full production admin font row (feed + onboarding + other screens).
+     * See {@link com.anyNews.anynews.Utils.AppUiDefaults}.
+     */
+    public static LanguageFontConfig compose(
+            float titleSize,
+            float bodySize,
+            String titleFamily,
+            String bodyFamily,
+            float stripSize,
+            Float programmaticBody,
+            float lineSpacingMultiplier,
+            int titleFontWeight,
+            int bodyFontWeight,
+            float stateSelectionFontSize,
+            float districtSelectionFontSize,
+            float districtSelectionBoxHeight,
+            float areaSelectionFontSize,
+            float languageSelectionFontSize,
+            float selectionHeaderFontSize,
+            float commentsFontSize,
+            float profileFontSize,
+            float loginFontSize,
+            float postSubmitFontSize
+    ) {
+        LanguageFontConfig cfg = of(titleSize, bodySize, titleFamily, bodyFamily, stripSize, programmaticBody);
+        cfg.lineSpacingMultiplier = lineSpacingMultiplier;
+        cfg.titleFontWeight = titleFontWeight;
+        cfg.bodyFontWeight = bodyFontWeight;
+        cfg.stateSelectionFontSize = stateSelectionFontSize;
+        cfg.districtSelectionFontSize = districtSelectionFontSize;
+        cfg.districtSelectionBoxHeight = districtSelectionBoxHeight;
+        cfg.areaSelectionFontSize = areaSelectionFontSize;
+        cfg.languageSelectionFontSize = languageSelectionFontSize;
+        cfg.selectionHeaderFontSize = selectionHeaderFontSize;
+        cfg.commentsFontSize = commentsFontSize;
+        cfg.profileFontSize = profileFontSize;
+        cfg.loginFontSize = loginFontSize;
+        cfg.postSubmitFontSize = postSubmitFontSize;
         return cfg;
+    }
+
+    /** Frozen production defaults — {@link com.anyNews.anynews.Utils.AppUiDefaults}. */
+    public static LanguageFontConfig productionFor(int languageId) {
+        return com.anyNews.anynews.Utils.AppUiDefaults.fontConfigFor(languageId);
     }
 }

@@ -9,8 +9,9 @@ import androidx.annotation.Nullable;
 /**
  * In-feed ad seats / format / unit + load knobs.
  *
- * <p>Seat placement is hardcoded at {@link #FIXED_AD_POSITIONS} (1-based flip
- * indices). Admin/splash {@code feed_ad_every_n} is inert for seats — still
+ * <p>Seat placement is hardcoded at {@link #FIXED_AD_POSITIONS} (0-based FlipView
+ * list indices: index 0 = first article, 1 = first ad, …). Admin/splash
+ * {@code feed_ad_every_n} is inert for seats — still
  * persisted for compat but never used to place shells.
  *
  * <p>Other knobs arrive via splash / session ({@code feed_ad_format},
@@ -53,8 +54,8 @@ public final class FeedAdConfig {
             "ca-app-pub-8562336752221105/8909042175";
 
     /**
-     * Hardcoded AdMob seats — 1-based flip/list indices (same on server
-     * {@code FIXED_AD_POSITIONS}). Exactly five seats; not every-N.
+     * Hardcoded AdMob seats — 0-based flip list indices (position 0 = first
+     * article, 1 = first ad seat, then 5/9/14/19). Exactly five seats; not every-N.
      */
     public static final int[] FIXED_AD_POSITIONS = {1, 5, 9, 14, 19};
 
@@ -149,16 +150,16 @@ public final class FeedAdConfig {
         getSecondUnitId(context);
     }
 
-    /** Copy of hardcoded 1-based seat indices. */
+    /** Copy of hardcoded 0-based seat list indices. */
     @NonNull
     public static int[] fixedAdPositions() {
         return FIXED_AD_POSITIONS.clone();
     }
 
-    /** True when {@code oneBasedPos} is a fixed AdMob seat. */
-    public static boolean isFixedAdPosition(int oneBasedPos) {
+    /** True when {@code listIndex} is a fixed AdMob seat in the FlipView list. */
+    public static boolean isFixedAdPosition(int listIndex) {
         for (int p : FIXED_AD_POSITIONS) {
-            if (p == oneBasedPos) return true;
+            if (p == listIndex) return true;
         }
         return false;
     }

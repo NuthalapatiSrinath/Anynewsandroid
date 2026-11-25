@@ -38,9 +38,9 @@ public final class FontSettingsHelper {
     /** CSS Regular — matches historical applyTypeface (Typeface.NORMAL) behavior. */
     public static final int DEFAULT_FONT_WEIGHT = 400;
     /**
-     * When false (default), Home typography uses baked {@link LanguageFontConfig#productionFor}
-     * for every language — no splash prefs, no custom-font HTTP downloads, stable layout.
-     * Flip to true only if admin remote fonts must drive the feed again.
+     * When false (default), Home typography uses frozen {@link AppUiDefaults} via
+     * {@link LanguageFontConfig#productionFor} for every language — no splash prefs, no custom-font
+     * HTTP downloads, stable layout. Flip to true only if admin remote fonts must drive the feed again.
      */
     public static final boolean APPLY_REMOTE_FONT_SETTINGS = false;
     private static final Gson GSON = new Gson();
@@ -656,6 +656,6 @@ public final class FontSettingsHelper {
     }
 
     private static LanguageFontConfig productionDefault(int languageId) {
-        return LanguageFontConfig.productionFor(languageId);
+        return AppUiDefaults.fontConfigFor(languageId);
     }
 }

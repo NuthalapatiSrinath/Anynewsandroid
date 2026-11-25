@@ -10,17 +10,19 @@ import android.widget.TextView;
 
 import androidx.core.graphics.ColorUtils;
 
-import com.anyNews.anynews.R;
 import com.anyNews.anynews.Ui.NeomorphFrameLayout;
 
 public final class ThemeColorHelper {
 
-    public static final String DEFAULT_COLOR = "#EF4923";
+    public static final String DEFAULT_COLOR = AppUiDefaults.BRAND_ACCENT_HEX;
 
     private ThemeColorHelper() {
     }
 
     public static void saveColor(Context context, String color) {
+        if (!AppUiDefaults.APPLY_REMOTE_THEME_COLOR) {
+            return;
+        }
         if (context == null) {
             return;
         }
@@ -33,14 +35,17 @@ public final class ThemeColorHelper {
     }
 
     public static int getThemeColor(Context context) {
+        if (!AppUiDefaults.APPLY_REMOTE_THEME_COLOR) {
+            return Color.parseColor(AppUiDefaults.BRAND_ACCENT_HEX);
+        }
         String stored = SharedPrefsData.getString(context, Constants.THEME_COLOR, Constants.PREF_NAME);
         if (TextUtils.isEmpty(stored)) {
-            return context.getColor(R.color.brand_orange);
+            return Color.parseColor(AppUiDefaults.BRAND_ACCENT_HEX);
         }
         try {
             return Color.parseColor(stored);
         } catch (IllegalArgumentException ignored) {
-            return context.getColor(R.color.brand_orange);
+            return Color.parseColor(AppUiDefaults.BRAND_ACCENT_HEX);
         }
     }
 
@@ -98,7 +103,7 @@ public final class ThemeColorHelper {
 
     public static String normalizeColor(String color) {
         if (TextUtils.isEmpty(color)) {
-            return DEFAULT_COLOR;
+            return AppUiDefaults.BRAND_ACCENT_HEX;
         }
         String trimmed = color.trim();
         if (!trimmed.startsWith("#")) {

@@ -50,9 +50,13 @@ public final class ContactUsChooser {
     }
 
     /**
-     * Opens admin Configuration WhatsApp ({@code full_jatakam_whatsapp}).
-     * @param prefill optional message; null uses contact default.
+     * In-feed ad screen “Advertise on AnyNews” — hardcoded sales line (not splash prefs).
      */
+    public static void openAdvertiseOnAnyNewsWhatsApp(
+            @NonNull Context context, @Nullable String prefill) {
+        openWhatsAppToNumber(context, AppUiDefaults.ADVERTISE_ON_ANYNEWS_WHATSAPP, prefill);
+    }
+
     public static void openWhatsApp(@NonNull Context context, @Nullable String prefill) {
         String number = ProfileHubConfigHelper.getFullJatakamWhatsapp(context);
         if (TextUtils.isEmpty(number)) {
@@ -65,7 +69,13 @@ public final class ContactUsChooser {
             return;
         }
         String digits = number.replaceAll("[^0-9]", "");
-        if (digits.length() < 10) {
+        openWhatsAppToNumber(context, digits, prefill);
+    }
+
+    private static void openWhatsAppToNumber(
+            @NonNull Context context, @NonNull String digits, @Nullable String prefill) {
+        String cleaned = digits.replaceAll("[^0-9]", "");
+        if (cleaned.length() < 10) {
             Toast.makeText(context, R.string.ad_center_whatsapp_missing, Toast.LENGTH_LONG).show();
             return;
         }
@@ -77,12 +87,21 @@ public final class ContactUsChooser {
             Uri uri =
                     Uri.parse(
                             "https://wa.me/"
-                                    + digits
+                                    + cleaned
                                     + "?text="
                                     + Uri.encode(text));
             context.startActivity(new Intent(Intent.ACTION_VIEW, uri));
         } catch (Exception e) {
-            Toast.makeText(context, R.string.ad_center_whatsapp_missing, Toast.LENGTH_SHORT).show();
+            try {
+                Intent dial =
+                        new Intent(
+                                Intent.ACTION_DIAL,
+                                Uri.parse("tel:" + cleaned));
+                context.startActivity(dial);
+            } catch (Exception e2) {
+                Toast.makeText(context, R.string.ad_center_whatsapp_missing, Toast.LENGTH_SHORT)
+                        .show();
+            }
         }
     }
 

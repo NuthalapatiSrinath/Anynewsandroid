@@ -1030,7 +1030,7 @@ public final class ReadArticleStore {
 
     /**
      * After unread filter / soft strip collapses the list, re-insert ad slots at
-     * {@link FeedAdConfig#FIXED_AD_POSITIONS} (1-based flip indices 1/5/9/14/19).
+     * {@link FeedAdConfig#FIXED_AD_POSITIONS} (0-based list indices 1/5/9/14/19).
      * Keeps original ad metadata ({@code ad_req_position}, codes) so already-loaded
      * native ads still match. Clones the template when needed so skip-ahead pages
      * that discarded later ads still get the fixed seats.
@@ -1095,8 +1095,8 @@ public final class ReadArticleStore {
         int contentIdx = 0;
         int adUsed = 0;
         while (contentIdx < content.size()) {
-            final int nextOneBased = rebuilt.size() + 1;
-            if (FeedAdConfig.isFixedAdPosition(nextOneBased)
+            final int listIndex = rebuilt.size();
+            if (FeedAdConfig.isFixedAdPosition(listIndex)
                     && adUsed < fixed.length) {
                 ModelClass.Datum slot;
                 if (adUsed < adPool.size()) {
@@ -1107,9 +1107,9 @@ public final class ReadArticleStore {
                 }
                 if (slot != null) {
                     try {
-                        slot.setAd_req_position(nextOneBased);
+                        slot.setAd_req_position(listIndex);
                         slot.setNext_ad_req_position(
-                                FeedAdConfig.nextFixedAdPosition(nextOneBased));
+                                FeedAdConfig.nextFixedAdPosition(listIndex));
                     } catch (Exception ignored) {
                     }
                     rebuilt.add(slot);

@@ -291,7 +291,8 @@ public interface APIService {
             @Query("state_id") Integer stateId,
             @Query("dist_id") Integer distId,
             @Query("skip") Integer skip,
-            @Query("post_id") Integer postId);
+            @Query("post_id") Integer postId,
+            @Query("feed_kind") String feedKind);
 
     /** Shared splash shell (no draft) — edge-cacheable. */
     @GET("app/{version}/public/splash_config")

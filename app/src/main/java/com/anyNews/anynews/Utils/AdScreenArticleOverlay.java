@@ -5,10 +5,10 @@ import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
-import android.widget.BaseAdapter;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -17,24 +17,22 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.anyNews.anynews.R;
-import com.anyNews.anynews.flipview.FlipView;
-import com.anyNews.anynews.flipview.OverFlipMode;
 import com.bumptech.glide.Glide;
 
 /**
- * Ad-screen recommend tap: temp FlipView surface over the main feed.
- * Does not splice into the main FlipView list — flip up dismisses and the
- * underlying ad/recommend page stays seated.
+ * Ad-screen recommend tap: temp surface over the main feed.
+ * Article page reuses {@link FlipperAdapter#createAdOverlayArticleView} when possible.
  */
-public final class AdScreenArticleOverlay implements FlipView.OnFlipListener {
+public final class AdScreenArticleOverlay {
 
     private static final long SLIDE_MS = 280L;
     private static final DecelerateInterpolator DECEL = new DecelerateInterpolator();
 
     @NonNull private final Context host;
     @NonNull private final FrameLayout hostFrame;
+    @Nullable private FlipperAdapter feedAdapter;
     @Nullable private View root;
-    @Nullable private FlipView flipView;
+    @Nullable private FrameLayout contentHost;
     @Nullable private ModelClass.Datum datum;
     private boolean showing;
     private boolean animating;
@@ -42,6 +40,10 @@ public final class AdScreenArticleOverlay implements FlipView.OnFlipListener {
     public AdScreenArticleOverlay(@NonNull Context host, @NonNull FrameLayout hostFrame) {
         this.host = host;
         this.hostFrame = hostFrame;
+    }
+
+    public void setFeedAdapter(@Nullable FlipperAdapter adapter) {
+        this.feedAdapter = adapter;
     }
 
     public boolean isShowing() {
@@ -57,22 +59,11 @@ public final class AdScreenArticleOverlay implements FlipView.OnFlipListener {
         }
         datum = article;
         ensureInflated();
-        if (root == null || flipView == null) {
+        if (root == null || contentHost == null) {
             return;
         }
-        OverlayFlipAdapter adapter = new OverlayFlipAdapter();
-        flipView.setAdapter(adapter);
-        flipView.setOnFlipListener(this);
-        flipView.setOverFlipMode(OverFlipMode.GLOW);
-        try {
-            flipView.setFlipDistanceperpage(
-                    200, host.getResources().getDisplayMetrics().density);
-        } catch (Exception ignored) {
-        }
-        try {
-            flipView.flipTo(0);
-        } catch (Exception ignored) {
-        }
+        bindArticleSurface();
+        attachFlipUpDismiss(root);
 
         showing = true;
         animating = true;
@@ -152,7 +143,64 @@ public final class AdScreenArticleOverlay implements FlipView.OnFlipListener {
                 new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
-        flipView = root.findViewById(R.id.ad_article_overlay_flip);
+        contentHost = root.findViewById(R.id.ad_article_overlay_content);
+    }
+
+    private void bindArticleSurface() {
+        if (contentHost == null) {
+            return;
+        }
+        contentHost.removeAllViews();
+        ModelClass.Datum d = datum;
+        if (d != null && feedAdapter != null) {
+            View feedPage = feedAdapter.createAdOverlayArticleView(contentHost, d);
+            if (feedPage != null) {
+                if (feedPage.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) feedPage.getParent()).removeView(feedPage);
+                }
+                contentHost.addView(
+                        feedPage,
+                        new FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT));
+                attachFlipUpDismiss(feedPage);
+                return;
+            }
+        }
+        View page =
+                LayoutInflater.from(host)
+                        .inflate(R.layout.page_ad_overlay_article, contentHost, false);
+        contentHost.addView(
+                page,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+        bindArticleFallback(page);
+        attachFlipUpDismiss(page);
+    }
+
+    private void attachFlipUpDismiss(@NonNull View target) {
+        final float[] downY = new float[1];
+        final float[] downX = new float[1];
+        target.setOnTouchListener(
+                (v, event) -> {
+                    switch (event.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            downY[0] = event.getY();
+                            downX[0] = event.getX();
+                            return false;
+                        case MotionEvent.ACTION_UP:
+                            float dy = downY[0] - event.getY();
+                            float dx = Math.abs(event.getX() - downX[0]);
+                            if (dy > Math.max(72f, v.getHeight() * 0.1f) && dy > dx * 1.2f) {
+                                dismiss(true);
+                                return true;
+                            }
+                            return false;
+                        default:
+                            return false;
+                    }
+                });
     }
 
     private void cancelAnim() {
@@ -164,6 +212,9 @@ public final class AdScreenArticleOverlay implements FlipView.OnFlipListener {
 
     private void hideHostImmediate() {
         cancelAnim();
+        if (contentHost != null) {
+            contentHost.removeAllViews();
+        }
         if (root != null) {
             root.setTranslationY(0f);
             root.setVisibility(View.GONE);
@@ -171,76 +222,13 @@ public final class AdScreenArticleOverlay implements FlipView.OnFlipListener {
         hostFrame.setVisibility(View.GONE);
         hostFrame.removeAllViews();
         root = null;
-        flipView = null;
+        contentHost = null;
         datum = null;
         showing = false;
         animating = false;
     }
 
-    @Override
-    public void onFlippedToPage(FlipView v, int position, long id) {
-        // Page 1 = dismiss sentinel — article flipped up; ad seat untouched underneath.
-        if (position >= 1) {
-            dismiss(true);
-        }
-    }
-
-    private final class OverlayFlipAdapter extends BaseAdapter {
-        @Override
-        public int getCount() {
-            return 2;
-        }
-
-        @Override
-        public Object getItem(int position) {
-            return position;
-        }
-
-        @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
-        @Override
-        public int getViewTypeCount() {
-            return 2;
-        }
-
-        @Override
-        public int getItemViewType(int position) {
-            return position;
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            if (position == 1) {
-                View blank = convertView;
-                if (blank == null) {
-                    blank = new View(parent.getContext());
-                    blank.setBackgroundColor(0xFF121212);
-                    blank.setLayoutParams(
-                            new ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT));
-                }
-                return blank;
-            }
-            View page = convertView;
-            if (page == null) {
-                page =
-                        LayoutInflater.from(parent.getContext())
-                                .inflate(R.layout.page_ad_overlay_article, parent, false);
-                page.setLayoutParams(
-                        new ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT));
-            }
-            bindArticlePage(page);
-            return page;
-        }
-    }
-
-    private void bindArticlePage(@NonNull View page) {
+    private void bindArticleFallback(@NonNull View page) {
         TextView title = page.findViewById(R.id.ad_overlay_title);
         TextView body = page.findViewById(R.id.ad_overlay_body);
         ImageView image = page.findViewById(R.id.ad_overlay_image);

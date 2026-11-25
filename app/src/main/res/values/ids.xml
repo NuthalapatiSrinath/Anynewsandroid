@@ -16,6 +16,9 @@
     <item name="tag_ad_shell_has_media" type="id" />
     <!-- Flip ad scrap: ad_req_position of the creative painted into this seat -->
     <item name="tag_ad_seat_req_pos" type="id" />
+    <!-- ads_screen: selected companion row for flip-up overlay -->
+    <item name="tag_ad_companion_datum" type="id" />
+    <item name="tag_ad_seat_feed_index" type="id" />
     <!-- Exo Way2 scrub: TRUE while user is dragging the red progress line -->
     <item name="exo_scrub_time_scrubbing" type="id" />
     <!-- Multi-image gallery: swipe-left coach session on ViewPager -->

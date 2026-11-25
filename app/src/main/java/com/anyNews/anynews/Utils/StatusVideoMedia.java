@@ -32,30 +32,36 @@ public final class StatusVideoMedia {
         if (item == null) {
             return null;
         }
+        final String writerAvatar = cleanUrl(item.getWriterProfile());
 
         String direct = cleanUrl(item.getThumbnail());
-        if (!TextUtils.isEmpty(direct) && !isStreamOnlyUrl(direct)) {
+        if (isUsableVideoPoster(direct, writerAvatar) && !isStreamOnlyUrl(direct)) {
             return ensureHttps(resolveStatic(direct));
         }
 
+        String videoThumb = cleanUrl(item.getVideoThumb());
+        if (isUsableVideoPoster(videoThumb, writerAvatar) && !isStreamOnlyUrl(videoThumb)) {
+            return ensureHttps(resolveStatic(videoThumb));
+        }
+
         String fromThumbs = firstListUrl(item.getThumbnails(), true);
-        if (!TextUtils.isEmpty(fromThumbs) && !isStreamOnlyUrl(fromThumbs)) {
+        if (isUsableVideoPoster(fromThumbs, writerAvatar) && !isStreamOnlyUrl(fromThumbs)) {
             return ensureHttps(resolveStatic(fromThumbs));
         }
 
         String img0 = firstImage(item);
-        if (!TextUtils.isEmpty(img0) && !isStreamOnlyUrl(img0)) {
+        if (isUsableVideoPoster(img0, writerAvatar) && !isStreamOnlyUrl(img0)) {
             return ensureHttps(resolveStatic(img0));
         }
 
         String bg = cleanUrl(item.getBackgroundImage());
-        if (!TextUtils.isEmpty(bg) && !isStreamOnlyUrl(bg)) {
+        if (isUsableVideoPoster(bg, writerAvatar) && !isStreamOnlyUrl(bg)) {
             return ensureHttps(resolveStatic(bg));
         }
 
         // Nested video maps may carry poster / thumbnail only.
         String nested = firstListUrl(item.getVideos(), true);
-        if (!TextUtils.isEmpty(nested) && !isStreamOnlyUrl(nested)) {
+        if (isUsableVideoPoster(nested, writerAvatar) && !isStreamOnlyUrl(nested)) {
             return ensureHttps(resolveStatic(nested));
         }
 
@@ -89,6 +95,7 @@ public final class StatusVideoMedia {
 
         String[] candidates = {
                 cleanUrl(item.getVideoUrl()),
+                cleanUrl(item.getVideo()),
                 cleanUrl(item.getDownloadUrl()),
                 firstListUrl(item.getVideos(), false)
         };
@@ -321,6 +328,36 @@ public final class StatusVideoMedia {
         }
         return url;
     }
+
+    /** Exposed for {@link EdgeFeedPostNormalizer} — never treat avatars as video posters. */
+    public static boolean isUsableVideoPosterForNormalize(
+            @Nullable String url, @Nullable String writerAvatar) {
+        return isUsableVideoPoster(url, writerAvatar);
+    }
+
+    private static boolean isUsableVideoPoster(
+      @Nullable String url, @Nullable String writerAvatar) {
+    if (TextUtils.isEmpty(url)) {
+      return false;
+    }
+    if (AvatarImageHelper.isUnusablePhoto(url)) {
+      return false;
+    }
+    if (!TextUtils.isEmpty(writerAvatar)) {
+      String a = writerAvatar.trim();
+      String u = url.trim();
+      if (a.equalsIgnoreCase(u)
+          || u.contains(a)
+          || (a.length() > 12 && u.contains(a.substring(a.length() - 12)))) {
+        return false;
+      }
+    }
+    String lower = url.trim().toLowerCase(Locale.US);
+    return !lower.contains("writer_profile")
+        && !lower.contains("user_profile.")
+        && !lower.contains("/profile_pic")
+        && !lower.contains("profile_pic/");
+  }
 
     private static boolean isHttpUrl(String url) {
         if (TextUtils.isEmpty(url)) {

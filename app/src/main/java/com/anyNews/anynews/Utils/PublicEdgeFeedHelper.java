@@ -44,16 +44,18 @@ public final class PublicEdgeFeedHelper {
     }
 
     /**
-     * True for main/local chronological feeds that can use the public edge.
-     * Search / special / flash / video / category browse stay on POST.
+     * True for feeds that can use anonymous GET {@code /public/feed} (CF-backed).
+     * Search, video, and category browse stay on encrypted POST.
      */
     public static boolean canUsePublicEdge(
             boolean searchMode,
             boolean specialMode,
             boolean videoMode,
+            boolean flashMode,
             int categoryId) {
-        if (searchMode || specialMode || videoMode) return false;
-        // category 0 = main national; -1 = local district; other categories need POST.
+        if (searchMode || videoMode) return false;
+        if (flashMode) return true;
+        if (specialMode) return categoryId == 0 || categoryId == -1;
         return categoryId == 0 || categoryId == -1;
     }
 
@@ -66,16 +68,20 @@ public final class PublicEdgeFeedHelper {
             int categoryId,
             long skip,
             long pinPostId,
+            boolean specialMode,
+            boolean flashMode,
             @NonNull Callback<PublicEdgeFeedResponse> callback) {
         Call<PublicEdgeFeedResponse> call =
-                buildPublicFeedCall(context, categoryId, skip, pinPostId);
+                buildPublicFeedCall(
+                        context, categoryId, skip, pinPostId, specialMode, flashMode);
         if (call == null) {
             callback.onFailure(
                     null, new IOException("public feed call unavailable"));
             return null;
         }
         NetworkCallDeduper.enqueueUnique(
-                publicFeedDedupeKey(context, categoryId, skip, pinPostId),
+                publicFeedDedupeKey(
+                        context, categoryId, skip, pinPostId, specialMode, flashMode),
                 call,
                 callback);
         return call;
@@ -86,7 +92,9 @@ public final class PublicEdgeFeedHelper {
             @NonNull Context context,
             int categoryId,
             long skip,
-            long pinPostId) {
+            long pinPostId,
+            boolean specialMode,
+            boolean flashMode) {
         int languageId = SharedPrefsData.getInt(
                 context, Constants.LanguageID, Constants.PREF_NAME);
         int stateId = 0;
@@ -98,9 +106,11 @@ public final class PublicEdgeFeedHelper {
                     context, Constants.Selected_Distric_Id, Constants.PREF_NAME);
         }
         long pin = Math.max(0L, pinPostId);
+        String kind = flashMode ? "flash" : (specialMode ? "special" : "main");
         return String.format(
                 Locale.US,
-                "public_feed_v3_%d_%d_%d_%d_%d",
+                "public_feed_v3_%s_%d_%d_%d_%d_%d",
+                kind,
                 languageId,
                 stateId,
                 distId,
@@ -113,7 +123,9 @@ public final class PublicEdgeFeedHelper {
             @NonNull Context context,
             int categoryId,
             long skip,
-            long pinPostId) {
+            long pinPostId,
+            boolean specialMode,
+            boolean flashMode) {
         try {
             int languageId = SharedPrefsData.getInt(
                     context, Constants.LanguageID, Constants.PREF_NAME);
@@ -121,26 +133,30 @@ public final class PublicEdgeFeedHelper {
 
             int stateId = 0;
             int distId = 0;
-            if (categoryId == -1) {
+            if (!flashMode && categoryId == -1) {
                 stateId = SharedPrefsData.getInt(
                         context, Constants.StateID, Constants.PREF_NAME);
                 distId = SharedPrefsData.getInt(
                         context, Constants.Selected_Distric_Id, Constants.PREF_NAME);
-                // Local needs geo on the public URL; otherwise soft-fallback to POST.
                 if (stateId <= 0 || distId <= 0) {
                     return null;
                 }
             }
 
             APIService api = RestApiClient.getClient().create(APIService.class);
-            Integer pin = pinPostId > 0 ? (int) Math.min(pinPostId, Integer.MAX_VALUE) : null;
+            Integer pin =
+                    !specialMode && !flashMode && pinPostId > 0
+                            ? (int) Math.min(pinPostId, Integer.MAX_VALUE)
+                            : null;
+            String feedKind = flashMode ? "flash" : (specialMode ? "special" : null);
             return api.Public_Feed(
                     "v3",
                     languageId,
                     stateId > 0 ? stateId : null,
                     distId > 0 ? distId : null,
                     (int) Math.max(0, Math.min(skip, Integer.MAX_VALUE)),
-                    pin);
+                    pin,
+                    feedKind);
         } catch (Exception e) {
             Logone.w(e, TAG + " build call failed");
             return null;
@@ -289,7 +305,7 @@ public final class PublicEdgeFeedHelper {
             long skip,
             long pinPostId) {
         Call<PublicEdgeFeedResponse> call =
-                buildPublicFeedCall(context, categoryId, skip, pinPostId);
+                buildPublicFeedCall(context, categoryId, skip, pinPostId, false, false);
         if (call == null) return null;
         try {
             Response<PublicEdgeFeedResponse> response = call.execute();

@@ -69,6 +69,13 @@ public class ModelClass implements Serializable {
         @SerializedName("video_url")
         @Expose
         private String videoUrl;
+        /** Mongo / lean alias when {@code video_url} is absent on edge cache rows. */
+        @SerializedName("video")
+        @Expose
+        private String video;
+        @SerializedName("video_thumb")
+        @Expose
+        private String videoThumb;
         @SerializedName("thumbnail")
         @Expose
         private String thumbnail;
@@ -546,6 +553,22 @@ public class ModelClass implements Serializable {
 
         public void setVideoUrl(String videoUrl) {
             this.videoUrl = videoUrl;
+        }
+
+        public String getVideo() {
+            return video;
+        }
+
+        public void setVideo(String video) {
+            this.video = video;
+        }
+
+        public String getVideoThumb() {
+            return videoThumb;
+        }
+
+        public void setVideoThumb(String videoThumb) {
+            this.videoThumb = videoThumb;
         }
 
         public String getThumbnail() {

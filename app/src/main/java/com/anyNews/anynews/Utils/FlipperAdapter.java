@@ -122,7 +122,6 @@ import com.anyNews.anynews.Pojo.LikeSelectionRequest;
 import com.anyNews.anynews.Pojo.RatingSubmitRequest;
 import com.anyNews.anynews.Pojo.SurveyFeedbackResponse;
 import com.anyNews.anynews.Pojo.SurveyRequestFeedback;
-import com.anyNews.anynews.Pojo.UserProfileRequest;
 import com.anyNews.anynews.R;
 import com.anyNews.anynews.Services.APIService;
 import com.anyNews.anynews.Services.RestApiClient;
@@ -189,6 +188,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -214,6 +214,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     RatingScreenViewHolder   ratingScreenViewHolder;
     AdsScreenViewHolder   adsScreenViewHolder;
+    /** User-selected (or default) companion row per ad feed index — for flip-up overlay. */
+    private final android.util.SparseArray<ModelClass.Datum> adsScreenOverlayPick =
+            new android.util.SparseArray<>();
     FullImageActivityHolder fullImageActivity;
     ImageSliderHolder imageSliderHolder;
     ImageGallaryHolder imageGallaryHolder;
@@ -699,6 +702,201 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     : String.format(java.util.Locale.US, "%.1fK", v);
         }
         return String.valueOf(c);
+    }
+
+    private void bindFullPostLikeCount(TextView tv, Integer count, String ignoredLabel) {
+        if (tv == null) return;
+        int c = count == null ? 0 : count;
+        tv.setText(formatCount(c));
+        tv.setVisibility(View.VISIBLE);
+    }
+
+    private String getLikeLabel() {
+        if (languageModelResponse != null && languageModelResponse.getData() != null
+                && languageModelResponse.getData().getLike() != null) {
+            return languageModelResponse.getData().getLike();
+        }
+        return "Like";
+    }
+
+    private String getCommentLabel() {
+        if (languageModelResponse != null && languageModelResponse.getData() != null
+                && languageModelResponse.getData().getComment() != null) {
+            return languageModelResponse.getData().getComment();
+        }
+        return "Comment";
+    }
+
+    private String getShareLabel() {
+        if (languageModelResponse != null && languageModelResponse.getData() != null
+                && languageModelResponse.getData().getShare() != null) {
+            return languageModelResponse.getData().getShare();
+        }
+        return "Share";
+    }
+
+    private void bindFullPostEngagementCounts(FullImageActivityHolder holder, int position) {
+        if (holder == null || list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        bindFullPostLikeCount(holder.full_img_like, list.get(position).getLikes(), getLikeLabel());
+        bindFullPostLikeCount(holder.full_img_comment, list.get(position).getComments(), getCommentLabel());
+        bindFullPostLikeCount(holder.full_img_share, list.get(position).getShares(), getShareLabel());
+        bindFullPostLikeCount(holder.full_img_whtsapp, list.get(position).getWhatsappShares(), null);
+    }
+
+    private void bindFullVideoEngagementCounts(
+            TextView likeView,
+            TextView commentView,
+            TextView shareView,
+            @Nullable TextView whatsappView,
+            int position) {
+        if (list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        bindFullPostLikeCount(likeView, list.get(position).getLikes(), getLikeLabel());
+        bindFullPostLikeCount(commentView, list.get(position).getComments(), getCommentLabel());
+        bindFullPostLikeCount(shareView, list.get(position).getShares(), getShareLabel());
+        bindFullPostLikeCount(whatsappView, list.get(position).getWhatsappShares(), null);
+    }
+
+    @NonNull
+    private static String safeBylineText(@Nullable String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String t = raw.trim();
+        if (t.isEmpty() || "null".equalsIgnoreCase(t) || "undefined".equalsIgnoreCase(t)) {
+            return "";
+        }
+        return t;
+    }
+
+    @NonNull
+    private static String displayCopy(@Nullable String raw) {
+        return safeBylineText(raw);
+    }
+
+    private void bindWriterStripIdentity(
+            ModelClass.Datum item,
+            TextView nameView,
+            TextView designationView,
+            TextView timeView) {
+        if (item == null) {
+            return;
+        }
+        if (nameView != null) {
+            String name = AutoNewsBylineHelper.displayWriterName(item.getWriterName());
+            if (TextUtils.isEmpty(name)) {
+                name = "Journalist";
+            }
+            nameView.setText(safeBylineText(name));
+        }
+        if (designationView != null) {
+            String designation =
+                    AutoNewsBylineHelper.displayDesignation(
+                            context, languageModelResponse, item);
+            designation = safeBylineText(designation);
+            if (TextUtils.isEmpty(designation)) {
+                designationView.setText("");
+                designationView.setVisibility(View.GONE);
+            } else {
+                designationView.setText(designation);
+                designationView.setVisibility(View.VISIBLE);
+            }
+        }
+        if (timeView != null) {
+            timeView.setText("");
+            String relative = "";
+            try {
+                Long published = item.getPublishedTime();
+                if (published != null && published > 0L && commonMethods != null) {
+                    relative = commonMethods.getHrsFormatfromDate(published);
+                }
+            } catch (Exception ignored) {
+                relative = "";
+            }
+            relative = safeBylineText(relative);
+            if (TextUtils.isEmpty(relative)) {
+                timeView.setText("");
+                timeView.setVisibility(View.GONE);
+            } else {
+                timeView.setText(relative);
+                timeView.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
+    private static int writerFollowUiState(@Nullable Integer isFollow) {
+        return isFollow != null && isFollow == 1 ? 1 : 0;
+    }
+
+    /** Feed half-video cards: writer strip hidden until product re-enables it. */
+    private static void hideFeedVideoWriterFooter(@Nullable View convertView) {
+        if (convertView == null) {
+            return;
+        }
+        View footer = convertView.findViewById(R.id.ll_footer_layout);
+        if (footer != null) {
+            footer.setVisibility(View.GONE);
+        }
+    }
+
+    private void applyWriterFollowState(
+            LinearLayout followRow,
+            LinearLayout followingRow,
+            TextView followLabel,
+            @Nullable TextView followingLabel,
+            int position) {
+        if (list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        int followState = writerFollowUiState(list.get(position).getIsFollow());
+        if (followingRow != null) {
+            followingRow.setVisibility(View.GONE);
+        }
+        if (followRow != null) {
+            followRow.setVisibility(View.GONE);
+        }
+        if (followState == 0) {
+            if (followRow != null) followRow.setVisibility(View.VISIBLE);
+            if (followLabel != null) followLabel.setText("Follow");
+        } else {
+            if (followingRow != null) followingRow.setVisibility(View.VISIBLE);
+            if (followingLabel != null) followingLabel.setText("Following");
+        }
+    }
+
+    /** Writer profile screen from feed row JSON only (no per-card get_writer_profile). */
+    private void openWriterProfileFromFeed(int position) {
+        if (list == null || position < 0 || position >= list.size()) {
+            return;
+        }
+        ModelClass.Datum item = list.get(position);
+        if (item == null || item.getWriterId() == null) {
+            return;
+        }
+        if (getApplicationContext() != null
+                && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
+            WriterProfileActivity.launchFromFeed(context, item);
+        }
+    }
+
+    private void bindFullImageAvatarPlus(int position) {
+        if (fullImageActivity.user_pic != null) {
+            AvatarImageHelper.loadUil(
+                    imageLoader, fullImageActivity.user_pic, list.get(position).getWriterProfile());
+        }
+        if (fullImageActivity.varified_btn != null) {
+            int followState = list.get(position).getIsFollow() != null
+                    ? list.get(position).getIsFollow() : 0;
+            if (followState == 0) {
+                fullImageActivity.varified_btn.setImageResource(R.drawable.ic_add_profile_icon);
+                fullImageActivity.varified_btn.setVisibility(View.VISIBLE);
+            } else {
+                fullImageActivity.varified_btn.setVisibility(View.GONE);
+            }
+        }
     }
 
     /**
@@ -1870,10 +2068,32 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         //return position;
         try {
             ModelClass.Datum album = list.get(position);
-            return (album.getPostId());
+            if (album == null) {
+                return -(position + 1L);
+            }
+            String pt = album.getPostType();
+            if (pt != null) {
+                if (pt.equalsIgnoreCase("ad")) {
+                    Integer req = album.getAd_req_position();
+                    if (req != null && req > 0) {
+                        return 900_000_000L + req;
+                    }
+                    return 800_000_000L + position;
+                }
+                if (pt.equalsIgnoreCase("share_app")
+                        || pt.equalsIgnoreCase("ratings")
+                        || pt.equalsIgnoreCase("feed_end")) {
+                    return 700_000_000L + position;
+                }
+            }
+            Long pid = album.getPostId();
+            if (pid == null || pid <= 0L) {
+                return -(position + 1L);
+            }
+            return pid;
         } catch (Exception e) {
             e.printStackTrace();
-            return 0;
+            return -(position + 1L);
         }
     }
 
@@ -2113,6 +2333,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             layoutParent.getLayoutParams().height = screenHeight;
                             final FrameLayout fl_adplaceholder = convertView.findViewById(R.id.fl_adplaceholder);
                             fl_adplaceholder.setVisibility(VISIBLE);
+                            fl_adplaceholder.setBackgroundColor(0);
+                            fl_adplaceholder.removeAllViews();
                             bindAdsScreenCompanion(convertView, position);
                             adapterCallback.closeBottomStrip(true);
                             View myView = LayoutInflater.from(context).inflate(R.layout.custom_ad_native, null);
@@ -2176,14 +2398,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     }, 500);
 
                                 } else {
-                                    showLog("SHARE #1");
-                                    convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
-                                    showShareScreen(convertView);
+                                    showLog("ads_screen: native no-fill — keep Way2 placeholder");
                                 }
                             } else {
-                                showLog("SHARE #2");
-                                convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
-                                showShareScreen(convertView);
+                                showLog("ads_screen: native pool empty — keep Way2 placeholder");
                             }
                         } else {
                             convertView = inflater.inflate(R.layout.fb_ad_post, parent, false);
@@ -2214,14 +2432,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                         }
                                     }, 500);
                                 } else {
-                                    showLog(" fb ad with share:");
-                                    convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
-                                    showShareScreen(convertView);
+                                    showLog("ads_screen: fb no-fill — keep Way2 placeholder");
                                 }
                             } else {
-                                showLog(" fb ad with share:");
-                                convertView = inflater.inflate(R.layout.share_app_layout, parent, false);
-                                showShareScreen(convertView);
+                                showLog("ads_screen: fb pool empty — keep Way2 placeholder");
                             }
                         }
                         break;
@@ -2395,7 +2609,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         // added to increase speed in view pager
                         viewpager.setOffscreenPageLimit(list.get(position).getImages().size() - 1);
                         imageGallaryHolder.indicator.setViewPager(viewpager);
-                        imageGallaryHolder.strip_text_name.setText("" + list.get(position).getStrip_content());
+                        imageGallaryHolder.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
                         applyFeedStripFont(imageGallaryHolder.strip_text_name);
                         View finalConvertView = convertView;
                         imageGallaryHolder.imageViewShareClose.setOnClickListener(new View.OnClickListener() {
@@ -3116,7 +3330,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public void showMagazineShareOptions(View convertView,int from){
-        fromWhatsapp=true;
+        fromWhatsapp = false;
         final RelativeLayout relativeLayoutShareOpt = convertView.findViewById(R.id.relativeLayoutShareOpt);
         relativeLayoutShareOpt.setVisibility(VISIBLE);
     }
@@ -3234,7 +3448,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 //
 //    }
     /**
-     * Ads screen: Advertise → admin WhatsApp; up to 3 flash/push rows ABOVE NativeAd.
+     * Ads screen (Way2): Advertise → native (300dp) → Recommended News → 3 flash rows below.
      * Rows stay outside {@code fl_adplaceholder} / NativeAdView (AdMob-safe).
      */
     private void bindAdsScreenCompanion(@Nullable View convertView, int adPosition) {
@@ -3242,15 +3456,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             return;
         }
         try {
+            convertView.setTag(R.id.tag_ad_seat_feed_index, adPosition);
+            bindAdsScreenTopFlashSlots(convertView);
             View title = convertView.findViewById(R.id.ad_recommended_title);
-            if (title != null) {
-                title.setVisibility(GONE);
-            }
             TextView advertise = convertView.findViewById(R.id.ad_feed_advertise_link);
             if (advertise != null) {
                 advertise.setOnClickListener(
                         v ->
-                                ContactUsChooser.openWhatsApp(
+                                ContactUsChooser.openAdvertiseOnAnyNewsWhatsApp(
                                         context,
                                         context.getString(R.string.ad_center_advertise_prefill)));
             }
@@ -3262,9 +3475,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             java.util.ArrayList<ModelClass.Datum> slots = collectAdsScreenFlashSlots(adPosition);
             if (slots.isEmpty()) {
                 slotHost.setVisibility(GONE);
+                if (title != null) {
+                    title.setVisibility(GONE);
+                }
+                adsScreenOverlayPick.remove(adPosition);
                 return;
             }
+            if (title != null) {
+                title.setVisibility(VISIBLE);
+            }
             slotHost.setVisibility(VISIBLE);
+            ModelClass.Datum selected = adsScreenOverlayPick.get(adPosition);
+            if (!isAdsScreenOpenableCompanion(selected)) {
+                selected = null;
+                for (ModelClass.Datum probe : slots) {
+                    if (isAdsScreenOpenableCompanion(probe)) {
+                        selected = probe;
+                        adsScreenOverlayPick.put(adPosition, probe);
+                        break;
+                    }
+                }
+            }
             LayoutInflater inf = LayoutInflater.from(context);
             for (int i = 0; i < slots.size(); i++) {
                 final ModelClass.Datum item = slots.get(i);
@@ -3272,6 +3503,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     continue;
                 }
                 View row = inf.inflate(R.layout.item_feed_ad_recommended, slotHost, false);
+                row.setTag(R.id.tag_ad_companion_datum, item);
+                final boolean rowSelected =
+                        selected != null
+                                && item.getTitle() != null
+                                && selected.getTitle() != null
+                                && item.getTitle().equals(selected.getTitle());
+                applyAdsScreenCompanionRowSelected(row, rowSelected);
                 TextView rowTitle = row.findViewById(R.id.ad_rec_title);
                 ImageView thumb = row.findViewById(R.id.ad_rec_thumb);
                 if (rowTitle != null) {
@@ -3295,11 +3533,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 row.setOnClickListener(
                         v -> {
-                            Long pid = item.getPostId();
-                            if (pid != null && pid > 0L && callbacks != null) {
+                            highlightAdsScreenCompanionRow(slotHost, row);
+                            adsScreenOverlayPick.put(adPosition, item);
+                            if (callbacks != null) {
                                 callbacks.openAdScreenArticleOverlay(item);
-                            } else if (callbacks != null) {
-                                callbacks.openFlashNewsFromFeedChip();
                             }
                         });
                 slotHost.addView(row);
@@ -3312,6 +3549,134 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
+    /** Flash headline strip at top of ad page — reserved when empty. */
+    private void bindAdsScreenTopFlashSlots(@Nullable View convertView) {
+        if (convertView == null) {
+            return;
+        }
+        LinearLayout top = convertView.findViewById(R.id.ad_top_flash_slots);
+        if (top == null) {
+            return;
+        }
+        top.removeAllViews();
+        String[] heads = DailyUpdatesConfigHelper.flashHeadlines(context);
+        boolean any = false;
+        if (heads != null) {
+            LayoutInflater inf = LayoutInflater.from(context);
+            for (int i = 0; i < heads.length && i < 3; i++) {
+                String h = heads[i] != null ? heads[i].trim() : "";
+                if (TextUtils.isEmpty(h)) {
+                    continue;
+                }
+                TextView row = new TextView(context);
+                row.setText(h);
+                row.setTextColor(0xFFE8E8E8);
+                row.setTextSize(13f);
+                row.setTypeface(row.getTypeface(), Typeface.BOLD);
+                row.setMaxLines(2);
+                row.setEllipsize(TextUtils.TruncateAt.END);
+                LinearLayout.LayoutParams lp =
+                        new LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.WRAP_CONTENT);
+                if (i > 0) {
+                    lp.topMargin =
+                            (int) (6 * context.getResources().getDisplayMetrics().density);
+                }
+                row.setLayoutParams(lp);
+                top.addView(row);
+                any = true;
+            }
+        }
+        top.setVisibility(VISIBLE);
+        if (!any) {
+            top.setMinimumHeight(
+                    (int) (56 * context.getResources().getDisplayMetrics().density));
+        }
+    }
+
+    private static void applyAdsScreenCompanionRowSelected(@NonNull View row, boolean selected) {
+        row.setBackgroundColor(selected ? 0xFF353535 : 0xFF252525);
+    }
+
+    private static void highlightAdsScreenCompanionRow(
+            @NonNull LinearLayout slotHost, @NonNull View selectedRow) {
+        for (int i = 0; i < slotHost.getChildCount(); i++) {
+            View child = slotHost.getChildAt(i);
+            applyAdsScreenCompanionRowSelected(child, child == selectedRow);
+        }
+    }
+
+    private static boolean isAdsScreenOpenableCompanion(@Nullable ModelClass.Datum item) {
+        if (item == null || TextUtils.isEmpty(item.getTitle())) {
+            return false;
+        }
+        Long pid = item.getPostId();
+        return pid != null && pid > 0L;
+    }
+
+    /**
+     * Companion row for ad-seat flip-up / pill tap — selected row or first openable slot.
+     * Does not splice or move the main FlipView index.
+     */
+    @Nullable
+    public ModelClass.Datum getAdsScreenOverlayDatum(int adPosition) {
+        ModelClass.Datum picked = adsScreenOverlayPick.get(adPosition);
+        if (isAdsScreenOpenableCompanion(picked)) {
+            return picked;
+        }
+        java.util.ArrayList<ModelClass.Datum> slots = collectAdsScreenFlashSlots(adPosition);
+        for (ModelClass.Datum item : slots) {
+            if (isAdsScreenOpenableCompanion(item)) {
+                adsScreenOverlayPick.put(adPosition, item);
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Feed index for overlay — reuses the same {@link #getView(int, View, ViewGroup)} path as flip.
+     */
+    public int resolveFeedIndexForOverlay(@NonNull ModelClass.Datum datum) {
+        if (list == null || list.isEmpty()) {
+            return -1;
+        }
+        try {
+            Long pid = datum.getPostId();
+            if (pid != null && pid > 0L) {
+                for (int i = 0; i < list.size(); i++) {
+                    ModelClass.Datum d = list.get(i);
+                    if (d != null && pid.equals(d.getPostId())) {
+                        return i;
+                    }
+                }
+            }
+            String title = datum.getTitle();
+            if (!TextUtils.isEmpty(title)) {
+                ModelClass.Datum match = findInMemoryPostByTitle(title.trim(), -1);
+                if (match != null) {
+                    for (int i = 0; i < list.size(); i++) {
+                        if (list.get(i) == match) {
+                            return i;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return -1;
+    }
+
+    /**
+     * Full flip card for ad-screen companion tap — not the title-only overlay layout.
+     */
+    @Nullable
+    public View createAdOverlayArticleView(@NonNull ViewGroup parent, @NonNull ModelClass.Datum datum) {
+        // Use slide-up overlay fallback only — never rebind FlipView via getView().
+        return null;
+    }
+
     /**
      * Prefer splash flash headlines (already in prefs) enriched with in-memory feed
      * thumbs/ids. No extra List_All. Hide when empty.
@@ -3320,7 +3685,17 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     private java.util.ArrayList<ModelClass.Datum> collectAdsScreenFlashSlots(int adPosition) {
         java.util.ArrayList<ModelClass.Datum> out = new java.util.ArrayList<>();
         try {
+            java.util.HashSet<Long> visibleIds = collectFeedPostIdsThroughSeat(adPosition);
+            java.util.HashSet<Long> pickedIds = new java.util.HashSet<>();
+            java.util.HashSet<String> flashTitles = new java.util.HashSet<>();
             String[] heads = DailyUpdatesConfigHelper.flashHeadlines(context);
+            if (heads != null) {
+                for (String head : heads) {
+                    if (!TextUtils.isEmpty(head)) {
+                        flashTitles.add(head.trim().toLowerCase(Locale.US));
+                    }
+                }
+            }
             if (heads != null && heads.length > 0) {
                 for (int i = 0; i < heads.length && out.size() < 3; i++) {
                     String h = heads[i] != null ? heads[i].trim() : "";
@@ -3328,33 +3703,103 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         continue;
                     }
                     ModelClass.Datum match = findInMemoryPostByTitle(h, adPosition);
-                    if (match != null) {
+                    if (match != null
+                            && canUseAdsScreenFlashCompanion(match, visibleIds, pickedIds)) {
                         out.add(match);
-                    } else {
+                        rememberAdsScreenPickedId(pickedIds, match);
+                    } else if (match == null) {
                         ModelClass.Datum stub = new ModelClass.Datum();
                         stub.setTitle(h);
                         out.add(stub);
                     }
                 }
-                return out;
+                if (!out.isEmpty()) {
+                    return out;
+                }
             }
-            // No splash flash pack — last 3 content cards already above this ad seat.
             if (list == null || list.isEmpty()) {
                 return out;
             }
-            for (int i = Math.min(adPosition, list.size()) - 1; i >= 0 && out.size() < 3; i--) {
-                ModelClass.Datum d = list.get(i);
-                if (d == null || isNonContentFlipItem(d)) {
-                    continue;
-                }
-                if (TextUtils.isEmpty(d.getTitle())) {
-                    continue;
-                }
-                out.add(0, d);
+            collectForwardAdsScreenFlashSlots(
+                    adPosition, out, visibleIds, pickedIds, flashTitles, !flashTitles.isEmpty());
+            if (out.size() < 3) {
+                collectForwardAdsScreenFlashSlots(
+                        adPosition, out, visibleIds, pickedIds, flashTitles, false);
             }
         } catch (Exception ignored) {
         }
         return out;
+    }
+
+    @NonNull
+    private java.util.HashSet<Long> collectFeedPostIdsThroughSeat(int adPosition) {
+        java.util.HashSet<Long> ids = new java.util.HashSet<>();
+        if (list == null || list.isEmpty() || adPosition < 0) {
+            return ids;
+        }
+        int last = Math.min(adPosition, list.size() - 1);
+        for (int i = 0; i <= last; i++) {
+            ModelClass.Datum d = list.get(i);
+            if (d == null) {
+                continue;
+            }
+            Long pid = d.getPostId();
+            if (pid != null && pid > 0L) {
+                ids.add(pid);
+            }
+        }
+        return ids;
+    }
+
+    private void collectForwardAdsScreenFlashSlots(
+            int adPosition,
+            @NonNull java.util.ArrayList<ModelClass.Datum> out,
+            @NonNull java.util.HashSet<Long> visibleIds,
+            @NonNull java.util.HashSet<Long> pickedIds,
+            @NonNull java.util.HashSet<String> flashTitles,
+            boolean requireFlashTitle) {
+        if (list == null) {
+            return;
+        }
+        for (int i = adPosition + 1; i < list.size() && out.size() < 3; i++) {
+            ModelClass.Datum d = list.get(i);
+            if (!canUseAdsScreenFlashCompanion(d, visibleIds, pickedIds)) {
+                continue;
+            }
+            if (requireFlashTitle && !flashTitles.isEmpty()) {
+                String title = d.getTitle();
+                if (TextUtils.isEmpty(title)
+                        || !flashTitles.contains(title.trim().toLowerCase(Locale.US))) {
+                    continue;
+                }
+            }
+            out.add(d);
+            rememberAdsScreenPickedId(pickedIds, d);
+        }
+    }
+
+    private static boolean canUseAdsScreenFlashCompanion(
+            @Nullable ModelClass.Datum d,
+            @NonNull java.util.HashSet<Long> visibleIds,
+            @NonNull java.util.HashSet<Long> pickedIds) {
+        if (d == null || isNonContentFlipItem(d) || TextUtils.isEmpty(d.getTitle())) {
+            return false;
+        }
+        Long pid = d.getPostId();
+        if (pid != null && pid > 0L) {
+            if (visibleIds.contains(pid) || pickedIds.contains(pid)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void rememberAdsScreenPickedId(
+            @NonNull java.util.HashSet<Long> pickedIds, @NonNull ModelClass.Datum d) {
+        Long pid = d.getPostId();
+        if (pid != null && pid > 0L) {
+            pickedIds.add(pid);
+        }
     }
 
     @Nullable
@@ -3449,6 +3894,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 adView.setNativeAd(ad);
                 parent.removeAllViews();
                 // Place the AdView into the parent.[;
+                parent.setVisibility(VISIBLE);
                 parent.addView(adView);
                 showLog("AD #10");
             }
@@ -3566,6 +4012,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     // Ensure that the parent view doesn't already contain an ad view.
                     parent.removeAllViews();
                     // Place the AdView into the parent.[;
+                    parent.setVisibility(VISIBLE);
                     parent.addView(nativeAdView);
                     showLog("AD #10");
 
@@ -3636,6 +4083,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 // Ensure that the parent view doesn't already contain an ad view.
                 parent.removeAllViews();
                 // Place the AdView into the parent.[;
+                parent.setVisibility(VISIBLE);
                 parent.addView(adView);
                 showLog("AD #10");
             }
@@ -3769,10 +4217,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 intent.putExtra(Intent.EXTRA_SUBJECT, mInvitationUrl.toString());
                 intent.putExtra(Intent.EXTRA_TEXT, msg);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                if(fromWhatsapp){
-                    intent.setType("text/plain");
-                    intent.setPackage("com.whatsapp");
-                }
 
                 Bitmap b = ScreenShott.getInstance().takeScreenShotOfView(magzine_relative_slider);
 
@@ -3834,12 +4278,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         final LinearLayout share_for_video_ll = convertView.findViewById(R.id.share_for_video);
         final LinearLayout full_image_whatsapp = convertView.findViewById(R.id.full_image_whatsapp);
         fullVideoNewYoutubeViewHolder.full_image_whatsapp_bg.setImageResource(R.drawable.ic_whatsapp_original1);
-        if (languageModelResponse != null && languageModelResponse.getData() != null) {
-            fullVideoNewYoutubeViewHolder.full_video_like.setText(" " + languageModelResponse.getData().getLike());
-            fullVideoNewYoutubeViewHolder.full_video_dislike.setText(" " + languageModelResponse.getData().getDislike());
-            fullVideoNewYoutubeViewHolder.full_video_share.setText(" " + languageModelResponse.getData().getShare());
-            fullVideoNewYoutubeViewHolder.full_video_comment.setText(" " + languageModelResponse.getData().getComment());
-        }
+        bindFullVideoEngagementCounts(
+                fullVideoNewYoutubeViewHolder.full_video_like,
+                fullVideoNewYoutubeViewHolder.full_video_comment,
+                fullVideoNewYoutubeViewHolder.full_video_share,
+                convertView.findViewById(R.id.full_img_whtsapp_text),
+                position);
         final ImageView imageViewYoutubePlayVideo = convertView.findViewById(R.id.imageViewPlayVideo);
         RelativeLayout layoutYoutubeFullView = convertView.findViewById(R.id.layoutYoutubeFullView);
         final YouTubePlayerView youTubePlayerView = convertView.findViewById(R.id.youtube_full_video);
@@ -3872,11 +4316,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         fullVideoNewYoutubeViewHolder.user_pic.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent intent = new Intent(context, WriterProfileActivity.class);
-                intent.putExtra("EXTRA_SESSION_ID", list.get(position).getWriterId().toString());
-                if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(intent);
-                }
+                openWriterProfileFromFeed(position);
 
             }
         });
@@ -4154,12 +4594,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         full_videoViewHolder.full_image_whatsapp_bg = convertView.findViewById(R.id.full_image_whatsapp_bg);
         full_videoViewHolder.user_pic = convertView.findViewById(R.id.user_pic);
         full_videoViewHolder.like_for_video_image = convertView.findViewById(R.id.like_for_video_image);
-        if (languageModelResponse != null && languageModelResponse.getData() != null) {
-            full_videoViewHolder.full_video_like.setText(" " + languageModelResponse.getData().getLike());
-            full_videoViewHolder.full_video_dislike.setText(" " + languageModelResponse.getData().getDislike());
-            full_videoViewHolder.full_video_share.setText(" " + languageModelResponse.getData().getShare());
-            full_videoViewHolder.full_video_comment.setText(" " + languageModelResponse.getData().getComment());
-        }
+        bindFullVideoEngagementCounts(
+                full_videoViewHolder.full_video_like,
+                full_videoViewHolder.full_video_comment,
+                full_videoViewHolder.full_video_share,
+                convertView.findViewById(R.id.full_img_whtsapp_text),
+                position);
 
         full_videoViewHolder.full_image_whatsapp_bg.setImageResource(R.drawable.ic_whatsapp_original1);
 
@@ -4200,7 +4640,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
             simpleExoPlayerViewFull.setVisibility(View.GONE);
             showLeanExoIdlePoster(thaumbnail_for_video, imageViewExoVideoPlayVideo,
-                    list.get(position).getThumbnail());
+                    StatusVideoMedia.resolveThumbnailUrl(list.get(position)));
             if (progress_bar_for_video != null) {
                 progress_bar_for_video.setVisibility(View.GONE);
             }
@@ -4228,13 +4668,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         full_videoViewHolder.user_pic.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                showLog("EXTRA_SESSION_ID::::"+list.get(position).getWriterId().toString());
-                Intent intent = new Intent(context, WriterProfileActivity.class);
-                intent.putExtra("EXTRA_SESSION_ID", list.get(position).getWriterId().toString());
-                if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(intent);
-                }
-
+                openWriterProfileFromFeed(position);
             }
         });
         if (list.get(position).getLikeStatus() != null && list.get(position).getLikeStatus() == 1) {
@@ -4249,7 +4683,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             public void onClick(View view) {
                 fullscreen = false;
                 mute_button.setImageResource(ic__volume_up);
-                String videoUrl = list.get(position).getVideoUrl();
+                String videoUrl = StatusVideoMedia.resolveStreamUrl(list.get(position));
+                if (TextUtils.isEmpty(videoUrl)) {
+                    videoUrl = list.get(position).getVideoUrl();
+                }
                 if (TextUtils.isEmpty(videoUrl)) {
                     Toast.makeText(context, "Video is not available", Toast.LENGTH_SHORT).show();
                     return;
@@ -4278,7 +4715,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 imageViewExoVideoPlayVideo.setVisibility(View.GONE);
                 thaumbnail_for_video.setVisibility(View.VISIBLE);
                 progress_bar_for_video.setVisibility(View.VISIBLE);
-                showLeanExoIdlePoster(thaumbnail_for_video, null, list.get(position).getThumbnail());
+                showLeanExoIdlePoster(thaumbnail_for_video, null,
+                        StatusVideoMedia.resolveThumbnailUrl(list.get(position)));
                 imageViewExoVideoPlayVideo.setVisibility(View.GONE);
                 simpleExoPlayerViewFull.setVisibility(View.VISIBLE);
                 if (exoPlayer != null) {
@@ -4290,11 +4728,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 exoPlayer = new ExoPlayer.Builder(context).build();
                 simpleExoPlayerViewFull.setPlayer(exoPlayer);
                 simpleExoPlayerViewFull.setResizeMode(RESIZE_MODE_FIT);
-                DefaultDataSource.Factory defaultDataSourceFactory = new DefaultDataSource.Factory(context);
-                mediaSource = new ProgressiveMediaSource.Factory(defaultDataSourceFactory)
-                        .createMediaSource(MediaItem.fromUri(videoUrl));
-
-                exoPlayer.prepare(mediaSource);
+                prepareFeedExoPlayer(exoPlayer, videoUrl);
                 exoPlayer.setPlayWhenReady(true);
                 full_videoViewHolder.side_menu = finalConvertViewFull.findViewById(R.id.video_side_menu);
                 if (full_videoViewHolder.side_menu != null) {
@@ -4498,11 +4932,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         fullImageActivity.strip_logo = convertView.findViewById(R.id.share_download_app_logo);
         fullImageActivity.varified_btn = convertView.findViewById(R.id.varified_btn);
 
-        fullImageActivity.user_pic.setImageResource(R.drawable.ic_user_profile);
-        fullImageActivity.varified_btn.setImageResource(R.drawable.ic_add_profile_icon);
+        bindFullImageAvatarPlus(position);
         fullImageActivity.full_image_comment_bg.setImageResource(R.drawable.chatbox);
         fullImageActivity.full_image_whatsapp_bg.setImageResource(R.drawable.ic_whatsapp_original1);
         fullImageActivity.full_image_share_bg.setImageResource(R.drawable.ic_share_full);
+        fullImageActivity.full_image_share_bg.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        fullImageActivity.full_image_share_bg.setBackground(null);
         fullImageActivity.share_download_app_logo.setImageResource(R.drawable.ic_download_now_icon);
         fullImageActivity.strip_logo.setImageResource(R.drawable.ic_logo_strip_icon);
         fullImageActivity.full_image_view_details = convertView.findViewById(R.id.full_image_view_details);
@@ -4519,38 +4954,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         fullImageActivity.user_pic.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent intent = new Intent(context, WriterProfileActivity.class);
-                intent.putExtra("EXTRA_SESSION_ID", list.get(position).getWriterId().toString());
-                if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(intent);
-                }
+                openWriterProfileFromFeed(position);
 
             }
         });
 
 
-        fullImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+        fullImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
         applyFeedStripFont(fullImageActivity.strip_text_name);
         fullImageActivity.full_img_like = convertView.findViewById(R.id.full_img_like_text);
         fullImageActivity.full_img_share = convertView.findViewById(R.id.full_image_share_text);
         fullImageActivity.full_img_whtsapp = convertView.findViewById(R.id.full_img_whtsapp_text);
         fullImageActivity.full_img_comment = convertView.findViewById(R.id.full_img_comment_txt);
-
-//                        Set Text
-        fullImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
-        if (languageModelResponse != null && languageModelResponse.getData() != null) {
-            fullImageActivity.full_img_like.setText(" " + languageModelResponse.getData().getLike());
-            fullImageActivity.full_img_whtsapp.setText(" " + languageModelResponse.getData().getWhatsapp());
-            fullImageActivity.full_img_share.setText(" " + languageModelResponse.getData().getShare());
-            fullImageActivity.full_img_comment.setText(" " + languageModelResponse.getData().getComment());
-            showLog("sree" + languageModelResponse.getData().getWhatsapp());
-        }
-
+        bindFullPostEngagementCounts(fullImageActivity, position);
 
         final LinearLayout full_image_like = convertView.findViewById(R.id.full_image_like);
         fullImageActivity.full_image_whatsapp = convertView.findViewById(R.id.full_image_whatsapp);
         fullImageActivity.full_image_share = convertView.findViewById(R.id.full_image_share);
         fullImageActivity.full_image_comment = convertView.findViewById(R.id.full_image_comment);
+        if (fullImageActivity.full_image_share != null) {
+            fullImageActivity.full_image_share.setVisibility(View.VISIBLE);
+        }
 
 
         final ImageView full_image_selected_like = convertView.findViewById(R.id.full_image_selected_like);
@@ -4589,10 +5013,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         });
         showLog("like status:"+list.get(position).getLikeStatus());
 
+        final TextView likeCountViewRef = convertView.findViewById(R.id.full_img_like_text);
+        full_image_like.setTag(position);
         full_image_like.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                int newStatus = applyLikeChange(position, null);
+                int pos = view.getTag() instanceof Integer ? (Integer) view.getTag() : position;
+                int newStatus = applyLikeChange(pos, likeCountViewRef);
                 if (newStatus == 1) full_image_selected_like.setImageResource(ic_like_half_selected1);
                 else full_image_selected_like.setImageResource(ic_like_half1);
             }
@@ -4865,7 +5292,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         showLog("ll_footer_layout:::"+halfImageActivity.ll_footer_layout.getVisibility());
         halfImageActivity.ll_footer_layout.setVisibility(VISIBLE);
         halfImageActivity.parent_layout = convertView.findViewById(R.id.parent_layout);
-        halfImageActivity.writer_profile_pic.setImageResource(R.drawable.ic_user_profile);
+        AvatarImageHelper.loadUil(
+                imageLoader,
+                halfImageActivity.writer_profile_pic,
+                list.get(position).getWriterProfile());
         halfImageActivity.app_download_logo.setImageResource(R.drawable.ic_download_now_icon);
         halfImageActivity.writer_time = convertView.findViewById(R.id.writer_time);
         halfImageActivity.writer_designation = convertView.findViewById(R.id.writer_designation);
@@ -4882,6 +5312,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfImageActivity.writer_follow = convertView.findViewById(R.id.writer_follow);
         halfImageActivity.writer_follower = convertView.findViewById(R.id.writer_follower);
         final TextView test_folloew = convertView.findViewById(R.id.test_folloew);
+        final TextView followingLabel = convertView.findViewById(R.id.second_language_name);
         halfImageActivity.writer_time = convertView.findViewById(R.id.writer_time);
         halfImageActivity.writer_designation = convertView.findViewById(R.id.writer_designation);
         halfImageActivity.writer_time = convertView.findViewById(R.id.writer_time);
@@ -4900,29 +5331,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfImageActivity.half_share_icon = convertView.findViewById(R.id.half_share_icon);
         halfImageActivity.report_icon = convertView.findViewById(R.id.report_icon);
         halfImageActivity.with_strip_layout.setBackgroundResource(R.drawable.ic_half_image_strike_icon);
-        TextView textViewWebUrl=convertView.findViewById(R.id.textViewWebUrl);
-        TextView textViewStripWebUrl=convertView.findViewById(R.id.textViewStripWebUrl);
-        showLog("webURl:"+list.get(position).getWeb_url());
-        if(list.get(position).getWeb_url()!=null && !list.get(position).getWeb_url().equalsIgnoreCase("")){
-            textViewWebUrl.setText(list.get(position).getWeb_url().replace("https://",""));
-            textViewStripWebUrl.setText(list.get(position).getWeb_url().replace("https://",""));
-
-        } else {
-            textViewWebUrl.setText("");
-            textViewStripWebUrl.setText("");
-        }
-        textViewWebUrl.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if(list.get(position).getWeb_url()==null) return;
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(list.get(position).getWeb_url()));
-                context.startActivity(browserIntent);
-            }
-        });
+        TextView textViewWebUrl = convertView.findViewById(R.id.textViewWebUrl);
+        TextView textViewStripWebUrl = convertView.findViewById(R.id.textViewStripWebUrl);
+        bindFeedWebUrlPill(textViewWebUrl, textViewStripWebUrl, list.get(position), false);
 
         bindHalfPostEngagementCounts(convertView, position);
         bindArticleTtsSpeaker(convertView, position);
 
+        bindWriterStripIdentity(
+                list.get(position),
+                halfImageActivity.writer_name,
+                halfImageActivity.writer_designation,
+                halfImageActivity.writer_time);
         try {
             WriterStripStyleHelper.apply(
                     context,
@@ -4963,9 +5383,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             halfImageActivity.tamil_half_content_description.setVisibility(View.VISIBLE);
             halfImageActivity.tamil_half_content_title.setVisibility(View.VISIBLE);
 
-            halfImageActivity.tamil_half_content_description.setText("" + list.get(position).getDescription());
-            halfImageActivity.tamil_half_content_title.setText("" + list.get(position).getTitle());
-            halfImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            halfImageActivity.tamil_half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            halfImageActivity.tamil_half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             showLog("Content Description TAMIL: "+halfImageActivity.tamil_half_content_description.getText().toString());
             applyFeedArticleFonts(
                     halfImageActivity.tamil_half_content_title,
@@ -4982,9 +5402,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             halfImageActivity.english_half_content_description.setVisibility(View.VISIBLE);
             halfImageActivity.english_half_content_title.setVisibility(View.VISIBLE);
 
-            halfImageActivity.english_half_content_description.setText("" + list.get(position).getDescription());
-            halfImageActivity.english_half_content_title.setText("" + list.get(position).getTitle());
-            halfImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            halfImageActivity.english_half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            halfImageActivity.english_half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             showLog("Content Description ENG : "+halfImageActivity.english_half_content_description.getText().toString());
             applyFeedArticleFonts(
                     halfImageActivity.english_half_content_title,
@@ -4999,9 +5419,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             halfImageActivity.half_content_title.setVisibility(View.GONE);
             halfImageActivity.half_content_description.setVisibility(View.VISIBLE);
             halfImageActivity.half_content_title.setVisibility(View.VISIBLE);
-            halfImageActivity.half_content_description.setText("" +list.get(position).getDescription());
-            halfImageActivity.half_content_title.setText("" + list.get(position).getTitle());
-            halfImageActivity.strip_text_name.setText("" + list.get(position).getStrip_content());
+            halfImageActivity.half_content_description.setText(displayCopy(list.get(position).getDescription()));
+            halfImageActivity.half_content_title.setText(displayCopy(list.get(position).getTitle()));
+            halfImageActivity.strip_text_name.setText(displayCopy(list.get(position).getStrip_content()));
             showLog("Content Description HALF: "+halfImageActivity.half_content_description.getText().toString());
             applyFeedArticleFonts(
                     halfImageActivity.half_content_title,
@@ -5073,27 +5493,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             halfImageActivity.half_image_like_icon.setOnClickListener(halfLikeClick);
         }
         showLog("Check Point Adapter:: 6");
-        halfImageActivity.writer_name.setText("" + list.get(position).getWriterName());
-
-        halfImageActivity.writer_designation.setText("" + list.get(position).getRole());
-
-        halfImageActivity.writer_time.setText("" + commonMethods.getHrsFormatfromDate(list.get(position).getPublishedTime()));
-
-        if (list.get(position).getIsFollow() == 0) {
-
-            halfImageActivity.writer_follower.setVisibility(View.GONE);
-            halfImageActivity.writer_follow.setVisibility(View.VISIBLE);
-
-            test_folloew.setText("Follow");
-
-        } else {
-
-            halfImageActivity.writer_follower.setVisibility(View.VISIBLE);
-            halfImageActivity.writer_follow.setVisibility(View.GONE);
-
-            test_folloew.setText("Following");
-
-        }
+        applyWriterFollowState(
+                halfImageActivity.writer_follow,
+                halfImageActivity.writer_follower,
+                test_folloew,
+                followingLabel,
+                position);
         showLog("Check Point Adapter:: 7");
         // Must run after bindLocationPill so Rewards/Flash never fall through to Local.
         bindDistrictOrRewardsClick(
@@ -5393,11 +5798,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                 LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
 
-                if (list.get(position).getIsFollow() == 0) {
+                if (writerFollowUiState(list.get(position).getIsFollow()) == 0) {
 
                     halfImageActivity.writer_follow.setVisibility(View.GONE);
                     halfImageActivity.writer_follower.setVisibility(View.VISIBLE);
                     test_folloew.setText("Following");
+                    list.get(position).setIsFollow(1);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 1);
 
@@ -5407,6 +5813,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     halfImageActivity.writer_follow.setVisibility(View.VISIBLE);
                     halfImageActivity.writer_follower.setVisibility(View.GONE);
                     test_folloew.setText("Follow");
+                    list.get(position).setIsFollow(0);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 0);
 
@@ -5428,11 +5835,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                 LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
 
-                if (list.get(position).getIsFollow() == 0) {
+                if (writerFollowUiState(list.get(position).getIsFollow()) == 0) {
 
                     halfImageActivity.writer_follow.setVisibility(View.GONE);
                     halfImageActivity.writer_follower.setVisibility(View.VISIBLE);
                     test_folloew.setText("Following");
+                    list.get(position).setIsFollow(1);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 1);
 
@@ -5442,6 +5850,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     halfImageActivity.writer_follow.setVisibility(View.VISIBLE);
                     halfImageActivity.writer_follower.setVisibility(View.GONE);
                     test_folloew.setText("Follow");
+                    list.get(position).setIsFollow(0);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 0);
 
@@ -5454,11 +5863,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfImageActivity.writer_profile_pic.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(getApplicationContext(), WriterProfileActivity.class);
-                intent.putExtra("EXTRA_SESSION_ID", list.get(position).getWriterId().toString());
-                if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(intent);
-                }
+                openWriterProfileFromFeed(position);
 
             }
         });
@@ -5655,41 +6060,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfVideoExoPlayerHolder.writer_follow = convertView.findViewById(R.id.writer_follow);
         halfVideoExoPlayerHolder.writer_follower = convertView.findViewById(R.id.writer_follower);
         final TextView test_folloew = convertView.findViewById(R.id.test_folloew);
+        final TextView followingLabel = convertView.findViewById(R.id.second_language_name);
         halfVideoExoPlayerHolder.ll_refer_and_earn_halfy = convertView.findViewById(R.id.ll_refer_and_earn_half);
         halfVideoExoPlayerHolder.iv_share_and_earn = convertView.findViewById(R.id.iv_share_and_earn);
         halfVideoExoPlayerHolder.my_feed = convertView.findViewById(R.id.my_feed);
-        halfVideoExoPlayerHolder.parent_layout.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (layoutParentReportDetails.isShown() || layoutParentReportDetails.getVisibility() == View.VISIBLE) {
-
-                    layoutParentReportDetails.setVisibility(View.GONE);
-                    Logone.e("fullimageadapter", "click gone");
-                    //  Toast.makeText(HomePage.this, "Gone", Toast.LENGTH_SHORT).show();
-                } else {
-                    layoutParentReportDetails.setVisibility(View.VISIBLE);
-                    Logone.e("fullimageadapter", "click visible");
-                    //  Toast.makeText(HomePage.this, "Visible", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
-        TextView textViewWebUrl=convertView.findViewById(R.id.textViewWebUrl);
-        TextView textViewStripWebUrl=convertView.findViewById(R.id.textViewStripWebUrl);
-        if(list.get(position).getWeb_url()!=null && !list.get(position).getWeb_url().equalsIgnoreCase("")){
-            textViewWebUrl.setText(list.get(position).getWeb_url().replace("https://",""));
-            textViewStripWebUrl.setText(list.get(position).getWeb_url().replace("https://",""));
-        } else {
-            textViewWebUrl.setText("");
-            textViewStripWebUrl.setText("");
-        }
-        textViewWebUrl.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if(list.get(position).getWeb_url()==null) return;
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(list.get(position).getWeb_url()));
-                context.startActivity(browserIntent);
-            }
-        });
+        halfVideoExoPlayerHolder.parent_layout.setOnClickListener(null);
+        hideFeedVideoWriterFooter(convertView);
+        TextView textViewWebUrl = convertView.findViewById(R.id.textViewWebUrl);
+        TextView textViewStripWebUrl = convertView.findViewById(R.id.textViewStripWebUrl);
+        bindFeedWebUrlPill(textViewWebUrl, textViewStripWebUrl, list.get(position), true);
         try {
             WriterStripStyleHelper.apply(
                     context,
@@ -5753,9 +6132,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             applyFeedArticleFonts(half_content_title, half_content_description);
             applyFeedStripFont(halfVideoExoPlayerHolder.strip_text_name);
         }
-        halfVideoExoPlayerHolder.writer_name.setText("" + list.get(position).getWriterName());
-        halfVideoExoPlayerHolder.writer_designation.setText("" + list.get(position).getRole());
-        halfVideoExoPlayerHolder.writer_time.setText("" + commonMethods.getHrsFormatfromDate(list.get(position).getPublishedTime()));
+        bindWriterStripIdentity(
+                list.get(position),
+                halfVideoExoPlayerHolder.writer_name,
+                halfVideoExoPlayerHolder.writer_designation,
+                halfVideoExoPlayerHolder.writer_time);
         int width = displayMetrics.widthPixels;
         //halfVideoExoPlayerHolder.imageViewItems.setVisibility(View.VISIBLE);
         //halfVideoExoPlayerHolder.youTubePlayerView.setVisibility(View.GONE);
@@ -5787,10 +6168,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 simpleExoPlayerView.setPlayer(null);
             }
             simpleExoPlayerView.setVisibility(View.GONE);
-            if (!"4".equalsIgnoreCase(list.get(position).getMediaType())) {
-                showLeanExoIdlePoster(thaumbnail_for_video, imageViewExoVideoPlayVideo,
-                        list.get(position).getThumbnail());
-            }
+            showLeanExoIdlePoster(thaumbnail_for_video, imageViewExoVideoPlayVideo,
+                    StatusVideoMedia.resolveThumbnailUrl(list.get(position)));
         }
 
         //....................................................Upload video..............................
@@ -5835,7 +6214,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 fullscreen = false;
                 textViewWebUrl.setVisibility(View.GONE);
                 mute_button.setImageResource(ic__volume_up);
-                String videoUrl = list.get(position).getVideoUrl();
+                String videoUrl = StatusVideoMedia.resolveStreamUrl(list.get(position));
+                if (TextUtils.isEmpty(videoUrl)) {
+                    videoUrl = list.get(position).getVideoUrl();
+                }
                 if (TextUtils.isEmpty(videoUrl)) {
                     Toast.makeText(context, "Video is not available", Toast.LENGTH_SHORT).show();
                     return;
@@ -5859,7 +6241,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 imageViewExoVideoPlayVideo.setVisibility(View.GONE);
                 thaumbnail_for_video.setVisibility(View.VISIBLE);
                 progress_bar_for_video.setVisibility(View.VISIBLE);
-                showLeanExoIdlePoster(thaumbnail_for_video, null, list.get(position).getThumbnail());
+                showLeanExoIdlePoster(thaumbnail_for_video, null,
+                        StatusVideoMedia.resolveThumbnailUrl(list.get(position)));
                 imageViewExoVideoPlayVideo.setVisibility(View.GONE);
                 simpleExoPlayerView.setVisibility(View.VISIBLE);
                 if (exoPlayer != null) {
@@ -5871,11 +6254,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 exoPlayer = new ExoPlayer.Builder(context).build();
                 simpleExoPlayerView.setPlayer(exoPlayer);
                 simpleExoPlayerView.setResizeMode(RESIZE_MODE_FIT);
-                DefaultDataSource.Factory defaultDataSourceFactory = new DefaultDataSource.Factory(context);
                 showLog("Video URL:" + videoUrl);
-                mediaSource = new ProgressiveMediaSource.Factory(defaultDataSourceFactory)
-                        .createMediaSource(MediaItem.fromUri(videoUrl));
-                exoPlayer.prepare(mediaSource);
+                prepareFeedExoPlayer(exoPlayer, videoUrl);
                 exoPlayer.setPlayWhenReady(true);
                 wireLeanExoChrome(simpleExoPlayerView, null);
                 exoPlayer.addListener(new Player.Listener() {
@@ -5912,15 +6292,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         //....................................................DONE........................................
 
-        if (list.get(position).getIsFollow() == 0) {
-            halfVideoExoPlayerHolder.writer_follower.setVisibility(View.GONE);
-            halfVideoExoPlayerHolder.writer_follow.setVisibility(View.VISIBLE);
-            test_folloew.setText("Follow");
-        } else {
-            halfVideoExoPlayerHolder.writer_follower.setVisibility(View.VISIBLE);
-            halfVideoExoPlayerHolder.writer_follow.setVisibility(View.GONE);
-            test_folloew.setText("Following");
-        }
+        applyWriterFollowState(
+                halfVideoExoPlayerHolder.writer_follow,
+                halfVideoExoPlayerHolder.writer_follower,
+                test_folloew,
+                followingLabel,
+                position);
+        hideFeedVideoWriterFooter(convertView);
 
         bindHalfLikeIcon(halfVideoExoPlayerHolder.half_image_like, list.get(position).getLikeStatus());
 
@@ -5958,11 +6336,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         halfVideoExoPlayerHolder.writer_profile_pic.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(getApplicationContext(), WriterProfileActivity.class);
-                intent.putExtra("EXTRA_SESSION_ID", list.get(position).getWriterId().toString());
-                if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(intent);
-                }
+                openWriterProfileFromFeed(position);
             }
         });
 
@@ -6141,11 +6515,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                 LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
 
-                if (list.get(position).getIsFollow() == 0) {
+                if (writerFollowUiState(list.get(position).getIsFollow()) == 0) {
 
                     halfVideoExoPlayerHolder.writer_follow.setVisibility(View.GONE);
                     halfVideoExoPlayerHolder.writer_follower.setVisibility(View.VISIBLE);
                     test_folloew.setText("Following");
+                    list.get(position).setIsFollow(1);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 1);
 
@@ -6156,6 +6531,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     halfVideoExoPlayerHolder.writer_follower.setVisibility(View.GONE);
 
                     test_folloew.setText("Follow");
+                    list.get(position).setIsFollow(0);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 0);
 
@@ -6177,11 +6553,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                 LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
 
-                if (list.get(position).getIsFollow() == 0) {
+                if (writerFollowUiState(list.get(position).getIsFollow()) == 0) {
 
                     halfVideoExoPlayerHolder.writer_follow.setVisibility(View.GONE);
                     halfVideoExoPlayerHolder.writer_follower.setVisibility(View.VISIBLE);
                     test_folloew.setText("Following");
+                    list.get(position).setIsFollow(1);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 1);
 
@@ -6190,6 +6567,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     halfVideoExoPlayerHolder.writer_follow.setVisibility(View.VISIBLE);
                     halfVideoExoPlayerHolder.writer_follower.setVisibility(View.GONE);
                     test_folloew.setText("Follow");
+                    list.get(position).setIsFollow(0);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 0);
 
@@ -6311,43 +6689,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         half_youTubePlayerHolder.writer_follow = convertView.findViewById(R.id.writer_follow);
         half_youTubePlayerHolder.writer_follower = convertView.findViewById(R.id.writer_follower);
         final TextView test_folloew = convertView.findViewById(R.id.test_folloew);
+        final TextView followingLabel = convertView.findViewById(R.id.second_language_name);
         half_youTubePlayerHolder.ll_refer_and_earn_halfy = convertView.findViewById(R.id.ll_refer_and_earn_half);
         half_youTubePlayerHolder.iv_share_and_earn = convertView.findViewById(R.id.iv_share_and_earn);
         half_youTubePlayerHolder.my_feed = convertView.findViewById(R.id.my_feed);
-        layoutParentReportDetails.setVisibility(View.VISIBLE);
-        parent_layout.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                  // layoutParentReportDetails=convertView.findViewById(R.id.layoutParentReportDetails);
-                if (layoutParentReportDetails.isShown() || layoutParentReportDetails.getVisibility() == View.VISIBLE) {
-                    layoutParentReportDetails.setVisibility(View.GONE);
-                    showLog("showNormalVideo"+ "click gone");
-                    //  Toast.makeText(HomePage.this, "Gone", Toast.LENGTH_SHORT).show();
-                } else {
-                    layoutParentReportDetails.setVisibility(View.VISIBLE);
-                    showLog("showNormalVideo"+ "click visible");
-                    //  Toast.makeText(HomePage.this, "Visible", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
+        parent_layout.setOnClickListener(null);
+        hideFeedVideoWriterFooter(convertView);
         showLog("showNormalVideo"+ "after thubnails");
-        TextView textViewWebUrl=convertView.findViewById(R.id.textViewWebUrl);
-        TextView textViewStripWebUrl=convertView.findViewById(R.id.textViewStripWebUrl);
-        if(list.get(position).getWeb_url()!=null && !list.get(position).getWeb_url().equalsIgnoreCase("")){
-            textViewWebUrl.setText(list.get(position).getWeb_url().replace("https://",""));
-            textViewStripWebUrl.setText(list.get(position).getWeb_url().replace("https://",""));
-        } else {
-            textViewWebUrl.setText("");
-            textViewStripWebUrl.setText("");
-        }
-        textViewWebUrl.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if(list.get(position).getWeb_url()==null) return;
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(list.get(position).getWeb_url()));
-                context.startActivity(browserIntent);
-            }
-        });
+        TextView textViewWebUrl = convertView.findViewById(R.id.textViewWebUrl);
+        TextView textViewStripWebUrl = convertView.findViewById(R.id.textViewStripWebUrl);
+        bindFeedWebUrlPill(textViewWebUrl, textViewStripWebUrl, list.get(position), true);
         try {
             WriterStripStyleHelper.apply(
                     context,
@@ -6411,9 +6762,11 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             applyFeedArticleFonts(half_content_title, half_content_description);
             applyFeedStripFont(half_youTubePlayerHolder.strip_text_name);
         }
-        half_youTubePlayerHolder.writer_name.setText("" + list.get(position).getWriterName());
-        half_youTubePlayerHolder.writer_designation.setText("" + list.get(position).getRole());
-        half_youTubePlayerHolder.writer_time.setText("" + commonMethods.getHrsFormatfromDate(list.get(position).getPublishedTime()));
+        bindWriterStripIdentity(
+                list.get(position),
+                half_youTubePlayerHolder.writer_name,
+                half_youTubePlayerHolder.writer_designation,
+                half_youTubePlayerHolder.writer_time);
         int width = displayMetrics.widthPixels;
         //half_youTubePlayerHolder.imageViewItems.setVisibility(View.VISIBLE);
         //half_youTubePlayerHolder.youTubePlayerView.setVisibility(View.GONE);
@@ -6526,15 +6879,13 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         });
         //....................................................DONE........................................
 
-        if (list.get(position).getIsFollow() == 0) {
-            half_youTubePlayerHolder.writer_follower.setVisibility(View.GONE);
-            half_youTubePlayerHolder.writer_follow.setVisibility(View.VISIBLE);
-            test_folloew.setText("Follow");
-        } else {
-            half_youTubePlayerHolder.writer_follower.setVisibility(View.VISIBLE);
-            half_youTubePlayerHolder.writer_follow.setVisibility(View.GONE);
-            test_folloew.setText("Following");
-        }
+        applyWriterFollowState(
+                half_youTubePlayerHolder.writer_follow,
+                half_youTubePlayerHolder.writer_follower,
+                test_folloew,
+                followingLabel,
+                position);
+        hideFeedVideoWriterFooter(convertView);
 
         bindHalfLikeIcon(half_youTubePlayerHolder.half_image_like, list.get(position).getLikeStatus());
 
@@ -6589,11 +6940,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         half_youTubePlayerHolder.writer_profile_pic.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Intent intent = new Intent(getApplicationContext(), WriterProfileActivity.class);
-                intent.putExtra("EXTRA_SESSION_ID", list.get(position).getWriterId().toString());
-                if (context != null && context.getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    context.startActivity(intent);
-                }
+                openWriterProfileFromFeed(position);
             }
         });
 
@@ -6772,11 +7119,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
                 LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
 
-                if (list.get(position).getIsFollow() == 0) {
+                if (writerFollowUiState(list.get(position).getIsFollow()) == 0) {
 
                     half_youTubePlayerHolder.writer_follow.setVisibility(View.GONE);
                     half_youTubePlayerHolder.writer_follower.setVisibility(View.VISIBLE);
                     test_folloew.setText("Following");
+                    list.get(position).setIsFollow(1);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 1);
 
@@ -6787,6 +7135,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     half_youTubePlayerHolder.writer_follower.setVisibility(View.GONE);
 
                     test_folloew.setText("Follow");
+                    list.get(position).setIsFollow(0);
 
                     set_follow_un_follow(list.get(position).getWriterId(), 0);
 
@@ -6806,11 +7155,12 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
             LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
 
-            if (list.get(position).getIsFollow() == 0) {
+            if (writerFollowUiState(list.get(position).getIsFollow()) == 0) {
 
                 half_youTubePlayerHolder.writer_follow.setVisibility(View.GONE);
                 half_youTubePlayerHolder.writer_follower.setVisibility(View.VISIBLE);
                 test_folloew.setText("Following");
+                list.get(position).setIsFollow(1);
 
                 set_follow_un_follow(list.get(position).getWriterId(), 1);
 
@@ -6819,6 +7169,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 half_youTubePlayerHolder.writer_follow.setVisibility(View.VISIBLE);
                 half_youTubePlayerHolder.writer_follower.setVisibility(View.GONE);
                 test_folloew.setText("Follow");
+                list.get(position).setIsFollow(0);
 
                 set_follow_un_follow(list.get(position).getWriterId(), 0);
 
@@ -7790,22 +8141,97 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         void closeBottomStrip(boolean closeStrip);
     }
 
-    private JsonObject set_writer_profile_data() {
-
-
-        UserProfileRequest requestModel = new UserProfileRequest();
-        requestModel.setDraftId(SharedPrefsData.getInt(context, Constants.DraftID, Constants.PREF_NAME));
-        String jsonString = new com.google.gson.Gson().toJson(requestModel);
-        String encrpt_data = null;
-        /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            encrpt_data = encrypt(jsonString);
-        }*/
-        encrpt_data = encrypt(jsonString);
-        showLog("API REQUEST E" + jsonString.toString());
-        EncritonRequestData Encriton_Request = new EncritonRequestData();
-        Encriton_Request.setData(encrpt_data);
-        return new Gson().toJsonTree(Encriton_Request).getAsJsonObject();
+    /**
+     * Feed cards: hide AnyNews share short-links on video; show external source only on articles.
+     */
+    private void bindFeedWebUrlPill(
+            @Nullable TextView pill,
+            @Nullable TextView stripPill,
+            @Nullable ModelClass.Datum item,
+            boolean onVideoCard) {
+        if (pill == null && stripPill == null) {
+            return;
+        }
+        if (onVideoCard || item == null) {
+            if (pill != null) {
+                pill.setVisibility(GONE);
+            }
+            if (stripPill != null) {
+                stripPill.setVisibility(GONE);
+            }
+            return;
+        }
+        String external = resolveExternalSourceUrlForPill(item);
+        if (TextUtils.isEmpty(external)) {
+            if (pill != null) {
+                pill.setVisibility(GONE);
+            }
+            if (stripPill != null) {
+                stripPill.setVisibility(GONE);
+            }
+            return;
+        }
+        String label = external.replace("https://", "").replace("http://", "");
+        if (pill != null) {
+            pill.setVisibility(VISIBLE);
+            pill.setText(label);
+            pill.setOnClickListener(
+                    v -> {
+                        try {
+                            context.startActivity(
+                                    new Intent(Intent.ACTION_VIEW, Uri.parse(external)));
+                        } catch (Exception ignored) {
+                        }
+                    });
+        }
+        if (stripPill != null) {
+            stripPill.setVisibility(VISIBLE);
+            stripPill.setText(label);
+        }
     }
+
+    @Nullable
+    private static String resolveExternalSourceUrlForPill(@NonNull ModelClass.Datum item) {
+        String candidate = item.getWeb_url();
+        if (TextUtils.isEmpty(candidate)) {
+            candidate = item.getSource_link();
+        }
+        if (TextUtils.isEmpty(candidate)) {
+            return null;
+        }
+        String url = candidate.trim();
+        String share = item.getShareLink();
+        if (!TextUtils.isEmpty(share) && url.equalsIgnoreCase(share.trim())) {
+            return null;
+        }
+        if (!SharePublicBaseHelper.newsShareOrigin(url).isEmpty()) {
+            return null;
+        }
+        try {
+            String host = Uri.parse(url).getHost();
+            if (host != null) {
+                String h = host.toLowerCase(Locale.US);
+                if (h.contains("anws.in")
+                        || SharePublicBaseHelper.isShortShareHost(h)
+                        || h.contains("anynews.co.in")) {
+                    return null;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return url;
+    }
+
+    private void prepareFeedExoPlayer(@NonNull ExoPlayer player, @NonNull String videoUrl) {
+        try {
+            String safe = StatusVideoMedia.ensureHttps(videoUrl.trim());
+            player.setMediaItem(MediaItem.fromUri(Uri.parse(safe)));
+            player.prepare();
+        } catch (Exception e) {
+            showLog("prepareFeedExoPlayer: " + e.getMessage());
+        }
+    }
+
     /**
      * Idle Exo card: load poster into {@code thaumbnail_for_video} (XML defaults GONE)
      * and show the big Way2 play circle. Fat equivalent: {@code setFeedExoPosterCover(..., true)}.
@@ -7816,11 +8242,21 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             @Nullable String thumbUrl) {
         if (thumbnail != null) {
             thumbnail.setVisibility(View.VISIBLE);
-            if (!TextUtils.isEmpty(thumbUrl) && isValidContextForGlide(context)) {
+            thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            if (!TextUtils.isEmpty(thumbUrl)) {
+                if (isValidContextForGlide(context)) {
+                    try {
+                        Glide.with(context).load(thumbUrl).centerCrop().into(thumbnail);
+                    } catch (Exception ignored) {
+                    }
+                }
                 try {
-                    Glide.with(context).load(thumbUrl).into(thumbnail);
+                    imageLoader.displayImage(thumbUrl, thumbnail, options, null);
                 } catch (Exception ignored) {
                 }
+            } else {
+                thumbnail.setImageDrawable(null);
+                thumbnail.setBackgroundColor(Color.parseColor("#1A1A1A"));
             }
         }
         if (centerPlay != null) {
@@ -8893,9 +9329,102 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     public static void applyHalfActionIconSizes(Context context, View convertView) {
+        if (convertView == null) {
+            return;
+        }
+        final float density =
+                convertView.getResources().getDisplayMetrics().density;
+        int glyphPx = Math.round(AppUiDefaults.HALF_ACTION_ICON_GLYPH_DP * density);
+        int circlePx = Math.round(AppUiDefaults.HALF_ACTION_ICON_CIRCLE_DP * density);
+        int slotPx = Math.round(AppUiDefaults.HALF_ACTION_ICON_SLOT_DP * density);
+        int gapPx = Math.round(AppUiDefaults.HALF_ACTION_ICON_GAP_DP * density);
+
+        int[] slotIds =
+                new int[] {
+                    R.id.half_image_like_icon,
+                    R.id.half_comment,
+                    R.id.half_share,
+                    R.id.half_tts,
+                    R.id.half_search,
+                    R.id.report,
+                    R.id.half_whatsapp
+                };
+        for (int slotId : slotIds) {
+            View slot = convertView.findViewById(slotId);
+            if (slot == null) {
+                continue;
+            }
+            ViewGroup.LayoutParams lp = slot.getLayoutParams();
+            if (lp != null) {
+                lp.width = slotPx;
+                lp.height = slotPx;
+                slot.setLayoutParams(lp);
+            }
+            if (slotId != R.id.report) {
+                ViewGroup.MarginLayoutParams mlp =
+                        lp instanceof ViewGroup.MarginLayoutParams
+                                ? (ViewGroup.MarginLayoutParams) lp
+                                : null;
+                if (mlp != null) {
+                    mlp.setMarginEnd(gapPx);
+                    slot.setLayoutParams(mlp);
+                }
+            }
+        }
+
+        int[] iconIds =
+                new int[] {
+                    R.id.half_image_like,
+                    R.id.half_comment_icon,
+                    R.id.half_share_icon,
+                    R.id.half_tts_icon,
+                    R.id.half_search_icon,
+                    R.id.report_icon,
+                    R.id.half_whatsapp_icon
+                };
+        for (int iconId : iconIds) {
+            View icon = convertView.findViewById(iconId);
+            if (icon == null) {
+                continue;
+            }
+            ViewGroup.LayoutParams lp = icon.getLayoutParams();
+            if (lp != null) {
+                lp.width = circlePx;
+                lp.height = circlePx;
+                icon.setLayoutParams(lp);
+            }
+            if (icon instanceof ImageView) {
+                ImageView iv = (ImageView) icon;
+                int pad = Math.max(0, (circlePx - glyphPx) / 2);
+                iv.setPadding(pad, pad, pad, pad);
+            }
+        }
     }
 
     public static void applyFullSideActionGap(Context context, View convertView) {
+        if (convertView == null) {
+            return;
+        }
+        int gapPx =
+                Math.round(
+                        clampFullSideActionGapDp(AppUiDefaults.HALF_ACTION_ICON_GAP_DP)
+                                * convertView.getResources().getDisplayMetrics().density);
+        View fullWa = convertView.findViewById(R.id.full_image_whatsapp);
+        View fullShare = convertView.findViewById(R.id.full_image_share);
+        applyGapEnd(fullWa, gapPx);
+        applyGapEnd(fullShare, gapPx);
+    }
+
+    private static void applyGapEnd(@Nullable View view, int gapPx) {
+        if (view == null) {
+            return;
+        }
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        if (lp instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            mlp.setMarginEnd(gapPx);
+            view.setLayoutParams(mlp);
+        }
     }
 
     public static int getPinnedLiveExoPosition() {
