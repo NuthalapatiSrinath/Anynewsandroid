@@ -6648,9 +6648,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         layoutParentTop = convertView.findViewById(R.id.layoutParentTop);
         half_youTubePlayerHolder.layoutParentTop = convertView.findViewById(R.id.layoutParentTop);
         ImageView imageViewYoutubePlayVideo = convertView.findViewById(R.id.imageViewPlayVideo);
-        half_youTubePlayerHolder.layoutParentTop.getLayoutParams().height = (layoutHeight);
-        imageViewItems.setVisibility(VISIBLE);
-        youTubePlayerView.setVisibility(GONE);
+        if (half_youTubePlayerHolder.layoutParentTop != null
+                && half_youTubePlayerHolder.layoutParentTop.getLayoutParams() != null) {
+            half_youTubePlayerHolder.layoutParentTop.getLayoutParams().height = layoutHeight;
+        }
+        if (imageViewItems != null) {
+            imageViewItems.setVisibility(VISIBLE);
+        }
+        if (youTubePlayerView != null) {
+            youTubePlayerView.setVisibility(GONE);
+        }
 
         /*  like */
         final TextView tamil_half_content_description = convertView.findViewById(R.id.tamil_half_content_description__);
@@ -6779,12 +6786,15 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
         showLog("showNormalVideo"+ "after thubnails 2");
 
-        if (list.get(position).getTitle() != null){
-            if (list.get(position).getVideoUrl() != null && isValidContextForGlide(context)) {
-                 imageLoader.displayImage(list.get(position).getThumbnail(), imageViewItems, options, animationListener);
+        if (list.get(position).getTitle() != null) {
+            if (imageViewItems != null
+                    && list.get(position).getVideoUrl() != null
+                    && isValidContextForGlide(context)) {
+                imageLoader.displayImage(
+                        list.get(position).getThumbnail(), imageViewItems, options, animationListener);
             }
         }
-        if (!isYoutubeVideoIsInitialized) {
+        if (!isYoutubeVideoIsInitialized && imageViewItems != null) {
             imageViewItems.setVisibility(View.VISIBLE);
         }
 
@@ -6814,9 +6824,14 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                         @Override
                         public void run() {
+                            if (youTubePlayerView == null) {
+                                return;
+                            }
                             textViewWebUrl.setVisibility(View.GONE);
                             isYoutubeVideoIsInitialized=true;
-                            imageViewItems.setVisibility(View.GONE);
+                            if (imageViewItems != null) {
+                                imageViewItems.setVisibility(View.GONE);
+                            }
                             youTubePlayerView.setVisibility(View.VISIBLE);
                             View v = youTubePlayerView.inflateCustomPlayerUi(R.layout.youtube_custom_player_ui);
                             YouTubePlayerListener listener = new com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener() {

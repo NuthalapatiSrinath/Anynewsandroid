@@ -4821,13 +4821,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 player.stop();
                 player.seekTo(0);
             }
-            if(progress_bar_for_video!=null){
+            if (progress_bar_for_video != null) {
                 progress_bar_for_video.setVisibility(View.VISIBLE);
             }
-            mute_video_player_image.setImageResource(R.drawable.ic_volume_off);
-            mute_video_player_text.setText("Unmute");
-            time_for_video.setText("00:00");
-            simpleSeekBar.setMax(0);
+            if (mute_video_player_image != null) {
+                mute_video_player_image.setImageResource(R.drawable.ic_volume_off);
+            }
+            if (mute_video_player_text != null) {
+                mute_video_player_text.setText("Unmute");
+            }
+            if (time_for_video != null) {
+                time_for_video.setText("00:00");
+            }
+            if (simpleSeekBar != null) {
+                simpleSeekBar.setMax(0);
+            }
 
         } catch (NullPointerException e) {
             e.printStackTrace();
