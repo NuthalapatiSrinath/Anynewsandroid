@@ -111,6 +111,7 @@ android {
             buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "true"
             buildConfigField "boolean", "PUBLIC_EDGE_TELEMETRY", "true"
             buildConfigField "boolean", "EDGE_DEBUG_HUD", "true"
+            buildConfigField "boolean", "DEV_EDGE_HUD", "true"
         }
         release {
 // 3999 0336 2591    155115
@@ -124,7 +125,9 @@ android {
             buildConfigField "String", "API_BASE_URL", "\"https://anynewsdevelopmentapi.anynews.co.in/\""
             buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "true"
             buildConfigField "boolean", "PUBLIC_EDGE_TELEMETRY", "true"
-            buildConfigField "boolean", "EDGE_DEBUG_HUD", "false"
+            // Dev API release (legacy-flip-test): HUD on. Set EDGE_DEBUG_HUD + DEV_EDGE_HUD false before prod promote.
+            buildConfigField "boolean", "EDGE_DEBUG_HUD", "true"
+            buildConfigField "boolean", "DEV_EDGE_HUD", "true"
             ndk {
                 debugSymbolLevel 'FULL'
             }

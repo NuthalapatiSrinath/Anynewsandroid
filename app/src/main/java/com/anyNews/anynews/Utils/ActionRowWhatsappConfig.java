@@ -11,7 +11,7 @@ import androidx.annotation.Nullable;
  * half articles) and {@code action_row_whatsapp_full_enabled} (full image,
  * full video, and any other card that uses that same side icon). If a
  * splash or feed payload only has the legacy {@code action_row_whatsapp_enabled},
- * both sides follow it. Half likes-row defaults OFF; full side defaults ON via legacy.
+ * both sides follow it. Default ON.
  */
 public final class ActionRowWhatsappConfig {
 
@@ -83,16 +83,9 @@ public final class ActionRowWhatsappConfig {
         return readSplitOrLegacy(context, Constants.ACTION_ROW_WHATSAPP_FULL_ENABLED);
     }
 
-    /** Half videos and half articles — likes-row WhatsApp icon and count. Default OFF. */
+    /** Half videos and half articles — likes-row WhatsApp icon and count. */
     public static boolean isHalfEnabled(@Nullable Context context) {
-        if (context == null) {
-            return false;
-        }
-        if (!prefsContain(context, Constants.ACTION_ROW_WHATSAPP_HALF_ENABLED)) {
-            return false;
-        }
-        return SharedPrefsData.getBool(
-                context, Constants.ACTION_ROW_WHATSAPP_HALF_ENABLED, Constants.PREF_NAME, false);
+        return readSplitOrLegacy(context, Constants.ACTION_ROW_WHATSAPP_HALF_ENABLED);
     }
 
     private static boolean prefsContain(@Nullable Context context, String key) {

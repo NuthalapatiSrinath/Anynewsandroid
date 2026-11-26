@@ -7820,11 +7820,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         try {
-            if (showReporterLogin) {
-                hideMagazineFooterShare();
-                hideFooterWhatsapp();
-                return;
-            }
             if (!isDeviceOnline()) {
                 hideMagazineFooterShare();
                 hideFooterWhatsapp();
@@ -7836,10 +7831,33 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 applyMagazineFooterShareOverlay();
             } else {
                 hideMagazineFooterShare();
-                applyFooterWhatsapp();
+                if (shouldShowFooterWhatsapp()) {
+                    applyFooterWhatsapp();
+                } else {
+                    hideFooterWhatsapp();
+                }
             }
         } catch (Exception e) {
             showLog("applyFooterCenterShare: " + e.getMessage());
+        }
+    }
+
+    /** Play Store: footer WhatsApp on feed cards; not magazine Share or hub modes. */
+    private boolean shouldShowFooterWhatsapp() {
+        try {
+            if (!isDeviceOnline() || shouldShowMagazineFooterShare()) {
+                return false;
+            }
+            if (isDailyUpdatesMode() || isCalendarMode()) {
+                return false;
+            }
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size() || list.get(idx) == null) {
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -7966,9 +7984,101 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (position >= 0) {
                 positionx = position;
             }
-            onFooterCenterShareTapped();
+            CallShareListener listener = new CallShareListener();
+            listener.setShareInterfaceListener(adapter);
+            listener.triggerEvent();
+            shareCurrentPostViaWhatsAppFooter();
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Footer WhatsApp. An ad uses the default ad screen's "share app with your
+     * friends" WhatsApp send. A news post uses the article WhatsApp handoff path.
+     */
+    private void onFooterCenterWhatsappClicked() {
+        if (footerWhatsappSharesTheApp()) {
+            if (adapter != null) {
+                adapter.shareAppWithFriendsOnWhatsApp();
+            }
+            return;
+        }
+        onArticleWhatsappClicked(getVisiblePostIndex());
+    }
+
+    /**
+     * The drawn card is an ad or the share-the-app invite, so the footer
+     * WhatsApp must not take the article-share path.
+     */
+    private boolean footerWhatsappSharesTheApp() {
+        if (visibleFlipIsInviteOrAdShell()) {
+            return true;
+        }
+        try {
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum item = list.get(idx);
+            if (item == null) {
+                return false;
+            }
+            if (ReadArticleStore.isAdFeedSlot(item)
+                    || ReadArticleStore.isShareFeedSlot(item)
+                    || ReadArticleStore.isRatingsFeedSlot(item)) {
+                return true;
+            }
+            String type = item.getPostType();
+            return type != null && type.trim().equalsIgnoreCase("web");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private View getFlipChildForShare() {
+        if (mFlipView == null || ppi < 0 || ppi >= mFlipView.getChildCount()) {
+            return null;
+        }
+        return mFlipView.getChildAt(ppi);
+    }
+
+    private void shareCurrentPostViaWhatsAppFooter() {
+        if (adapter == null) {
+            return;
+        }
+        if (list == null || positionx < 0 || positionx >= list.size()) {
+            return;
+        }
+        ModelClass.Datum item = list.get(positionx);
+        if (item == null || item.getPostType() == null) {
+            return;
+        }
+        String postType = item.getPostType();
+        if (postType.equalsIgnoreCase("ad")
+                || postType.equalsIgnoreCase("web_ads")
+                || postType.equalsIgnoreCase("web")
+                || postType.equalsIgnoreCase("ratings")
+                || postType.equalsIgnoreCase("share_app")) {
+            return;
+        }
+
+        View flipChild = getFlipChildForShare();
+        if (flipChild == null) {
+            return;
+        }
+
+        if (postType.equalsIgnoreCase("image_gallery")) {
+            adapter.shareGalleryScreenShotUI(flipChild);
+        } else if (postType.equalsIgnoreCase("full_image")) {
+            adapter.shareFullImageScree(flipChild, positionx);
+        } else if (postType.equalsIgnoreCase("normal_image")) {
+            adapter.takeNormalImageScreenshot(flipChild, positionx, 1);
+        } else if (postType.equalsIgnoreCase("magazine")) {
+            adapter.showMagazineShareOptions(flipChild, 1);
+        } else if (postType.equalsIgnoreCase("normal_video")
+                || postType.equalsIgnoreCase("full_video")) {
+            adapter.showVideoShareChooserForPost(positionx, flipChild);
         }
     }
 
@@ -7995,6 +8105,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             FooterStyleHelper.applyFooterWhatsappIcon(this, imageVIewShareWhatsapp);
             imageVIewShareWhatsapp.setEnabled(true);
             imageVIewShareWhatsapp.setClickable(true);
+            imageVIewShareWhatsapp.setOnClickListener(v -> onFooterCenterWhatsappClicked());
             if (home_page_navigation != null) {
                 imageVIewShareWhatsapp.bringToFront();
             }
@@ -8010,6 +8121,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         try {
+            imageVIewShareWhatsapp.setOnClickListener(null);
+            imageVIewShareWhatsapp.setClickable(false);
             imageVIewShareWhatsapp.clearAnimation();
             imageVIewShareWhatsapp.animate().cancel();
             imageVIewShareWhatsapp.setAlpha(1f);

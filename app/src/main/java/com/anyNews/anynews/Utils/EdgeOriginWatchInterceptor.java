@@ -9,8 +9,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 /**
- * Observes Retrofit/OkHttp traffic for unexpected origin API calls on debug APKs
- * ({@link BuildConfig#DEBUG} via {@link EdgeOriginCallWatch#isInstrumentedBuild()}).
+ * Observes all {@link RestApiClient} OkHttp traffic (edge HUD + origin watch on dev / dev-API release).
  * Never alters requests/responses; beacons are fire-and-forget.
  */
 public final class EdgeOriginWatchInterceptor implements Interceptor {

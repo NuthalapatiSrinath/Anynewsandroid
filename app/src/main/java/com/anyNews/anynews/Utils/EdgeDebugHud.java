@@ -9,7 +9,9 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -29,24 +31,29 @@ import okhttp3.Response;
 import retrofit2.Call;
 
 /**
- * Dev-only overlay (debug APK) — short API / feed-origin flashes. No-op in release.
+ * Dev / legacy-flip-test release overlay — rolling API call log (top-end). No-op when disabled.
  */
 public final class EdgeDebugHud {
 
-    /** Debug APK only; release sets {@link BuildConfig#EDGE_DEBUG_HUD} false. */
-    public static final boolean EDGE_DEBUG_HUD = BuildConfig.EDGE_DEBUG_HUD;
+    /**
+     * {@link BuildConfig#EDGE_DEBUG_HUD} or {@link BuildConfig#DEV_EDGE_HUD} (release APK → dev API).
+     */
+    public static final boolean EDGE_DEBUG_HUD =
+            BuildConfig.EDGE_DEBUG_HUD || BuildConfig.DEV_EDGE_HUD;
 
-    private static final long DISMISS_MS = 2500L;
-    private static final int MAX_LINES = 3;
+    private static final int MAX_LINES = 8;
+    private static final int COLOR_NORMAL = Color.parseColor("#E8F4FF");
+    private static final int COLOR_WARNING = Color.parseColor("#FFB020");
+    private static final int COLOR_ORIGIN = Color.parseColor("#FF5555");
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
-    private static final ArrayDeque<String> LINES = new ArrayDeque<>(MAX_LINES);
+    private static final ArrayDeque<HudLine> LINES = new ArrayDeque<>(MAX_LINES);
 
     @Nullable private static WeakReference<Activity> hostRef;
     @Nullable private static FrameLayout overlayHost;
-    @Nullable private static TextView hudText;
-    @Nullable private static Runnable dismissRunnable;
+    @Nullable private static LinearLayout linesContainer;
     @Nullable private static String stagedFeedSource;
+    @Nullable private static HudTone stagedFeedTone;
 
     private EdgeDebugHud() {
     }
@@ -77,17 +84,17 @@ public final class EdgeDebugHud {
                     if (activity != null && host != null && host != activity) {
                         return;
                     }
-                    cancelDismiss();
                     if (overlayHost != null && overlayHost.getParent() instanceof ViewGroup) {
                         ((ViewGroup) overlayHost.getParent()).removeView(overlayHost);
                     }
                     overlayHost = null;
-                    hudText = null;
+                    linesContainer = null;
                     hostRef = null;
+                    LINES.clear();
                 });
     }
 
-    /** OkHttp completed call — path + CF-Cache-Status (GET) or method label (POST). */
+    /** OkHttp completed call — path + served-by label for every app API path. */
     public static void notifyHttp(
             @Nullable Request request, @Nullable Response response) {
         if (!isEnabled() || request == null) {
@@ -103,29 +110,21 @@ public final class EdgeDebugHud {
                     || path.toLowerCase(Locale.US).contains("edge_telemetry")) {
                 return;
             }
-            if (!isSignificantPath(path)) {
-                return;
-            }
             Headers headers = response != null ? response.headers() : request.headers();
             String method = request.method();
-            String suffix;
-            if ("GET".equalsIgnoreCase(method)) {
-                String cf = firstHeader(headers, "CF-Cache-Status", "cf-cache-status");
-                suffix = TextUtils.isEmpty(cf) ? "GET" : cf.trim().toUpperCase(Locale.US);
-            } else {
-                suffix = method.toUpperCase(Locale.US);
-            }
-            enqueue(shortenPath(path) + " · " + suffix);
+            HttpLine built = buildHttpLine(path, method, headers);
+            enqueue(built.text, built.tone);
         } catch (Exception ignored) {
         }
     }
 
-  /** Remember feed origin until {@link #flushStagedFeedSource()} on paint. */
+    /** Remember feed origin until {@link #flushStagedFeedSource()} on paint. */
     public static void stageFeedSource(@Nullable String label) {
         if (!isEnabled() || TextUtils.isEmpty(label)) {
             return;
         }
         stagedFeedSource = label;
+        stagedFeedTone = toneForFeedLabel(label);
     }
 
     public static void flushStagedFeedSource() {
@@ -133,9 +132,11 @@ public final class EdgeDebugHud {
             return;
         }
         String line = stagedFeedSource;
+        HudTone tone = stagedFeedTone != null ? stagedFeedTone : HudTone.NORMAL;
         stagedFeedSource = null;
+        stagedFeedTone = null;
         if (!TextUtils.isEmpty(line)) {
-            enqueue(line);
+            enqueue(formatFeedStageLine(line), tone);
         }
     }
 
@@ -160,10 +161,16 @@ public final class EdgeDebugHud {
         }
         String cf = firstHeader(headers, "CF-Cache-Status", "cf-cache-status");
         if ("HIT".equalsIgnoreCase(cf)) {
-            return "Feed: CF HIT";
+            return "Feed: Cloudflare (HIT)";
         }
         String serving = servingFromBody(body);
         if (!TextUtils.isEmpty(serving)) {
+            if ("Mongo".equalsIgnoreCase(serving)) {
+                return "Feed: Mongo";
+            }
+            if ("Redis".equalsIgnoreCase(serving)) {
+                return "Feed: Redis";
+            }
             return "Feed: " + serving;
         }
         String mongo = firstHeader(headers, "X-AnyNews-Origin-Mongo", "x-anynews-origin-mongo");
@@ -175,9 +182,9 @@ public final class EdgeDebugHud {
             return "Feed: Redis";
         }
         if (!TextUtils.isEmpty(cf)) {
-            return "Feed: CF " + cf.trim().toUpperCase(Locale.US);
+            return "Feed: Cloudflare (" + cf.trim().toUpperCase(Locale.US) + ")";
         }
-        return "Feed: CF MISS";
+        return "Feed: Cloudflare (MISS)";
     }
 
     /** Feed GET succeeded — stage paint label (HTTP line comes from OkHttp interceptor). */
@@ -223,100 +230,104 @@ public final class EdgeDebugHud {
         return null;
     }
 
-    private static void enqueue(@NonNull String line) {
+    private static void enqueue(@NonNull String line, @NonNull HudTone tone) {
         MAIN.post(
                 () -> {
                     while (LINES.size() >= MAX_LINES) {
                         LINES.pollFirst();
                     }
-                    LINES.addLast(line);
+                    LINES.addLast(new HudLine(line, tone));
                     Activity host = hostRef != null ? hostRef.get() : null;
                     if (host != null && !host.isFinishing()) {
                         ensureOverlay(host);
                     }
                     render();
-                    scheduleDismiss();
                 });
     }
 
     private static void render() {
-        if (hudText == null) {
+        if (linesContainer == null) {
             return;
         }
-        StringBuilder sb = new StringBuilder();
-        for (String s : LINES) {
-            if (sb.length() > 0) {
-                sb.append('\n');
-            }
-            sb.append(s);
+        linesContainer.removeAllViews();
+        int pad = linesContainer.getResources().getDisplayMetrics().density > 0
+                ? Math.round(4 * linesContainer.getResources().getDisplayMetrics().density)
+                : 4;
+        for (HudLine entry : LINES) {
+            TextView row = new TextView(linesContainer.getContext());
+            row.setText(entry.text);
+            row.setTextColor(colorFor(entry.tone));
+            row.setTextSize(10f);
+            row.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+            row.setGravity(Gravity.END);
+            row.setPadding(0, pad, 0, pad);
+            linesContainer.addView(row);
         }
-        hudText.setText(sb.toString());
         if (overlayHost != null) {
-            overlayHost.setVisibility(sb.length() > 0 ? View.VISIBLE : View.GONE);
-        }
-    }
-
-    private static void scheduleDismiss() {
-        cancelDismiss();
-        dismissRunnable =
-                () -> {
-                    LINES.clear();
-                    stagedFeedSource = null;
-                    render();
-                };
-        MAIN.postDelayed(dismissRunnable, DISMISS_MS);
-    }
-
-    private static void cancelDismiss() {
-        if (dismissRunnable != null) {
-            MAIN.removeCallbacks(dismissRunnable);
-            dismissRunnable = null;
+            boolean show = !LINES.isEmpty();
+            overlayHost.setVisibility(show ? View.VISIBLE : View.GONE);
+            if (show) {
+                overlayHost.bringToFront();
+                overlayHost.setElevation(dpFromView(overlayHost, 24));
+            }
         }
     }
 
     private static void ensureOverlay(@NonNull Activity activity) {
-        if (overlayHost != null && hudText != null) {
-            return;
+        if (overlayHost != null && linesContainer != null) {
+            ViewParent parent = overlayHost.getParent();
+            if (parent == null) {
+                overlayHost = null;
+                linesContainer = null;
+            } else {
+                return;
+            }
         }
         View content = activity.findViewById(android.R.id.content);
-        if (!(content instanceof FrameLayout)) {
+        if (!(content instanceof ViewGroup)) {
             return;
         }
-        FrameLayout root = (FrameLayout) content;
+        ViewGroup root = (ViewGroup) content;
+
         FrameLayout wrap = new FrameLayout(activity);
         FrameLayout.LayoutParams lp =
                 new FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
-                        Gravity.BOTTOM);
-        lp.setMargins(0, 0, 0, dp(activity, 72));
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.TOP | Gravity.END);
+        int m = dp(activity, 8);
+        lp.setMargins(m, dp(activity, 36), m, 0);
         wrap.setLayoutParams(lp);
         wrap.setClickable(false);
         wrap.setFocusable(false);
         wrap.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        wrap.setElevation(dp(activity, 24));
 
-        TextView tv = new TextView(activity);
-        FrameLayout.LayoutParams tlp =
-                new FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout stack = new LinearLayout(activity);
+        stack.setOrientation(LinearLayout.VERTICAL);
+        stack.setGravity(Gravity.END);
         int pad = dp(activity, 8);
-        tv.setLayoutParams(tlp);
-        tv.setPadding(pad, pad, pad, pad);
-        tv.setBackgroundColor(0xCC1A2332);
-        tv.setTextColor(Color.parseColor("#E8F4FF"));
-        tv.setTextSize(11f);
-        tv.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        tv.setMaxLines(MAX_LINES);
-        wrap.addView(tv);
+        stack.setPadding(pad, pad, pad, pad);
+        stack.setBackgroundColor(0xCC1A2332);
+        FrameLayout.LayoutParams slp =
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.END);
+        wrap.addView(stack, slp);
 
         root.addView(wrap);
         overlayHost = wrap;
-        hudText = tv;
+        linesContainer = stack;
     }
 
     private static int dp(@NonNull Activity activity, int dp) {
         float d = activity.getResources().getDisplayMetrics().density;
+        return Math.round(dp * d);
+    }
+
+    private static int dpFromView(@NonNull View view, int dp) {
+        float d = view.getResources().getDisplayMetrics().density;
         return Math.round(dp * d);
     }
 
@@ -328,36 +339,104 @@ public final class EdgeDebugHud {
         } else if (p.startsWith("/app/")) {
             p = p.substring("/app/".length());
         }
-        if (p.length() > 48) {
-            return "…" + p.substring(p.length() - 45);
+        if (p.length() > 42) {
+            return "…" + p.substring(p.length() - 39);
         }
         return p;
     }
 
-    private static boolean isSignificantPath(@NonNull String path) {
+    @NonNull
+    private static HttpLine buildHttpLine(
+            @NonNull String path, @NonNull String method, @Nullable Headers headers) {
+        String shortPath = shortenPath(path);
+        String served = resolveServedBy(path, method, headers);
+        String text = shortPath + " · served by: " + served;
+        HudTone tone = toneForHttp(path, method, headers, served);
+        return new HttpLine(text, tone);
+    }
+
+    @NonNull
+    private static String resolveServedBy(
+            @NonNull String path, @NonNull String method, @Nullable Headers headers) {
         String lower = path.toLowerCase(Locale.US);
-        if (lower.contains("/public/")) {
-            return true;
+        if ("POST".equalsIgnoreCase(method) && lower.contains("list_all_articles")) {
+            return "List POST";
         }
-        if (lower.contains("list_all_articles")) {
-            return true;
+        String mongo = firstHeader(headers, "X-AnyNews-Origin-Mongo", "x-anynews-origin-mongo");
+        if ("USED".equalsIgnoreCase(mongo)) {
+            return "Mongo";
         }
-        if (lower.contains("splash")) {
-            return true;
+        String redis = firstHeader(headers, "X-AnyNews-Origin-Redis", "x-anynews-origin-redis");
+        if ("HIT".equalsIgnoreCase(redis)) {
+            return "Redis";
         }
-        if (lower.contains("daily")) {
-            return true;
+        String cf = firstHeader(headers, "CF-Cache-Status", "cf-cache-status");
+        if (!TextUtils.isEmpty(cf)) {
+            return "Cloudflare (" + cf.trim().toUpperCase(Locale.US) + ")";
         }
-        if (lower.contains("flash")) {
-            return true;
+        if ("GET".equalsIgnoreCase(method)) {
+            return "Cloudflare (MISS)";
         }
-        if (lower.contains("special")) {
-            return true;
+        return method.toUpperCase(Locale.US);
+    }
+
+    @NonNull
+    private static HudTone toneForHttp(
+            @NonNull String path,
+            @NonNull String method,
+            @Nullable Headers headers,
+            @NonNull String served) {
+        String lower = path.toLowerCase(Locale.US);
+        if ("POST".equalsIgnoreCase(method) && lower.contains("list_all_articles")) {
+            return HudTone.ORIGIN;
         }
-        if (lower.contains("stock_market")) {
-            return true;
+        if (served.contains("Redis") || served.contains("Mongo") || served.contains("List POST")) {
+            return HudTone.ORIGIN;
         }
-        return false;
+        String cf = firstHeader(headers, "CF-Cache-Status", "cf-cache-status");
+        if ("HIT".equalsIgnoreCase(cf)) {
+            return HudTone.NORMAL;
+        }
+        if ("MISS".equalsIgnoreCase(cf) || served.contains("(MISS)")) {
+            return HudTone.WARNING;
+        }
+        if ("POST".equalsIgnoreCase(method) && lower.contains("list")) {
+            return HudTone.ORIGIN;
+        }
+        return HudTone.NORMAL;
+    }
+
+    @NonNull
+    private static HudTone toneForFeedLabel(@NonNull String label) {
+        String l = label.toLowerCase(Locale.US);
+        if (l.contains("list post") || l.contains("redis") || l.contains("mongo")) {
+            return HudTone.ORIGIN;
+        }
+        if (l.contains("miss")) {
+            return HudTone.WARNING;
+        }
+        return HudTone.NORMAL;
+    }
+
+    @NonNull
+    private static String formatFeedStageLine(@NonNull String staged) {
+        if (staged.startsWith("Feed: ")) {
+            String rest = staged.substring("Feed: ".length());
+            return "public/feed · served by: " + rest;
+        }
+        return staged;
+    }
+
+    private static int colorFor(@NonNull HudTone tone) {
+        switch (tone) {
+            case ORIGIN:
+                return COLOR_ORIGIN;
+            case WARNING:
+                return COLOR_WARNING;
+            case NORMAL:
+            default:
+                return COLOR_NORMAL;
+        }
     }
 
     @NonNull
@@ -372,5 +451,31 @@ public final class EdgeDebugHud {
             }
         }
         return "";
+    }
+
+    private enum HudTone {
+        NORMAL,
+        WARNING,
+        ORIGIN
+    }
+
+    private static final class HudLine {
+        @NonNull final String text;
+        @NonNull final HudTone tone;
+
+        HudLine(@NonNull String text, @NonNull HudTone tone) {
+            this.text = text;
+            this.tone = tone;
+        }
+    }
+
+    private static final class HttpLine {
+        @NonNull final String text;
+        @NonNull final HudTone tone;
+
+        HttpLine(@NonNull String text, @NonNull HudTone tone) {
+            this.text = text;
+            this.tone = tone;
+        }
     }
 }

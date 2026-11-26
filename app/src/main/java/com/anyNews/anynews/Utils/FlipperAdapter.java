@@ -2289,7 +2289,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 }
                 if (pagePostType == null) {
                     pagePostType = "";
+                } else {
+                    pagePostType = pagePostType.trim().toLowerCase(Locale.US);
                 }
+                convertView = coerceConvertViewForPostType(convertView, position);
                 switch (pagePostType) {
                     case "google_vasttag":
                         pauseVideo();
@@ -3334,6 +3337,19 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         });
 
                         break;
+                    default:
+                        pauseVideo();
+                        halfImageActivity = new HalfImageActivityHolder();
+                        if (AppHelper.isTeluguLanguageSelected()) {
+                            convertView =
+                                    inflater.inflate(R.layout.activity_half_image_telugu, parent, false);
+                        } else {
+                            convertView = inflater.inflate(R.layout.activity_half_image_new, parent, false);
+                        }
+                        customConvertView = convertView;
+                        fromWhatsapp = false;
+                        showNormalImage(position, convertView);
+                        break;
 
                 }
             }
@@ -3345,6 +3361,45 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
         return convertView;
 
+    }
+
+    /** Flip scrap must not paint {@code ads_screen} on article rows (and vice versa). */
+    public boolean isFeedAdSeat(int position) {
+        try {
+            if (list == null || position < 0 || position >= list.size()) {
+                return false;
+            }
+            return ReadArticleStore.isAdFeedSlot(list.get(position));
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    public static boolean viewHasAdsScreenChrome(@Nullable View convertView) {
+        if (convertView == null) {
+            return false;
+        }
+        return convertView.findViewById(R.id.ad_flip_up_skip) != null
+                || convertView.findViewById(R.id.ad_recommended_list) != null
+                || (convertView.findViewById(R.id.fl_adplaceholder) != null
+                        && convertView.findViewById(R.id.parent_layout) == null);
+    }
+
+    @Nullable
+    private View coerceConvertViewForPostType(@Nullable View convertView, int position) {
+        if (convertView == null || list == null || position < 0 || position >= list.size()) {
+            return convertView;
+        }
+        boolean adSeat = ReadArticleStore.isAdFeedSlot(list.get(position));
+        boolean adsChrome = viewHasAdsScreenChrome(convertView);
+        if (adsChrome && !adSeat) {
+            hideAdsScreenChrome(convertView);
+            return null;
+        }
+        if (!adsChrome && adSeat && convertView.findViewById(R.id.parent_layout) != null) {
+            return null;
+        }
+        return convertView;
     }
 
     private void showVastTagAd(View convertView, int position) {
@@ -3561,31 +3616,49 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         ImageView imageViewWhatsapp=convertView.findViewById(R.id.imageViewWhatsapp);
         imageViewShare.setImageResource(R.drawable.ic_app_share_socail);
         imageViewWhatsapp.setImageResource(R.drawable.ic_whatsapp_home);
-        imageViewWhatsapp.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent sendIntent = new Intent();
-                sendIntent.setAction(Intent.ACTION_SEND);
-                sendIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                if(appInstalledOrNot("com.whatsapp")){
-                    sendIntent.setPackage("com.whatsapp");
-                    sendIntent.putExtra(Intent.EXTRA_TEXT,
-                            "Hey check out my app at: https://play.google.com/store/apps/details?id=" + BuildConfig.APPLICATION_ID);
-                    sendIntent.setType("text/plain");
-                    context.startActivity(sendIntent);
-                }else{
-                    Toast.makeText(context, "App is not installed", Toast.LENGTH_SHORT).show();
-                }
+        imageViewWhatsapp.setOnClickListener(view -> shareAppWithFriendsOnWhatsApp());
+    }
 
+    /**
+     * "Share AnyNews with your friends" via WhatsApp. Same send as the old
+     * icon on the default ad screen. Does not write an article share count.
+     */
+    public void shareAppWithFriendsOnWhatsApp() {
+        Intent sendIntent = new Intent();
+        sendIntent.setAction(Intent.ACTION_SEND);
+        sendIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (appInstalledOrNot("com.whatsapp")) {
+            sendIntent.setPackage("com.whatsapp");
+            sendIntent.putExtra(Intent.EXTRA_TEXT, shareAppWithFriendsText());
+            sendIntent.setType("text/plain");
+            context.startActivity(sendIntent);
+        } else {
+            Toast.makeText(context, "App is not installed", Toast.LENGTH_SHORT).show();
+        }
+    }
 
-            }
-        });
+    private String shareAppWithFriendsText() {
+        return "Hey check out my app at: https://play.google.com/store/apps/details?id="
+                + BuildConfig.APPLICATION_ID;
+    }
+
+    /** Footer / row WhatsApp on videos — direct WhatsApp handoff (Play Store parity). */
+    public void showVideoShareChooserForPost(int position, View convertView) {
+        if (list == null || position < 0 || position >= list.size() || convertView == null) {
+            return;
+        }
+        shareVideoDirect(position, VideoShareHelper.ShareMode.WHATSAPP_STATUS);
     }
 
     public void showMagazineShareOptions(View convertView,int from){
-        fromWhatsapp = false;
+        fromWhatsapp = true;
+        if (convertView == null) {
+            return;
+        }
         final RelativeLayout relativeLayoutShareOpt = convertView.findViewById(R.id.relativeLayoutShareOpt);
-        relativeLayoutShareOpt.setVisibility(VISIBLE);
+        if (relativeLayoutShareOpt != null) {
+            relativeLayoutShareOpt.setVisibility(VISIBLE);
+        }
     }
 
     private boolean appInstalledOrNot(String uri) {

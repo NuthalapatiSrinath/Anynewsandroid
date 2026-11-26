@@ -1062,6 +1062,21 @@ public class FlipView extends FrameLayout {
                     scrap.boundItemId, scrap.boundGeneration);
             scrap = null;
         }
+        if (scrap != null
+                && scrap.v != null
+                && mAdapter instanceof FlipperAdapter) {
+            FlipperAdapter flipper = (FlipperAdapter) mAdapter;
+            boolean adSeat = flipper.isFeedAdSeat(index);
+            boolean adsChrome = FlipperAdapter.viewHasAdsScreenChrome(scrap.v);
+            if (adsChrome != adSeat) {
+                try {
+                    mRecycler.addScrapView(
+                            scrap.v, index, type, scrap.boundItemId, scrap.boundGeneration);
+                } catch (Exception ignored) {
+                }
+                scrap = null;
+            }
+        }
         if (canReturnScrapWithoutRebind(scrap, want) && !isActivePageView(scrap.v)) {
             // Scrap skips getView, which is where the likes-row WhatsApp is gated.
             // Apply the admin switch here so a card bound while the icon was ON
