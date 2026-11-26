@@ -48,6 +48,20 @@ public final class StatusVideoMedia {
             return ensureHttps(resolveStatic(videoThumb));
         }
 
+        String thumbImage = cleanUrl(item.getThumbImage());
+        if (isUsableVideoPoster(thumbImage, writerAvatar)
+                && !isStreamOnlyUrl(thumbImage)
+                && !isGenericVideoPlaceholderUrl(thumbImage)) {
+            return ensureHttps(resolveStatic(thumbImage));
+        }
+
+        String loneImage = cleanUrl(item.getImage());
+        if (isUsableVideoPoster(loneImage, writerAvatar)
+                && !isStreamOnlyUrl(loneImage)
+                && !isGenericVideoPlaceholderUrl(loneImage)) {
+            return ensureHttps(resolveStatic(loneImage));
+        }
+
         String fromThumbs = firstListUrl(item.getThumbnails(), true);
         if (isUsableVideoPoster(fromThumbs, writerAvatar)
                 && !isStreamOnlyUrl(fromThumbs)

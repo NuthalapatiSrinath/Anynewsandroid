@@ -158,6 +158,7 @@ import com.anyNews.anynews.Utils.OpenPathSplashConfigRefresher;
 import com.anyNews.anynews.Utils.EdgeOriginCallWatch;
 import com.anyNews.anynews.Utils.PublicEdgeFeedHelper;
 import com.anyNews.anynews.Utils.PublicEdgeTelemetry;
+import com.anyNews.anynews.Utils.EdgeDebugHud;
 import com.anyNews.anynews.Utils.EdgeFeedPostNormalizer;
 import com.anyNews.anynews.Utils.ReadArticleStore;
 import com.anyNews.anynews.Pojo.PublicEdgeFeedResponse;
@@ -547,6 +548,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * native every {@link #AD_SEAT_REFRESH_MS}. Cancelled on leave/pause.
      */
     private static final long AD_SEAT_REFRESH_MS = 30_000L;
+    /** Way2: one AdMob request per seat visit — no 30s stay refresh. */
+    private static final boolean AD_SEAT_STAY_REFRESH_ENABLED = false;
+    /** Preload the next ad seat only after the user starts flipping, not on page-0 bind. */
+    private static final boolean AD_PREFETCH_ON_SCROLL_ONLY = true;
     private final Handler adSeatRefreshHandler = new Handler(Looper.getMainLooper());
     private final Runnable adSeatRefreshRunnable = this::onAdSeatStayRefreshTick;
     /** At most one AdLoader in flight per feed {@code ad_req_position}. */
@@ -569,6 +574,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 //        MobileAds.setRequestConfiguration(requestConfiguration.build());
 
         setContentView(R.layout.activity_home_page);
+        EdgeDebugHud.attach(this);
         allsharedpreference = new Allsharedpreference(HomePage.this);
         Activity=this;
         activity=this;
@@ -608,6 +614,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         layoutMagazineShareFooter = findViewById(R.id.layoutMagazineShareFooter);
         ivMagazineShareFooter = findViewById(R.id.ivMagazineShareFooter);
         tvMagazineShareFooter = findViewById(R.id.tvMagazineShareFooter);
+        if (layoutMagazineShareFooter != null) {
+            layoutMagazineShareFooter.setOnClickListener(v -> {
+                writeButtonClick("User", type_firebase_button, current_time_firebase,
+                        draft_id_firebase, device_id_firebase, button_name_post);
+                onFooterCenterShareTapped();
+            });
+        }
 
 
 
@@ -873,6 +886,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         un_selected_local.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                try {
+                    OpenPathSplashConfigRefresher.maybeRefreshOnAuxiliaryOpen(HomePage.this);
+                } catch (Exception ignored) {
+                }
 
                 un_selected_local.setVisibility(View.GONE);
                 selected_local.setVisibility(View.VISIBLE);
@@ -934,13 +951,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         setStaticData();
 
-        // Lean open: StartingActivity stays zero-API; soft-refresh Splash_Screen fonts/admin
-        // prefs about once/day so existing users are not stuck on stale FontSettingsHelper.
-        // Push/warm re-entry respects the same throttle + process in-flight guard.
-        try {
-            OpenPathSplashConfigRefresher.maybeRefreshInBackground(this);
-        } catch (Exception ignored) {
-        }
+        // Lean open: main feed = List/edge page-0 only. Splash_Screen config refresh is
+        // deferred to auxiliary tabs (Daily Updates, Special, Local) — see perform*Open hooks.
 
         // Event_Status seeds process blink; Special glyph stays ic_footer_special
         // (never transparent — that caused label-only Special + misplaced blink).
@@ -955,7 +967,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         try {
             applyFooterSlotVisibility();
-            applyFooterWhatsapp();
+            applyFooterCenterShare();
             FooterStyleHelper.apply(this, bottomNavigationView);
             FooterStyleHelper.applyFab(this, floatingActionButtonHome);
             FooterStyleHelper.applyMagazineShareChrome(
@@ -1162,6 +1174,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void loadAds(String ad_code, Integer ad_req_position, String ad_type,
                          boolean replaceExisting) {
+        if (isSpecialFeedActive()) {
+            flipAdLog("loadAds skip special feed active");
+            return;
+        }
         if (shouldDeferAdWork()) {
             long wait = Math.max(80L, FlipAdWorkGate.millisUntilAdWorkSafe() + 40L);
             flipAdLog("loadAds deferred (flip settle) reqPos=" + ad_req_position
@@ -1553,6 +1569,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      */
     private void scheduleAdSeatStayRefresh() {
         cancelAdSeatStayRefresh();
+        if (!AD_SEAT_STAY_REFRESH_ENABLED) {
+            return;
+        }
         if (!homeLifecycleResumed || isFinishing() || isDestroyed()) {
             return;
         }
@@ -1766,6 +1785,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void rebalanceFeedAdsIfNeeded(@Nullable EncreptionRequest enc) {
+        if (isSpecialFeedActive()) {
+            stripSpecialFeedAdsIfNeeded();
+            return;
+        }
         if (enc == null || !enc.isShow_ads() || list == null || list.isEmpty()) return;
         if (!isDeviceOnline()) return;
         try {
@@ -1780,8 +1803,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    private boolean shouldRunAdScrollPrefetch() {
+        if (!AD_PREFETCH_ON_SCROLL_ONLY) {
+            return true;
+        }
+        return positionx > 0 || feedCurrentPage > 0;
+    }
+
     /** One native preload for the nearest upcoming ad seat (in-flight cap = 1). */
     private void preloadNativeAdsForFeedSlots() {
+        if (isSpecialFeedActive()) {
+            return;
+        }
         if (list == null || list.isEmpty() || !isDeviceOnline()) return;
         if (shouldDeferAdWork()) return;
         try {
@@ -2059,6 +2092,28 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Engagement / Continue-reading hub — search feed mode not ported; soft News. */
     public boolean isSearchFeedActive() {
         return false;
+    }
+
+    /** Special (స్పెషల్) tab — articles only, no feed ad seats. */
+    public boolean isSpecialFeedActive() {
+        try {
+            return SharedPrefsData.getBool(
+                    HomePage.this, Constants.isUnreadPostsSelected, Constants.PREF_NAME);
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void stripSpecialFeedAdsIfNeeded() {
+        if (!isSpecialFeedActive() || list == null || list.isEmpty()) {
+            return;
+        }
+        try {
+            if (ReadArticleStore.stripAdFeedSlots(list)) {
+                showLog("feed: special stripped ad slots listSize=" + list.size());
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     public void openMainNewsFromSearchHub() {
@@ -3360,6 +3415,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         public void onReceive(Context context, Intent intent) {
             String value = intent.getStringExtra("message");
 
+            if (comment_page == null) {
+                return;
+            }
             if (comment_page.isShown()) {
                 comment_page.setVisibility(View.GONE);
             } else {
@@ -3501,8 +3559,59 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         WriteComments();
     }
 
+    private void bindCommentsListFromResponse(ListOfCommentsResponse validateUserOtp) {
+        if (validateUserOtp == null || !Boolean.TRUE.equals(validateUserOtp.getSuccess())) {
+            return;
+        }
+        List<ListOfCommentsResponse.Datum> rows = validateUserOtp.getData();
+        comment_chooseLanguage_models = new ArrayList<>();
+        if (rows != null) {
+            for (int i = 0; i < rows.size(); i++) {
+                ListOfCommentsResponse.Datum src = rows.get(i);
+                if (src == null) {
+                    continue;
+                }
+                ListOfCommentsResponse.Datum datum = new ListOfCommentsResponse.Datum();
+                datum.setId(src.getId());
+                datum.setPostId(src.getPostId());
+                datum.setDraftId(src.getDraftId());
+                datum.setUserName(src.getUserName());
+                datum.setComment(src.getComment());
+                datum.setCreatedAt(src.getCreatedAt());
+                datum.setCommentTime(src.getCommentTime());
+                datum.setUser_profile_pic(src.getUser_profile_pic());
+                datum.setEmail(src.getEmail());
+                comment_chooseLanguage_models.add(datum);
+            }
+        }
+        if (comment_chooseLanguage_models.isEmpty()) {
+            if (comment_recycler_view != null) {
+                comment_recycler_view.setVisibility(View.INVISIBLE);
+            }
+            linear_no_comment_page.setVisibility(View.VISIBLE);
+            return;
+        }
+        comment_linearlayoutmanager = new LinearLayoutManager(HomePage.this);
+        comment_recycler_view.setLayoutManager(comment_linearlayoutmanager);
+        comment_totoal_count.setVisibility(View.VISIBLE);
+        comment_recycler_view.setVisibility(View.VISIBLE);
+        linear_no_comment_page.setVisibility(View.GONE);
+        MailAdapter mMailAdapter = new MailAdapter(
+                HomePage.this,
+                comment_chooseLanguage_models,
+                position -> openReportPage(position),
+                position -> { },
+                position -> { },
+                position -> { });
+        comment_recycler_view.setAdapter(mMailAdapter);
+        comment_totoal_count.setText(" Comments ( " + comment_chooseLanguage_models.size() + " )");
+    }
+
     @Override
     public void OpenComments(Long post_id, Long sub_post_id) {
+        if (post_id == null || post_id <= 0) {
+            return;
+        }
 
             showProgress();
 
@@ -3517,63 +3626,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
                 @Override
                 public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
+                    hideProgress();
+                    if (response == null || !response.isSuccessful()) {
+                        return;
+                    }
                     EncreptionRequest encreptionRequest = response.body();
-                    String encrpt_data = null;
-                    /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        encrpt_data = decrypt(encreptionRequest.getData());
-                    }*/
-                    encrpt_data = decrypt(encreptionRequest.getData());
+                    if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                        return;
+                    }
+                    String encrpt_data = decrypt(encreptionRequest.getData());
                     showLog("comments response:"+encrpt_data);
                     Gson gsonObj = new Gson();
                     ListOfCommentsResponse validateUserOtp = gsonObj.fromJson(encrpt_data, ListOfCommentsResponse.class);
-
-                    hideProgress();
-                    if (validateUserOtp.getSuccess()) {
-                        if (validateUserOtp.getData().size() == 0) {
-                            comment_recycler_view.setVisibility(View.INVISIBLE);
-                            linear_no_comment_page.setVisibility(View.VISIBLE);
-
-                        } else {
-                            for (int i = 0; i < validateUserOtp.getData().size(); i++) {
-                                ListOfCommentsResponse.Datum datum = new ListOfCommentsResponse.Datum();
-                                datum.setId(validateUserOtp.getData().get(i).getId());
-                                datum.setPostId(validateUserOtp.getData().get(i).getPostId());
-                                datum.setDraftId(validateUserOtp.getData().get(i).getDraftId());
-                                datum.setUserName(validateUserOtp.getData().get(i).getUserName());
-                                datum.setComment(validateUserOtp.getData().get(i).getComment());
-                                datum.setCreatedAt(validateUserOtp.getData().get(i).getCreatedAt());
-                                datum.setCommentTime(validateUserOtp.getData().get(i).getCommentTime());
-                                datum.setUser_profile_pic(validateUserOtp.getData().get(i).getUser_profile_pic());
-                                datum.setEmail(validateUserOtp.getData().get(i).getEmail());
-                                comment_chooseLanguage_models.add(datum);
-                            }
-
-
-                            //   comment_progress.setVisibility(View.GONE);
-
-                            comment_linearlayoutmanager = new LinearLayoutManager(getContext());
-                            comment_recycler_view.setLayoutManager(comment_linearlayoutmanager);
-                            comment_totoal_count.setVisibility(View.VISIBLE);
-                            comment_recycler_view.setVisibility(View.VISIBLE);
-                            linear_no_comment_page.setVisibility(View.GONE);
-                            MailAdapter mMailAdapter = new MailAdapter(
-                                    HomePage.this,
-                                    comment_chooseLanguage_models,
-                                    position -> openReportPage(position),
-                                    position -> { },
-                                    position -> { },
-                                    position -> { });
-                            comment_recycler_view.setAdapter(mMailAdapter);
-                            comment_totoal_count.setText(" Comments ( " + comment_chooseLanguage_models.size() + " )");
-                            //        leave_comment_white.setText(" " + languageModelResponse.getData().getLeaveAComment());
-                        }
-
-
-                    } else {
-
-
-                    }
-
+                    bindCommentsListFromResponse(validateUserOtp);
                 }
 
                 @Override
@@ -3586,6 +3651,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         } catch (Exception e) {
             e.printStackTrace();
+            hideProgress();
         }
     }
 
@@ -3610,6 +3676,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void openReportPage(int pos) {
+        if (comment_chooseLanguage_models == null
+                || pos < 0
+                || pos >= comment_chooseLanguage_models.size()) {
+            return;
+        }
         if(allsharedpreference.getEmailId()!=null && !allsharedpreference.getEmailId().equalsIgnoreCase("")){
             ListOfCommentsResponse.Datum lDatum=  comment_chooseLanguage_models.get(pos);
             CommentsBottomSheetDialog commentsBottomSheetDialog =
@@ -3900,61 +3971,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 @Override
                 public void onResponse(Call<EncreptionRequest> call, Response<EncreptionRequest> response) {
                     hideProgress();
+                    if (response == null || !response.isSuccessful()) {
+                        return;
+                    }
                     EncreptionRequest encreptionRequest = response.body();
-                    String encrpt_data = null;
-                    /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        encrpt_data = decrypt(encreptionRequest.getData());
-                    }*/
-                    encrpt_data = decrypt(encreptionRequest.getData());
+                    if (encreptionRequest == null || encreptionRequest.getData() == null) {
+                        return;
+                    }
+                    String encrpt_data = decrypt(encreptionRequest.getData());
                     showLog("comments response:"+encrpt_data);
 
                     Gson gsonObj = new Gson();
                     ListOfCommentsResponse validateUserOtp = gsonObj.fromJson(encrpt_data, ListOfCommentsResponse.class);
-                    if (validateUserOtp.getSuccess()) {
-                        if (validateUserOtp.getData().size() == 0) {
-                            comment_recycler_view.setVisibility(View.INVISIBLE);
-                            linear_no_comment_page.setVisibility(View.VISIBLE);
-                        } else {
-                            for (int i = 0; i < validateUserOtp.getData().size(); i++) {
-                                ListOfCommentsResponse.Datum datum = new ListOfCommentsResponse.Datum();
-                                datum.setId(validateUserOtp.getData().get(i).getId());
-                                datum.setPostId(validateUserOtp.getData().get(i).getPostId());
-                                datum.setDraftId(validateUserOtp.getData().get(i).getDraftId());
-                                datum.setUserName(validateUserOtp.getData().get(i).getUserName());
-                                datum.setComment(validateUserOtp.getData().get(i).getComment());
-                                datum.setCreatedAt(validateUserOtp.getData().get(i).getCreatedAt());
-                                datum.setCommentTime(validateUserOtp.getData().get(i).getCommentTime());
-                                datum.setUser_profile_pic(validateUserOtp.getData().get(i).getUser_profile_pic());
-                                datum.setEmail(validateUserOtp.getData().get(i).getEmail());
-                                comment_chooseLanguage_models.add(datum);
-                            }
-
-
-                            //   comment_progress.setVisibility(View.GONE);
-
-                            comment_linearlayoutmanager = new LinearLayoutManager(getContext());
-                            comment_recycler_view.setLayoutManager(comment_linearlayoutmanager);
-                            comment_totoal_count.setVisibility(View.VISIBLE);
-                            comment_recycler_view.setVisibility(View.VISIBLE);
-                            linear_no_comment_page.setVisibility(View.GONE);
-                            MailAdapter mMailAdapter = new MailAdapter(
-                                    HomePage.this,
-                                    comment_chooseLanguage_models,
-                                    position -> openReportPage(position),
-                                    position -> { },
-                                    position -> { },
-                                    position -> { });
-                            comment_recycler_view.setAdapter(mMailAdapter);
-                            comment_totoal_count.setText(" Comments ( " + comment_chooseLanguage_models.size() + " )");
-                            //        leave_comment_white.setText(" " + languageModelResponse.getData().getLeaveAComment());
-                        }
-
-
-                    } else {
-
-
-                    }
-
+                    bindCommentsListFromResponse(validateUserOtp);
                 }
 
                 @Override
@@ -4237,7 +4266,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     && response.isSuccessful()
                                     && PublicEdgeFeedHelper.isAcceptableEdgeResponse(
                                             body, skip)) {
-                                PublicEdgeFeedHelper.logPublicFeedResponse(call, response);
+                                EdgeDebugHud.notifyPublicFeedResponse(call, response);
                                 String telKind =
                                         flashNewsModeActive
                                                 ? "flash"
@@ -4498,6 +4527,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (call != null && call.isCanceled()) {
                         return;
                     }
+                    EdgeDebugHud.stageFeedSource("Feed: List POST");
                     convertListOfArticles(response, reqPos);
                 }
 
@@ -4598,35 +4628,13 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (encreptionRequest.getUpdateMenuStatus() != null && encreptionRequest.getUpdateMenuStatus()==2 ){
                         PlaystoreUpdateDialog();
                     }
-                    // ads_data / ad_positions: seat metadata for the feed — do NOT fan-out
-                    // AdLoader for every position on page-0. At most one preload; seat
-                    // loads happen on land + ~30s stay-refresh (single in-flight).
-                    if (encreptionRequest.isShow_ads() && positionx == 0
-                            && encreptionRequest.getAd_positions() != null
-                            && !encreptionRequest.getAd_positions().isEmpty()) {
-                        if (!shouldDeferAdWork()) {
-                            AdsPojo first = null;
-                            for (int i = 0; i < encreptionRequest.getAd_positions().size(); i++) {
-                                AdsPojo p = encreptionRequest.getAd_positions().get(i);
-                                if (p != null && !TextUtils.isEmpty(p.getAd_code())
-                                        && p.getAd_req_position() != null) {
-                                    first = p;
-                                    break;
-                                }
-                            }
-                            if (first != null) {
-                                showLog("ListAll Articles Api trigger and AD Loading (single)");
-                                loadAds(first.getAd_code(), first.getAd_req_position(),
-                                        first.getAd_type());
-                            }
-                        } else {
-                            showLog("ListAll Articles ad load deferred/skipped (flip or in-flight)");
-                        }
-                    }
+                    // ads_data / ad_positions: metadata only — AdLoader runs on seat land
+                    // or scroll-ahead prefetch (one in-flight).
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
                         final int listSizeBefore = list.size();
                         rememberFeedSeenPostIds(validateUserOtp.getData());
                         addUniqueArticles(validateUserOtp.getData());
+                        EdgeDebugHud.flushStagedFeedSource();
                         if (reqPos == 3
                                 && list.size() == listSizeBefore
                                 && validateUserOtp.getData().size() > 0) {
@@ -4640,7 +4648,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     category_id, 3, listAllArticlesGen, true);
                             return;
                         }
-                        if (encreptionRequest.isShow_ads()) {
+                        if (isSpecialFeedActive()) {
+                            stripSpecialFeedAdsIfNeeded();
+                        } else if (encreptionRequest.isShow_ads()) {
                             rebalanceFeedAdsIfNeeded(encreptionRequest);
                         }
                         requestSize = list.size();
@@ -4675,7 +4685,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 encreptionRequest.getAction_row_whatsapp_enabled(),
                                 encreptionRequest.getAction_row_whatsapp_full_enabled(),
                                 encreptionRequest.getAction_row_whatsapp_half_enabled());
-                        if (encreptionRequest.isShow_ads()) {
+                        if (!isSpecialFeedActive()
+                                && encreptionRequest.isShow_ads()
+                                && shouldRunAdScrollPrefetch()) {
                             preloadNativeAdsForFeedSlots();
                         }
                         if (reqPos == 3) {
@@ -4811,7 +4823,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 showLog("showReporterLogin:" + showReporterLogin);
                 // Footer center = WhatsApp only; reporter create lives on Profile (isFooterShowPlus false).
                 floatingActionButtonHome.setVisibility(View.GONE);
-                applyFooterWhatsapp();
+                applyFooterCenterShare();
                 Boolean pushPermAlert = encreptionRequest.getShow_push_perm_alert();
                 showNotificationAlert(pushPermAlert != null && pushPermAlert);
             }else{
@@ -5271,7 +5283,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
         //loading Ad (flip-safe defer — no full native pool rewrite)
-        if (list.get(positionx).getPostType().equalsIgnoreCase("ad")) {
+        if (!isSpecialFeedActive()
+                && list.get(positionx).getPostType().equalsIgnoreCase("ad")) {
             final ModelClass.Datum adSeat = list.get(positionx);
             ensureAdSeatReqPositionOnDatum(positionx, adSeat);
             final int seatPos = resolveFeedAdSeatReqPosition(positionx, adSeat);
@@ -5301,6 +5314,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } else {
             cancelAdSeatStayRefresh();
+        }
+        try {
+            if (!isSpecialFeedActive()
+                    && encreptionRequest__ != null
+                    && encreptionRequest__.isShow_ads()
+                    && shouldRunAdScrollPrefetch()
+                    && list.get(position).getPostType() != null
+                    && !list.get(position).getPostType().equalsIgnoreCase("ad")) {
+                preloadNativeAdsForFeedSlots();
+            }
+        } catch (Exception ignored) {
         }
         showLog("CHECK POINT ONFLIPPEDTOPAGE 7");
         try {
@@ -5358,6 +5382,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         adapter = null;
+        EdgeDebugHud.detach(this);
         super.onDestroy();
         isFromLocalArticles=false;
 
@@ -5439,6 +5464,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void onResume() {
         super.onResume();
         homeLifecycleResumed = true;
+        try {
+            applyFooterCenterShare();
+        } catch (Exception ignored) {
+        }
         try {
             ViewsBatchTracker.get().setHomeFlushActive(true);
             PostDwellTracker.get().onResumed(getApplicationContext());
@@ -5726,78 +5755,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 case R.id.navigation_stricker:
                     // firebase events triggered
                     showLog("isUnreadPostsSelected set to false #1");
-                    //SharedPrefsData.putBool(HomePage.this, Constants.isUnreadPostsSelected, false, Constants.PREF_NAME);
                     writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_post);
                     showLog("showReporterLogin:"+showReporterLogin);
                     if (!showReporterLogin) {
-                        if (list != null
-                                && positionx >= 0
-                                && positionx < list.size()
-                                && list.get(positionx).getPostType() != null
-                                && (list.get(positionx).getPostType().equalsIgnoreCase("ad")
-                                        || list.get(positionx)
-                                                .getPostType()
-                                                .equalsIgnoreCase("share_app"))) {
-                            shareAnyNewsAppPromotion();
-                            return true;
-                        }
-                        showLog("onClick of whatsapp");
-                        CallShareListener listener = new CallShareListener();
-                        listener.setShareInterfaceListener(adapter);
-                        listener.triggerEvent();
-                        showLog("onClick of whatsapp:" + ppi);
-                        if (list!=null && list.size()>0 && list.get(positionx).getPostType().equalsIgnoreCase("image_gallery")) {
-                            //adapter.shareGalleryScreenShot(positionx, 1);
-                            adapter.shareGalleryScreenShotUI(mFlipView.getChildAt(ppi));
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("full_image")) {
-                            adapter.shareFullImageScree(mFlipView.getChildAt(ppi), positionx);
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("normal_image")) {
-                            adapter.takeNormalImageScreenshot(mFlipView.getChildAt(ppi), positionx, 1);
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("magazine")) {
-                            adapter.showMagazineShareOptions(mFlipView.getChildAt(ppi), 1);
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("normal_video")) {
-                            if (list.get(positionx).getMediaType().equals("3")) {
-                                PlayerView simpleExoPlayerView = mFlipView.getChildAt(ppi).findViewById(R.id.normal_video_player);
-                                final ImageView thaumbnail_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.thaumbnail_for_video);
-                                final ImageView imageViewExoVideoPlayVideo = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewVideoPlayVideo);
-                                final ProgressBar progress_bar_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.progress_bar_for_video);
-                                adapter.shareExoPlayerVideoScreenShot(mFlipView.getChildAt(ppi), positionx, 1, simpleExoPlayerView, thaumbnail_for_video, imageViewExoVideoPlayVideo, progress_bar_for_video);
-
-
-                            } else if (list.get(positionx).getMediaType().equals("4")) {
-                                final ImageView thaumbnail_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.thaumbnail_for_video);
-                                final ImageView imageViewItem__ = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewItem__);
-                                final ImageView imageViewExoVideoPlayVideo = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewVideoPlayVideo);
-                                final ProgressBar progress_bar_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.progress_bar_for_video);
-                                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView youTubePlayerView = mFlipView.getChildAt(ppi).findViewById(R.id.youtube_view_half_video);
-                                adapter.shareYoutubeVideoScreenShot(mFlipView.getChildAt(ppi), positionx, youTubePlayerView, 1, imageViewItem__);
-                            }
-
-                        }
-                        if (list.get(positionx).getPostType().equalsIgnoreCase("full_video")) {
-                            if (list.get(positionx).getMediaType().equals("5")) {
-                                final ImageView thaumbnail_for_video = mFlipView.getChildAt(ppi).findViewById(R.id.thaumbnail_for_video);
-                                final RelativeLayout exo_play_layout = mFlipView.getChildAt(ppi).findViewById(R.id.exo_play_layout);
-                                final ImageView imageViewExoVideoPlayVideo = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewVideoPlayVideo);
-                                PlayerView simpleExoPlayerViewFull = mFlipView.getChildAt(ppi).findViewById(R.id.normal_video_player);
-                                adapter.shareExoPlayerFullVideoShare(positionx, 1, thaumbnail_for_video, exo_play_layout, imageViewExoVideoPlayVideo, simpleExoPlayerViewFull);
-
-
-                            } else if (list.get(positionx).getMediaType().equals("6")) {
-                                ImageView newFullImageView1 = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewItem1);
-                                RelativeLayout layoutYoutubeFullView = mFlipView.getChildAt(ppi).findViewById(R.id.layoutYoutubeFullView);
-                                final com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView youTubePlayerView = mFlipView.getChildAt(ppi).findViewById(R.id.youtube_full_video);
-                                ImageView imageViewYoutubePlayVideo = mFlipView.getChildAt(ppi).findViewById(R.id.imageViewPlayVideo);
-                                LinearLayout side_menu = mFlipView.getChildAt(ppi).findViewById(R.id.video_side_menu);
-                                adapter.shareYoutubePlayerFullVideoShare(positionx, 1, newFullImageView1, youTubePlayerView, layoutYoutubeFullView, imageViewYoutubePlayVideo, side_menu);
-                            }
-
-                        }
-
+                        onFooterCenterShareTapped();
                     } else {
                         countDownTimer = new CountDownTimer(100, 100) {
 
@@ -7042,9 +7003,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (!ProfileHubConfigHelper.isFooterShowVideos(this) || !isDeviceOnline()) {
             return;
         }
+        try {
+            OpenPathSplashConfigRefresher.maybeRefreshOnAuxiliaryOpen(this);
+        } catch (Exception ignored) {
+        }
         dailyUpdatesModeActive = true;
         persistDailyUpdatesDestination(true);
         SharedPrefsData.putBool(HomePage.this, Constants.isUnreadPostsSelected, false, Constants.PREF_NAME);
+        try {
+            applyFooterCenterShare();
+        } catch (Exception ignored) {
+        }
         try {
             enforceExclusiveFooterSelection(R.id.navigation_status);
         } catch (Exception ignored) {
@@ -7183,6 +7152,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         if (!ProfileHubConfigHelper.isFooterShowSpecial(this) || !isDeviceOnline()) {
             return;
         }
+        try {
+            OpenPathSplashConfigRefresher.maybeRefreshOnAuxiliaryOpen(this);
+        } catch (Exception ignored) {
+        }
         hideHomeDailyUpdatesMode();
         hideHomeCalendarMode();
         hideLocalFeedChromeThin();
@@ -7223,6 +7196,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         resetFeedCursorsForSoftOpen();
         inlist(0);
+        try {
+            applyFooterCenterShare();
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -7253,6 +7230,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 HomePage.this, Constants.isUnreadPostsSelected, false, Constants.PREF_NAME);
         SharedPrefsData.putBool(
                 HomePage.this, Constants.isVideoPostsSelected, false, Constants.PREF_NAME);
+        try {
+            applyFooterCenterShare();
+        } catch (Exception ignored) {
+        }
         if (forceNetworkRefresh) {
             try {
                 // Slot-change / soft News: force network page-0 WITHOUT greeting poll.
@@ -7475,9 +7456,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             MenuItem centerSlot = menu.findItem(R.id.navigation_stricker);
             if (!online) {
                 hideFooterWhatsapp();
+                hideMagazineFooterShare();
                 centerFooterSpacerPrepared = false;
                 setFooterMenuItemVisible(centerSlot, false);
             } else if (showCalendar) {
+                hideMagazineFooterShare();
                 centerFooterSpacerPrepared = false;
                 if (centerSlot != null) {
                     centerSlot.setIcon(R.drawable.ic_footer_panchangam);
@@ -7486,7 +7469,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } else {
                 prepareMagazineShareCenterSlot(centerSlot);
                 hideShareCenterSlotChrome();
-                applyFooterWhatsapp();
+                applyFooterCenterShare();
             }
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_status), showVideos);
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_profile), showProfile);
@@ -7679,6 +7662,150 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return null;
     }
 
+    /** Special tab → system share sheet; News tab → legacy WhatsApp-first paths. */
+    private int footerSharePackagingFrom() {
+        return isSpecialFeedActive() ? 0 : 1;
+    }
+
+    /**
+     * Center footer control: magazine Share on Special tab, WhatsApp on News et al.
+     */
+    private void applyFooterCenterShare() {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        try {
+            if (showReporterLogin) {
+                hideMagazineFooterShare();
+                hideFooterWhatsapp();
+                return;
+            }
+            if (isSpecialFeedActive() && isDeviceOnline()) {
+                hideFooterWhatsapp();
+                applyMagazineFooterShareOverlay();
+            } else {
+                hideMagazineFooterShare();
+                applyFooterWhatsapp();
+            }
+        } catch (Exception e) {
+            showLog("applyFooterCenterShare: " + e.getMessage());
+        }
+    }
+
+    private void applyMagazineFooterShareOverlay() {
+        if (layoutMagazineShareFooter == null) {
+            return;
+        }
+        try {
+            layoutMagazineShareFooter.setVisibility(View.VISIBLE);
+            layoutMagazineShareFooter.setEnabled(true);
+            if (home_page_navigation != null) {
+                layoutMagazineShareFooter.bringToFront();
+            }
+            if (ivMagazineShareFooter != null) {
+                ivMagazineShareFooter.clearAnimation();
+                Animation pulse = AnimationUtils.loadAnimation(this, R.anim.pulse_share);
+                ivMagazineShareFooter.startAnimation(pulse);
+            }
+            hideShareCenterSlotChrome();
+            repositionCenterFabForVisibleTabs();
+        } catch (Exception e) {
+            showLog("applyMagazineFooterShareOverlay: " + e.getMessage());
+        }
+    }
+
+    private void hideMagazineFooterShare() {
+        if (layoutMagazineShareFooter == null) {
+            return;
+        }
+        try {
+            layoutMagazineShareFooter.setVisibility(View.GONE);
+            if (ivMagazineShareFooter != null) {
+                ivMagazineShareFooter.clearAnimation();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Center slot / footer Share tap — Play Store magazine payload via chooser on Special. */
+    private void onFooterCenterShareTapped() {
+        if (showReporterLogin || adapter == null || list == null
+                || positionx < 0 || positionx >= list.size()) {
+            return;
+        }
+        ModelClass.Datum item = list.get(positionx);
+        if (item == null || item.getPostType() == null) {
+            return;
+        }
+        if (item.getPostType().equalsIgnoreCase("ad")
+                || item.getPostType().equalsIgnoreCase("share_app")) {
+            shareAnyNewsAppPromotion();
+            return;
+        }
+        CallShareListener listener = new CallShareListener();
+        listener.setShareInterfaceListener(adapter);
+        listener.triggerEvent();
+        View flipChild = (mFlipView != null) ? mFlipView.getChildAt(ppi) : null;
+        if (flipChild == null) {
+            return;
+        }
+        final boolean specialShare = isSpecialFeedActive();
+        final int shareFrom = footerSharePackagingFrom();
+        String postType = item.getPostType();
+        if (postType.equalsIgnoreCase("image_gallery")) {
+            if (specialShare) {
+                adapter.shareGalleryScreenShot(positionx, 0, flipChild);
+            } else {
+                adapter.shareGalleryScreenShotUI(flipChild);
+            }
+        } else if (postType.equalsIgnoreCase("full_image")) {
+            adapter.shareFullImageScree(flipChild, positionx);
+        } else if (postType.equalsIgnoreCase("normal_image")) {
+            adapter.takeNormalImageScreenshot(flipChild, positionx, shareFrom);
+        } else if (postType.equalsIgnoreCase("magazine")) {
+            if (specialShare) {
+                ImageView shareIcon = flipChild.findViewById(R.id.imageViewShare);
+                RelativeLayout shareOpt = flipChild.findViewById(R.id.relativeLayoutShareOpt);
+                RelativeLayout slider = flipChild.findViewById(R.id.magzine_relative_slider);
+                adapter.shareMagazineScreenShot(shareIcon, shareOpt, positionx, slider);
+            } else {
+                adapter.showMagazineShareOptions(flipChild, 1);
+            }
+        } else if (postType.equalsIgnoreCase("normal_video")) {
+            if ("3".equals(item.getMediaType())) {
+                PlayerView pv = flipChild.findViewById(R.id.normal_video_player);
+                ImageView thumb = flipChild.findViewById(R.id.thaumbnail_for_video);
+                ImageView play = flipChild.findViewById(R.id.imageViewVideoPlayVideo);
+                ProgressBar bar = flipChild.findViewById(R.id.progress_bar_for_video);
+                adapter.shareExoPlayerVideoScreenShot(
+                        flipChild, positionx, shareFrom, pv, thumb, play, bar);
+            } else if ("4".equals(item.getMediaType())) {
+                ImageView thumb = flipChild.findViewById(R.id.imageViewItem__);
+                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView yt =
+                        flipChild.findViewById(R.id.youtube_view_half_video);
+                adapter.shareYoutubeVideoScreenShot(flipChild, positionx, yt, shareFrom, thumb);
+            }
+        } else if (postType.equalsIgnoreCase("full_video")) {
+            if ("5".equals(item.getMediaType())) {
+                ImageView thumb = flipChild.findViewById(R.id.thaumbnail_for_video);
+                RelativeLayout exoPlay = flipChild.findViewById(R.id.exo_play_layout);
+                ImageView play = flipChild.findViewById(R.id.imageViewVideoPlayVideo);
+                PlayerView pv = flipChild.findViewById(R.id.normal_video_player);
+                adapter.shareExoPlayerFullVideoShare(
+                        positionx, shareFrom, thumb, exoPlay, play, pv);
+            } else if ("6".equals(item.getMediaType())) {
+                ImageView cover = flipChild.findViewById(R.id.imageViewItem1);
+                RelativeLayout ytLayout = flipChild.findViewById(R.id.layoutYoutubeFullView);
+                com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView yt =
+                        flipChild.findViewById(R.id.youtube_full_video);
+                ImageView play = flipChild.findViewById(R.id.imageViewPlayVideo);
+                LinearLayout side = flipChild.findViewById(R.id.video_side_menu);
+                adapter.shareYoutubePlayerFullVideoShare(
+                        positionx, shareFrom, cover, yt, ytLayout, play, side);
+            }
+        }
+    }
+
     /**
      * Half-row WhatsApp chip — same share path as center footer WhatsApp.
      * Does not re-hit like APIs or start extra feed calls.
@@ -7688,62 +7815,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             if (position >= 0) {
                 positionx = position;
             }
-            if (adapter == null || list == null || positionx < 0 || positionx >= list.size()) {
-                return;
-            }
-            CallShareListener listener = new CallShareListener();
-            listener.setShareInterfaceListener(adapter);
-            listener.triggerEvent();
-            View flipChild = (mFlipView != null) ? mFlipView.getChildAt(ppi) : null;
-            if (flipChild == null) {
-                return;
-            }
-            ModelClass.Datum item = list.get(positionx);
-            if (item == null || item.getPostType() == null) {
-                return;
-            }
-            String postType = item.getPostType();
-            if (postType.equalsIgnoreCase("image_gallery")) {
-                adapter.shareGalleryScreenShotUI(flipChild);
-            } else if (postType.equalsIgnoreCase("full_image")) {
-                adapter.shareFullImageScree(flipChild, positionx);
-            } else if (postType.equalsIgnoreCase("normal_image")) {
-                adapter.takeNormalImageScreenshot(flipChild, positionx, 1);
-            } else if (postType.equalsIgnoreCase("magazine")) {
-                adapter.showMagazineShareOptions(flipChild, 1);
-            } else if (postType.equalsIgnoreCase("normal_video")) {
-                if ("3".equals(item.getMediaType())) {
-                    PlayerView pv = flipChild.findViewById(R.id.normal_video_player);
-                    ImageView thumb = flipChild.findViewById(R.id.thaumbnail_for_video);
-                    ImageView play = flipChild.findViewById(R.id.imageViewVideoPlayVideo);
-                    ProgressBar bar = flipChild.findViewById(R.id.progress_bar_for_video);
-                    adapter.shareExoPlayerVideoScreenShot(
-                            flipChild, positionx, 1, pv, thumb, play, bar);
-                } else if ("4".equals(item.getMediaType())) {
-                    ImageView thumb = flipChild.findViewById(R.id.imageViewItem__);
-                    com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView yt =
-                            flipChild.findViewById(R.id.youtube_view_half_video);
-                    adapter.shareYoutubeVideoScreenShot(flipChild, positionx, yt, 1, thumb);
-                }
-            } else if (postType.equalsIgnoreCase("full_video")) {
-                if ("5".equals(item.getMediaType())) {
-                    ImageView thumb = flipChild.findViewById(R.id.thaumbnail_for_video);
-                    RelativeLayout exoPlay = flipChild.findViewById(R.id.exo_play_layout);
-                    ImageView play = flipChild.findViewById(R.id.imageViewVideoPlayVideo);
-                    PlayerView pv = flipChild.findViewById(R.id.normal_video_player);
-                    adapter.shareExoPlayerFullVideoShare(
-                            positionx, 1, thumb, exoPlay, play, pv);
-                } else if ("6".equals(item.getMediaType())) {
-                    ImageView cover = flipChild.findViewById(R.id.imageViewItem1);
-                    RelativeLayout ytLayout = flipChild.findViewById(R.id.layoutYoutubeFullView);
-                    com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView yt =
-                            flipChild.findViewById(R.id.youtube_full_video);
-                    ImageView play = flipChild.findViewById(R.id.imageViewPlayVideo);
-                    LinearLayout side = flipChild.findViewById(R.id.video_side_menu);
-                    adapter.shareYoutubePlayerFullVideoShare(
-                            positionx, 1, cover, yt, ytLayout, play, side);
-                }
-            }
+            onFooterCenterShareTapped();
         } catch (Exception e) {
             e.printStackTrace();
         }

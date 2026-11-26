@@ -85,8 +85,9 @@ public final class FeedAdConfig {
      * between fixed seats (~4). Deeper windows stockpile matched ads that never
      * impress and depress match rate. App hard-caps seat AdLoader starts to 1.
      */
-    public static final int DEFAULT_PREFETCH_LOOKAHEAD = 4;
-    public static final int MIN_PREFETCH_LOOKAHEAD = 3;
+    /** ~2 flip pages ahead while scrolling (Way2 / Play-smooth). */
+    public static final int DEFAULT_PREFETCH_LOOKAHEAD = 2;
+    public static final int MIN_PREFETCH_LOOKAHEAD = 2;
     public static final int MAX_PREFETCH_LOOKAHEAD = 12;
 
     /**

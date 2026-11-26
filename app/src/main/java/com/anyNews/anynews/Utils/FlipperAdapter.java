@@ -64,6 +64,7 @@ import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.webkit.SslErrorHandler;
@@ -2021,6 +2022,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         }
     }
 
+    private boolean isSpecialFeedActive() {
+        try {
+            HomePage hp = resolveHomePageHost(context);
+            if (hp == null && activity instanceof HomePage) {
+                hp = (HomePage) activity;
+            }
+            return hp != null && hp.isSpecialFeedActive();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     @Nullable
     private static HomePage resolveHomePageHost(@Nullable Context ctx) {
         if (ctx instanceof HomePage) {
@@ -2268,23 +2281,27 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         //media_type: 5 => full normal video
                         //media_type: 6 => full youtube video
                         fromWhatsapp = false;
-                        if (list.get(position).getMediaType().equals("5")) {
-                            full_videoViewHolder = new FullVideoViewHolder();
-                            convertView = inflater.inflate(
-                                    FeedVideoPlayerConfig.fullVideoLayout(context), parent, false);
-                            showFullVideoWithExoPlayer(position, convertView);
-                        }
-                        // full youtube video
-                        else if (list.get(position).getMediaType().equals("6")) {
-                            fullVideoNewYoutubeViewHolder = new FullVideoNewYoutubeViewHolder();
-                            convertView = inflater.inflate(R.layout.youtube_full_videos_new, parent, false);
-                            showFullVideoWithYoutube(position, convertView);
-
-                        }
-                        // full youtube video
-                        else {
-                            full_youTubePlayerHolder = new FullYouTubePlayerHolder();
-                            convertView = inflater.inflate(R.layout.activity_full_youtube_video_detailes, parent, false);
+                        {
+                            String fullMedia = feedDatumMediaType(list.get(position));
+                            if ("5".equals(fullMedia)) {
+                                full_videoViewHolder = new FullVideoViewHolder();
+                                convertView = inflater.inflate(
+                                        FeedVideoPlayerConfig.fullVideoLayout(context), parent, false);
+                                showFullVideoWithExoPlayer(position, convertView);
+                            } else if ("6".equals(fullMedia)) {
+                                fullVideoNewYoutubeViewHolder = new FullVideoNewYoutubeViewHolder();
+                                convertView = inflater.inflate(R.layout.youtube_full_videos_new, parent, false);
+                                showFullVideoWithYoutube(position, convertView);
+                            } else if (StatusVideoMedia.resolveYoutubeId(list.get(position)) != null) {
+                                full_youTubePlayerHolder = new FullYouTubePlayerHolder();
+                                convertView = inflater.inflate(
+                                        R.layout.activity_full_youtube_video_detailes, parent, false);
+                            } else {
+                                full_videoViewHolder = new FullVideoViewHolder();
+                                convertView = inflater.inflate(
+                                        FeedVideoPlayerConfig.fullVideoLayout(context), parent, false);
+                                showFullVideoWithExoPlayer(position, convertView);
+                            }
                         }
                         customConvertView = convertView;
                         break;
@@ -2297,7 +2314,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                             convertView = inflater.inflate(R.layout.activity_half_video_detailes, parent, false);
                         }else */
                         fromWhatsapp = false;
-                        if (list.get(position).getMediaType().equals("3")) {
+                        {
+                            String halfMedia = feedDatumMediaType(list.get(position));
+                            if ("3".equals(halfMedia)) {
                             halfVideoExoPlayerHolder = new HalfVideoExoPlayerHolder();
                             boolean teluguFeed = LanguageId != 1 && LanguageId != 4;
                             convertView = inflater.inflate(
@@ -2305,7 +2324,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     parent,
                                     false);
                             showHalfPostExoPlayerVideo(convertView, position);
-                        } else if (list.get(position).getMediaType().equals("4")) {
+                            } else if ("4".equals(halfMedia)) {
                             half_youTubePlayerHolder = new HalfYouTubePlayerHolder();
                             if (AppHelper.isTeluguLanguageSelected()) {
                                 convertView =
@@ -2321,6 +2340,7 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                                 false);
                             }
                             showHalfPostYoutubeVideo(convertView, position);
+                            }
                         }
                         break;
                     case "magazine":
@@ -2335,6 +2355,9 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         final TextView textViewAllPage = convertView.findViewById(R.id.textViewAllPage);
                         final TextView textViewSinglePage = convertView.findViewById(R.id.textViewSinglePage);
                         final ImageView imageViewShareClose = convertView.findViewById(R.id.imageViewShareClose);
+                        // Special tab: footer center Share replaces on-card FAB.
+                        imageViewShareMag.setVisibility(GONE);
+                        imageViewShareMag.clearAnimation();
                         //imageGallaryHolder.galleryLayout.setLayerType(View.LAYER_TYPE_NONE,null);
                         imageViewShareMag.setOnClickListener(new View.OnClickListener() {
                             @Override
@@ -2442,6 +2465,16 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         }
                         break;
                     case "ad":
+                        if (isSpecialFeedActive()) {
+                            showLog("ads_screen skip — special feed active");
+                            convertView = new FrameLayout(context);
+                            convertView.setLayoutParams(
+                                    new ViewGroup.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.MATCH_PARENT));
+                            adapterCallback.closeBottomStrip(true);
+                            break;
+                        }
                         pauseVideo();
                         String TAG = "AD DATA";
                         adsScreenViewHolder = new AdsScreenViewHolder();
@@ -2539,9 +2572,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                                     if (fromView == 2
                                             && isRegularFlipNativeViewType(list.get(position).getAd_view_type())
                                             && nativeAdHasHeroMedia(ad)) {
-                                        fromView = 0;
+                                        // Medium = MediaView + headline/CTA; full template is media-only.
+                                        fromView = 1;
                                         myView = LayoutInflater.from(context)
-                                                .inflate(R.layout.anynews_ad_full_template_view, null);
+                                                .inflate(R.layout.anynews_ad_medium_template_view, null);
                                     }
                                     View finalConvertView2 = convertView;
                                     View finalMyView = myView;
@@ -2723,13 +2757,18 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                         imageGallaryHolder.imageViewShareClose = convertView.findViewById(R.id.imageViewShareClose);
                         //imageGallaryHolder.galleryLayout.setLayerType(View.LAYER_TYPE_NONE,null);
                         imageGallaryHolder.relativeLayoutShareOpt.setVisibility(GONE);
-                        final Animation myAnim = AnimationUtils.loadAnimation(context, R.anim.bounce);
-                        double animationDuration = 8 * 1000;
-                        myAnim.setDuration((long) animationDuration);
-                        // Use custom animation interpolator to achieve the bounce effect
-                        MyBounceInterpolator interpolator = new MyBounceInterpolator(0.60, 20.00);
-                        myAnim.setInterpolator(interpolator);
-                        imageGallaryHolder.image_gallary_share.startAnimation(myAnim);
+                        if (isSpecialFeedActive()) {
+                            imageGallaryHolder.image_gallary_share.setVisibility(GONE);
+                            imageGallaryHolder.image_gallary_share.clearAnimation();
+                        } else {
+                            final Animation myAnim = AnimationUtils.loadAnimation(context, R.anim.bounce);
+                            double animationDuration = 8 * 1000;
+                            myAnim.setDuration((long) animationDuration);
+                            MyBounceInterpolator interpolator = new MyBounceInterpolator(0.60, 20.00);
+                            myAnim.setInterpolator(interpolator);
+                            imageGallaryHolder.image_gallary_share.setVisibility(VISIBLE);
+                            imageGallaryHolder.image_gallary_share.startAnimation(myAnim);
+                        }
                         //imageGallaryHolder.indicator.initialize(config);
                         for (int i = 0; i < list.get(position).getImages().size(); i++) {
                             image_gallary.add(list.get(position).getImages().get(i));
@@ -3612,6 +3651,10 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         if (convertView == null) {
             return;
         }
+        if (isSpecialFeedActive()) {
+            hideAdsScreenChrome(convertView);
+            return;
+        }
         try {
             convertView.setTag(R.id.tag_ad_seat_feed_index, adPosition);
             LinearLayout topFlash = convertView.findViewById(R.id.ad_top_flash_slots);
@@ -3713,6 +3756,43 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
             }
         } catch (Exception e) {
             showLog("bindAdsScreenCompanion: " + e.getMessage());
+        }
+    }
+
+    /** Hide native slot + Recommended News chrome (Special tab belt-and-suspenders). */
+    private static void hideAdsScreenChrome(@Nullable View convertView) {
+        if (convertView == null) {
+            return;
+        }
+        try {
+            View body = convertView.findViewById(R.id.ad_feed_body);
+            if (body != null) {
+                body.setVisibility(GONE);
+            }
+            TextView advertise = convertView.findViewById(R.id.ad_feed_advertise_link);
+            if (advertise != null) {
+                advertise.setVisibility(GONE);
+            }
+            View title = convertView.findViewById(R.id.ad_recommended_title);
+            if (title != null) {
+                title.setVisibility(GONE);
+            }
+            LinearLayout slotHost = convertView.findViewById(R.id.ad_recommended_list);
+            if (slotHost != null) {
+                slotHost.removeAllViews();
+                slotHost.setVisibility(GONE);
+            }
+            FrameLayout placeholder = convertView.findViewById(R.id.fl_adplaceholder);
+            if (placeholder != null) {
+                placeholder.removeAllViews();
+                placeholder.setVisibility(GONE);
+            }
+            LinearLayout topFlash = convertView.findViewById(R.id.ad_top_flash_slots);
+            if (topFlash != null) {
+                topFlash.removeAllViews();
+                topFlash.setVisibility(GONE);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -4218,6 +4298,56 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         });
     }
 
+    private static void ensureNativeCtaVisible(@Nullable NativeAdView adView, @Nullable NativeAd ad) {
+        if (adView == null || ad == null) {
+            return;
+        }
+        View ctaView = adView.getCallToActionView();
+        if (!(ctaView instanceof TextView)) {
+            return;
+        }
+        TextView cta = (TextView) ctaView;
+        String label = ad.getCallToAction();
+        if (TextUtils.isEmpty(label)) {
+            label = "Learn more";
+        }
+        cta.setText(label);
+        cta.setVisibility(VISIBLE);
+    }
+
+    /** Let MediaView use all space above the text/CTA row (no 62% crop). */
+    private void fitRegularNativeMediaToSlot(@Nullable NativeAdView adView, @Nullable ViewGroup parent) {
+        if (adView == null || parent == null) {
+            return;
+        }
+        final View rlTop = adView.findViewById(R.id.rl_top);
+        final View rlBtm = adView.findViewById(R.id.rl_btm);
+        if (rlTop == null) {
+            return;
+        }
+        parent.post(() -> {
+            int slotH = parent.getHeight();
+            if (slotH <= 0) {
+                return;
+            }
+            final int bottomH =
+                    rlBtm != null && rlBtm.getHeight() > 0
+                            ? rlBtm.getHeight()
+                            : (int) (slotH * 0.32f);
+            int mediaH = Math.max(slotH - bottomH, (int) (slotH * 0.55f));
+            ViewGroup.LayoutParams topLp = rlTop.getLayoutParams();
+            if (topLp != null) {
+                topLp.height = mediaH;
+                rlTop.setLayoutParams(topLp);
+            }
+            View media = adView.findViewById(R.id.ad_media);
+            if (media != null && media.getLayoutParams() != null) {
+                media.getLayoutParams().height = mediaH;
+                media.requestLayout();
+            }
+        });
+    }
+
     private void displayGoogleFullNativeAd(ViewGroup parent, NativeAd ad,View myView,View convertView) {
         {
             // Inflate a layout and add it to the parent ViewGroup.
@@ -4374,6 +4504,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                     // Place the AdView into the parent.[;
                     parent.setVisibility(VISIBLE);
                     parent.addView(nativeAdView);
+                    ensureNativeCtaVisible(nativeAdView, nativeAd);
+                    fitRegularNativeMediaToSlot(nativeAdView, parent);
                     showLog("AD #10");
 
 
@@ -4445,7 +4577,8 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
                 // Place the AdView into the parent.[;
                 parent.setVisibility(VISIBLE);
                 parent.addView(adView);
-                applyRegularNativeSlotSizing(adView, parent);
+                ensureNativeCtaVisible(adView, ad);
+                fitRegularNativeMediaToSlot(adView, parent);
                 showLog("AD #10");
             }
 
@@ -8669,6 +8802,33 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
     }
 
     /**
+     * FlipView rows sometimes omit {@code media_type}; infer from post_type + YouTube id
+     * so half ({@code 3}/{@code 4}) vs full ({@code 5}/{@code 6}) layouts match prod.
+     */
+    @NonNull
+    private static String feedDatumMediaType(@Nullable ModelClass.Datum datum) {
+        if (datum == null) {
+            return "";
+        }
+        String mt = datum.getMediaType();
+        if (!TextUtils.isEmpty(mt)) {
+            return mt.trim();
+        }
+        String pt = datum.getPostType();
+        if (TextUtils.isEmpty(pt)) {
+            return "";
+        }
+        boolean youtube = StatusVideoMedia.resolveYoutubeId(datum) != null;
+        if ("full_video".equalsIgnoreCase(pt)) {
+            return youtube ? "6" : "5";
+        }
+        if ("normal_video".equalsIgnoreCase(pt)) {
+            return youtube ? "4" : "3";
+        }
+        return "";
+    }
+
+    /**
      * Half/full Exo + YouTube idle: Glide poster from thumb URLs only (never HLS/mp4 streams).
      * YouTube maxres → hqdefault; HLS-only uses server {@code images[0]} via {@link StatusVideoMedia}.
      */
@@ -9776,24 +9936,159 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
 
     }
 
-    // --- legacy-flip-test (303c32b3) compat for FlipView / StartingActivity callers on 528 ---
-    public static final int DEFAULT_ACTION_ICON_GAP_DP = 2;
+    private static final int[] HALF_ACTION_ICON_IDS = new int[] {
+            R.id.half_image_like, R.id.half_comment_icon, R.id.half_whatsapp_icon, R.id.half_share_icon,
+            R.id.half_tts_icon, R.id.half_search_icon, R.id.share, R.id.report_icon, R.id.video_report
+    };
+
+    private static final int[] HALF_ACTION_SLOT_IDS = new int[] {
+            R.id.half_image_like_icon, R.id.half_comment, R.id.half_whatsapp, R.id.half_share,
+            R.id.half_tts, R.id.half_search, R.id.half_share__, R.id.report
+    };
+
+    private static final int DEFAULT_ACTION_ICON_SIZE_DP = AppUiDefaults.HALF_ACTION_ICON_GLYPH_DP;
+    private static final int ACTION_ICON_SIZE_MIN_DP = 10;
+    private static final int ACTION_ICON_SIZE_MAX_DP = 40;
+    public static final int DEFAULT_ACTION_ICON_GAP_DP = AppUiDefaults.HALF_ACTION_ICON_GAP_DP;
+    private static final int ACTION_ICON_GAP_MIN_DP = 0;
+    private static final int ACTION_ICON_GAP_MAX_DP = 32;
     public static final int DEFAULT_FULL_SIDE_ACTION_GAP_DP = 6;
+    private static final int FULL_SIDE_ACTION_GAP_MIN_DP = 0;
+    private static final int FULL_SIDE_ACTION_GAP_MAX_DP = 32;
+    private static final int[] FULL_SIDE_ACTION_IDS = new int[] {
+            R.id.full_image_like, R.id.full_image_comment, R.id.full_image_whatsapp,
+            R.id.full_image_share, R.id.like_for_video, R.id.comment_for_video,
+            R.id.dislike_for_video, R.id.share_for_video
+    };
+    private static final int ACTION_ICON_END_INSET_DP = 4;
+    private static final int SHARE_LINK_CLEARANCE_DP = 8;
+    private static final int DEFAULT_LIKE_CIRCLE_SIZE_DP = AppUiDefaults.HALF_ACTION_ICON_CIRCLE_DP;
+    private static final int LIKE_CIRCLE_SIZE_MIN_DP = 20;
+    private static final int LIKE_CIRCLE_SIZE_MAX_DP = 52;
+    private static final int ACTION_SLOT_EXTRA_DP =
+            AppUiDefaults.HALF_ACTION_ICON_SLOT_DP - AppUiDefaults.HALF_ACTION_ICON_CIRCLE_DP;
+
+    public static void applyHalfActionIconSizes(Context context, View convertView) {
+        if (context == null || convertView == null) {
+            return;
+        }
+        int circleDp = DEFAULT_LIKE_CIRCLE_SIZE_DP;
+        int iconDp = DEFAULT_ACTION_ICON_SIZE_DP;
+        try {
+            int storedCircle = SharedPrefsData.getInt(context, Constants.LIKE_CIRCLE_SIZE_DP, Constants.PREF_NAME);
+            if (storedCircle > 0) circleDp = storedCircle;
+        } catch (Exception ignored) {
+        }
+        try {
+            int storedIcon = SharedPrefsData.getInt(context, Constants.ACTION_ICON_SIZE_DP, Constants.PREF_NAME);
+            if (storedIcon > 0) iconDp = storedIcon;
+        } catch (Exception ignored) {
+        }
+        circleDp = Math.max(LIKE_CIRCLE_SIZE_MIN_DP, Math.min(LIKE_CIRCLE_SIZE_MAX_DP, circleDp));
+        iconDp = Math.max(ACTION_ICON_SIZE_MIN_DP, Math.min(ACTION_ICON_SIZE_MAX_DP, iconDp));
+        if (iconDp > circleDp) iconDp = circleDp;
+
+        float density = context.getResources().getDisplayMetrics().density;
+        int circlePx = Math.round(circleDp * density);
+        int slotPx = Math.round((circleDp + ACTION_SLOT_EXTRA_DP) * density);
+        int iconPaddingPx = Math.max(0, Math.round(((circleDp - iconDp) / 2f) * density));
+
+        for (int id : HALF_ACTION_SLOT_IDS) {
+            View slot = convertView.findViewById(id);
+            if (slot == null) continue;
+            ViewGroup.LayoutParams lp = slot.getLayoutParams();
+            if (lp == null) continue;
+            lp.width = slotPx;
+            lp.height = slotPx;
+            slot.setLayoutParams(lp);
+        }
+
+        for (int id : HALF_ACTION_ICON_IDS) {
+            View icon = convertView.findViewById(id);
+            if (icon == null) continue;
+            ViewGroup.LayoutParams lp = icon.getLayoutParams();
+            if (lp == null) continue;
+            lp.width = circlePx;
+            lp.height = circlePx;
+            icon.setLayoutParams(lp);
+            icon.setPadding(iconPaddingPx, iconPaddingPx, iconPaddingPx, iconPaddingPx);
+        }
+        ensureHalfTtsPulseVisible(convertView, slotPx);
+        applyActionIconHorizontalGap(context, convertView, density);
+    }
 
     public static int clampActionIconGapDp(int gapDp) {
-        return Math.max(0, Math.min(32, gapDp));
+        return Math.max(ACTION_ICON_GAP_MIN_DP, Math.min(ACTION_ICON_GAP_MAX_DP, gapDp));
+    }
+
+    private static int readActionIconGapDp(Context context) {
+        int gapDp = DEFAULT_ACTION_ICON_GAP_DP;
+        try {
+            android.content.SharedPreferences sp =
+                    context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (sp.contains(Constants.ACTION_ICON_GAP_DP)) {
+                gapDp = sp.getInt(Constants.ACTION_ICON_GAP_DP, DEFAULT_ACTION_ICON_GAP_DP);
+            }
+        } catch (Exception ignored) {
+        }
+        return clampActionIconGapDp(gapDp);
     }
 
     public static int clampFullSideActionGapDp(int gapDp) {
-        return Math.max(0, Math.min(32, gapDp));
+        return Math.max(FULL_SIDE_ACTION_GAP_MIN_DP, Math.min(FULL_SIDE_ACTION_GAP_MAX_DP, gapDp));
     }
 
-    /**
-     * Half likes-row chip follows the half switch. Full-image / full-video
-     * side button follows the full switch. Footer WhatsApp stays untouched.
-     *
-     * @return true if any icon's visibility changed
-     */
+    private static int readFullSideActionGapDp(Context context) {
+        int gapDp = DEFAULT_FULL_SIDE_ACTION_GAP_DP;
+        try {
+            android.content.SharedPreferences sp =
+                    context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE);
+            if (sp.contains(Constants.FULL_SIDE_ACTION_GAP_DP)) {
+                gapDp = sp.getInt(Constants.FULL_SIDE_ACTION_GAP_DP, DEFAULT_FULL_SIDE_ACTION_GAP_DP);
+            }
+        } catch (Exception ignored) {
+        }
+        return clampFullSideActionGapDp(gapDp);
+    }
+
+    public static void applyFullSideActionGap(Context context, View convertView) {
+        if (context == null || convertView == null) {
+            return;
+        }
+        applyActionRowWhatsappVisibility(context, convertView);
+        int gapPx = Math.round(readFullSideActionGapDp(context)
+                * context.getResources().getDisplayMetrics().density);
+        boolean touched = false;
+        for (int id : FULL_SIDE_ACTION_IDS) {
+            View action = convertView.findViewById(id);
+            if (action == null) {
+                continue;
+            }
+            ViewGroup.LayoutParams lp = action.getLayoutParams();
+            if (!(lp instanceof ViewGroup.MarginLayoutParams)) {
+                continue;
+            }
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+            if (mlp.topMargin != gapPx) {
+                mlp.topMargin = gapPx;
+                action.setLayoutParams(mlp);
+            }
+            touched = true;
+        }
+        if (!touched) {
+            return;
+        }
+        View rail = convertView.findViewById(R.id.video_side_menu);
+        if (rail == null) {
+            return;
+        }
+        ViewGroup.LayoutParams railLp = rail.getLayoutParams();
+        if (railLp != null && railLp.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
+            railLp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            rail.setLayoutParams(railLp);
+        }
+    }
+
     public static boolean applyActionRowWhatsappVisibility(Context context, View convertView) {
         if (convertView == null) {
             return false;
@@ -9807,7 +10102,6 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return changed;
     }
 
-    /** Sets visibility on every view with {@code id} in this tree, not only the first. */
     private static boolean setVisibilityDeep(View root, int id, int vis) {
         if (root == null) {
             return false;
@@ -9826,102 +10120,138 @@ public class FlipperAdapter extends BaseAdapter implements YouTubePlayer.OnIniti
         return changed;
     }
 
-    public static void applyHalfActionIconSizes(Context context, View convertView) {
-        if (convertView == null) {
+    private static void applyActionIconHorizontalGap(Context context, View convertView, float density) {
+        if (context == null || convertView == null) {
             return;
         }
-        final float density =
-                convertView.getResources().getDisplayMetrics().density;
-        int glyphPx = Math.round(AppUiDefaults.HALF_ACTION_ICON_GLYPH_DP * density);
-        int circlePx = Math.round(AppUiDefaults.HALF_ACTION_ICON_CIRCLE_DP * density);
-        int slotPx = Math.round(AppUiDefaults.HALF_ACTION_ICON_SLOT_DP * density);
-        int gapPx = Math.round(AppUiDefaults.HALF_ACTION_ICON_GAP_DP * density);
-
-        int[] slotIds =
-                new int[] {
-                    R.id.half_image_like_icon,
-                    R.id.half_comment,
-                    R.id.half_share,
-                    R.id.half_tts,
-                    R.id.half_search,
-                    R.id.report,
-                    R.id.half_whatsapp
-                };
-        for (int slotId : slotIds) {
-            View slot = convertView.findViewById(slotId);
-            if (slot == null) {
-                continue;
-            }
+        int gapPx = Math.round(readActionIconGapDp(context) * density);
+        int endInsetPx = Math.round(ACTION_ICON_END_INSET_DP * density);
+        View lastVisible = null;
+        for (int id : HALF_ACTION_SLOT_IDS) {
+            View slot = convertView.findViewById(id);
+            if (slot == null) continue;
             ViewGroup.LayoutParams lp = slot.getLayoutParams();
-            if (lp != null) {
-                lp.width = slotPx;
-                lp.height = slotPx;
-                slot.setLayoutParams(lp);
-            }
-            if (slotId != R.id.report) {
-                ViewGroup.MarginLayoutParams mlp =
-                        lp instanceof ViewGroup.MarginLayoutParams
-                                ? (ViewGroup.MarginLayoutParams) lp
-                                : null;
-                if (mlp != null) {
-                    mlp.setMarginEnd(gapPx);
-                    slot.setLayoutParams(mlp);
-                }
-            }
-        }
-
-        int[] iconIds =
-                new int[] {
-                    R.id.half_image_like,
-                    R.id.half_comment_icon,
-                    R.id.half_share_icon,
-                    R.id.half_tts_icon,
-                    R.id.half_search_icon,
-                    R.id.report_icon,
-                    R.id.half_whatsapp_icon
-                };
-        for (int iconId : iconIds) {
-            View icon = convertView.findViewById(iconId);
-            if (icon == null) {
-                continue;
-            }
-            ViewGroup.LayoutParams lp = icon.getLayoutParams();
-            if (lp != null) {
-                lp.width = circlePx;
-                lp.height = circlePx;
-                icon.setLayoutParams(lp);
-            }
-            if (icon instanceof ImageView) {
-                ImageView iv = (ImageView) icon;
-                int pad = Math.max(0, (circlePx - glyphPx) / 2);
-                iv.setPadding(pad, pad, pad, pad);
-            }
-        }
-    }
-
-    public static void applyFullSideActionGap(Context context, View convertView) {
-        if (convertView == null) {
-            return;
-        }
-        int gapPx =
-                Math.round(
-                        clampFullSideActionGapDp(AppUiDefaults.HALF_ACTION_ICON_GAP_DP)
-                                * convertView.getResources().getDisplayMetrics().density);
-        View fullWa = convertView.findViewById(R.id.full_image_whatsapp);
-        View fullShare = convertView.findViewById(R.id.full_image_share);
-        applyGapEnd(fullWa, gapPx);
-        applyGapEnd(fullShare, gapPx);
-    }
-
-    private static void applyGapEnd(@Nullable View view, int gapPx) {
-        if (view == null) {
-            return;
-        }
-        ViewGroup.LayoutParams lp = view.getLayoutParams();
-        if (lp instanceof ViewGroup.MarginLayoutParams) {
+            if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
             mlp.setMarginEnd(gapPx);
-            view.setLayoutParams(mlp);
+            slot.setLayoutParams(mlp);
+            if (slot.getVisibility() != View.GONE) {
+                lastVisible = slot;
+            }
+        }
+        if (lastVisible != null && lastVisible.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lastVisible.getLayoutParams();
+            mlp.setMarginEnd(endInsetPx);
+            lastVisible.setLayoutParams(mlp);
+        }
+        keepActionIconsClearOfShareLink(convertView, density, gapPx);
+    }
+
+    private static void keepActionIconsClearOfShareLink(View convertView, float density, int gapPx) {
+        if (convertView == null || gapPx <= 0) {
+            return;
+        }
+        final View link = convertView.findViewById(R.id.textViewWebUrl);
+        final View row = convertView.findViewById(R.id.with_out_strips_layout);
+        if (link == null || row == null || link.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        row.post(() -> {
+            if (!link.isAttachedToWindow() || !row.isAttachedToWindow()) return;
+            if (link.getWidth() <= 0 || row.getWidth() <= 0) return;
+            View first = null;
+            View last = null;
+            int visible = 0;
+            for (int id : HALF_ACTION_SLOT_IDS) {
+                View slot = row.findViewById(id);
+                if (slot == null) {
+                    slot = convertView.findViewById(id);
+                }
+                if (slot == null || slot.getVisibility() == View.GONE || slot.getWidth() <= 0) {
+                    continue;
+                }
+                if (first == null) first = slot;
+                last = slot;
+                visible++;
+            }
+            if (first == null || last == null || visible < 2) return;
+            int[] linkLoc = new int[2];
+            int[] firstLoc = new int[2];
+            link.getLocationOnScreen(linkLoc);
+            first.getLocationOnScreen(firstLoc);
+            int minLeft = linkLoc[0] + link.getWidth() + Math.round(SHARE_LINK_CLEARANCE_DP * density);
+            int overlap = minLeft - firstLoc[0];
+            if (overlap <= 0) return;
+            int gapCount = visible - 1;
+            int reducePer = (int) Math.ceil(overlap / (float) gapCount);
+            int newGap = Math.max(0, gapPx - reducePer);
+            if (newGap >= gapPx) return;
+            for (int id : HALF_ACTION_SLOT_IDS) {
+                View slot = convertView.findViewById(id);
+                if (slot == null || slot.getVisibility() == View.GONE || slot == last) continue;
+                ViewGroup.LayoutParams lp = slot.getLayoutParams();
+                if (!(lp instanceof ViewGroup.MarginLayoutParams)) continue;
+                ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
+                if (mlp.getMarginEnd() == newGap) continue;
+                mlp.setMarginEnd(newGap);
+                slot.setLayoutParams(mlp);
+            }
+        });
+    }
+
+    private static void ensureHalfTtsPulseVisible(View convertView, int slotPx) {
+        View pulse = convertView.findViewById(R.id.half_tts_pulse);
+        if (pulse == null || slotPx <= 0) {
+            return;
+        }
+        ViewGroup.LayoutParams pulseLp = pulse.getLayoutParams();
+        if (pulseLp != null && (pulseLp.width != slotPx || pulseLp.height != slotPx)) {
+            pulseLp.width = slotPx;
+            pulseLp.height = slotPx;
+            pulse.setLayoutParams(pulseLp);
+        }
+        float density = convertView.getResources().getDisplayMetrics().density;
+        int overflow = Math.round(slotPx * (ArticleTtsHelper.PULSE_MAX_SCALE - 1f) / 2f)
+                + Math.round(2f * density);
+        View row = convertView.findViewById(R.id.with_out_strips_layout);
+        if (row != null) {
+            boolean underPhoto = convertView.findViewById(R.id.layoutImageHeight) != null;
+            int padTop = underPhoto ? row.getPaddingTop() : Math.max(row.getPaddingTop(), overflow);
+            int padBottom = Math.max(row.getPaddingBottom(), overflow);
+            if (padTop != row.getPaddingTop() || padBottom != row.getPaddingBottom()) {
+                row.setPadding(row.getPaddingLeft(), padTop, row.getPaddingRight(), padBottom);
+            }
+            clearClipForTtsPulse(row);
+        } else {
+            clearClipForTtsPulse(pulse);
+        }
+    }
+
+    private static void clearClipForTtsPulse(View start) {
+        View current = start;
+        for (int i = 0; i < 8 && current != null; i++) {
+            if (current instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) current;
+                group.setClipChildren(false);
+                group.setClipToPadding(false);
+            }
+            ViewParent parent = current.getParent();
+            if (!(parent instanceof ViewGroup)) {
+                break;
+            }
+            ViewGroup group = (ViewGroup) parent;
+            int id = group.getId();
+            if (id == R.id.rl_question || id == R.id.rl_survay_main) {
+                break;
+            }
+            group.setClipChildren(false);
+            group.setClipToPadding(false);
+            if (id == R.id.relative_half_contents
+                    || id == R.id.layoutMain
+                    || id == R.id.parent_layout) {
+                break;
+            }
+            current = group;
         }
     }
 

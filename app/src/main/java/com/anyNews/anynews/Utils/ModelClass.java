@@ -126,6 +126,13 @@ public class ModelClass implements Serializable {
         @SerializedName("full_image")
         @Expose
         private String fullImage;
+        /** Lean Mongo / edge row hero — server maps to {@code images[0]} when list is empty. */
+        @SerializedName("image")
+        @Expose
+        private String image;
+        @SerializedName("thumb_image")
+        @Expose
+        private String thumbImage;
         /** Active IST slot name stamped by server seal (morning/afternoon/…). */
         @SerializedName("greeting_seal_slot")
         @Expose
@@ -697,6 +704,22 @@ public class ModelClass implements Serializable {
 
         public void setFullImage(String fullImage) {
             this.fullImage = fullImage;
+        }
+
+        public String getImage() {
+            return image;
+        }
+
+        public void setImage(String image) {
+            this.image = image;
+        }
+
+        public String getThumbImage() {
+            return thumbImage;
+        }
+
+        public void setThumbImage(String thumbImage) {
+            this.thumbImage = thumbImage;
         }
 
         public String getGreetingSealSlot() {
