@@ -29,8 +29,10 @@ public class RestApiClient
     public static Retrofit getClient() {
         showLog("CHECK POINT GETCLIENT-1 ::");
         HttpLoggingInterceptor interceptor = new HttpLoggingInterceptor();
-        if(BuildConfig.DEBUG){
-            interceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
+        // HEADERS only — BODY logs full session/settings JSON every ~15s and large feed
+        // payloads on the OkHttp thread, which worsens GC jank and debug ANRs on emulator.
+        if (BuildConfig.DEBUG) {
+            interceptor.setLevel(HttpLoggingInterceptor.Level.HEADERS);
         }
         // First-open feed must fail fast into shimmer retry, not hang 30–100s.
         OkHttpClient.Builder clientBuilder = new OkHttpClient.Builder()

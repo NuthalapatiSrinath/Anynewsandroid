@@ -55,6 +55,7 @@ public final class EdgeOriginCallWatch {
             "public/splash_config",
             "public/daily_updates",
             "public/edge_origin_event",
+            "public/edge_telemetry",
             // Splash draft still needed for first open
             "splash_screen",
             // Likes / comments

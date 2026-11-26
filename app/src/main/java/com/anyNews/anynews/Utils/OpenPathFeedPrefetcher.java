@@ -132,9 +132,16 @@ public final class OpenPathFeedPrefetcher {
                             if (!response.isSuccessful()
                                     || !PublicEdgeFeedHelper.isAcceptableEdgeResponse(
                                             response.body(), 0L)) {
+                                Logone.w(
+                                        TAG,
+                                        "early edge reject → POST: "
+                                                + PublicEdgeFeedHelper.describeEdgeReject(
+                                                        response, 0L));
                                 enqueuePostFallback(app, langId);
                                 return;
                             }
+                            PublicEdgeTelemetry.reportFeedResponse(
+                                    response, "main", langId, 0L);
                             EncreptionRequest wrapped =
                                     PublicEdgeFeedHelper.toEncreptionRequest(
                                             app, response.body(), 0L);
@@ -309,6 +316,7 @@ public final class OpenPathFeedPrefetcher {
             requestModel.setApp_version_number("" + BuildConfig.VERSION_CODE);
             requestModel.setSdk_version(Build.VERSION.SDK_INT);
             requestModel.setNotif_perm_allowed(1);
+            requestModel.setLimit(PublicEdgeFeedHelper.EDGE_FEED_PAGE_SIZE);
 
             String jsonString = new Gson().toJson(requestModel);
             EncritonRequestData enc = new EncritonRequestData();

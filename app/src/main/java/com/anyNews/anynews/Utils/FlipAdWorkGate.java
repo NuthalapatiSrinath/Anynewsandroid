@@ -26,6 +26,7 @@ public final class FlipAdWorkGate {
 
     private static volatile boolean flipAnimating;
     private static volatile long lastInteractionUptimeMs;
+    private static volatile boolean pendingAdapterNotify;
 
     private FlipAdWorkGate() {}
 
@@ -77,4 +78,24 @@ public final class FlipAdWorkGate {
         }
         return SETTLE_GRACE_MS - elapsed;
     }
+
+  /** {@code notifyDataSetChanged} queued because FlipView was mid-gesture. */
+  public static void markPendingAdapterNotify() {
+    pendingAdapterNotify = true;
+  }
+
+  public static boolean hasPendingAdapterNotify() {
+    return pendingAdapterNotify;
+  }
+
+  public static void clearPendingAdapterNotify() {
+    pendingAdapterNotify = false;
+  }
+
+  /**
+   * True while adapter must not call {@code notifyDataSetChanged} (recycles visible card).
+   */
+  public static boolean shouldDeferAdapterNotify() {
+    return shouldDeferAdWork();
+  }
 }

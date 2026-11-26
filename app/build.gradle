@@ -107,8 +107,9 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             proguardFiles 'proguard-rules.pro'
             buildConfigField "String", "API_BASE_URL", "\"https://anynewsdevelopmentapi.anynews.co.in/\""
-            // Dev/debug: Firebase post_view on flip; no POST /app/v3/views/batch
-            buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "false"
+            // Phase 1: POST /app/v3/views/batch (dev panel + local testing)
+            buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "true"
+            buildConfigField "boolean", "PUBLIC_EDGE_TELEMETRY", "true"
         }
         release {
 // 3999 0336 2591    155115
@@ -118,9 +119,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             proguardFiles 'proguard-rules.pro'
             signingConfig signingConfigs.release
-            buildConfigField "String", "API_BASE_URL", "\"https://api.anynews.co.in/\""
-            // Dev/release test builds: Firebase post_view (same as debug); no POST /views/batch
-            buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "false"
+            // legacy-flip-test release → dev API (admin edge stats + CF testing)
+            buildConfigField "String", "API_BASE_URL", "\"https://anynewsdevelopmentapi.anynews.co.in/\""
+            buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "true"
+            buildConfigField "boolean", "PUBLIC_EDGE_TELEMETRY", "true"
             ndk {
                 debugSymbolLevel 'FULL'
             }

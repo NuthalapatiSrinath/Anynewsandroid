@@ -288,11 +288,39 @@ public interface APIService {
     Call<com.anyNews.anynews.Pojo.PublicEdgeFeedResponse> Public_Feed(
             @Path("version") String version,
             @Query("language_id") int languageId,
+            @Query("category_id") Integer categoryId,
             @Query("state_id") Integer stateId,
             @Query("dist_id") Integer distId,
             @Query("skip") Integer skip,
             @Query("post_id") Integer postId,
             @Query("feed_kind") String feedKind);
+
+    @GET("app/{version}/public/main/lang/{language_id}/page/{page}")
+    Call<com.anyNews.anynews.Pojo.PublicEdgeFeedResponse> Public_Feed_Main(
+            @Path("version") String version,
+            @Path("language_id") int languageId,
+            @Path("page") int page,
+            @Query("pin") Integer pinPostId);
+
+    @GET("app/{version}/public/local/lang/{language_id}/state/{state_id}/dist/{dist_id}/page/{page}")
+    Call<com.anyNews.anynews.Pojo.PublicEdgeFeedResponse> Public_Feed_Local(
+            @Path("version") String version,
+            @Path("language_id") int languageId,
+            @Path("state_id") int stateId,
+            @Path("dist_id") int distId,
+            @Path("page") int page);
+
+    @GET("app/{version}/public/flash/lang/{language_id}/page/{page}")
+    Call<com.anyNews.anynews.Pojo.PublicEdgeFeedResponse> Public_Feed_Flash(
+            @Path("version") String version,
+            @Path("language_id") int languageId,
+            @Path("page") int page);
+
+    @GET("app/{version}/public/special/lang/{language_id}/page/{page}")
+    Call<com.anyNews.anynews.Pojo.PublicEdgeFeedResponse> Public_Feed_Special(
+            @Path("version") String version,
+            @Path("language_id") int languageId,
+            @Path("page") int page);
 
     /** Shared splash shell (no draft) — edge-cacheable. */
     @GET("app/{version}/public/splash_config")
@@ -317,6 +345,12 @@ public interface APIService {
      */
     @POST("app/{version}/public/edge_origin_event")
     Call<Void> Public_Edge_Origin_Event(
+            @Path("version") String version,
+            @Body JsonObject body);
+
+    /** CF-Cache-Status samples from public GET responses (debug telemetry). */
+    @POST("app/{version}/public/edge_telemetry")
+    Call<Void> Public_Edge_Telemetry(
             @Path("version") String version,
             @Body JsonObject body);
 

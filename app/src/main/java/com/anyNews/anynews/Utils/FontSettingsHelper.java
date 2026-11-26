@@ -42,7 +42,7 @@ public final class FontSettingsHelper {
      * {@link LanguageFontConfig#productionFor} for every language — no splash prefs, no custom-font
      * HTTP downloads, stable layout. Flip to true only if admin remote fonts must drive the feed again.
      */
-    public static final boolean APPLY_REMOTE_FONT_SETTINGS = false;
+    public static final boolean APPLY_REMOTE_FONT_SETTINGS = true;
     private static final Gson GSON = new Gson();
     private static final Type MAP_TYPE = new TypeToken<Map<String, LanguageFontConfig>>() {}.getType();
     private static final Type URL_MAP_TYPE = new TypeToken<Map<String, String>>() {}.getType();

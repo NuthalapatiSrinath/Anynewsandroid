@@ -98,13 +98,13 @@ public final class ViewsBatchTracker {
         return INSTANCE;
     }
 
-    /** When false (debug), impressions go to Firebase only — no POST /views/batch. */
+    /** When false, impressions go to Firebase only — no POST /views/batch. */
     public static boolean isServerBatchEnabled() {
         return BuildConfig.IMPRESSIONS_SERVER_BATCH_ENABLED;
     }
 
     /**
-     * Flip settled on an article. Debug → {@link PostViewAnalytics}; release → local queue.
+     * Flip settled on an article. Batch off → {@link PostViewAnalytics}; batch on → local queue.
      */
     public void onFlipSettled(
             Context context,
@@ -128,7 +128,8 @@ public final class ViewsBatchTracker {
 
     /**
      * Home onResume → true (start timer only while the process is foreground).
-     * Home onPause → false (stop timer). Does not POST by itself.
+     * Home onPause → false (stop timer). {@link com.anyNews.anynews.Activities.HomePage}
+     * flushes the queue after dwell enqueue when batch is on.
      */
     public void setHomeFlushActive(boolean active) {
         homeActive = active;

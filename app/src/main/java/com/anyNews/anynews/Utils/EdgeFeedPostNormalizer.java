@@ -29,10 +29,20 @@ public final class EdgeFeedPostNormalizer {
             d.setVideoUrl(clean(d.getVideo()));
         }
         final String writer = clean(d.getWriterProfile());
+        final String videoUrl = clean(d.getVideoUrl());
+        String thumb = clean(d.getThumbnail());
+        if (!TextUtils.isEmpty(thumb)) {
+            if (StatusVideoMedia.isStreamOnlyUrl(thumb)
+                    || StatusVideoMedia.isGenericVideoPlaceholderUrl(thumb)
+                    || (!TextUtils.isEmpty(videoUrl)
+                    && thumb.equalsIgnoreCase(videoUrl))) {
+                d.setThumbnail(null);
+            }
+        }
         if (TextUtils.isEmpty(clean(d.getThumbnail()))) {
-            String thumb = clean(d.getVideoThumb());
-            if (StatusVideoMedia.isUsableVideoPosterForNormalize(thumb, writer)) {
-                d.setThumbnail(thumb);
+            String videoThumb = clean(d.getVideoThumb());
+            if (StatusVideoMedia.isUsableVideoPosterForNormalize(videoThumb, writer)) {
+                d.setThumbnail(videoThumb);
             }
         }
         if (TextUtils.isEmpty(clean(d.getThumbnail()))
@@ -47,6 +57,15 @@ public final class EdgeFeedPostNormalizer {
         if (TextUtils.isEmpty(clean(d.getVideoThumb())) && !TextUtils.isEmpty(clean(d.getThumbnail()))) {
             d.setVideoThumb(clean(d.getThumbnail()));
         }
+        if (TextUtils.isEmpty(clean(d.getThumbnail()))) {
+            String poster = StatusVideoMedia.resolveFeedVideoPosterUrl(d);
+            if (!TextUtils.isEmpty(poster)) {
+                d.setThumbnail(poster);
+                if (TextUtils.isEmpty(clean(d.getVideoThumb()))) {
+                    d.setVideoThumb(poster);
+                }
+            }
+        }
         if (TextUtils.isEmpty(clean(d.getWriterName()))) {
             d.setWriterName("Journalist");
         } else {
@@ -54,6 +73,10 @@ public final class EdgeFeedPostNormalizer {
         }
         if (TextUtils.isEmpty(clean(d.getRole()))) {
             d.setRole("Reporter");
+        }
+        // Keep server writer_profile when present; only fill generic avatar when still empty.
+        if (TextUtils.isEmpty(clean(d.getWriterProfile()))) {
+            d.setWriterProfile(MediaUrl.DEFAULT_PROFILE);
         }
     }
 

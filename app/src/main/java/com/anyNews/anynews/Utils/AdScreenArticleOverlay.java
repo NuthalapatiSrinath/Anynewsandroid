@@ -54,6 +54,13 @@ public final class AdScreenArticleOverlay {
         if (article == null || TextUtils.isEmpty(article.getTitle()) || animating) {
             return;
         }
+        if (feedAdapter != null) {
+            ModelClass.Datum enriched = feedAdapter.enrichAdsScreenOverlayDatum(article);
+            if (enriched == null) {
+                return;
+            }
+            article = enriched;
+        }
         if (showing) {
             dismiss(false);
         }
@@ -191,8 +198,16 @@ public final class AdScreenArticleOverlay {
                             return false;
                         case MotionEvent.ACTION_UP:
                             float dy = downY[0] - event.getY();
-                            float dx = Math.abs(event.getX() - downX[0]);
-                            if (dy > Math.max(72f, v.getHeight() * 0.1f) && dy > dx * 1.2f) {
+                            float rawDx = event.getX() - downX[0];
+                            float dx = Math.abs(rawDx);
+                            float threshold = Math.max(72f, v.getHeight() * 0.1f);
+                            // Flip up — slide overlay away upward (same as feed flip-to-skip).
+                            if (dy > threshold && dy > dx * 1.2f) {
+                                dismiss(true);
+                                return true;
+                            }
+                            // Back / flick right — same dismiss animation as flip up.
+                            if (rawDx > threshold && dx > Math.abs(dy) * 1.2f) {
                                 dismiss(true);
                                 return true;
                             }

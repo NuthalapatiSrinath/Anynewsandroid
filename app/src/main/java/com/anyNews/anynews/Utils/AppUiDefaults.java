@@ -27,10 +27,10 @@ public final class AppUiDefaults {
    * Production admin Configuration ({@code action_icon_size_dp} / {@code like_circle_size_dp}).
    * Used when splash prefs must not resize feed engagement icons.
    */
-  public static final int HALF_ACTION_ICON_GLYPH_DP = 21;
+  public static final int HALF_ACTION_ICON_GLYPH_DP = 24;
   public static final int HALF_ACTION_ICON_CIRCLE_DP = 35;
-  public static final int HALF_ACTION_ICON_SLOT_DP = 42;
-  public static final int HALF_ACTION_ICON_GAP_DP = 2;
+  public static final int HALF_ACTION_ICON_SLOT_DP = 40;
+  public static final int HALF_ACTION_ICON_GAP_DP = 0;
 
   /**
    * When false, {@link ThemeColorHelper} ignores splash-stored theme_color and always uses

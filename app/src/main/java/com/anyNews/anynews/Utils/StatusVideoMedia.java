@@ -35,33 +35,45 @@ public final class StatusVideoMedia {
         final String writerAvatar = cleanUrl(item.getWriterProfile());
 
         String direct = cleanUrl(item.getThumbnail());
-        if (isUsableVideoPoster(direct, writerAvatar) && !isStreamOnlyUrl(direct)) {
+        if (isUsableVideoPoster(direct, writerAvatar)
+                && !isStreamOnlyUrl(direct)
+                && !isGenericVideoPlaceholderUrl(direct)) {
             return ensureHttps(resolveStatic(direct));
         }
 
         String videoThumb = cleanUrl(item.getVideoThumb());
-        if (isUsableVideoPoster(videoThumb, writerAvatar) && !isStreamOnlyUrl(videoThumb)) {
+        if (isUsableVideoPoster(videoThumb, writerAvatar)
+                && !isStreamOnlyUrl(videoThumb)
+                && !isGenericVideoPlaceholderUrl(videoThumb)) {
             return ensureHttps(resolveStatic(videoThumb));
         }
 
         String fromThumbs = firstListUrl(item.getThumbnails(), true);
-        if (isUsableVideoPoster(fromThumbs, writerAvatar) && !isStreamOnlyUrl(fromThumbs)) {
+        if (isUsableVideoPoster(fromThumbs, writerAvatar)
+                && !isStreamOnlyUrl(fromThumbs)
+                && !isGenericVideoPlaceholderUrl(fromThumbs)) {
             return ensureHttps(resolveStatic(fromThumbs));
         }
 
         String img0 = firstImage(item);
-        if (isUsableVideoPoster(img0, writerAvatar) && !isStreamOnlyUrl(img0)) {
+        if (isUsableVideoPoster(img0, writerAvatar)
+                && !isStreamOnlyUrl(img0)
+                && !isGenericVideoPlaceholderUrl(img0)) {
             return ensureHttps(resolveStatic(img0));
         }
 
         String bg = cleanUrl(item.getBackgroundImage());
-        if (isUsableVideoPoster(bg, writerAvatar) && !isStreamOnlyUrl(bg)) {
+        if (isUsableVideoPoster(bg, writerAvatar)
+                && !isStreamOnlyUrl(bg)
+                && !isGenericVideoPlaceholderUrl(bg)) {
             return ensureHttps(resolveStatic(bg));
         }
 
         // Nested video maps may carry poster / thumbnail only.
         String nested = firstListUrl(item.getVideos(), true);
-        if (isUsableVideoPoster(nested, writerAvatar) && !isStreamOnlyUrl(nested)) {
+        if (isUsableVideoPoster(nested, writerAvatar)
+                && !isStreamOnlyUrl(nested)
+                && !isGenericVideoPlaceholderUrl(nested)) {
             return ensureHttps(resolveStatic(nested));
         }
 
@@ -70,6 +82,119 @@ public final class StatusVideoMedia {
             return "https://img.youtube.com/vi/" + ytId + "/hqdefault.jpg";
         }
         return null;
+    }
+
+    /**
+     * Feed half/full Exo idle poster — {@link #resolveThumbnailUrl} plus YouTube hqdefault
+     * when CMS thumbnail is empty (avoids Universal Image Loader {@code app_splash_logo} empty-uri art).
+     */
+    /**
+     * YouTube half cards (media_type 4): official frame first; never CMS splash branding.
+     */
+    @Nullable
+    public static String resolveYoutubeHalfPosterUrl(@Nullable ModelClass.Datum item) {
+        if (item == null) {
+            return null;
+        }
+        String ytId = resolveYoutubeId(item);
+        if (!TextUtils.isEmpty(ytId)) {
+            String max = YouTubeIdHelper.maxresThumbnailUrlForId(ytId);
+            if (!TextUtils.isEmpty(max)) {
+                return max;
+            }
+            return YouTubeIdHelper.hqDefaultThumbnailUrlForId(ytId);
+        }
+        String hq = YouTubeIdHelper.hqDefaultThumbnailUrl(item.getVideoUrl());
+        if (!TextUtils.isEmpty(hq)) {
+            return hq;
+        }
+        hq = YouTubeIdHelper.hqDefaultThumbnailUrl(item.getVideo());
+        if (!TextUtils.isEmpty(hq)) {
+            return hq;
+        }
+        String thumb = resolveThumbnailUrl(item);
+        return isGenericVideoPlaceholderUrl(thumb) ? null : thumb;
+    }
+
+    /** Orange "Click Here to Play" / splash logo art must not cover video cards. */
+    public static boolean isGenericVideoPlaceholderUrl(@Nullable String url) {
+        if (TextUtils.isEmpty(url)) {
+            return false;
+        }
+        String u = url.trim().toLowerCase(Locale.US);
+        return u.contains("app_splash")
+                || u.contains("splash_logo")
+                || u.contains("splash_screen")
+                || u.contains("click_here")
+                || u.contains("click-here")
+                || u.contains("play_video")
+                || u.contains("default_video")
+                || u.contains("/anynews_logo")
+                || u.contains("placeholder_video");
+    }
+
+    @Nullable
+    public static String resolveFeedVideoPosterUrl(@Nullable ModelClass.Datum item) {
+        if (item != null) {
+            String media = normalize(item.getMediaType());
+            if ("4".equals(media) || "6".equals(media)) {
+                String ytPoster = asGlidePosterUrl(resolveYoutubeHalfPosterUrl(item));
+                if (!TextUtils.isEmpty(ytPoster)) {
+                    return ytPoster;
+                }
+            }
+        }
+        String thumb = asGlidePosterUrl(resolveThumbnailUrl(item));
+        if (!TextUtils.isEmpty(thumb)) {
+            return thumb;
+        }
+        if (item == null) {
+            return null;
+        }
+        // HLS / stream-only play URL: never Glide the manifest — use server still.
+        final String writerAvatar = cleanUrl(item.getWriterProfile());
+        String stream = resolveStreamUrl(item);
+        if (!TextUtils.isEmpty(stream) && isStreamOnlyUrl(stream)) {
+            String img0 = firstImage(item);
+            String fromImg = asGlidePosterUrl(
+                    isUsableVideoPoster(img0, writerAvatar) ? resolveStatic(img0) : null);
+            if (!TextUtils.isEmpty(fromImg)) {
+                return fromImg;
+            }
+            String serverThumb = asGlidePosterUrl(cleanUrl(item.getVideoThumb()));
+            if (!TextUtils.isEmpty(serverThumb)) {
+                return serverThumb;
+            }
+        }
+        String yt = asGlidePosterUrl(YouTubeIdHelper.hqDefaultThumbnailUrl(item.getVideoUrl()));
+        if (!TextUtils.isEmpty(yt)) {
+            return yt;
+        }
+        yt = asGlidePosterUrl(YouTubeIdHelper.hqDefaultThumbnailUrl(item.getVideo()));
+        if (!TextUtils.isEmpty(yt)) {
+            return yt;
+        }
+        if (item.getVideos() != null) {
+            for (Object o : item.getVideos()) {
+                if (o == null) {
+                    continue;
+                }
+                yt = asGlidePosterUrl(YouTubeIdHelper.hqDefaultThumbnailUrl(String.valueOf(o)));
+                if (!TextUtils.isEmpty(yt)) {
+                    return yt;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Bitmap posters only — Glide must never receive HLS/mp4 play URLs. */
+    @Nullable
+    public static String asGlidePosterUrl(@Nullable String url) {
+        if (TextUtils.isEmpty(url) || isStreamOnlyUrl(url) || isGenericVideoPlaceholderUrl(url)) {
+            return null;
+        }
+        return ensureHttps(url.startsWith("http") ? url : resolveStatic(url));
     }
 
     /**
@@ -112,6 +237,35 @@ public final class StatusVideoMedia {
             if (isHttpUrl(c) || c.startsWith("file")) {
                 return ensureHttps(c);
             }
+        }
+        return null;
+    }
+
+    /**
+     * Exo tap-to-play on feed cards: {@link #resolveStreamUrl} then a guarded {@code video_url}
+     * fallback (HTTP/HLS only — never bare YouTube ids / watch pages).
+     */
+    @Nullable
+    public static String resolveFeedPlayUrl(@Nullable ModelClass.Datum item) {
+        String stream = resolveStreamUrl(item);
+        if (!TextUtils.isEmpty(stream)) {
+            return stream;
+        }
+        if (item == null) {
+            return null;
+        }
+        String raw = cleanUrl(item.getVideoUrl());
+        if (TextUtils.isEmpty(raw)) {
+            raw = cleanUrl(item.getVideo());
+        }
+        if (TextUtils.isEmpty(raw)) {
+            return null;
+        }
+        if (isYoutubeish(raw)) {
+            return null;
+        }
+        if (isHttpUrl(raw) || raw.startsWith("file")) {
+            return ensureHttps(raw);
         }
         return null;
     }

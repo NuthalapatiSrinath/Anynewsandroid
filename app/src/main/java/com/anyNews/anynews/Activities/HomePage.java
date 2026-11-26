@@ -145,6 +145,7 @@ import com.anyNews.anynews.Utils.Constants;
 import com.anyNews.anynews.Utils.FeedAdConfig;
 import com.anyNews.anynews.Utils.FeedEndHelper;
 import com.anyNews.anynews.Utils.FirebaseAnalyticsJSON;
+import com.anyNews.anynews.Utils.ActionRowWhatsappConfig;
 import com.anyNews.anynews.Utils.FlipAdWorkGate;
 import com.anyNews.anynews.Utils.FlipperAdapter;
 import com.anyNews.anynews.Utils.FooterStyleHelper;
@@ -156,6 +157,7 @@ import com.anyNews.anynews.Utils.OpenPathCache;
 import com.anyNews.anynews.Utils.OpenPathSplashConfigRefresher;
 import com.anyNews.anynews.Utils.EdgeOriginCallWatch;
 import com.anyNews.anynews.Utils.PublicEdgeFeedHelper;
+import com.anyNews.anynews.Utils.PublicEdgeTelemetry;
 import com.anyNews.anynews.Utils.EdgeFeedPostNormalizer;
 import com.anyNews.anynews.Utils.ReadArticleStore;
 import com.anyNews.anynews.Pojo.PublicEdgeFeedResponse;
@@ -220,6 +222,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -234,6 +237,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
 
     private static final String TAG = "HomePage :";
+    /** Logcat filter: `adb logcat -s AnyNewsFlipAd` */
+    private static final String FLIP_AD_LOG_TAG = "AnyNewsFlipAd";
+
+    private static void flipAdLog(String msg) {
+        Log.d(FLIP_AD_LOG_TAG, msg);
+    }
 
     /** Open this footer tab after CLEAR_TOP from Profile / login (menu item id). */
     public static final String EXTRA_FOOTER_TAB = "extra_footer_tab";
@@ -265,7 +274,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private FlipperAdapter adapter;
     ArrayList<ModelClass.Datum> list;
     ArrayList<ModelClass.Datum> dummylist=new ArrayList<>();
-    Response<EncreptionRequest> dummyResponse;
     int ppi=0;
     String post_type="";
 
@@ -288,16 +296,30 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public  boolean adImpress=false;
     public  String adError="";
 
-    static RelativeLayout no_internet, yes_internet,googleAds;
+    RelativeLayout no_internet, yes_internet, googleAds;
 
     private static final String LOG_TAG = "CheckNetworkStatus";
     private NetworkChangeReceiver receiver;
     private boolean isConnected = false;
     private boolean isApiRequested = false;
-    int positionx=0,requestPostition=1;
+    int positionx=0;
     int requestSize=0;
-    /** Trigger next public-feed GET when this many cards from the end (prod ~5). */
-    private static final int FEED_PREFETCH_FROM_END = 5;
+    /** Explicit CF public-feed page index (0..4); not derived from {@code skip}. */
+    private int feedCurrentPage = 0;
+    @Nullable private String cachedTranslatorJson;
+    @Nullable private LanguageModelResponse cachedTranslatorResponse;
+    /** Trigger next public-feed GET when this many cards from the end. */
+    private static final int FEED_PREFETCH_FROM_END = 12;
+    /** Rapid-flip guard: coalesce prefetch triggers without cancelling an in-flight page. */
+    private static final long FEED_PREFETCH_DEBOUNCE_MS = 120L;
+    private final Handler feedPaginationHandler = new Handler(Looper.getMainLooper());
+    @Nullable private Runnable feedPrefetchRunnable;
+    private final Handler flipSettleHandler = new Handler(Looper.getMainLooper());
+    @Nullable private Runnable flipSettleRunnable;
+    /** skip value for the active pagination network call (reqPos==3). */
+    private long paginationSkipInFlight = -1L;
+    /** Share-link / pagination dedupe: post_ids already painted this session. */
+    private final HashSet<Long> feedSeenPostIds = new HashSet<>();
     boolean isFromLocalArticles=false;
     FCMTrackingEvents trackingEvents;
     public static boolean isPlayingVideoInFullScreen=false;
@@ -421,6 +443,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     /** Cancel / generation guard for public edge GET or List_All_Articles (warm push N2). */
     @Nullable private Call<?> listAllArticlesCall;
     private int listAllArticlesGen = 0;
+    /** One transient 5xx/network retry per {@link #listAllArticlesGen} on page-0 edge. */
+    private int edgeOpenTransientRetryGen = -1;
 
     /** Embedded Telugu calendar / Raasi (from Daily Updates). */
     private boolean calendarModeActive = false;
@@ -714,10 +738,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             last_post_id = 0;
             skip = 0;
             actual_skip = 0;
-            category_id = Integer.parseInt(sessionId);
-            isFromLocalArticles=false;
-            showLog("inlist from oncreate 2:"+Integer.parseInt(sessionId));
-            inlist(Integer.parseInt(sessionId));
+            isFromLocalArticles = false;
+            try {
+                int parsedSession = Integer.parseInt(sessionId.trim());
+                category_id = parsedSession;
+                showLog("inlist from oncreate 2:" + parsedSession);
+                inlist(parsedSession);
+            } catch (NumberFormatException e) {
+                showLog("EXTRA_SESSION_ID invalid: " + sessionId);
+                category_id = 0;
+                inlist(0);
+            }
 
             try {
 
@@ -831,7 +862,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         receiver = new NetworkChangeReceiver();
-        registerReceiver(receiver, filter);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.registerReceiver(this, receiver, filter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(receiver, filter);
+        }
 
 
         un_selected_local.setOnClickListener(new View.OnClickListener() {
@@ -853,7 +889,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 skip = 0;
                 actual_skip = 0;
                 category_id = -1;
-              //  inlist(-1);
+                isFromLocalArticles = true;
+                try {
+                    OpenPathCache.forceNextFeedNetwork(HomePage.this);
+                } catch (Exception ignored) {
+                }
+                inlist(-1);
 
                 writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_local);
 
@@ -878,7 +919,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 skip = 0;
                 actual_skip = 0;
                 category_id = 0;
-              //  inlist(0);
+                isFromLocalArticles = false;
+                try {
+                    OpenPathCache.forceNextFeedNetwork(HomePage.this);
+                } catch (Exception ignored) {
+                }
+                inlist(0);
 
                 writeButtonClick("User", type_firebase_button, current_time_firebase, draft_id_firebase, device_id_firebase, button_name_myfeed);
 
@@ -1076,6 +1122,35 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
+    /** Stable reqPos key for native pool ↔ feed ad row matching. */
+    private int resolveFeedAdSeatReqPosition(int listIndex, @Nullable ModelClass.Datum seat) {
+        if (seat != null) {
+            Integer req = seat.getAd_req_position();
+            if (req != null && req > 0) {
+                return req;
+            }
+            int next = seat.getNext_ad_req_position();
+            if (next > 0) {
+                return next;
+            }
+        }
+        return Math.max(1, listIndex + 1);
+    }
+
+    private void ensureAdSeatReqPositionOnDatum(int listIndex, @Nullable ModelClass.Datum seat) {
+        if (seat == null) {
+            return;
+        }
+        Integer req = seat.getAd_req_position();
+        if (req != null && req > 0) {
+            return;
+        }
+        try {
+            seat.setAd_req_position(resolveFeedAdSeatReqPosition(listIndex, seat));
+        } catch (Exception ignored) {
+        }
+    }
+
     private void loadAds(String ad_code, Integer ad_req_position, String ad_type) {
         loadAds(ad_code, ad_req_position, ad_type, false);
     }
@@ -1088,37 +1163,48 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     private void loadAds(String ad_code, Integer ad_req_position, String ad_type,
                          boolean replaceExisting) {
         if (shouldDeferAdWork()) {
-            showLog("loadAds deferred (flip settle)");
+            long wait = Math.max(80L, FlipAdWorkGate.millisUntilAdWorkSafe() + 40L);
+            flipAdLog("loadAds deferred (flip settle) reqPos=" + ad_req_position
+                    + " retryInMs=" + wait);
+            final String deferAdCode = ad_code;
+            final Integer deferReqPos = ad_req_position;
+            final String deferAdType = ad_type;
+            final boolean deferReplace = replaceExisting;
+            new Handler(Looper.getMainLooper()).postDelayed(
+                    () -> loadAds(deferAdCode, deferReqPos, deferAdType, deferReplace), wait);
             return;
         }
         if (ad_req_position == null) {
-            showLog("loadAds skip null reqPos");
+            flipAdLog("loadAds skip null reqPos");
             return;
         }
         if (isFeedNativeSeatRequestInFlight(ad_req_position)) {
-            showLog("loadAds skip — AdLoader in flight pos=" + ad_req_position);
+            flipAdLog("loadAds skip AdLoader in flight pos=" + ad_req_position);
             return;
         }
         if (ad_type == null) {
             ad_type = "google";
         }
-       showLog("Ad loading ad_code 1 :"+ad_code);
-       showLog("Ad loading ad_req_position :"+ad_req_position);
-        showLog("Ad loading ad_type:"+ad_type);
-        if(ad_type.equalsIgnoreCase("google")){
+        flipAdLog("loadAds start type=" + ad_type + " reqPos=" + ad_req_position
+                + " unit=" + ad_code + " replace=" + replaceExisting);
+        if (ad_type.equalsIgnoreCase("google")) {
             if (!replaceExisting && isFeedNativeSeatLoaded(ad_req_position)) {
-                showLog("loadAds skip — creative already loaded pos=" + ad_req_position);
+                flipAdLog("loadAds skip creative already loaded pos=" + ad_req_position
+                        + " → rebind");
+                rebindAdsScreenAfterNativeLoad(ad_req_position);
                 return;
             }
             loadGoogleAds(ad_code, ad_req_position, 0, replaceExisting);
-        }else{
+        } else {
             if (!replaceExisting
                     && nativeFBAdArray != null
                     && nativeFBAdArray.contains(ad_req_position)) {
-                showLog("loadAds skip — fb creative already loaded pos=" + ad_req_position);
+                flipAdLog("loadAds skip fb creative already loaded pos=" + ad_req_position
+                        + " → rebind");
+                rebindAdsScreenAfterNativeLoad(ad_req_position);
                 return;
             }
-            loadFBAds(ad_code,ad_req_position);
+            loadFBAds(ad_code, ad_req_position);
         }
 
     }
@@ -1133,6 +1219,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return nativeGoogleAdArray != null && nativeGoogleAdArray.contains(reqPos);
     }
 
+    /** True when preload/on-settle already has a creative for this seat (no AdLoader). */
+    private boolean isFeedAdSeatPoolReady(@Nullable String adType, int reqPos) {
+        if (adType == null || adType.equalsIgnoreCase("google")) {
+            return isFeedNativeSeatLoaded(reqPos);
+        }
+        return nativeFBAdArray != null && nativeFBAdArray.contains(reqPos);
+    }
+
     private void markFeedNativeSeatRequestInFlight(int reqPos) {
         synchronized (feedNativeAdSeatsInFlight) {
             feedNativeAdSeatsInFlight.add(reqPos);
@@ -1145,7 +1239,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
     }
 
-    /** Full-bleed ad page: bottom nav GONE on ad seats, restored elsewhere. */
+    /** Way2 ad seat keeps footer visible; only share/rating cards are full-bleed. */
     private void updateHomePageNavigationForSeat() {
         if (home_page_navigation == null || list == null || positionx < 0
                 || positionx >= list.size()) {
@@ -1199,7 +1293,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             return;
         }
         markFeedNativeSeatRequestInFlight(ad_req_position);
-        showLog("loadAdLoader START pos=" + ad_req_position
+        flipAdLog("AdMob request start pos=" + ad_req_position
                 + " replace=" + replaceExisting + " unit=" + adCode);
         AdLoader adLoader = new AdLoader.Builder(context, adCode)
                 .withAdListener(new AdListener() {
@@ -1233,6 +1327,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             object.put("adCode",adCode);
                             object.put("adPos",ad_req_position);
                             adError=object.toString();
+                            flipAdLog("AdMob onAdFailed pos=" + ad_req_position
+                                    + " code=" + errorCode + " msg=" + errorMessage);
                             showLog("loadAdLoader FAIL pos=" + ad_req_position
                                     + " keep previous/empty shell code=" + errorCode
                                     + " msg=" + errorMessage);
@@ -1252,6 +1348,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     @Override
                     public void onAdLoaded() {
                         super.onAdLoaded();
+                        flipAdLog("AdMob onAdLoaded banner pos=" + ad_req_position);
                         showLog(TAG+  "onAdLoaded: ");
                     }
 
@@ -1264,6 +1361,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 .forNativeAd(new NativeAd.OnNativeAdLoadedListener() {
                     @Override
                     public void onNativeAdLoaded(@NonNull NativeAd nativeAd) {
+                        flipAdLog("AdMob onNativeAdLoaded pos=" + ad_req_position);
                         showLog(TAG+  "onNativeAdLoaded: ");
                         try {
                             if (list != null && list.size() > 0) {
@@ -1347,6 +1445,19 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception ignored) {
         }
+        try {
+            if (list != null && positionx >= 0 && positionx < list.size()) {
+                ModelClass.Datum cur = list.get(positionx);
+                if (cur != null && cur.getPostType() != null
+                        && cur.getPostType().equalsIgnoreCase("ad")) {
+                    cur.setAd_code(adCode);
+                    if (cur.getAd_req_position() != ad_req_position) {
+                        cur.setAd_req_position(ad_req_position);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
         if (oldToDestroy != null && oldToDestroy != nativeAd) {
             try {
                 oldToDestroy.destroy();
@@ -1393,13 +1504,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                             || !seat.getPostType().equalsIgnoreCase("ad")) {
                         return;
                     }
-                    if (seat.getAd_req_position() != reqPos) {
+                    int seatReq = resolveFeedAdSeatReqPosition(positionx, seat);
+                    if (seatReq != reqPos) {
+                        flipAdLog("rebind skip reqPos mismatch seat=" + seatReq
+                                + " loaded=" + reqPos);
                         return;
                     }
                     if (adapter != null) {
                         final int keep = positionx;
-                        adapter.notifyDataSetChanged();
-                        syncFlipViewToFeedIndex(keep);
+                        adapter.notifyDataSetChangedFlipSafe();
+                        if (mFlipView == null || !mFlipView.isFlipAnimating()) {
+                            syncFlipViewToFeedIndex(keep);
+                        }
                     }
                 } catch (Exception e) {
                     showLog("rebindAdsScreenAfterNativeLoad: " + e.getMessage());
@@ -1603,6 +1719,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 actual_skip = Math.max(actual_skip, list.size());
             }
             skip = (int) Math.min(Integer.MAX_VALUE, actual_skip);
+            feedCurrentPage++;
         } else {
             if (respSkip != null) {
                 skip = respSkip;
@@ -1612,6 +1729,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } else if (respSkip != null) {
                 actual_skip = respSkip.longValue();
             }
+            feedCurrentPage = 1;
         }
     }
 
@@ -1684,10 +1802,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (TextUtils.isEmpty(code)) {
                     code = FeedAdConfig.getUnitId(this);
                 }
-                Integer pos = d.getAd_req_position();
-                if (pos == null) {
-                    pos = i + 1;
-                }
+                ensureAdSeatReqPositionOnDatum(i, d);
+                int pos = resolveFeedAdSeatReqPosition(i, d);
                 if (isFeedNativeSeatLoaded(pos)
                         || isFeedNativeSeatRequestInFlight(pos)) {
                     showLog("preloadNativeAdsForFeedSlots skip loaded/in-flight reqPos=" + pos);
@@ -1746,6 +1862,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     }
 
     private void loadFBAds(String adCode, Integer ad_req_position) {
+        flipAdLog("Facebook request start pos=" + ad_req_position + " unit=" + adCode);
         showLog("loadAds3");
       //  AdSettings.addTestDevice("b14f44bb-6e6c-4e38-910a-17b1b14ccc78");
         //AdSettings.addTestDevice(" 7f8b87ee-f0f2-4e3f-8a78-e3e60e226f41");
@@ -1766,7 +1883,8 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
             @Override
             public void onError(Ad ad, AdError adError) {
-                // Native ad failed to load
+                flipAdLog("Facebook onAdFailed pos=" + ad_req_position + " msg="
+                        + adError.getErrorMessage());
                 showLog(TAG+  "Native ad failed to load: " + adError.getErrorMessage());
 
             }
@@ -1776,16 +1894,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 if (nativeAd == null || nativeAd != ad) {
                     return;
                 }
-                // Native ad is loaded and ready to be displayed
+                flipAdLog("Facebook onAdLoaded pos=" + ad_req_position);
                 showLog(TAG+  "Native ad is loaded and ready to be displayed!");
                 FlipGoogleNativeAds flipGoogleNativeAds=new FlipGoogleNativeAds();
                 flipGoogleNativeAds.setFbAd(nativeAd);
-                flipGoogleNativeAds.setAdCode("");
-                flipGoogleNativeAds.setReqPos(list.get(positionx).getAd_req_position());
-                if(!nativeFBAdArray.contains(list.get(positionx).getAd_req_position())){
-                    nativeFBAdArray.add(list.get(positionx).getAd_req_position());
+                flipGoogleNativeAds.setAdCode(adCode);
+                flipGoogleNativeAds.setReqPos(ad_req_position);
+                if (nativeFBAdArray == null) {
+                    nativeFBAdArray = new ArrayList<>();
+                }
+                if (nativeFBAdList == null) {
+                    nativeFBAdList = new ArrayList<>();
+                }
+                if (!nativeFBAdArray.contains(ad_req_position)) {
+                    nativeFBAdArray.add(ad_req_position);
                 }
                 nativeFBAdList.add(flipGoogleNativeAds);
+                rebindAdsScreenAfterNativeLoad(ad_req_position);
 
             }
 
@@ -2002,13 +2127,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         try {
             showLog("CURRENT_LOCATION category_ID:"+category_id);
-            int timer=0;
-            if(positionx==requestPostition){
-                timer=2000;
-            }else{
-                timer=0;
-            }
-
+            final int timer = 0;
 
             if (category_id == 0) {
                 mFlipView.setVisibility(View.VISIBLE);
@@ -2023,12 +2142,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         skip = 0;
                         actual_skip = 0;
                         category_id = -1;
-                        requestPostition=1;
                         requestSize=0;
                         isFromLocalArticles=true;
                         positionx=0;
                         list=new ArrayList<>();
-                        dummyResponse=null;
                         inlist(-1);
                     }
                 },timer);
@@ -2063,9 +2180,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                         requestSize=0;
                         isFromLocalArticles=true;
                         positionx=0;
-                        requestPostition=1;
-                        dummyResponse=null;
-                        //   inlist(0);
                         inlist(0);
                     }
                 },timer);
@@ -2127,19 +2241,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         showLog("onOverFlip::positionx:"+((list.size()-1)==positionx));
 
         if(v.getPageCount()==list.size() && (list.size()-1)==positionx && loadingOnOverFlip && overFlipDistance>0){
-            boolean showLoadingToast = false;
-            if (!isDataParsed && dummyResponse != null) {
-                convertListOfArticles(dummyResponse, 3);
-            } else if (!isDataParsed && !isApiRequested) {
-                isApiRequested = true;
+            if (!isApiRequested && feedHasMorePages()) {
                 ShowNews_Data_Values(category_id, 3);
-                showLoadingToast = true;
-            } else if (!isDataParsed && isApiRequested && dummyResponse == null) {
-                showLoadingToast = true;
+                Toasty.info(getApplicationContext(), no_article_message, Toast.LENGTH_SHORT, true).show();
             } else if (isDataParsed && "No articles to read further".equals(no_article_message)) {
                 Toasty.info(getApplicationContext(), no_article_message, Toast.LENGTH_SHORT, true).show();
-            }
-            if (showLoadingToast) {
+            } else if (isApiRequested) {
                 Toasty.info(getApplicationContext(), no_article_message, Toast.LENGTH_SHORT, true).show();
             }
             loadingOnOverFlip = false;
@@ -2171,6 +2278,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         super.onNewIntent(intent);
         try {
             setIntent(intent);
+            handleFooterTabExtra(intent);
             handleWarmPushOpen(intent);
         } catch (Exception e) {
             Logone.w("HomePage", "onNewIntent failed", e);
@@ -2319,6 +2427,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
             showLog("HomePage warm open reload push=" + pushUpdatedID
                     + " share=" + SHARE_ID);
+            feedSeenPostIds.clear();
             inlist(0);
         } catch (Exception e) {
             Logone.w("HomePage", "reloadFeedForWarmPushOpen failed", e);
@@ -3085,7 +3194,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     //countforshareanddownload(list.get(positionx).getPostId(), list.get(positionx).getSubPostId(), 0);
 
                 }
-                adapter.notifyDataSetChanged();
+                if (adapter != null) {
+                    adapter.notifyDataSetChangedFlipSafe();
+                }
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -3178,12 +3289,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     skip = 0;
                     actual_skip = 0;
                     category_id = -1;
-                    requestPostition=1;
                     requestSize=0;
                     isFromLocalArticles=true;
                     positionx=0;
                     list=new ArrayList<>();
-                    dummyResponse=null;
                     inlist(-1);
 
 
@@ -3205,12 +3314,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     skip = 0;
                     actual_skip = 0;
                     category_id = 0;
-                    requestPostition=1;
                     requestSize=0;
                     isFromLocalArticles=true;
                     positionx=0;
-                    requestPostition=1;
-                    dummyResponse=null;
                     inlist(0);
                 }
 
@@ -3342,19 +3448,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 }
             }
         });
-        goHomePage.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                showLog("Check Point #1 : HomePage.setOnClickListener ");
-
-                Intent intent = new Intent(HomePage.this, HomePage.class);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                if (getApplicationContext() != null && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                    startActivity(intent);
-                }
-                finish();
-            }
-        });
+        goHomePage.setOnClickListener(
+                view -> {
+                    showLog("Check Point #1 : HomePage.setOnClickListener ");
+                    beginInstantNewsFooterReturn(true);
+                });
 
 
 
@@ -3499,8 +3597,16 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     @Override
     public void closeBottomStrip(boolean closeStrip) {
-        showLog("closeBottomStrip:"+closeStrip);
+        showLog("closeBottomStrip:" + closeStrip);
         updateHomePageNavigationForSeat();
+        if (list != null
+                && positionx >= 0
+                && positionx < list.size()
+                && list.get(positionx) != null
+                && "ad".equalsIgnoreCase(list.get(positionx).getPostType())
+                && home_page_navigation != null) {
+            home_page_navigation.setVisibility(View.VISIBLE);
+        }
     }
 
     private void openReportPage(int pos) {
@@ -3603,6 +3709,37 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @Override
     public void OnFlipCompletedListener(FlipView v) {
         showLog("OnFlipCompletedListener:::::::::");
+        try {
+            FlipAdWorkGate.setFlipAnimating(false);
+            v.postDelayed(this::flushDeferredAdapterRefresh, FlipAdWorkGate.SETTLE_GRACE_MS);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void flushDeferredAdapterRefresh() {
+        if (adapter == null) {
+            return;
+        }
+        try {
+            adapter.flushPendingAdapterNotifyIfNeeded();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Live FlipView page on screen (null if unavailable). */
+    @Nullable
+    public View getCurrentFlipPageView() {
+        try {
+            if (mFlipView != null) {
+                return mFlipView.getCurrentPageView();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    public int getCurrentFeedPosition() {
+        return positionx;
     }
 
     public class NetworkChangeReceiver extends BroadcastReceiver {
@@ -3837,7 +3974,6 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     public void inlist(int category_id) {
 
         list = new ArrayList<>();
-        dummyResponse=null;
         showLog("inlist called:"+category_id);
         initialCall=false;
         ShowNews_Data_Values(category_id,-1);
@@ -3845,11 +3981,18 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         try {
 
             allsharedpreference = new Allsharedpreference(HomePage.this);
-            Gson gson = new Gson();
             String Translation = allsharedpreference.getShared_String(Allsharedpreference.Translator);
-            if (Translation != null && !Translation.isEmpty()) {
-                languageModelResponse = gson.fromJson(Translation, LanguageModelResponse.class);
+            if (Translation != null
+                    && !Translation.isEmpty()
+                    && !Translation.equals(cachedTranslatorJson)) {
+                cachedTranslatorJson = Translation;
+                cachedTranslatorResponse =
+                        new Gson().fromJson(Translation, LanguageModelResponse.class);
+            } else if (Translation == null || Translation.isEmpty()) {
+                cachedTranslatorJson = null;
+                cachedTranslatorResponse = null;
             }
+            languageModelResponse = cachedTranslatorResponse;
 
             if (languageModelResponse != null && languageModelResponse.getData() != null) {
                 showLog("");
@@ -3969,6 +4112,9 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         requestModel.setApp_version_number(""+BuildConfig.VERSION_CODE);
         requestModel.setSdk_version(SDK_VERSION);
         requestModel.setNotif_perm_allowed(isPermissionGranted);
+        // CF GET serves EDGE_FEED_PAGE_SIZE (50). Play-store APKs without edge still use
+        // server default limit 8; dev edge soft-fallback must request 50 or FlipView stops ~8.
+        requestModel.setLimit(PublicEdgeFeedHelper.EDGE_FEED_PAGE_SIZE);
 
         String jsonString = new com.google.gson.Gson().toJson(requestModel);
         String encrpt_data = null;
@@ -3990,20 +4136,66 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         listAllArticlesCall = null;
     }
 
+    private boolean isPaginationInFlightForSkip(long forSkip) {
+        try {
+            return reqPosPaginationInFlight()
+                    && paginationSkipInFlight == forSkip
+                    && listAllArticlesCall != null
+                    && !listAllArticlesCall.isCanceled();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean reqPosPaginationInFlight() {
+        return isApiRequested && paginationSkipInFlight >= 0L;
+    }
+
+    private void clearPaginationInFlight() {
+        isApiRequested = false;
+        paginationSkipInFlight = -1L;
+    }
+
     private void ShowNews_Data_Values(int category_id,int reqPos) {
         showLog("API CATEGORY ID:" + category_id);
         showLog("API CATEGORY REQPOS:" + reqPos);
-        // N2: cancel prior in-flight feed call; ignore stale callbacks via gen.
-        cancelListAllArticlesCall();
+        if (reqPos == 3 && isPaginationInFlightForSkip(skip)) {
+            showLog("ShowNews_Data_Values skip — pagination in flight skip=" + skip);
+            return;
+        }
+        // Page-0 / refresh: cancel stale feed. Pagination: never cancel same-skip in flight.
+        if (reqPos != 3) {
+            cancelListAllArticlesCall();
+            clearPaginationInFlight();
+        } else if (listAllArticlesCall != null
+                && paginationSkipInFlight >= 0L
+                && paginationSkipInFlight != skip) {
+            cancelListAllArticlesCall();
+            clearPaginationInFlight();
+        }
         final int gen = ++listAllArticlesGen;
+        final int feedReqPos = reqPos;
+        if (reqPos == 3) {
+            isApiRequested = true;
+            paginationSkipInFlight = skip;
+        }
 
         boolean special = SharedPrefsData.getBool(
                 HomePage.this, Constants.isUnreadPostsSelected, Constants.PREF_NAME);
         boolean video = SharedPrefsData.getBool(
                 HomePage.this, Constants.isVideoPostsSelected, Constants.PREF_NAME);
         boolean search = isSearchFeedActive();
-        boolean useEdge = PublicEdgeFeedHelper.canUsePublicEdge(
-                search, special, video, flashNewsModeActive, category_id);
+        boolean useEdge =
+                PublicEdgeFeedHelper.canUsePublicEdge(
+                        search, special, video, flashNewsModeActive, category_id);
+        if (feedCurrentPage > 4) {
+            useEdge = false;
+        }
+
+        if (reqPos != 3) {
+            feedSeenPostIds.clear();
+            feedCurrentPage = 0;
+        }
 
         long pinPostId = 0L;
         try {
@@ -4011,18 +4203,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
             pinPostId = SHARE_ID;
         }
+        final long edgePinPostId = skip <= 0L ? pinPostId : 0L;
+        final int edgePage =
+                PublicEdgeFeedHelper.clampFeedPage(feedCurrentPage);
 
         if (useEdge) {
             try {
-                final long pinForWrap = pinPostId;
+                final long pinForWrap = edgePinPostId;
+                final long skipForWrap = skip;
                 Call<PublicEdgeFeedResponse> edgeCall =
                         PublicEdgeFeedHelper.enqueuePublicFeedCoalesced(
                                 getApplicationContext(),
                                 category_id,
                                 skip,
-                                pinPostId,
+                                edgePinPostId,
                                 special,
                                 flashNewsModeActive,
+                                edgePage,
                                 new Callback<PublicEdgeFeedResponse>() {
                         @Override
                         public void onResponse(
@@ -4040,14 +4237,90 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                     && response.isSuccessful()
                                     && PublicEdgeFeedHelper.isAcceptableEdgeResponse(
                                             body, skip)) {
-                                EncreptionRequest enc =
-                                        PublicEdgeFeedHelper.toEncreptionRequest(
-                                                getApplicationContext(), body, pinForWrap);
-                                if (enc != null) {
-                                    convertListOfArticles(Response.success(enc), reqPos);
+                                PublicEdgeFeedHelper.logPublicFeedResponse(call, response);
+                                String telKind =
+                                        flashNewsModeActive
+                                                ? "flash"
+                                                : (special ? "special" : "main");
+                                PublicEdgeTelemetry.reportFeedResponse(
+                                        response,
+                                        telKind,
+                                        SharedPrefsData.getInt(
+                                                getApplicationContext(),
+                                                Constants.LanguageID,
+                                                Constants.PREF_NAME),
+                                        skip);
+                                final Set<Long> seenForWrap =
+                                        skipForWrap > 0L ? feedSeenPostIds : null;
+                                PublicEdgeFeedHelper.deliverPlainEdgeOnMain(
+                                        getApplicationContext(),
+                                        body,
+                                        pinForWrap,
+                                        skipForWrap,
+                                        seenForWrap,
+                                        enc -> {
+                                            if (gen != listAllArticlesGen
+                                                    || isFinishing()
+                                                    || isDestroyed()) {
+                                                return;
+                                            }
+                                            if (call != null && call.isCanceled()) {
+                                                return;
+                                            }
+                                            if (enc != null) {
+                                                convertListOfArticles(
+                                                        Response.success(enc), reqPos);
+                                            } else {
+                                                enqueueListAllArticlesOrigin(
+                                                        category_id, reqPos, gen, true);
+                                            }
+                                        });
+                                return;
+                            }
+                            String edgeReject =
+                                    PublicEdgeFeedHelper.describeEdgeReject(response, skip);
+                            showLog(
+                                    "public edge miss cat="
+                                            + category_id
+                                            + " skip="
+                                            + skip
+                                            + " reason="
+                                            + edgeReject);
+                            if (skipForWrap <= 0L
+                                    && reqPos != 3
+                                    && edgeOpenTransientRetryGen != gen
+                                    && PublicEdgeFeedHelper.isTransientEdgeFailure(
+                                            response, null, skipForWrap)) {
+                                edgeOpenTransientRetryGen = gen;
+                                showLog(
+                                        "public edge transient failure — retry GET once gen="
+                                                + gen);
+                                Call<PublicEdgeFeedResponse> retry =
+                                        PublicEdgeFeedHelper.enqueuePublicFeedCoalesced(
+                                                getApplicationContext(),
+                                                category_id,
+                                                skip,
+                                                edgePinPostId,
+                                                special,
+                                                flashNewsModeActive,
+                                                edgePage,
+                                                this);
+                                if (retry != null) {
+                                    listAllArticlesCall = retry;
                                     return;
                                 }
                             }
+                            showLog(
+                                    "public feed List_All_Articles fallback reqPos="
+                                            + reqPos
+                                            + " cat="
+                                            + category_id
+                                            + " skip="
+                                            + skip
+                                            + " page="
+                                            + edgePage
+                                            + " reason="
+                                            + edgeReject);
                             // Soft-fall to encrypted List (Node → Redis → Mongo).
                             PublicEdgeFeedHelper.reportEdgeOriginBeacon(
                                     getApplicationContext(),
@@ -4057,14 +4330,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                             getApplicationContext(),
                                             Constants.LanguageID,
                                             Constants.PREF_NAME),
-                                    SharedPrefsData.getInt(
-                                            getApplicationContext(),
-                                            Constants.StateID,
-                                            Constants.PREF_NAME),
-                                    SharedPrefsData.getInt(
-                                            getApplicationContext(),
-                                            Constants.Selected_Distric_Id,
-                                            Constants.PREF_NAME));
+                                    PublicEdgeFeedHelper.edgeBeaconStateId(
+                                            getApplicationContext(), category_id),
+                                    PublicEdgeFeedHelper.edgeBeaconDistId(
+                                            getApplicationContext(), category_id));
                             enqueueListAllArticlesOrigin(
                                     category_id, reqPos, gen, true);
                         }
@@ -4076,8 +4345,57 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 return;
                             }
                             if (call != null && call.isCanceled()) {
+                                if (feedReqPos == 3) {
+                                    clearPaginationInFlight();
+                                }
                                 return;
                             }
+                            showLog(
+                                    "public edge failure cat="
+                                            + category_id
+                                            + " skip="
+                                            + skip
+                                            + " err="
+                                            + (t != null ? t.getClass().getSimpleName() : "?"));
+                            if (skipForWrap <= 0L
+                                    && feedReqPos != 3
+                                    && edgeOpenTransientRetryGen != gen
+                                    && PublicEdgeFeedHelper.isTransientEdgeFailure(
+                                            null, t, skipForWrap)) {
+                                edgeOpenTransientRetryGen = gen;
+                                showLog(
+                                        "public edge transient failure — retry GET once gen="
+                                                + gen);
+                                Call<PublicEdgeFeedResponse> retry =
+                                        PublicEdgeFeedHelper.enqueuePublicFeedCoalesced(
+                                                getApplicationContext(),
+                                                category_id,
+                                                skip,
+                                                edgePinPostId,
+                                                special,
+                                                flashNewsModeActive,
+                                                edgePage,
+                                                this);
+                                if (retry != null) {
+                                    listAllArticlesCall = retry;
+                                    return;
+                                }
+                            }
+                            String failReason =
+                                    t != null
+                                            ? t.getClass().getSimpleName()
+                                                    + ":"
+                                                    + String.valueOf(t.getMessage())
+                                            : "unknown";
+                            showLog(
+                                    "public feed List_All_Articles fallback reqPos="
+                                            + reqPos
+                                            + " cat="
+                                            + category_id
+                                            + " skip="
+                                            + skip
+                                            + " reason="
+                                            + failReason);
                             PublicEdgeFeedHelper.reportEdgeOriginBeacon(
                                     getApplicationContext(),
                                     "client_main_local_list_fallback",
@@ -4086,28 +4404,45 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                             getApplicationContext(),
                                             Constants.LanguageID,
                                             Constants.PREF_NAME),
-                                    SharedPrefsData.getInt(
-                                            getApplicationContext(),
-                                            Constants.StateID,
-                                            Constants.PREF_NAME),
-                                    SharedPrefsData.getInt(
-                                            getApplicationContext(),
-                                            Constants.Selected_Distric_Id,
-                                            Constants.PREF_NAME));
+                                    PublicEdgeFeedHelper.edgeBeaconStateId(
+                                            getApplicationContext(), category_id),
+                                    PublicEdgeFeedHelper.edgeBeaconDistId(
+                                            getApplicationContext(), category_id));
                             enqueueListAllArticlesOrigin(
                                     category_id, reqPos, gen, true);
                         }
                     });
                 if (edgeCall != null) {
-                    showLog("API public edge feed cat=" + category_id + " skip=" + skip);
+                    showLog(
+                            "API public edge feed cat="
+                                    + category_id
+                                    + " skip="
+                                    + skip
+                                    + " page="
+                                    + edgePage);
                     listAllArticlesCall = edgeCall;
                     return;
                 }
             } catch (Exception e) {
-                showLog("public edge enqueue failed — List fallback");
+                showLog(
+                        "public feed List_All_Articles fallback reqPos="
+                                + reqPos
+                                + " cat="
+                                + category_id
+                                + " skip="
+                                + skip
+                                + " reason=edge_enqueue_exception");
             }
         }
 
+        showLog(
+                "public feed List_All_Articles fallback reqPos="
+                        + reqPos
+                        + " cat="
+                        + category_id
+                        + " skip="
+                        + skip
+                        + " reason=edge_not_eligible_or_build_null");
         enqueueListAllArticlesOrigin(category_id, reqPos, gen, false);
     }
 
@@ -4171,11 +4506,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     if (gen != listAllArticlesGen) {
                         return;
                     }
-                    isApiRequested = false;
+                    if (reqPos == 3) {
+                        clearPaginationInFlight();
+                    } else {
+                        isApiRequested = false;
+                    }
                 }
             });
         } catch (Exception e) {
-            /* soft */
+            if (reqPos == 3) {
+                clearPaginationInFlight();
+            }
         }
     }
     /**
@@ -4183,6 +4524,15 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
      * Prevents the same post showing twice when pagination returns overlapping data.
      * Ads / share_app / ratings (postId == null) are always kept since they are positional.
      */
+    private void rememberFeedSeenPostIds(@Nullable java.util.List<ModelClass.Datum> rows) {
+        if (rows == null) return;
+        for (ModelClass.Datum d : rows) {
+            if (d != null && d.getPostId() != null) {
+                feedSeenPostIds.add(d.getPostId());
+            }
+        }
+    }
+
     private void addUniqueArticles(java.util.List<ModelClass.Datum> newData) {
         if (newData == null) return;
         java.util.HashSet<String> existing = new java.util.HashSet<>();
@@ -4214,37 +4564,27 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         showLog("reqPos:::::"+reqPos);
         showLog("isFromLocalArticles:::::"+isFromLocalArticles);
-        if (reqPos == 3 && !isFromLocalArticles) {
-            if (response != null && response != dummyResponse) {
-                isDataParsed = false;
-                dummyResponse = response;
-                showLog("requestPosition::" + requestPostition);
-                requestPostition = 1 + requestSize;
-                showLog("requestPosition::" + requestPostition);
-                return;
-            }
-            dummyResponse = null;
-        }
         try {
             if (response!=null && response.body() != null) {
                 showLog("response body not null");
-                dummyResponse=null;
                 isDataParsed=true;
-                isApiRequested = false;
+                if (reqPos == 3) {
+                    clearPaginationInFlight();
+                } else {
+                    isApiRequested = false;
+                }
                 SharedPrefsData.putBool(getApplicationContext(), Constants.HOME_SCREEN, true, Constants.PREF_NAME);
                 EncreptionRequest encreptionRequest = response.body();
                 encreptionRequest__=encreptionRequest;
-                String encrpt_data = decrypt(encreptionRequest.getData());
-                if(encrpt_data!=null && encrpt_data.length()>1){
-                    int maxLogSize = 2000;
-                    for(int i = 0; i <= encrpt_data.length() / maxLogSize; i++) {
-                        int start = i * maxLogSize;
-                        int end = (i+1) * maxLogSize;
-                        end = end > encrpt_data.length() ? encrpt_data.length() : end;
-                        if(BuildConfig.DEBUG){
-                            android.util.Log.d("ALL ARTICLES DATA:", encrpt_data.substring(start, end));
-                        }
-                    }
+                String encrpt_data =
+                        encreptionRequest.isPublicEdgePlainPayload()
+                                ? encreptionRequest.getData()
+                                : decrypt(encreptionRequest.getData());
+                if (BuildConfig.DEBUG
+                        && encrpt_data != null
+                        && encrpt_data.length() > 1
+                        && encrpt_data.length() <= 2000) {
+                    android.util.Log.d("ALL ARTICLES DATA:", encrpt_data);
                 }
 
 
@@ -4285,7 +4625,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                     }
                     if (validateUserOtp.getData() != null && validateUserOtp.getData().size() > 0) {
                         final int listSizeBefore = list.size();
+                        rememberFeedSeenPostIds(validateUserOtp.getData());
                         addUniqueArticles(validateUserOtp.getData());
+                        if (reqPos == 3
+                                && list.size() == listSizeBefore
+                                && validateUserOtp.getData().size() > 0) {
+                            showLog(
+                                    "feed pagination: server returned rows but all deduped"
+                                            + " — soft List retry skip="
+                                            + skip);
+                            advanceFeedSkipAfterResponse(validateUserOtp, reqPos);
+                            clearPaginationInFlight();
+                            enqueueListAllArticlesOrigin(
+                                    category_id, 3, listAllArticlesGen, true);
+                            return;
+                        }
                         if (encreptionRequest.isShow_ads()) {
                             rebalanceFeedAdsIfNeeded(encreptionRequest);
                         }
@@ -4312,15 +4666,23 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                 positionx >= 0 && positionx < list.size() ? positionx : 0;
                         final int flipCountBefore =
                                 mFlipView != null ? mFlipView.getPageCount() : listSizeBefore;
-                        adapter.setData(list);
-                        if (reqPos == 3 && mFlipView != null && list.size() > flipCountBefore) {
-                            mFlipView.pageCountGrewQuietly();
-                        }
+                        final boolean feedGrew = list.size() > listSizeBefore;
+                        adapter.setData(
+                                list,
+                                reqPos == 3 ? true : feedGrew && listSizeBefore > 0);
+                        ActionRowWhatsappConfig.saveFromServer(
+                                this,
+                                encreptionRequest.getAction_row_whatsapp_enabled(),
+                                encreptionRequest.getAction_row_whatsapp_full_enabled(),
+                                encreptionRequest.getAction_row_whatsapp_half_enabled());
                         if (encreptionRequest.isShow_ads()) {
                             preloadNativeAdsForFeedSlots();
                         }
-                        isApiRequested = false;
-                        requestPostition = 1 + list.size();
+                        if (reqPos == 3) {
+                            clearPaginationInFlight();
+                        } else {
+                            isApiRequested = false;
+                        }
                         showLog(
                                 "feed append seat="
                                         + seatBefore
@@ -4330,9 +4692,26 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                                         + skip
                                         + " actual_skip="
                                         + actual_skip);
-                        // Append / pagination: keep the user's current card (never snap home).
-                        if (reqPos == 3) {
-                            syncFlipViewToFeedIndex(seatBefore);
+                        // Append: keep seat on page N+; page-0 paint flips home.
+                        if (list.size() > listSizeBefore) {
+                            if (mFlipView != null && list.size() > flipCountBefore) {
+                                mFlipView.pageCountGrewQuietly();
+                            }
+                            if (listSizeBefore > 0) {
+                                positionx = Math.max(0, Math.min(seatBefore, list.size() - 1));
+                                if (mFlipView != null && !mFlipView.isFlipAnimating()) {
+                                    syncFlipViewToFeedIndex(seatBefore);
+                                }
+                            } else {
+                                positionx = 0;
+                                ppi = 0;
+                                try {
+                                    if (mFlipView != null) {
+                                        mFlipView.flipTo(0);
+                                    }
+                                } catch (Exception ignored) {
+                                }
+                            }
                         } else if (reqPos == -1 || positionx < 0 || positionx >= list.size()) {
                             positionx = 0;
                             ppi = 0;
@@ -4439,6 +4818,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 isDataParsed=true;
                 showLog("response body null");
                 no_article_message="No articles to read further";
+                if (reqPos == 3) {
+                    clearPaginationInFlight();
+                } else {
+                    isApiRequested = false;
+                }
             }
 
             initialCall=true;
@@ -4528,13 +4912,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         }
         if (txtNoData != null && txtNoData.getVisibility() == View.VISIBLE) {
             showLog("Check Point #2 : HomePage back from empty");
-            Intent intent = new Intent(HomePage.this, HomePage.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            if (getApplicationContext() != null
-                    && getApplicationContext().getPackageName().equals(BuildConfig.APPLICATION_ID)) {
-                startActivity(intent);
-            }
-            finish();
+            beginInstantNewsFooterReturn(true);
             return;
         }
         if (FlipperAdapter.fullscreen) {
@@ -4656,75 +5034,83 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return super.onTouchEvent(event);
     }
 
-    /*   check internet connection */
-    public static void dialog(boolean value) {
 
-        if (value) {
-            yes_internet.setVisibility(View.VISIBLE);
-            no_internet.setVisibility(View.GONE);
+    private void refreshDetails() {
+        showLog("positionx::" + positionx);
+        showLog("LIST SIZE:" + list.size() + ":positionx:" + positionx);
+        if (feedPrefetchRunnable != null) {
+            feedPaginationHandler.removeCallbacks(feedPrefetchRunnable);
+        }
+        final int seat = positionx;
+        feedPrefetchRunnable =
+                () -> {
+                    if (seat != positionx) {
+                        return;
+                    }
+                    runNearEndFeedPrefetch();
+                };
+        feedPaginationHandler.postDelayed(feedPrefetchRunnable, FEED_PREFETCH_DEBOUNCE_MS);
 
-            Handler handler = new Handler();
-            Runnable delayrunnable = new Runnable() {
-                @Override
-                public void run() {
-                    yes_internet.setVisibility(View.VISIBLE);
-                    no_internet.setVisibility(View.GONE);
-                }
-            };
-            handler.postDelayed(delayrunnable, 500);
-        } else {
-            yes_internet.setVisibility(View.GONE);
-            no_internet.setVisibility(View.VISIBLE);
+        if (list == null
+                || list.isEmpty()
+                || positionx < Math.max(0, list.size() - FEED_PREFETCH_FROM_END)) {
+            refreshDetailsFooterOnly();
         }
     }
 
-    private void refreshDetails() {
+    /**
+     * Prefetch when within {@link #FEED_PREFETCH_FROM_END} of list tail — debounced from
+     * {@link #refreshDetails()} so rapid flip does not cancel the in-flight page.
+     */
+    private boolean feedHasMorePages() {
+        return !"No articles to read further".equals(no_article_message);
+    }
 
-        showLog("positionx::"+positionx);
-        showLog("requestPostition::"+requestPostition);
-        showLog("LIST SIZE:"+(list.size()+":positionx:"+positionx));
-        if(positionx==requestPostition){
-            showLog("request at position::"+requestSize);
-            isApiRequested=true;
-            ShowNews_Data_Values(category_id,3);
+    private void runNearEndFeedPrefetch() {
+        if (list == null || list.isEmpty()) {
+            return;
         }
+        if (isApiRequested || !feedHasMorePages()) {
+            return;
+        }
+        int prefetchAt = Math.max(0, list.size() - FEED_PREFETCH_FROM_END);
+        if (positionx < prefetchAt) {
+            return;
+        }
+        maybePrefetchNextFeedPage(true);
+    }
 
-        if (list != null
-                && !list.isEmpty()
-                && positionx >= Math.max(0, list.size() - FEED_PREFETCH_FROM_END)) {
-            showProgress();
-            if (dummyResponse != null) {
-                new Handler().postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        showLog("request at position:: convertListOfArticles");
-                        convertListOfArticles(dummyResponse, 3);
-                        hideProgress();
-                    }
-                }, 100);
-            } else {
-                showLog("request at position::" + requestSize + isApiRequested);
-                if (!isApiRequested) {
-                    isApiRequested = true;
-                    ShowNews_Data_Values(category_id, 3);
-                }
-                hideProgress();
-            }
-        } else {
+    private void maybePrefetchNextFeedPage(boolean fromNearEnd) {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        if (isPaginationInFlightForSkip(skip)) {
+            showLog("prefetch skip — page in flight skip=" + skip);
+            return;
+        }
+        showLog(
+                "request at position prefetch nearEnd="
+                        + fromNearEnd
+                        + " size="
+                        + list.size()
+                        + " seat="
+                        + positionx
+                        + " skip="
+                        + skip);
+        ShowNews_Data_Values(category_id, 3);
+        if (fromNearEnd) {
+            hideProgress();
+        }
+    }
+
+    private void refreshDetailsFooterOnly() {
+        if (bottomNavigationView == null) {
+            return;
+        }
+        try {
             bottomNavigationView.getMenu().getItem(0).setIcon(R.drawable.refresh_icon);
             bottomNavigationView.getMenu().getItem(0).setTitle("" + languageModelResponse.getData().getReload());
-//
-//            if (positionx >= 1) {
-//                bottomNavigationView.getMenu().getItem(0).setIcon(R.drawable.refresh_icon);
-//                bottomNavigationView.getMenu().getItem(0).setTitle("" + languageModelResponse.getData().getReload());
-//                Logone.d("TestingHome", "" + languageModelResponse.getData().getReload());
-//            }
-//
-//            if (positionx == 0) {
-//                bottomNavigationView.getMenu().getItem(0).setIcon(R.drawable.ic_home);
-//                bottomNavigationView.getMenu().getItem(0).setTitle("" + languageModelResponse.getData().getHome());
-//                Logone.d("TestingHome", "" + languageModelResponse.getData().getHome());
-//            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -4742,6 +5128,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
     @SuppressLint("SetTextI18n")
     @Override
     public void onFlippedToPage(FlipView view, int position, long id) {
+        try {
+            FlipAdWorkGate.setFlipAnimating(view != null && view.isFlipAnimating());
+        } catch (Exception ignored) {
+        }
         final int settledFrom = positionx;
         try {
             if (view == mFlipView && adScreenArticleOverlay != null && adScreenArticleOverlay.isShowing()) {
@@ -4767,18 +5157,33 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             }
         } catch (Exception ignored) {
         }
-        new Handler().postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                onFlippedToPage1(view,position,id);
-            }
-        },50);
+        if (flipSettleRunnable != null) {
+            flipSettleHandler.removeCallbacks(flipSettleRunnable);
+        }
+        final FlipView settleView = view;
+        final int settlePosition = position;
+        final long settleId = id;
+        flipSettleRunnable =
+                () -> onFlippedToPage1(settleView, settlePosition, settleId);
+        flipSettleHandler.postDelayed(flipSettleRunnable, 50L);
 
     }
+
+    private void clearWindowSecureFlagIfNeeded() {
+        try {
+            if ((getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     public void onFlippedToPage1(FlipView view, int position, long id) {
         showLog("onFlippedToPage1:::");
         try {
             FlipAdWorkGate.noteFlipInteraction();
+            FlipAdWorkGate.setFlipAnimating(false);
+            flushDeferredAdapterRefresh();
         } catch (Exception ignored) {
         }
         if (list == null || position < 0 || position >= list.size() || list.get(position) == null) {
@@ -4798,13 +5203,12 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             e.printStackTrace();
         }
         showLog("CHECK POINT ONFLIPPEDTOPAGE 2");
-        firbaseJSONObj = firebaseJSON();
         if (position >= 0 && position < 2) {
             ppi = position;
         } else {
             ppi = 1;
         }
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        clearWindowSecureFlagIfNeeded();
         if(post_type.equalsIgnoreCase("image_gallery")){
             adapter.closeGalleryShareLayout(mFlipView.getChildAt(ppi));
         }
@@ -4868,24 +5272,33 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
         //loading Ad (flip-safe defer — no full native pool rewrite)
         if (list.get(positionx).getPostType().equalsIgnoreCase("ad")) {
-            showLog("ONFLIPPEDTOPAGE AD Loading");
-            if (!shouldDeferAdWork()) {
-                ModelClass.Datum adSeat = list.get(positionx);
-                String seatCode = adSeat.getAd_code();
-                if (TextUtils.isEmpty(seatCode)) {
-                    seatCode = adSeat.getNext_req_ad_code();
+            final ModelClass.Datum adSeat = list.get(positionx);
+            ensureAdSeatReqPositionOnDatum(positionx, adSeat);
+            final int seatPos = resolveFeedAdSeatReqPosition(positionx, adSeat);
+            final String seatCode =
+                    !TextUtils.isEmpty(adSeat.getAd_code())
+                            ? adSeat.getAd_code()
+                            : (!TextUtils.isEmpty(adSeat.getNext_req_ad_code())
+                                    ? adSeat.getNext_req_ad_code()
+                                    : FeedAdConfig.getUnitId(this));
+            final String seatType =
+                    !TextUtils.isEmpty(adSeat.getAd_type()) ? adSeat.getAd_type() : "google";
+            flipAdLog("ad seat reached listIndex=" + positionx + " reqPos=" + seatPos
+                    + " type=" + seatType + " unit=" + seatCode);
+            if (isFeedAdSeatPoolReady(seatType, seatPos)) {
+                flipAdLog("ad seat pool ready — skip settle loadAds reqPos=" + seatPos);
+                scheduleAdSeatStayRefresh();
+            } else {
+                Runnable adLoad = () -> loadAds(seatCode, seatPos, seatType);
+                if (!shouldDeferAdWork()) {
+                    adLoad.run();
+                } else {
+                    long wait = Math.max(80L, FlipAdWorkGate.millisUntilAdWorkSafe() + 40L);
+                    flipAdLog("ad seat load deferred retryInMs=" + wait);
+                    new Handler(Looper.getMainLooper()).postDelayed(adLoad, wait);
                 }
-                if (TextUtils.isEmpty(seatCode)) {
-                    seatCode = FeedAdConfig.getUnitId(this);
-                }
-                Integer seatPos = adSeat.getAd_req_position();
-                String seatType = adSeat.getAd_type();
-                if (TextUtils.isEmpty(seatType)) {
-                    seatType = "google";
-                }
-                loadAds(seatCode, seatPos, seatType);
+                scheduleAdSeatStayRefresh();
             }
-            scheduleAdSeatStayRefresh();
         } else {
             cancelAdSeatStayRefresh();
         }
@@ -4898,7 +5311,21 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         } catch (Exception ignored) {
         }
         trackingEvents.FireBase("post_type", list.get(position).getPostType()+"_pos_"+position);
-        BundleDataToGcmPush(position);
+        // Article onFlip → ViewsBatchTracker only when batch on; keep GCM for ad telemetry.
+        if (!ViewsBatchTracker.isServerBatchEnabled()
+                || "ad".equalsIgnoreCase(list.get(position).getPostType())) {
+            // Defer flip telemetry so getView / touch handling is not blocked by GCM marshal.
+            final int gcmPos = position;
+            if (mFlipView != null) {
+                mFlipView.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (gcmPos < 0 || list == null || gcmPos >= list.size()) return;
+                    BundleDataToGcmPush(gcmPos);
+                });
+            } else {
+                BundleDataToGcmPush(gcmPos);
+            }
+        }
 
 //        if(list.get(positionx).getPostType().equalsIgnoreCase("normal_image")){
 //            LocalBroadcastManager.getInstance(getContext()).registerReceiver(CURRENT_LOCATION,
@@ -4950,11 +5377,61 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             lbm.unregisterReceiver(WRITER_FOLLOWER);
             lbm.unregisterReceiver(SURVEY_STATUS);
             lbm.unregisterReceiver(SURVEY_POLL);
-            if (receiver != null) unregisterReceiver(receiver);
+            lbm.unregisterReceiver(CURRENT_LOCATION);
+            if (receiver != null) {
+                unregisterReceiver(receiver);
+                receiver = null;
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
+        try {
+            if (flipSettleRunnable != null) {
+                flipSettleHandler.removeCallbacks(flipSettleRunnable);
+                flipSettleRunnable = null;
+            }
+            if (feedPrefetchRunnable != null) {
+                feedPaginationHandler.removeCallbacks(feedPrefetchRunnable);
+                feedPrefetchRunnable = null;
+            }
+            destroyLoadedNativeAds();
+        } catch (Exception ignored) {
+        }
         showLog("isUnreadPostsSelected set to false #4");
+    }
+
+    private void destroyLoadedNativeAds() {
+        try {
+            if (nativeGoogleAdList != null) {
+                for (FlipGoogleNativeAds packed : nativeGoogleAdList) {
+                    if (packed == null) {
+                        continue;
+                    }
+                    if (packed.getAd() != null) {
+                        packed.getAd().destroy();
+                        packed.setAd(null);
+                    }
+                    if (packed.getFbAd() != null) {
+                        packed.getFbAd().destroy();
+                        packed.setFbAd(null);
+                    }
+                }
+                nativeGoogleAdList.clear();
+            }
+            if (nativeFBAdList != null) {
+                for (FlipGoogleNativeAds packed : nativeFBAdList) {
+                    if (packed == null) {
+                        continue;
+                    }
+                    if (packed.getFbAd() != null) {
+                        packed.getFbAd().destroy();
+                        packed.setFbAd(null);
+                    }
+                }
+                nativeFBAdList.clear();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
 
@@ -5143,8 +5620,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         homeLifecycleResumed = false;
         cancelAdSeatStayRefresh();
         try {
-            ViewsBatchTracker.get().setHomeFlushActive(false);
             PostDwellTracker.get().onPaused(getApplicationContext());
+            ViewsBatchTracker.get().setHomeFlushActive(false);
+            if (ViewsBatchTracker.isServerBatchEnabled()) {
+                ViewsBatchTracker.get().flush(getApplicationContext(), true);
+            }
         } catch (Exception ignored) {
         }
         //new flip
@@ -6621,6 +7101,17 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 
     private void resetFeedCursorsForSoftOpen() {
         try {
+            destroyLoadedNativeAds();
+            if (nativeGoogleAdArray != null) {
+                nativeGoogleAdArray.clear();
+            }
+            if (nativeFBAdArray != null) {
+                nativeFBAdArray.clear();
+            }
+            synchronized (feedNativeAdSeatsInFlight) {
+                feedNativeAdSeatsInFlight.clear();
+            }
+            feedSeenPostIds.clear();
             cancelListAllArticlesCall();
             SHARE_ID = 0;
             SHARE_REDIRECT_ID = "0";
@@ -6630,12 +7121,11 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             actual_skip = 0;
             positionx = 0;
             ppi = 0;
-            requestPostition = 1;
             requestSize = 0;
+            feedCurrentPage = 0;
             isApiRequested = false;
             isDataParsed = true;
             isFromLocalArticles = false;
-            dummyResponse = null;
             category_id = 0;
             nativeGoogleAdList = new ArrayList<>();
             nativeFBAdList = new ArrayList<>();
@@ -6996,6 +7486,7 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
             } else {
                 prepareMagazineShareCenterSlot(centerSlot);
                 hideShareCenterSlotChrome();
+                applyFooterWhatsapp();
             }
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_status), showVideos);
             setFooterMenuItemVisible(menu.findItem(R.id.navigation_profile), showProfile);

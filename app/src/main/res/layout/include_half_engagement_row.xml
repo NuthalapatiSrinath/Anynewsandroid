@@ -40,9 +40,9 @@
 
     <LinearLayout
         android:id="@+id/half_image_like_icon"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:layout_marginEnd="2dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="0dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:gravity="center">
@@ -60,7 +60,7 @@
                 android:layout_gravity="center"
                 android:background="@drawable/white_oval"
                 android:contentDescription="@string/like_image"
-                android:padding="7dp"
+                android:padding="5dp"
                 android:src="@drawable/ic_action_like" />
 
             <TextView
@@ -87,9 +87,9 @@
 
     <LinearLayout
         android:id="@+id/half_comment"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:layout_marginEnd="2dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="0dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:gravity="center">
@@ -107,7 +107,7 @@
                 android:layout_gravity="center"
                 android:background="@drawable/white_oval"
                 android:contentDescription="@string/comment_image"
-                android:padding="7dp"
+                android:padding="5dp"
                 android:src="@drawable/ic_action_comment" />
 
             <TextView
@@ -134,9 +134,9 @@
 
     <LinearLayout
         android:id="@+id/half_share"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:layout_marginEnd="2dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="0dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:gravity="center">
@@ -154,7 +154,7 @@
                 android:layout_gravity="center"
                 android:background="@drawable/white_oval"
                 android:contentDescription="@string/share_image"
-                android:padding="7dp"
+                android:padding="5dp"
                 android:src="@drawable/ic_action_share" />
 
             <TextView
@@ -182,9 +182,9 @@
     <!-- Article TTS between share and search (admin tts_speaker_on_engagement). -->
     <LinearLayout
         android:id="@+id/half_tts"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:layout_marginEnd="2dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="0dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:gravity="center"
@@ -198,8 +198,8 @@
 
             <View
                 android:id="@+id/half_tts_pulse"
-                android:layout_width="42dp"
-                android:layout_height="42dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:layout_gravity="center"
                 android:background="@drawable/bg_article_tts_pulse"
                 android:visibility="gone" />
@@ -211,7 +211,7 @@
                 android:layout_gravity="center"
                 android:background="@drawable/white_oval"
                 android:contentDescription="Read aloud"
-                android:padding="7dp"
+                android:padding="5dp"
                 android:src="@drawable/ic_action_tts" />
         </FrameLayout>
     </LinearLayout>
@@ -220,9 +220,9 @@
          Same outer white circle + glyph sizing as like/share (Configuration). -->
     <LinearLayout
         android:id="@+id/half_search"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:layout_marginEnd="2dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="0dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:gravity="center"
@@ -234,15 +234,15 @@
             android:layout_height="35dp"
             android:background="@drawable/white_oval"
             android:contentDescription="@string/search_stories"
-            android:padding="7dp"
+            android:padding="5dp"
             android:src="@drawable/ic_action_search" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/report"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:layout_marginEnd="4dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginEnd="0dp"
         android:gravity="center">
 
         <ImageView
@@ -251,7 +251,7 @@
             android:layout_height="35dp"
             android:background="@drawable/white_oval"
             android:contentDescription="@null"
-            android:padding="7dp"
+            android:padding="5dp"
             android:src="@drawable/ic_action_more_vert" />
     </LinearLayout>
 </LinearLayout>

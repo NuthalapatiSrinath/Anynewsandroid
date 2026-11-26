@@ -37,6 +37,7 @@ import androidx.core.view.MotionEventCompat;
 import androidx.core.view.VelocityTrackerCompat;
 
 import com.anyNews.anynews.R;
+import com.anyNews.anynews.Utils.ActionRowWhatsappConfig;
 import com.anyNews.anynews.Utils.FlipperAdapter;
 
 import java.util.ArrayList;
@@ -1067,6 +1068,11 @@ public class FlipView extends FrameLayout {
             // does not bring it back after staff turn it off.
             try {
                 Context ctx = scrap.v.getContext();
+                if (ActionRowWhatsappConfig.isHalfEnabled(ctx)
+                        && scrap.v.findViewById(R.id.half_whatsapp) == null
+                        && mAdapter instanceof FlipperAdapter) {
+                    ((FlipperAdapter) mAdapter).ensureHalfWhatsappForSeat(scrap.v, index);
+                }
                 if (FlipperAdapter.applyActionRowWhatsappVisibility(ctx, scrap.v)) {
                     FlipperAdapter.applyHalfActionIconSizes(ctx, scrap.v);
                     FlipperAdapter.applyFullSideActionGap(ctx, scrap.v);

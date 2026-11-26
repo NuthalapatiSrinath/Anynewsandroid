@@ -3249,7 +3249,8 @@ public class newProfileDetails extends AppCompatActivity {
                 return true;
             }
             navigateHomeWithFooterTab(id);
-            return true;
+            // Stay on Profile tab highlight while this screen is still visible.
+            return false;
         });
         profileBottomNav.setOnNavigationItemReselectedListener(item -> {
             if (item.getItemId() == R.id.navigation_profile) {
@@ -5004,6 +5005,13 @@ public class newProfileDetails extends AppCompatActivity {
                             != appliedNightUiMask)) {
                 maybeRecreateForNightModeChange();
                 return;
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            if (profileBottomNav != null) {
+                profileBottomNav.setSelectedItemId(R.id.navigation_profile);
             }
         } catch (Exception ignored) {
         }

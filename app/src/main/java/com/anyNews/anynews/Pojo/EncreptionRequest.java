@@ -88,6 +88,17 @@ public class EncreptionRequest {
         this.data = data;
     }
 
+    /** In-memory only: {@link #data} is plain JSON from public edge (skip decrypt). */
+    private transient boolean publicEdgePlainPayload;
+
+    public boolean isPublicEdgePlainPayload() {
+        return publicEdgePlainPayload;
+    }
+
+    public void setPublicEdgePlainPayload(boolean publicEdgePlainPayload) {
+        this.publicEdgePlainPayload = publicEdgePlainPayload;
+    }
+
     public CardsDisplay getCards_display() {
         return cards_display;
     }
