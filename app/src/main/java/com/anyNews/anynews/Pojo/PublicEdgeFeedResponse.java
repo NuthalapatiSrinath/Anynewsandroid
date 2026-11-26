@@ -50,6 +50,19 @@ public class PublicEdgeFeedResponse {
     @Expose
     private String eng;
 
+    /** Optional origin hint from Node (when present on CF MISS). */
+    @SerializedName("serving")
+    @Expose
+    private String serving;
+
+    @SerializedName("origin_redis")
+    @Expose
+    private Boolean origin_redis;
+
+    @SerializedName("origin_mongo")
+    @Expose
+    private Boolean origin_mongo;
+
     @SerializedName("pinned_post_id")
     @Expose
     private Long pinned_post_id;
@@ -96,6 +109,18 @@ public class PublicEdgeFeedResponse {
 
     public String getEng() {
         return eng;
+    }
+
+    public String getServing() {
+        return serving;
+    }
+
+    public Boolean getOrigin_redis() {
+        return origin_redis;
+    }
+
+    public Boolean getOrigin_mongo() {
+        return origin_mongo;
     }
 
     public Long getPinned_post_id() {

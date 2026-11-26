@@ -110,6 +110,7 @@ android {
             // Phase 1: POST /app/v3/views/batch (dev panel + local testing)
             buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "true"
             buildConfigField "boolean", "PUBLIC_EDGE_TELEMETRY", "true"
+            buildConfigField "boolean", "EDGE_DEBUG_HUD", "true"
         }
         release {
 // 3999 0336 2591    155115
@@ -123,6 +124,7 @@ android {
             buildConfigField "String", "API_BASE_URL", "\"https://anynewsdevelopmentapi.anynews.co.in/\""
             buildConfigField "boolean", "IMPRESSIONS_SERVER_BATCH_ENABLED", "true"
             buildConfigField "boolean", "PUBLIC_EDGE_TELEMETRY", "true"
+            buildConfigField "boolean", "EDGE_DEBUG_HUD", "false"
             ndk {
                 debugSymbolLevel 'FULL'
             }

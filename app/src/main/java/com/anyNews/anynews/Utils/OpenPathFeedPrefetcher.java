@@ -140,6 +140,7 @@ public final class OpenPathFeedPrefetcher {
                                 enqueuePostFallback(app, langId);
                                 return;
                             }
+                            EdgeDebugHud.notifyPublicFeedResponse(c, response);
                             PublicEdgeTelemetry.reportFeedResponse(
                                     response, "main", langId, 0L);
                             EncreptionRequest wrapped =

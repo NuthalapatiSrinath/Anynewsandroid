@@ -38,6 +38,11 @@ public final class EdgeOriginWatchInterceptor implements Interceptor {
         }
         Response response = chain.proceed(request);
         try {
+            EdgeDebugHud.notifyHttp(request, response);
+        } catch (Exception ignored) {
+            /* never break the call path */
+        }
+        try {
             PublicEdgeTelemetry.reportOutboundCall(request, response);
         } catch (Exception ignored) {
             /* never break the call path */

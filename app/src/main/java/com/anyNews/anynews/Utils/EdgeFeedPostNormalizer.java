@@ -4,6 +4,7 @@ import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -28,6 +29,17 @@ public final class EdgeFeedPostNormalizer {
         if (TextUtils.isEmpty(clean(d.getVideoUrl())) && !TextUtils.isEmpty(clean(d.getVideo()))) {
             d.setVideoUrl(clean(d.getVideo()));
         }
+        if (d.getImages() == null || d.getImages().isEmpty()) {
+            String hero = clean(d.getImage());
+            if (TextUtils.isEmpty(hero)) {
+                hero = clean(d.getFullImage());
+            }
+            if (!TextUtils.isEmpty(hero)) {
+                ArrayList<String> imgs = new ArrayList<>(1);
+                imgs.add(hero);
+                d.setImages(imgs);
+            }
+        }
         final String writer = clean(d.getWriterProfile());
         final String videoUrl = clean(d.getVideoUrl());
         String thumb = clean(d.getThumbnail());
@@ -37,6 +49,13 @@ public final class EdgeFeedPostNormalizer {
                     || (!TextUtils.isEmpty(videoUrl)
                     && thumb.equalsIgnoreCase(videoUrl))) {
                 d.setThumbnail(null);
+            }
+        }
+        if (TextUtils.isEmpty(clean(d.getThumbnail()))) {
+            String thumbImage = clean(d.getThumbImage());
+            if (StatusVideoMedia.isUsableVideoPosterForNormalize(thumbImage, writer)
+                    && !StatusVideoMedia.isStreamOnlyUrl(thumbImage)) {
+                d.setThumbnail(thumbImage);
             }
         }
         if (TextUtils.isEmpty(clean(d.getThumbnail()))) {

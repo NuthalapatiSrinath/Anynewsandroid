@@ -42,7 +42,8 @@ public final class PublicEdgeTelemetry {
   /**
    * Debug APK: POST every outbound API call (throttled) for Admin session timeline.
    */
-    public static void reportOutboundCall(@Nullable Request request, @Nullable Response<?> response) {
+    public static void reportOutboundCall(
+            @Nullable Request request, @Nullable okhttp3.Response response) {
         if (!EdgeOriginCallWatch.isInstrumentedBuild() || request == null) return;
         try {
             HttpUrl url = request.url();

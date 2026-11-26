@@ -49,8 +49,21 @@ public final class OpenPathSplashConfigRefresher {
     private static final Gson GSON = new Gson();
     /** One attempt per process open (push/warm stampede guard). */
     private static final AtomicBoolean inFlight = new AtomicBoolean(false);
+    /**
+     * When true, do not hit Splash_Screen on main-feed cold open; refresh when the
+     * user opens Daily Updates, Special, Local, etc. ({@link #maybeRefreshOnAuxiliaryOpen}).
+     */
+    public static final boolean DEFER_ON_MAIN_FEED_OPEN = true;
 
     private OpenPathSplashConfigRefresher() {
+    }
+
+    /** Splash/admin refresh after user leaves main feed for an auxiliary tab/flow. */
+    public static void maybeRefreshOnAuxiliaryOpen(@Nullable Context context) {
+        if (!DEFER_ON_MAIN_FEED_OPEN) {
+            return;
+        }
+        maybeRefreshInBackground(context);
     }
 
     /**
