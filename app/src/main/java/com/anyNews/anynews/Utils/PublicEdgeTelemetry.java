@@ -16,6 +16,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import okhttp3.Headers;
+import okhttp3.HttpUrl;
+import okhttp3.Request;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -26,6 +28,7 @@ import retrofit2.Response;
 public final class PublicEdgeTelemetry {
     private static final String TAG = "PublicEdgeTelemetry";
     private static final long THROTTLE_MS = 4000L;
+    private static final long TIMELINE_THROTTLE_MS = 1500L;
     private static final ExecutorService EXEC = Executors.newSingleThreadExecutor();
     private static final ConcurrentHashMap<String, Long> LAST = new ConcurrentHashMap<>();
 
@@ -34,6 +37,55 @@ public final class PublicEdgeTelemetry {
 
     public static boolean isEnabled() {
         return BuildConfig.PUBLIC_EDGE_TELEMETRY;
+    }
+
+  /**
+   * Debug APK: POST every outbound API call (throttled) for Admin session timeline.
+   */
+    public static void reportOutboundCall(@Nullable Request request, @Nullable Response<?> response) {
+        if (!EdgeOriginCallWatch.isInstrumentedBuild() || request == null) return;
+        try {
+            HttpUrl url = request.url();
+            if (url == null) return;
+            String path = url.encodedPath();
+            if (TextUtils.isEmpty(path) || path.toLowerCase().contains("edge_telemetry")) {
+                return;
+            }
+            Headers headers = response != null ? response.headers() : request.headers();
+            String cf = firstHeader(headers, "CF-Cache-Status", "cf-cache-status");
+            if (TextUtils.isEmpty(cf)) {
+                cf = guessCfForRoute(path);
+            }
+            String sessionId = EdgeOriginCallWatch.resolveAppSessionId();
+            String throttleKey =
+                    String.format(
+                            Locale.US,
+                            "%s|%s|%s",
+                            sessionId != null ? sessionId : "-",
+                            path,
+                            request.method());
+            long now = System.currentTimeMillis();
+            Long prev = LAST.put(throttleKey, now);
+            if (prev != null && (now - prev) < TIMELINE_THROTTLE_MS) {
+                return;
+            }
+            final String cfFinal = cf;
+            final String feedKind = feedKindFromPath(path);
+            EXEC.execute(
+                    () ->
+                            fire(
+                                    feedKind,
+                                    0,
+                                    0,
+                                    cfFinal,
+                                    parseAge(headers != null ? headers.get("Age") : null),
+                                    path,
+                                    request.method(),
+                                    url.toString(),
+                                    sessionId));
+        } catch (Exception e) {
+            Logone.w(e, TAG + " timeline skipped");
+        }
     }
 
     /**
@@ -67,7 +119,19 @@ public final class PublicEdgeTelemetry {
                 return;
             }
             final String cfFinal = cf;
-            EXEC.execute(() -> fire(feedKind, languageId, skip, cfFinal, age));
+            final String sessionId = EdgeOriginCallWatch.resolveAppSessionId();
+            EXEC.execute(
+                    () ->
+                            fire(
+                                    feedKind,
+                                    languageId,
+                                    skip,
+                                    cfFinal,
+                                    age,
+                                    null,
+                                    "GET",
+                                    null,
+                                    sessionId));
         } catch (Exception e) {
             Logone.w(e, TAG + " report skipped");
         }
@@ -78,7 +142,11 @@ public final class PublicEdgeTelemetry {
             int languageId,
             long skip,
             String cfStatus,
-            int ageSec) {
+            int ageSec,
+            @Nullable String endpoint,
+            @Nullable String method,
+            @Nullable String url,
+            @Nullable String sessionId) {
         try {
             JsonObject body = new JsonObject();
             body.addProperty("cf_cache_status", cfStatus);
@@ -87,6 +155,20 @@ public final class PublicEdgeTelemetry {
             if (skip > 0) body.addProperty("skip", skip);
             if (ageSec >= 0) body.addProperty("age", ageSec);
             body.addProperty("version_code", BuildConfig.VERSION_CODE);
+            if (!TextUtils.isEmpty(endpoint)) {
+                body.addProperty(
+                        "endpoint",
+                        endpoint.length() > 120 ? endpoint.substring(0, 120) : endpoint);
+            }
+            if (!TextUtils.isEmpty(method)) {
+                body.addProperty("method", method);
+            }
+            if (!TextUtils.isEmpty(url)) {
+                body.addProperty("url", url.length() > 160 ? url.substring(0, 160) : url);
+            }
+            if (!TextUtils.isEmpty(sessionId)) {
+                body.addProperty("session_id", sessionId);
+            }
 
             APIService api = RestApiClient.getClient().create(APIService.class);
             Call<Void> call = api.Public_Edge_Telemetry("v3", body);
@@ -115,6 +197,29 @@ public final class PublicEdgeTelemetry {
             if (!TextUtils.isEmpty(v)) return v.trim();
         }
         return "";
+    }
+
+    @NonNull
+    private static String guessCfForRoute(@NonNull String path) {
+        String route = EdgeOriginCallWatch.normalizeRoute(path.toLowerCase(Locale.US));
+        if (EdgeOriginCallWatch.isPublicEdgeRoute(route)) {
+            return "MISS";
+        }
+        return "ORIGIN";
+    }
+
+    @NonNull
+    private static String feedKindFromPath(@NonNull String path) {
+        String lower = path.toLowerCase(Locale.US);
+        if (lower.contains("/public/splash")) return "splash";
+        if (lower.contains("/public/daily_updates")
+                || lower.contains("/public/daily/lang")) return "daily_updates";
+        if (lower.contains("/public/flash/")) return "flash";
+        if (lower.contains("/public/special/")) return "special";
+        if (lower.contains("/public/local/")) return "main";
+        if (lower.contains("/public/main/")) return "main";
+        if (lower.contains("/public/feed")) return "main";
+        return "main";
     }
 
     private static int parseAge(@Nullable String raw) {

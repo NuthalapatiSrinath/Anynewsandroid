@@ -54,6 +54,11 @@ public final class EdgeOriginCallWatch {
             "public/feed",
             "public/splash_config",
             "public/daily_updates",
+            "public/main",
+            "public/local",
+            "public/flash",
+            "public/special",
+            "public/daily",
             "public/edge_origin_event",
             "public/edge_telemetry",
             // Splash draft still needed for first open
@@ -232,9 +237,7 @@ public final class EdgeOriginCallWatch {
             if (TextUtils.isEmpty(route)) return;
 
             // Correct CF attempts — server records A/B/C/E on Node miss; do not beacon.
-            if ("public/feed".equals(route)
-                    || "public/splash_config".equals(route)
-                    || "public/daily_updates".equals(route)) {
+            if (isPublicEdgeRoute(route)) {
                 return;
             }
 
@@ -356,6 +359,10 @@ public final class EdgeOriginCallWatch {
                 body.addProperty("url", u);
             }
             body.addProperty("source", "apk_client");
+            String sessionId = resolveAppSessionId();
+            if (!TextUtils.isEmpty(sessionId)) {
+                body.addProperty("session_id", sessionId);
+            }
 
             APIService api = RestApiClient.getClient().create(APIService.class);
             Call<Void> call = api.Public_Edge_Origin_Event("v3", body);
@@ -411,7 +418,19 @@ public final class EdgeOriginCallWatch {
         return false;
     }
 
+    static boolean isPublicEdgeRoute(@NonNull String route) {
+        return "public/feed".equals(route)
+                || route.startsWith("public/main/")
+                || route.startsWith("public/local/")
+                || route.startsWith("public/flash/")
+                || route.startsWith("public/special/")
+                || "public/splash_config".equals(route)
+                || "public/daily_updates".equals(route)
+                || route.startsWith("public/daily/");
+    }
+
     private static boolean isAllowedRoute(@NonNull String route) {
+        if (isPublicEdgeRoute(route)) return true;
         if (ALLOWED_ROUTE_SUFFIXES.contains(route)) return true;
         for (String s : ALLOWED_ROUTE_SUFFIXES) {
             if (route.equals(s) || route.startsWith(s + "/") || route.endsWith("/" + s)) {
@@ -453,6 +472,16 @@ public final class EdgeOriginCallWatch {
         if ("flash_news".equals(route)) return "flash_news_origin";
         if ("get_single_article".equals(route)) return "direct_single_article";
         return "unexpected_origin_call";
+    }
+
+    @Nullable
+    static String resolveAppSessionId() {
+        try {
+            String active = SessionAnalyticsTracker.get().getActiveSessionId();
+            if (!TextUtils.isEmpty(active)) return active;
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     @NonNull
