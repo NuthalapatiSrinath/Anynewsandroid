@@ -62,6 +62,13 @@ public final class StatusVideoMedia {
             return ensureHttps(resolveStatic(loneImage));
         }
 
+        String fullImage = cleanUrl(item.getFullImage());
+        if (isUsableVideoPoster(fullImage, writerAvatar)
+                && !isStreamOnlyUrl(fullImage)
+                && !isGenericVideoPlaceholderUrl(fullImage)) {
+            return ensureHttps(resolveStatic(fullImage));
+        }
+
         String fromThumbs = firstListUrl(item.getThumbnails(), true);
         if (isUsableVideoPoster(fromThumbs, writerAvatar)
                 && !isStreamOnlyUrl(fromThumbs)

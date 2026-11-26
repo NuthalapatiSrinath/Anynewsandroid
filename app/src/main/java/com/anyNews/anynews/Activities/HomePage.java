@@ -5355,6 +5355,10 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
 //            LocalBroadcastManager.getInstance(getContext()).registerReceiver(CURRENT_LOCATION,
 //                    new IntentFilter("CURRENT_LOCATION"));
 //        }
+        try {
+            applyFooterCenterShare();
+        } catch (Exception ignored) {
+        }
 
     }
 
@@ -7667,8 +7671,149 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
         return isSpecialFeedActive() ? 0 : 1;
     }
 
+    private int getVisiblePostIndex() {
+        if (list != null && positionx >= 0 && positionx < list.size()) {
+            return positionx;
+        }
+        if (mFlipView != null) {
+            return mFlipView.getCurrentPage();
+        }
+        return positionx;
+    }
+
     /**
-     * Center footer control: magazine Share on Special tab, WhatsApp on News et al.
+     * Play Store parity: glow footer Share only for card magazines and Magazines-category
+     * specials — not every Special-tab row (full_video, normal_video, generic gallery).
+     */
+    public static boolean usesMagazineGlowShare(@Nullable ModelClass.Datum item) {
+        return usesMagazineGlowShare(item, -1);
+    }
+
+    private static boolean usesMagazineGlowShare(@Nullable ModelClass.Datum item, int idx) {
+        try {
+            if (item == null) {
+                return false;
+            }
+            String type = item.getPostType();
+            if (type == null) {
+                return false;
+            }
+            type = type.trim();
+            boolean glow = type.equalsIgnoreCase("magazine")
+                    || type.equalsIgnoreCase("magazines");
+            Integer catId = item.getCategoryId();
+            if (!glow && type.equalsIgnoreCase("image_gallery")
+                    && catId != null && catId.intValue() == 15) {
+                glow = true;
+            }
+            if (!glow && !"image_gallery".equalsIgnoreCase(type)
+                    && "2".equals(String.valueOf(item.getMediaType()))) {
+                String strip = item.getStrip_content();
+                if (strip != null && strip.trim().length() > 2
+                        && (strip.trim().startsWith("[") || strip.contains("http"))) {
+                    glow = true;
+                }
+            }
+            if (!glow && catId != null && catId.intValue() == 15
+                    && "2".equals(String.valueOf(item.getMediaType()))
+                    && !"image_gallery".equalsIgnoreCase(type)) {
+                glow = true;
+            }
+            return glow;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean visibleFlipIsInviteOrAdShell() {
+        try {
+            if (mFlipView == null) {
+                return false;
+            }
+            View page = mFlipView.getCurrentPageView();
+            if (page == null) {
+                return false;
+            }
+            if (page.findViewById(R.id.ad_default_placeholder_root) != null) {
+                return true;
+            }
+            if (page.findViewById(R.id.fl_adplaceholder) != null
+                    && page.findViewById(R.id.magzine_viewPager_data) == null
+                    && page.findViewById(R.id.viewpager) == null) {
+                return true;
+            }
+            return page.findViewById(R.id.imageViewWhatsapp) != null
+                    && page.findViewById(R.id.magzine_viewPager_data) == null
+                    && page.findViewById(R.id.viewpager) == null
+                    && page.findViewById(R.id.gallery_horizontal_flip) == null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean shouldShowMagazineFooterShare() {
+        try {
+            if (visibleFlipIsInviteOrAdShell()) {
+                return false;
+            }
+            int idx = getVisiblePostIndex();
+            if (list == null || idx < 0 || idx >= list.size()) {
+                return false;
+            }
+            ModelClass.Datum item = list.get(idx);
+            if (item != null && (ReadArticleStore.isSyntheticFeedSlot(item)
+                    || ReadArticleStore.isShareFeedSlot(item))) {
+                return false;
+            }
+            if (usesMagazineGlowShare(item, idx)) {
+                return true;
+            }
+            if (!isSpecialFeedActive() || item == null) {
+                return false;
+            }
+            String type = item.getPostType();
+            if (type == null) {
+                return false;
+            }
+            type = type.trim();
+            return type.equalsIgnoreCase("image_gallery")
+                    || type.equalsIgnoreCase("magazine")
+                    || type.equalsIgnoreCase("magazines");
+        } catch (Exception e) {
+            showLog("shouldShowMagazineFooterShare: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** Localized Share label from language pack (Telugu on Play Store builds). */
+    private void applyMagazineShareFooterLabel() {
+        if (tvMagazineShareFooter == null) {
+            return;
+        }
+        String label = null;
+        try {
+            if (languageModelResponse != null
+                    && languageModelResponse.getData() != null
+                    && languageModelResponse.getData().getShare() != null) {
+                label = languageModelResponse.getData().getShare().trim();
+            }
+        } catch (Exception ignored) {
+        }
+        if (label == null || label.isEmpty()) {
+            label = getString(R.string.share);
+        }
+        tvMagazineShareFooter.setText(label);
+        if (layoutMagazineShareFooter != null) {
+            layoutMagazineShareFooter.setContentDescription(label);
+        }
+        if (ivMagazineShareFooter != null) {
+            ivMagazineShareFooter.setContentDescription(label);
+        }
+    }
+
+    /**
+     * Center footer: magazine Share only on glow-eligible posts; WhatsApp on all others
+     * (including Special full_video / normal_video).
      */
     private void applyFooterCenterShare() {
         if (isFinishing() || isDestroyed()) {
@@ -7680,8 +7825,14 @@ public class HomePage extends AppCompatActivity implements FlipperAdapter.Callba
                 hideFooterWhatsapp();
                 return;
             }
-            if (isSpecialFeedActive() && isDeviceOnline()) {
+            if (!isDeviceOnline()) {
+                hideMagazineFooterShare();
                 hideFooterWhatsapp();
+                return;
+            }
+            if (shouldShowMagazineFooterShare()) {
+                hideFooterWhatsapp();
+                applyMagazineShareFooterLabel();
                 applyMagazineFooterShareOverlay();
             } else {
                 hideMagazineFooterShare();
